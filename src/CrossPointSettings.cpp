@@ -19,6 +19,9 @@
 #include "util/ParagraphIndentMigration.h"
 #include "util/PluginLocations.h"
 
+// The font pickers put the built-in families first in their list.
+static_assert(BUILTIN_READER_FONT_FAMILIES == CrossPointSettings::BUILTIN_FONT_COUNT);
+
 namespace {
 
 // Stack buffer for "<key>_obf" key construction — avoids a std::string

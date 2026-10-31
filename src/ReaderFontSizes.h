@@ -60,3 +60,19 @@ uint8_t snapToNearestPointSize(const uint8_t* sizes, size_t count, uint8_t pt);
 inline uint8_t snapToNearestPointSize(const std::vector<uint8_t>& sizes, const uint8_t pt) {
   return sizes.empty() ? pt : snapToNearestPointSize(sizes.data(), sizes.size(), pt);
 }
+
+// Font pickers list the built-in family (Noto Sans) first, then the SD-card
+// families in registry order. Indexes below refer to that list.
+inline constexpr int BUILTIN_READER_FONT_FAMILIES = 1;
+
+inline int readerFontFamilyCount(const SdCardFontRegistry* registry) {
+  return BUILTIN_READER_FONT_FAMILIES + (registry ? registry->getFamilyCount() : 0);
+}
+
+// List index of the active family. An SD family that is not installed maps to
+// the built-in entry.
+int readerFontFamilyIndex(const SdCardFontRegistry* registry, const char* sdFamilyName, uint8_t fontFamily);
+
+// SD family name at list index `index`: "" for the built-in family, nullptr
+// when the index is out of range.
+const char* readerFontFamilySdName(const SdCardFontRegistry* registry, int index);

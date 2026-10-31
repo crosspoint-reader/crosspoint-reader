@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -326,6 +327,15 @@ int EpubReaderActivity::bookPercentFor(const ChapterPosition& position) const {
   return static_cast<int>(std::clamp(fraction, 0.0f, 1.0f) * 100.0f + 0.5f);
 }
 
+namespace {
+// Menu actions that work on the page on screen, so they need its layout.
+bool usesCurrentPage(const EpubReaderMenuActivity::MenuAction action) {
+  using MA = EpubReaderMenuActivity::MenuAction;
+  return action == MA::FOOTNOTES || action == MA::SAVE_CLIPPING || action == MA::TOGGLE_BOOKMARK ||
+         action == MA::DICTIONARY || action == MA::DISPLAY_QR;
+}
+}  // namespace
+
 void EpubReaderActivity::openReaderMenu() {
   pendingManualTurn = 0;
   if (usesToolbarMenu()) {
@@ -348,21 +358,49 @@ void EpubReaderActivity::openReaderMenu() {
   const ChapterPosition position = chapterPosition();
   const int bookProgressPercent = bookPercentFor(position);
 
-  startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                             renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages,
-                             bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
-                             !cachedBookmarks.empty(), CLIPPINGS.hasClippings(), selectedMenuAction),
-                         [this](const ActivityResult& result) {
-                           const auto& menu = std::get<MenuResult>(result.data);
+  auto menuActivity = std::make_unique<EpubReaderMenuActivity>(
+      renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages, bookProgressPercent,
+      SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(), CLIPPINGS.hasClippings(),
+      &sdFontSystem.registry(), selectedMenuAction);
+  startActivityForResult(std::move(menuActivity), [this](const ActivityResult& result) {
+    const auto& menu = std::get<MenuResult>(result.data);
 
-                           if (SETTINGS.orientation != menu.orientation) {
-                             applyOrientation(menu.orientation);
-                           }
+    if (SETTINGS.orientation != menu.orientation) {
+      applyOrientation(menu.orientation);
+    }
+    const auto action = static_cast<EpubReaderMenuActivity::MenuAction>(menu.action);
+    if (menu.fontPointSize > 0) {
+      if (!result.isCancelled && usesCurrentPage(action)) {
+        // A font change frees this page's layout, which the action needs:
+        // apply the font once the action is done (see loop()).
+        deferredMenuFontFamily = menu.fontFamily;
+        deferredMenuFontSize = menu.fontPointSize;
+      } else {
+        applyMenuFont(menu.fontFamily, menu.fontPointSize);
+      }
+    }
 
-                           toggleAutoPageTurn(menu.pageTurnOption);
-                           if (!result.isCancelled) {
-                             onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+    toggleAutoPageTurn(menu.pageTurnOption);
+    if (!result.isCancelled) {
+      onReaderMenuConfirm(action);
+    }
+  });
+}
+
+void EpubReaderActivity::openTextSettings(const TextSettingsActivity::Tab tab) {
+  startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(), tab),
+                         [this](const ActivityResult&) {
+                           {
+                             RenderLock lock;
+                             if (section) {
+                               rememberCurrentContentOffset();
+                               cachedSpineIndex = currentSpineIndex;
+                               cachedChapterTotalPageCount = section->pageCount;
+                               nextPageNumber = section->currentPage;
+                             }
+                             section.reset();
                            }
+                           openReaderMenu();
                          });
 }
 
@@ -640,6 +678,15 @@ void EpubReaderActivity::loop() {
   if (!epub) {
     finish();
     return;
+  }
+
+  // A menu font held back for a page action; a child screen it opened has closed.
+  if (deferredMenuFontSize > 0) {
+    const int family = deferredMenuFontFamily;
+    const uint8_t pointSize = deferredMenuFontSize;
+    deferredMenuFontFamily = -1;
+    deferredMenuFontSize = 0;
+    applyMenuFont(family, pointSize);
   }
 
   rememberBookOnceRendered();
@@ -1183,22 +1230,15 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       openFootnoteSelect(true);
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS: {
-      startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
-                                                                    TextSettingsActivity::Tab::Family),
-                             [this](const ActivityResult&) {
-                               {
-                                 RenderLock lock;
-                                 if (section) {
-                                   rememberCurrentContentOffset();
-                                   cachedSpineIndex = currentSpineIndex;
-                                   cachedChapterTotalPageCount = section->pageCount;
-                                   nextPageNumber = section->currentPage;
-                                 }
-                                 section.reset();
-                               }
-                               openReaderMenu();
-                             });
+    case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS:
+    case EpubReaderMenuActivity::MenuAction::FONT_FAMILY: {
+      // FONT_FAMILY/FONT_SIZE arrive here only when their popup list is too
+      // long for the screen.
+      openTextSettings(TextSettingsActivity::Tab::Family);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::FONT_SIZE: {
+      openTextSettings(TextSettingsActivity::Tab::Size);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BLUETOOTH:
@@ -3077,15 +3117,42 @@ void EpubReaderActivity::applyReaderTextSettings() {
   sdFontSystem.ensureLoaded(renderer);
 }
 
+// Font picked in the list menu's Font Family / Font Size popups.
+bool EpubReaderActivity::setMenuFont(const int family, const uint8_t pointSize) {
+  if (family >= 0) {
+    const char* sdName = readerFontFamilySdName(&sdFontSystem.registry(), family);
+    if (!sdName) return false;
+    if (sdName[0] == '\0') SETTINGS.fontFamily = static_cast<uint8_t>(family);
+    strncpy(SETTINGS.sdFontFamilyName, sdName, sizeof(SETTINGS.sdFontFamilyName) - 1);
+    SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
+  }
+  SETTINGS.fontPointSize = pointSize;
+  return true;
+}
+
+void EpubReaderActivity::applyMenuFont(const int family, const uint8_t pointSize) {
+  if (setMenuFont(family, pointSize)) applyReaderTextSettings();
+}
+
+void EpubReaderActivity::onExit() {
+  // The book closed before a held-back menu font was applied: keep the pick.
+  if (deferredMenuFontSize > 0 && setMenuFont(deferredMenuFontFamily, deferredMenuFontSize)) {
+    SETTINGS.saveToFile();
+  }
+  deferredMenuFontSize = 0;
+  ReaderActivity::onExit();
+}
+
 // The More panel carries everything the classic list menu offers except the
-// two entries that have their own tool (chapters -> Contents, text -> Text).
+// entries that have their own tool (chapters -> Contents, text and font -> Text).
 void EpubReaderActivity::buildMoreActions() {
   using MA = EpubReaderMenuActivity::MenuAction;
   EpubReaderMenuActivity::buildMenuItems(moreItems, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
                                          CLIPPINGS.hasClippings());
   moreItems.erase(std::remove_if(moreItems.begin(), moreItems.end(),
                                  [](const auto& item) {
-                                   return item.action == MA::SELECT_CHAPTER || item.action == MA::TEXT_SETTINGS;
+                                   return item.action == MA::SELECT_CHAPTER || item.action == MA::TEXT_SETTINGS ||
+                                          item.action == MA::FONT_FAMILY || item.action == MA::FONT_SIZE;
                                  }),
                   moreItems.end());
 }

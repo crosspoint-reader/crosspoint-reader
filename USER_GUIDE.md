@@ -712,6 +712,11 @@ Available options include:
 - **Go Home** – Close the book and return to the Home screen.
 - **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)). This entry appears when sync credentials are saved or an enabled plugin subscribes to device events. Without sync credentials, it connects to Wi-Fi to send queued plugin events.
 - **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
+- **Reader Font Family** – Pick the built-in font or a font installed on the SD card. If the new font does not have the current size, the closest size is used.
+- **Reader Font Size** – Pick one of the sizes the current font provides.
+- **Text Settings** – Change the font, size, spacing and other text options without leaving the book.
+
+These last three are at the bottom of the list, so pressing **Up** from the top of the menu reaches them quickly. Font family and size changes from the menu apply when you close it. If a font list is too long to fit on the screen, **Text Settings** opens instead.
 
 Press **Back** at any time to close the menu and return to your current page.
 
