@@ -28,6 +28,7 @@ def method(name, next_name, text=source):
     return text[start:text.index(next_name, signature)].rstrip()
 
 extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSelectionActivity::closestInRow")
+prewarm_word = method("void ClipSelectionActivity::prewarmWord", "void ClipSelectionActivity::ditherGapBetween")
 clean_draw = method("void ClipSelectionActivity::drawWordClean", "void ClipSelectionActivity::drawWordHighlight")
 highlight_draw = method("void ClipSelectionActivity::drawWordHighlight", "bool ClipSelectionActivity::renderIncremental")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
@@ -103,12 +104,28 @@ struct PageLine {
   const Block* getBlock() const { return &block; }
 };
 struct Page { std::vector<std::unique_ptr<PageLine>> elements; };
+struct FontCacheManager {
+  int prewarms = 0;
+  uint8_t styleMask = 0;
+  int fontId = 0;
+  std::string text;
+  void prewarmCache(int font, const char* value, uint8_t style) {
+    ++prewarms;
+    fontId = font;
+    text = value;
+    styleMask = style;
+  }
+};
 struct Renderer {
   enum RenderMode { BW };
   struct Draw { int x, width, tracking; };
   mutable std::vector<Draw> draws;
   mutable std::vector<Draw> fills;
   bool sdFont = false;
+  mutable FontCacheManager cache;
+  std::set<int> ttfFonts;
+  FontCacheManager* getFontCacheManager() const { return &cache; }
+  const std::set<int>& getTtfFonts() const { return ttfFonts; }
   mutable size_t coldMeasurements = 0;
   std::set<std::pair<uint8_t, uint32_t>> advances;
   bool isSdCardFont(int) const { return sdFont; }
@@ -215,7 +232,7 @@ struct ClipSelectionActivity {
   void drawWordClean(int, int, int) const;
   void drawWordHighlight(int, int, int, int, int) const;
   void drawSelection() const;
-  void prewarmWord(int) const {}
+  void prewarmWord(int) const;
   void clearGapBetween(const WordBox&, const WordBox&, int, int) const {}
   void ditherGapBetween(const WordBox&, const WordBox&, int, int) const {}
   int textOffset() const { return 0; }
@@ -223,7 +240,7 @@ struct ClipSelectionActivity {
   Rect handleRect(int, bool) const { return {}; }
   Rect actionRect() const { return {}; }
 };
-""" + build_text + extract_words + clean_draw + highlight_draw + selection_draw + r"""
+""" + build_text + extract_words + prewarm_word + clean_draw + highlight_draw + selection_draw + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -270,6 +287,31 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
   assert(text == expected);
 }
 int main() {
+  // Repeated built-in word redraws must not allocate page-prewarm slots.
+  ClipSelectionActivity prewarm;
+  prewarm.wordCount = 1;
+  prewarm.words[0].text = "sample";
+  prewarm.words[0].fontId = 42;
+  for (int i = 0; i < 24; ++i) prewarm.prewarmWord(0);
+  assert(prewarm.renderer.cache.prewarms == 0);
+  // SD and vector font prewarming keeps its original style dispatch.
+  for (int kind = 0; kind < 2; ++kind) {
+    prewarm.renderer.sdFont = kind == 0;
+    if (kind == 1) prewarm.renderer.ttfFonts.insert(42);
+    for (int style = 0; style < 4; ++style) {
+      prewarm.words[0].style = static_cast<EpdFontFamily::Style>(style | 4);
+      prewarm.prewarmWord(0);
+      assert(prewarm.renderer.cache.styleMask == (1u << style));
+      assert(prewarm.renderer.cache.fontId == 42);
+      assert(prewarm.renderer.cache.text == "sample");
+    }
+  }
+  assert(prewarm.renderer.cache.prewarms == 8);
+  prewarm.prewarmWord(-1);
+  prewarm.prewarmWord(1);
+  prewarm.words[0].text = nullptr;
+  prewarm.prewarmWord(0);
+  assert(prewarm.renderer.cache.prewarms == 8);
   // Returning from a definition releases the SD font caches before selection is rebuilt.
   for (const bool rtl : {false, true}) {
     ClipSelectionActivity cold;
