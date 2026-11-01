@@ -84,9 +84,9 @@ class TtfEpdFont {
   // transitions (WiFi + web server, image decode, dictionary, sleep).
   void releaseResidentCaches();
 
-  // Optional batch pre-warm of the REGULAR face (other styles fault lazily).
-  bool build(const char* utf8);
-  bool addCoverage(const char* utf8);
+  // Optional batch pre-warm of a face (defaults to regular; styles fault lazily).
+  bool build(const char* utf8, uint8_t style = 0);
+  bool addCoverage(const char* utf8, uint8_t style = 0);
 
  private:
   // A borrowed source file (one per style role that the caller supplies).
