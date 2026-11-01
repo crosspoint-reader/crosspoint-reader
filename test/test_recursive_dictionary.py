@@ -439,22 +439,31 @@ int main() {
   assert(root.finished && root.result.isCancelled);
   // Header long-press exits independently of text-selection settings; body long-press still selects.
   HeaderBackTapTarget::set(4, 4, 32, 32);
+  const struct { int x, y; bool header, padded; } longPressTargets[] = {
+    {10, 10, true, true},
+    {0, 10, false, true},
+    {10, 0, false, true},
+    {40, 10, false, true},
+    {10, 40, false, true},
+    {50, 0, false, false},
+  };
   for (const bool controlsEnabled : {false, true}) {
     SETTINGS.touchReaderControls = controlsEnabled;
-    for (const bool onHeader : {false, true}) {
+    for (const auto& target : longPressTargets) {
       DictionaryDefinitionActivity touchView;
       touchView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
       touchView.content.text = dictionary.entries.at(10);
       assert(touchView.prepareDefinition(touchView.content));
       touchView.mappedInput.longPress = true;
-      touchView.mappedInput.touchX = onHeader ? 10 : 50;
-      touchView.mappedInput.touchY = onHeader ? 10 : 0;
+      touchView.mappedInput.touchX = target.x;
+      touchView.mappedInput.touchY = target.y;
+      assert(HeaderBackTapTarget::contains(target.x, target.y) == target.padded);
       const unsigned readsBeforeTouch = dictionary.reads;
       touchView.handleBack();
       assert(touchView.mappedInput.contactSuppressed && dictionary.reads == readsBeforeTouch);
-      assert(touchView.finished == onHeader && touchView.result.isCancelled == onHeader);
-      assert(bool(touchView.child) == (!onHeader && controlsEnabled));
-      if (onHeader) {
+      assert(touchView.finished == target.header && touchView.result.isCancelled == target.header);
+      assert(bool(touchView.child) == (!target.header && controlsEnabled));
+      if (target.header) {
         DictionaryDefinitionActivity parent, reader;
         parent.onDefinitionResult(touchView.result);
         reader.onLookupResult(parent.result);
