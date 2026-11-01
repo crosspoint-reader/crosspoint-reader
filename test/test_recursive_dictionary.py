@@ -58,7 +58,7 @@ lookup_source = (ROOT / "src/activities/reader/DictionaryWordSelectActivity.cpp"
 definition_result = block(lookup_source, "[this](const ActivityResult& result)")
 reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
 lookup_result = block(reader_source.split("startActivityForResult(std::move(lookup)", 1)[1],
-                      "[this](const ActivityResult& result)")
+                      "[this, spineIndex, pageNumber, restore](const ActivityResult& result)")
 reader_constants = (ROOT / "src/activities/reader/ReaderUtils.h").read_text().split("namespace ReaderUtils {", 1)[1].split(
     "constexpr unsigned long SKIP_HOLD_MS", 1
 )[0]
@@ -189,6 +189,7 @@ struct Dictionary {
 };
 struct ClipSelectionActivity {
 ''' + selection + r'''
+  enum class Mode { Lookup };
   template<typename... Args> explicit ClipSelectionActivity(Args&&...) {}
 };
 bool styledAvailable = false;
@@ -221,10 +222,26 @@ struct DictionaryDefinitionActivity {
   void requestUpdateAndWait() {}
   void finish() { finished = true; }
   void setResult(ActivityResult&& next) { result = std::move(next); }
+  struct ReaderSection {
+    int currentPage = 0, pageCount = 3;
+    uint32_t getVisibleTextOffsetForPage(int page) const { return static_cast<uint32_t>(page * 100); }
+  };
+  std::unique_ptr<ReaderSection> section = std::make_unique<ReaderSection>();
+  int currentSpineIndex = 0;
+  uint32_t currentPageVisibleOffset = 0;
+  ClipSelectionActivity::Selection restoredSelection;
   void openDictionaryWordSelect() { selectionOpened = true; }
+  void startClipSelection(int, int, ClipSelectionActivity::Mode, ClipSelectionActivity::Selection selected) {
+    selectionOpened = true;
+    restoredSelection = selected;
+  }
   void handleBack() { ''' + back_handler + r''' }
   void onDefinitionResult(const ActivityResult& child) { (''' + definition_result + r''')(child); }
-  void onLookupResult(const ActivityResult& child) { (''' + lookup_result + r''')(child); }
+  void onLookupResult(const ActivityResult& child) {
+    const int spineIndex = 0, pageNumber = 0;
+    const ClipSelectionActivity::Selection restore{0, 0, 4, 4, true};
+    (''' + lookup_result + r''')(child);
+  }
   void startActivityForResult(std::unique_ptr<ClipSelectionActivity> next, ActivityResultHandler handler) {
     child = std::move(next);
     callback = std::move(handler);
@@ -415,7 +432,7 @@ int main() {
   assert(parent.finished && !parent.result.isCancelled);
   reader.onLookupResult(parent.result);
   assert(reader.selectionOpened);
-  // Lookup exits reopen book selection only on buttons-only devices.
+  // Lookup exits restore the selected word on touch and button-only devices.
   for (const bool touch : {false, true}) {
     for (const bool cancelled : {false, true}) {
       for (const bool controlsEnabled : {false, true}) {
@@ -426,7 +443,10 @@ int main() {
         lookupParent.onDefinitionResult(exitResult);
         bookReader.mappedInput.touch = touch;
         bookReader.onLookupResult(lookupParent.result);
-        assert(bookReader.selectionOpened == (!touch && !cancelled));
+        assert(bookReader.selectionOpened == !cancelled);
+        if (!cancelled) {
+          assert(bookReader.restoredSelection.valid && bookReader.restoredSelection.firstWord == 4);
+        }
       }
     }
   }

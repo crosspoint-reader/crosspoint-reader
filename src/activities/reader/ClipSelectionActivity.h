@@ -31,6 +31,10 @@ class ClipSelectionActivity final : public Activity {
                         std::vector<std::unique_ptr<Page>> pages, int marginLeft, int marginTop, int initialX = -1,
                         int initialY = -1, Mode mode = Mode::Clip);
 
+  ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                        std::vector<std::unique_ptr<Page>> pages, int marginLeft, int marginTop, int initialX,
+                        int initialY, Mode mode, Selection selection);
+
   // The definition viewer retains these pages until this child exits.
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         std::span<const std::unique_ptr<Page>> borrowedPages, int marginLeft, int marginTop,

@@ -454,7 +454,8 @@ void EpubReaderActivity::openDictionaryWordSelect() {
 }
 
 void EpubReaderActivity::startClipSelection(const int initialX, const int initialY,
-                                            const ClipSelectionActivity::Mode mode) {
+                                            const ClipSelectionActivity::Mode mode,
+                                            const ClipSelectionActivity::Selection selection) {
   if (!section || !epub || section->currentPage < 0 || section->currentPage >= section->pageCount) return;
 
   const int pageNumber = section->currentPage;
@@ -507,7 +508,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
   std::string author = epub->getAuthor();
 
   auto activity = makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, std::move(pages), marginLeft,
-                                                           marginTop, initialX, initialY, mode);
+                                                           marginTop, initialX, initialY, mode, selection);
   if (!activity) {
     LOG_ERR("CLIP", "Failed to allocate clipping selection activity");
     requestUpdate();
@@ -551,8 +552,17 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         requestUpdate();
         return;
       }
-      startActivityForResult(std::move(lookup), [this](const ActivityResult& result) {
-        if (!result.isCancelled && !mappedInput.hasTouch()) openDictionaryWordSelect();
+      const ClipSelectionActivity::Selection restore{clipping.startPageOffset, clipping.endPageOffset,
+                                                     clipping.startWordIndex, clipping.endWordIndex, true};
+      startActivityForResult(std::move(lookup), [this, spineIndex, pageNumber, restore](const ActivityResult& result) {
+        if (result.isCancelled) return;
+        if (section && currentSpineIndex == spineIndex && pageNumber < section->pageCount) {
+          section->currentPage = pageNumber;
+          currentPageVisibleOffset = section->getVisibleTextOffsetForPage(pageNumber);
+          startClipSelection(-1, -1, ClipSelectionActivity::Mode::Lookup, restore);
+        } else {
+          openDictionaryWordSelect();
+        }
       });
       return;
     }

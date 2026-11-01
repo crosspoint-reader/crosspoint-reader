@@ -70,6 +70,19 @@ ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputM
       initialY(initialY),
       mode(Mode::DefinitionLookup) {}
 
+ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                             std::vector<std::unique_ptr<Page>> pages, const int marginLeft,
+                                             const int marginTop, const int initialX, const int initialY,
+                                             const Mode mode, const Selection selection)
+    : Activity("ClipSelection", renderer, mappedInput),
+      pages(std::move(pages)),
+      initialSelection(selection),
+      marginLeft(marginLeft),
+      marginTop(marginTop),
+      initialX(initialX),
+      initialY(initialY),
+      mode(mode) {}
+
 void ClipSelectionActivity::onEnter() {
   Activity::onEnter();
   std::string dictionaryPath;
