@@ -170,8 +170,9 @@ void settleStart();
 // the module's to give (off, idle, or a start still settling).
 enum class BuildRelease : uint8_t { NotHeld, Released, StillUp };
 BuildRelease beforeChapterBuild();
-// Call once, when the page of a build that got Released or StillUp is on screen: the radio
-// stopped for it may start again.
+// Call once, when a build that got Released or StillUp is finished and its page is on screen,
+// or when the book that asked goes away: the radio stopped for it may start again. A screen
+// pushed over the book does not end the hold.
 void afterPaint();
 // The radio holds the heap or is asking for it: the book defers its background work.
 bool holdsHeap();
