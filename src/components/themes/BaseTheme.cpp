@@ -117,8 +117,12 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
   const auto fontIt = renderer.getFontMap().find(SMALL_FONT_ID);
   if (fontIt != renderer.getFontMap().end()) {
     if (const auto glyph = fontIt->second.getGlyph('0', EpdFontFamily::REGULAR)) {
-      const int inkTop = renderer.getFontAscenderSize(SMALL_FONT_ID) - static_cast<int>(glyph->top);
-      y = rect.y + inkTop + (static_cast<int>(glyph->height) - rect.height) / 2;
+      // Glyph metrics are physical pixels; rect and the ascender are logical.
+      const float scale = renderer.uiScale();
+      const int glyphTop = static_cast<int>(lroundf(glyph->top / scale));
+      const int glyphH = static_cast<int>(lroundf(glyph->height / scale));
+      const int inkTop = renderer.getFontAscenderSize(SMALL_FONT_ID) - glyphTop;
+      y = rect.y + inkTop + (glyphH - rect.height) / 2;
     }
   }
 

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+
 #include <EpdFontFamily.h>
 #include <HalDisplay.h>
 
@@ -45,6 +48,33 @@ class GfxRenderer {
   };
 
  private:
+  float uiScale_ = 1.0f;
+  mutable bool uiScaleActive_ = false;
+  // Draws in physical coordinates for the duration of one public call, so its
+  // implementation (and any public method it calls) is not scaled again.
+  struct UiScaleOff {
+    const GfxRenderer* renderer;
+    bool previous;
+    explicit UiScaleOff(const GfxRenderer* r) : renderer(r), previous(r->uiScaleActive_) {
+      r->uiScaleActive_ = false;
+    }
+    ~UiScaleOff() { renderer->uiScaleActive_ = previous; }
+  };
+  int sp(const int v) const { return static_cast<int>(lroundf(static_cast<float>(v) * uiScale_)); }
+  int lp(const int v) const { return static_cast<int>(lroundf(static_cast<float>(v) / uiScale_)); }
+  // Line widths never scale below one physical pixel.
+  int spw(const int v) const { return v <= 0 ? v : std::max(1, sp(v)); }
+  void spRect(int& x, int& y, int& w, int& h) const {
+    const int x1 = sp(x + w), y1 = sp(y + h);
+    x = sp(x);
+    y = sp(y);
+    w = x1 - x;
+    h = y1 - y;
+  }
+  void drawIconScaled(const uint8_t bitmap[], int x, int y, int size, int outSize) const;
+  void drawImageScaled(const uint8_t bitmap[], int x, int y, int width, int height, int outWidth, int outHeight) const;
+
+
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
 
   HalDisplay& display;
@@ -294,9 +324,13 @@ class GfxRenderer {
   // Drawing
   // UI drawing clip in logical coordinates; independent of panel orientation.
   std::array<int, 4> getClipRect() const {
+    if (uiScaleActive_) {
+      return {lp(clipLeft_), lp(clipTop_), lp(clipRight_ - clipLeft_), lp(clipBottom_ - clipTop_)};
+    }
     return {clipLeft_, clipTop_, clipRight_ - clipLeft_, clipBottom_ - clipTop_};
   }
   void setClipRect(int x, int y, int width, int height) const {
+    if (uiScaleActive_) spRect(x, y, width, height);
     clipLeft_ = x;
     clipTop_ = y;
     clipRight_ = x + width;
@@ -322,6 +356,11 @@ class GfxRenderer {
                        bool roundBottomLeft, bool roundBottomRight, Color color) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawIcon(const uint8_t bitmap[], int x, int y, int size) const;
+  // Board UI scale (BoardProfile::layoutScale). While active, every public draw
+  // and measure call takes and returns logical coordinates, multiplied by the
+  // scale on the way to the panel; glyphs, icons and bitmaps are drawn at
+  // physical resolution. 1.0 (every board but the dense ones) is the identity.
+  float uiScale() const { return uiScale_; }
   bool drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0, float cropY = 0,
                   bool whiteAsTransparent = false) const;
   bool drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
