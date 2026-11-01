@@ -109,10 +109,13 @@ void ReaderActivity::onExit() {
   flushReaderSession();
 
   if (pluginevents::anySubscriber(pluginevents::Event::ReaderExit)) {
+    const ScreenshotInfo info = getScreenshotInfo();
     char percent[8];
-    snprintf(percent, sizeof(percent), "%d", getScreenshotInfo().progressPercent);
-    const pluginevents::Var vars[] = {{"book", bookPath.c_str()}, {"percent", percent}};
-    pluginevents::emit(pluginevents::Event::ReaderExit, vars, 2);
+    char endPercent[8];
+    snprintf(percent, sizeof(percent), "%d", info.progressPercent);
+    snprintf(endPercent, sizeof(endPercent), "%d", info.endProgressPercent);
+    const pluginevents::Var vars[] = {{"book", bookPath.c_str()}, {"percent", percent}, {"end_percent", endPercent}};
+    pluginevents::emit(pluginevents::Event::ReaderExit, vars, 3);
   }
 
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);

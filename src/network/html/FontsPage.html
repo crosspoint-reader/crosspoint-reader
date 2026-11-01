@@ -6,48 +6,15 @@
     <title>Fonts - CrossPoint Reader</title>
     <style>
       h3 { margin: 0 0 8px 0; }
-      .family {
-        border-bottom: 1px solid var(--border-color);
-        padding: 12px 0;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-      .family:last-child { border-bottom: none; }
       .family-info { flex: 1; }
       .family-meta { color: var(--label-color); font-size: 0.9em; }
-      .btn {
-        padding: 6px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.9em;
-      }
-      .btn-danger {
-        background: var(--danger-color);
-        color: var(--button-text);
-      }
-      .btn-danger:hover { background: var(--danger-hover); }
-      .btn-primary {
-        background: var(--accent-color);
-        color: var(--button-text);
-      }
-      .btn-primary:hover { background: var(--accent-hover-color); }
-      .upload-form {
+      .font-upload-form {
         display: flex;
         gap: 10px;
         align-items: center;
         flex-wrap: wrap;
       }
-      .upload-form input[type="text"] {
-        padding: 6px 10px;
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        background: var(--bg);
-        color: var(--font-color);
-      }
-      .upload-form input[type="file"] { flex: 1; min-width: 200px; }
-      .empty { color: var(--label-color); text-align: center; padding: 20px; }
+      .font-upload-form input[type="file"] { flex: 1; min-width: 200px; }
     </style>
   <link rel="stylesheet" href="/assets/web.css" />
   <link rel="icon" type="image/svg+xml" href="/assets/crosspoint-icon.svg" />
@@ -59,12 +26,13 @@
 
     <div class="card">
       <h2>Installed Fonts</h2>
-      <div id="families"><p class="empty">Loading...</p></div>
+      <div id="families"><p class="empty-state">Loading...</p></div>
     </div>
 
     <div class="card">
       <h2>Upload Font</h2>
-      <form class="upload-form" id="uploadForm">
+      <p class="family-meta" style="margin: 0 0 12px;">Choose the folder that contains one font family. The picker selects folders, not single files.</p>
+      <form class="font-upload-form" id="uploadForm">
         <input type="file" id="fontFiles" webkitdirectory directory multiple required />
         <button type="submit" class="btn btn-primary">Upload</button>
       </form>
@@ -103,7 +71,7 @@
         el.replaceChildren();
         if (!data.families || data.families.length === 0) {
           const p = document.createElement('p');
-          p.className = 'empty';
+          p.className = 'empty-state';
           p.textContent = 'No fonts installed';
           el.appendChild(p);
           return;
@@ -140,7 +108,7 @@
       } catch (e) {
         el.replaceChildren();
         const p = document.createElement('p');
-        p.className = 'empty';
+        p.className = 'empty-state';
         p.textContent = 'Failed to load font list';
         el.appendChild(p);
       }

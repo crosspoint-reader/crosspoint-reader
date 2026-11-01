@@ -209,8 +209,8 @@ bool endsWithBreakableHyphen(const std::string_view token) {
 // pagination and must not allocate.
 constexpr size_t FOCUS_PREFIX_BUF_SIZE = 40;
 
-// Advance from the token origin to the start of its regular-weight suffix: the bold prefix plus
-// the kerning across the weight change. Doubles as the suffix's x offset inside the word.
+// Bold prefix width plus kerning across the weight change. In LTR this is also
+// the offset to the regular suffix; in RTL it contributes to the total word width.
 uint16_t measureFocusPrefixAdvance(const GfxRenderer& renderer, const int fontId, const std::string_view word,
                                    const EpdFontFamily::Style style, const uint8_t focusBoundary,
                                    const int8_t characterSpacing) {
@@ -221,8 +221,11 @@ uint16_t measureFocusPrefixAdvance(const GfxRenderer& renderer, const int fontId
 
   const auto boldStyle = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
   const auto* suffixPtr = reinterpret_cast<const unsigned char*>(word.data() + focusBoundary);
+  const uint32_t suffixFirst = utf8NextCodepoint(&suffixPtr);
+  const bool rtl = BidiUtils::startsWithRtl(prefixBuf);
   const int kerning =
-      renderer.getKerning(fontId, lastCodepoint(prefixBuf), utf8NextCodepoint(&suffixPtr), boldStyle, characterSpacing);
+      rtl ? renderer.getKerning(fontId, suffixFirst, lastCodepoint(prefixBuf), style, characterSpacing)
+          : renderer.getKerning(fontId, lastCodepoint(prefixBuf), suffixFirst, boldStyle, characterSpacing);
   return static_cast<uint16_t>(renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle, characterSpacing) + kerning);
 }
 
@@ -244,6 +247,16 @@ uint16_t measureFocusWordWidth(const GfxRenderer& renderer, const int fontId, co
   const uint16_t suffixWidth = measureWordWidth(renderer, fontId, word.substr(focusBoundary), style, characterSpacing,
                                                 wordSpacingPercent, appendHyphen);
   return measureFocusPrefixAdvance(renderer, fontId, word, style, focusBoundary, characterSpacing) + suffixWidth;
+}
+
+// RTL draws the regular suffix on the left and the bold prefix on the right.
+uint16_t measureFocusRtlSplitAdvance(const GfxRenderer& renderer, const int fontId, const std::string_view word,
+                                     const EpdFontFamily::Style style, const uint8_t boundary,
+                                     const int8_t characterSpacing) {
+  const auto suffix = word.substr(boundary);
+  const int kerning = renderer.getKerning(fontId, firstCodepoint(suffix), lastCodepoint(word.substr(0, boundary)),
+                                          style, characterSpacing);
+  return measureWordWidth(renderer, fontId, suffix, style, characterSpacing, 100) + kerning;
 }
 
 // Focus boundaries for the two halves of a token split at `splitOffset`.
@@ -877,11 +890,6 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
 }
 
-static inline bool isCjkIdeograph(uint32_t cp) {
-  return (cp >= 0x4E00 && cp <= 0x9FFF) || (cp >= 0x3400 && cp <= 0x4DBF) || (cp >= 0xF900 && cp <= 0xFAFF) ||
-         (cp >= 0x20000 && cp <= 0x3FFFF);
-}
-
 // The first word of a line may have its ruby characters wider than the word (the base text). In that case, we need to
 // move the base text to the right a bit so that ruby text doesn't overflow the left border, and it is still centered
 // over the base text. This function calculates how much we need to move the base text to the right.
@@ -908,21 +916,16 @@ int ParsedText::calculateRubyExtraStartOffset(const size_t wordIdx, const size_t
     return 0;
   }
 
-  const int leftOverlap = (rubyWidth - groupActualWidth) / 2;
-
-  // This function is only ever called for the first word of a line.
-  // words[wordIdx - 1], if it exists, is always the last word of the *prior* line
-  // and cannot absorb any left overhang on the current line.
-  // The full leftOverlap must therefore be reserved as a visual indent so the
-  // ruby text does not overflow the left margin.
-  return leftOverlap;
+  // The ruby extends past the first base character by 1 unit (1 / 2M of the difference).
+  // At the start of a line there is no preceding character to absorb overhang, so this
+  // 1 unit must be reserved as a visual indent so ruby does not overflow the left margin.
+  return (rubyWidth - groupActualWidth) / (2 * static_cast<int>(groupWordCount));
 }
 
 // The last ruby group on a line may have its ruby characters wider than the group's base text.
-// The right half of that overhang protrudes past the last base character. This function returns
+// The right unit of overhang protrudes past the last base character. This function returns
 // the amount of right-margin space that must be reserved so the ruby does not overflow the right
-// border. It mirrors calculateRubyExtraStartOffset: words[lineBreak] is on the *next* line and
-// cannot absorb any of the right overhang on the current line, so the full rightOverlap is returned.
+// border. It mirrors calculateRubyExtraStartOffset.
 int ParsedText::calculateRubyExtraEndOffset(const size_t lineStartIdx, const size_t lineBreakIdx,
                                             const GfxRenderer& renderer, const int fontId) const {
   if (rubyTexts.empty() || lineBreakIdx == 0 || lineStartIdx >= lineBreakIdx) {
@@ -953,7 +956,9 @@ int ParsedText::calculateRubyExtraEndOffset(const size_t lineStartIdx, const siz
     return 0;
   }
 
-  return (rubyWidth - groupActualWidth) / 2;
+  const int m = static_cast<int>(lineBreakIdx - leaderIdx);
+  const int delta = rubyWidth - groupActualWidth;
+  return delta - (delta * (2 * m - 1)) / (2 * m);
 }
 
 int ParsedText::wordFontId(const size_t wordIndex, const int blockFontId) const {
@@ -990,8 +995,10 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
       size_t count;
       int baseWidth;
       int rubyWidth;
-      int leftOverlap;
-      int rightOverlap;
+      int leftStickOut;
+      int rightStickOut;
+      int firstCharWidth;
+      int lastCharWidth;
     };
 
     std::vector<RubyGroupInfo> groups;
@@ -1007,8 +1014,24 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
         }
         g.rubyWidth =
             renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP, blockStyle.characterSpacing);
-        g.leftOverlap = std::max(0, (g.rubyWidth - g.baseWidth) / 2);
-        g.rightOverlap = std::max(0, (g.rubyWidth - g.baseWidth) / 2);
+
+        const int delta = g.rubyWidth - g.baseWidth;
+        if (delta > 0) {
+          const int totalUnits = 2 * static_cast<int>(g.count);
+          g.leftStickOut = delta / totalUnits;
+          g.rightStickOut = delta - (delta * (totalUnits - 1)) / totalUnits;
+        } else {
+          g.leftStickOut = 0;
+          g.rightStickOut = 0;
+        }
+
+        char firstChar[5] = {}, lastChar[5] = {};
+        utf8AppendCodepoint(firstChar, firstCodepoint(rubyTexts[i]));
+        utf8AppendCodepoint(lastChar, lastCodepoint(rubyTexts[i]));
+
+        g.firstCharWidth = renderer.getTextAdvanceX(fontId, firstChar, EpdFontFamily::SUP, blockStyle.characterSpacing);
+        g.lastCharWidth = renderer.getTextAdvanceX(fontId, lastChar, EpdFontFamily::SUP, blockStyle.characterSpacing);
+
         groups.push_back(g);
         i += g.count - 1;
       }
@@ -1017,61 +1040,53 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
     // Adjust widths based on adjacent characters and group-to-group spacing
     for (size_t gIdx = 0; gIdx < groups.size(); ++gIdx) {
       const auto& g = groups[gIdx];
+      const size_t nextIdx = g.start + g.count;
+      const int delta = g.rubyWidth - g.baseWidth;
 
-      // 1. Preceding character (left overhang)
-      if (g.start > 0) {
-        const uint32_t cpPrev = lastCodepoint(wordAt(g.start - 1));
-        if (isCjkIdeograph(cpPrev)) {
-          wordWidths[g.start - 1] += g.leftOverlap;
-        } else {
-          const int maxLeftOverhang = wordWidths[g.start - 1] / 2;
-          wordWidths[g.start - 1] += std::max(0, g.leftOverlap - maxLeftOverhang);
+      // 1. Spacing between base characters inside the group (if M >= 2 and ruby is wider)
+      if (g.count >= 2 && delta > 0) {
+        const int totalUnits = 2 * static_cast<int>(g.count);
+        int prevCumulative = g.leftStickOut;
+        for (size_t k = 0; k + 1 < g.count; ++k) {
+          const int targetUnits = 1 + 2 * (static_cast<int>(k) + 1);
+          const int nextCumulative = (delta * targetUnits) / totalUnits;
+          wordWidths[g.start + k] += (nextCumulative - prevCumulative);
+          prevCumulative = nextCumulative;
         }
       }
 
-      // 2. Succeeding character (right overhang / group collision)
-      const size_t nextIdx = g.start + g.count;
+      const bool prevIsAdjacentRuby = (gIdx > 0 && groups[gIdx - 1].start + groups[gIdx - 1].count == g.start);
+      const bool nextIsAdjacentRuby = (gIdx + 1 < groups.size() && groups[gIdx + 1].start == nextIdx);
+
+      // 2. Preceding character (left overhang into regular text)
+      if (g.start > 0 && !prevIsAdjacentRuby && g.leftStickOut > 0) {
+        // Chromium would use something like `wordWidths[g.start - 1] / 2`, but
+        // when two text blocks have ruby annotations twice as wide as their base
+        // text and are separated by a half-width Latin letter, as in
+        // `<ruby>諺<rt>ことわざ</rt></ruby>L<ruby>諺<rt>ことわざ</rt></ruby>`,
+        // the two ruby annotation blocks would touch, potentially causing readers
+        // to misread them. Chromium has additional code to handle this case, but
+        // I want to avoid adding that complexity, so I use
+        // `wordWidths[g.start - 1] / 4` instead of `/ 2`. A quarter of a kana's
+        // width in the base text is equivalent to half a kana's width in the ruby
+        // annotation, which is why I chose 4 as the divisor.
+        const int maxLeftOverhang = std::min(g.firstCharWidth / 2, wordWidths[g.start - 1] / 4);
+        if (g.leftStickOut > maxLeftOverhang) {
+          wordWidths[g.start - 1] += (g.leftStickOut - maxLeftOverhang);
+        }
+      }
+
+      // 3. Succeeding character (adjacent ruby collision or right overhang into regular text)
       if (nextIdx < words.size()) {
-        if (gIdx + 1 < groups.size() && groups[gIdx + 1].start == nextIdx) {
-          // Adjacent ruby groups: compute collision
-          const auto& nextG = groups[gIdx + 1];
-          const int collision = g.rightOverlap + nextG.leftOverlap;
+        if (nextIsAdjacentRuby) {
+          const int collision = g.rightStickOut + groups[gIdx + 1].leftStickOut;
           if (collision > 0) {
             wordWidths[g.start + g.count - 1] += collision;
           }
-        } else {
-          // Regular character following: check if it's Kanji
-          const uint32_t cpNext = firstCodepoint(wordAt(nextIdx));
-          if (isCjkIdeograph(cpNext)) {
-            wordWidths[g.start + g.count - 1] += g.rightOverlap;
-          } else {
-            const int maxRightOverhang = wordWidths[nextIdx] / 2;
-            wordWidths[g.start + g.count - 1] += std::max(0, g.rightOverlap - maxRightOverhang);
-          }
-
-          // Check if there is another ruby group further ahead separated only by non-ideographs
-          if (gIdx + 1 < groups.size()) {
-            const auto& nextG = groups[gIdx + 1];
-            bool onlyNonIdeographsInBetween = true;
-            int gapWidth = 0;
-            for (size_t k = nextIdx; k < nextG.start; ++k) {
-              const uint32_t cp = firstCodepoint(wordAt(k));
-              if (isCjkIdeograph(cp)) {
-                onlyNonIdeographsInBetween = false;
-                break;
-              }
-              gapWidth += wordWidths[k];
-            }
-            if (onlyNonIdeographsInBetween) {
-              const int maxRightOverhang = wordWidths[g.start + g.count - 1] / 2;
-              const int maxLeftOverhang = wordWidths[nextG.start - 1] / 2;
-              const int allowedRight = std::min(g.rightOverlap, maxRightOverhang);
-              const int allowedLeft = std::min(nextG.leftOverlap, maxLeftOverhang);
-              const int touchOverlap = allowedRight + allowedLeft - gapWidth;
-              if (touchOverlap > 0) {
-                wordWidths[g.start + g.count - 1] += touchOverlap;
-              }
-            }
+        } else if (g.rightStickOut > 0) {
+          const int maxRightOverhang = std::min(g.lastCharWidth / 2, wordWidths[nextIdx] / 4);
+          if (g.rightStickOut > maxRightOverhang) {
+            wordWidths[g.start + g.count - 1] += (g.rightStickOut - maxRightOverhang);
           }
         }
       }
@@ -1881,25 +1896,27 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     return;
   }
 
-  // Each word is one TextBlock entry carrying its own boundary; all that remains is the suffix x
-  // offset the renderer needs to resume in regular weight, i.e. the bold prefix's advance.
+  // Each word is one TextBlock entry carrying its own boundary and an offset
+  // to the second visual run: the bold prefix in RTL, the regular suffix in LTR.
   std::vector<uint8_t> outBoundaries;
-  std::vector<uint16_t> outSuffixX;
+  std::vector<uint16_t> outSplitX;
   outBoundaries.reserve(lineWordCount);
-  outSuffixX.reserve(lineWordCount);
+  outSplitX.reserve(lineWordCount);
   for (size_t i = 0; i < lineWordCount; i++) {
     const uint8_t boundary = focusBoundaryAt(i);
     outBoundaries.push_back(boundary);
     const int wordFont = wordFontId(lastBreakAt + (willReorder ? visualOrderScratch[i] : i), fontId);
-    outSuffixX.push_back(boundary == 0 ? 0
-                                       : measureFocusPrefixAdvance(
-                                             renderer, wordFont, lineWords[i],
-                                             getWordStyleAt(lastBreakAt + (willReorder ? visualOrderScratch[i] : i)),
-                                             boundary, blockStyle.characterSpacing));
+    const auto style = getWordStyleAt(lastBreakAt + (willReorder ? visualOrderScratch[i] : i));
+    const bool rtl = BidiUtils::startsWithRtl(lineWords[i].c_str());
+    outSplitX.push_back(boundary == 0 ? 0
+                        : rtl         ? measureFocusRtlSplitAdvance(renderer, wordFont, lineWords[i], style, boundary,
+                                                                    blockStyle.characterSpacing)
+                                      : measureFocusPrefixAdvance(renderer, wordFont, lineWords[i], style, boundary,
+                                                                  blockStyle.characterSpacing));
   }
 
   auto block =
-      makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX, blockStyle,
+      makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSplitX, blockStyle,
                                    std::move(lineRubyTexts), std::move(lineLinks), sourceRanges, paragraphStartWord);
   if (!block || !block->valid() || !attachWordFonts(*block)) {
     LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");

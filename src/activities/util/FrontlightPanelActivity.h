@@ -9,9 +9,8 @@
 // or a button bound to "Control Center" (iOS Control Center style): a grabber,
 // the frontlight brightness/warmth sliders (on boards with a light), and a row
 // of quick-setting icons — night mode, ghost-cleanup refresh, reading
-// orientation, and reader touch controls on/off. The
-// frontlight controls are always there: they are what the panel is for. Pure
-// 1-bit: enabled toggles have a filled circle and an On/Off caption. The grabber sits
+// orientation, reader touch controls, and Bluetooth. Enabled toggles have filled
+// rounded squares; all other controls are outlined. The grabber sits
 // along the panel's bottom edge, the edge the sheet is dragged from.
 class FrontlightPanelActivity final : public Activity, private UiAppHost {
   ButtonNavigator buttonNavigator;
@@ -35,8 +34,8 @@ class FrontlightPanelActivity final : public Activity, private UiAppHost {
   uint8_t touchModeRestore = CrossPointSettings::TOUCH_READER_ON;
   int panelBottom = 0;
 
-  // Quick settings, left to right: night mode, refresh, orientation, touch.
-  static constexpr int kTileCount = 4;
+  // Quick settings, left to right: night mode, refresh, orientation, touch, Bluetooth.
+  static constexpr int kTileCount = 5;
 
   // SliderRowProps embeds a StyleSet, so keep it off the render stack.
   freeink::ui::SliderRowProps rowProps;

@@ -38,6 +38,9 @@ class CrossPointWebServer {
     size_t size = 0;
     bool success = false;
     String error = "";
+    // Overwriting an existing file: data goes to "<file>.part", which replaces
+    // the file only after the whole upload is written.
+    bool staged = false;
 
     // Upload write buffer - batches small writes into larger SD card operations
     // 4KB is a good balance: large enough to reduce syscall overhead, small enough
@@ -175,7 +178,7 @@ class CrossPointWebServer {
 
   // SD-plugin job queue. External systems (a companion app, a script) enqueue
   // {plugin, action, args}; any open page hosting the plugin (File Manager,
-  // Settings, or the headless /plugins-run page) claims and executes it, then
+  // Plugins, or the headless /plugins-run page) claims and executes it, then
   // posts the result. The firmware only stores small JSON blobs — plugin logic
   // never runs on-device. Fixed pool inside this (heap-allocated, web-session
   // lifetime) object: no allocation per job, oldest finished slot recycled.
@@ -200,6 +203,7 @@ class CrossPointWebServer {
   uint32_t nextPluginJobId = 1;
   uint32_t nextPluginJobClaim = 1;
   PluginJob* allocPluginJob();
+  void handlePluginsPage() const;       // GET /plugins     -> plugin settings page
   void handlePluginRunnerPage() const;  // GET /plugins-run -> headless executor page
   void handlePluginJobSubmit();         // POST /api/plugin-jobs          -> {id}
   void handlePluginJobClaim();          // GET  /api/plugin-jobs/claim    -> next pending job for a plugin

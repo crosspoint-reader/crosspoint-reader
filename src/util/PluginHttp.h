@@ -53,6 +53,11 @@ void readRequest(JsonVariantConst node, const char* defaultMethod, RequestSpec& 
 // Percent-encodes a query value ('/' included).
 std::string urlEncodeQuery(const std::string& s);
 
+// Percent-encodes the bytes an HTTP request line cannot carry (controls,
+// space, non-ASCII) and keeps the rest, including existing %XX escapes, so a
+// template filled with raw text (e.g. "{title}") still forms a valid URL.
+std::string escapeUrl(const std::string& url);
+
 // --- token / config files ---
 
 // A manifest file path: relative paths live in the plugin's own folder

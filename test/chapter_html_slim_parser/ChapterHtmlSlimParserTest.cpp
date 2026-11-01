@@ -36,16 +36,17 @@ void installBuiltinVariants(GfxRenderer& renderer) {
 }
 
 void installSyntheticVariants(GfxRenderer& renderer) {
-  renderer.setFontVariantProvider({&renderer,
-                                   [](void* ctx, const int fontId, const float scale) {
-                                     const int variant = fontId * 1000 + static_cast<int>(scale * 100 + 0.5f);
-                                     static_cast<GfxRenderer*>(ctx)->fontMap.emplace(variant, EpdFontFamily(nullptr));
-                                     return variant;
-                                   },
-                                   [](void* ctx, const int fontId) {
-                                     static_cast<GfxRenderer*>(ctx)->fontMap.emplace(fontId, EpdFontFamily(nullptr));
-                                     return true;
-                                   }});
+  renderer.setFontVariantProvider(
+      {&renderer,
+       [](void* ctx, const int fontId, const float scale) {
+         const int variant = fontId * 1000 + static_cast<int>(scale * 100 + 0.5f);
+         static_cast<GfxRenderer*>(ctx)->fontMap.emplace(variant, EpdFontFamily(12, nullptr));
+         return variant;
+       },
+       [](void* ctx, const int fontId) {
+         static_cast<GfxRenderer*>(ctx)->fontMap.emplace(fontId, EpdFontFamily(12, nullptr));
+         return true;
+       }});
 }
 
 class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
@@ -343,7 +344,7 @@ TEST(ReaderFontSizes, BuiltinVariantsStayInFamilyAndRespectSizeBounds) {
 TEST_F(ChapterHtmlSlimParserTest, BlockFontScaleUsesProviderAndFallsBackToBodyFont) {
   installBuiltinVariants(renderer);
   for (const int id : {NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID}) {
-    renderer.fontMap.emplace(id, EpdFontFamily(nullptr));
+    renderer.fontMap.emplace(id, EpdFontFamily(12, nullptr));
   }
   parser.fontId = NOTOSANS_14_FONT_ID;
   EXPECT_EQ(parser.fontIdForScale(1.0f), NOTOSANS_14_FONT_ID);
@@ -629,6 +630,70 @@ class ChapterBlockDecorationTest : public ChapterHtmlSlimParserTest {
   }
 };
 
+// 90% of a 25 px font spaces lines 23 px apart, less than the font's 34 px line height.
+class ChapterTightSpacingTest : public ChapterBlockDecorationTest {
+ protected:
+  static constexpr int GLYPH_HEIGHT = 34;
+  void SetUp() override {
+    ChapterBlockDecorationTest::SetUp();
+    renderer.fontLineHeights[0] = GLYPH_HEIGHT;
+    renderer.fontSizePixels[0] = 25;
+    renderer.fontAscenders[0] = 28;
+    parser.lineCompression = 0.9f;
+    parser.viewportHeight = 69;
+  }
+};
+
+TEST_F(ChapterTightSpacingTest, FontSizeLineSpacingKeepsLastLineInsidePage) {
+  open("p", nullptr);
+  text(words(80));
+  close("p");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_GE(pages.size(), 2u);
+  bool checkedSpacing = false;
+  for (const auto& page : pages) {
+    int previousY = -1;
+    for (const auto& element : page->elements) {
+      if (element->getTag() != TAG_PageLine) continue;
+      EXPECT_LE(element->yPos + GLYPH_HEIGHT, parser.viewportHeight);
+      if (previousY >= 0) {
+        EXPECT_EQ(element->yPos - previousY, 23);
+        checkedSpacing = true;
+      }
+      previousY = element->yPos;
+    }
+  }
+  EXPECT_TRUE(checkedSpacing);
+}
+
+TEST_F(ChapterTightSpacingTest, TightTableLinesStayTogetherAndInsidePage) {
+  open("table", nullptr);
+  parser.tableColumnWidths = {240, 240};
+  parser.tableColumnCount = 2;
+  open("tr", nullptr);
+  for (int column = 0; column < 2; ++column) {
+    open("td", nullptr);
+    text(words(80));
+    close("td");
+  }
+  ASSERT_FALSE(parser.tableRowStacked);
+  close("tr");
+  close("table");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_GE(pages.size(), 2u);
+  for (const auto& page : pages) {
+    std::map<int, int> columnsAtY;
+    for (const auto& element : page->elements) {
+      if (element->getTag() != TAG_PageLine) continue;
+      EXPECT_LE(element->yPos + GLYPH_HEIGHT, parser.viewportHeight);
+      ++columnsAtY[element->yPos];
+    }
+    for (const auto& [y, columns] : columnsAtY) {
+      EXPECT_EQ(columns, 2) << "at y=" << y;
+    }
+  }
+}
+
 TEST_F(ChapterBlockDecorationTest, RepeatedSectionBreaksEachAddOneLine) {
   for (int breaks = 1; breaks <= 3; ++breaks) {
     open("p", "margin-top: 1px");
@@ -875,6 +940,161 @@ TEST_F(ChapterBlockDecorationTest, FloatedLeadingSpanBecomesDropCap) {
   EXPECT_STREQ(static_cast<const PageLine*>(lines[0])->getBlock()->wordText(0), "he");
 }
 
+TEST_F(ChapterTightSpacingTest, TightDropCapMovesWithAllSpannedLines) {
+  open("p", nullptr);
+  text("Before");
+  close("p");
+  ASSERT_EQ(parser.currentPageNextY, 23);
+  open("p", nullptr);
+  open("span", "float: left; font-size: 2em");
+  text("T");
+  close("span");
+  text("he " + words(50));
+  close("p");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_GE(pages.size(), 2u);
+  size_t capCount = 0;
+  for (size_t index = 0; index < pages.size(); ++index) {
+    bool hasCap = false;
+    size_t besideCap = 0;
+    for (const auto& element : pages[index]->elements) {
+      if (element->getTag() == TAG_PageDropCap) {
+        hasCap = true;
+        ++capCount;
+      }
+      if (element->getTag() == TAG_PageLine) {
+        EXPECT_LE(element->yPos + GLYPH_HEIGHT, parser.viewportHeight);
+        if (element->xPos > 0) ++besideCap;
+      }
+    }
+    if (hasCap) {
+      EXPECT_GT(index, 0u);
+      EXPECT_EQ(besideCap, 2u);
+    } else {
+      EXPECT_EQ(besideCap, 0u);
+    }
+  }
+  EXPECT_EQ(capCount, 1u);
+}
+
+TEST_F(ChapterTightSpacingTest, TextAfterBoxStartsBelowItsFrame) {
+  parser.viewportHeight = 400;
+  parser.extraParagraphSpacing = false;
+  open("div", "border: 1px solid black");
+  open("p", nullptr);
+  text("Framed");
+  close("p");
+  close("div");
+  open("p", nullptr);
+  text("Outside");
+  close("p");
+  ASSERT_EQ(elementsWithTag(TAG_PageBorderBox).size(), 1u);
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[1]->yPos, lines[0]->yPos + GLYPH_HEIGHT + 5);  // 4 px gap + 1 px border
+}
+
+TEST_F(ChapterTightSpacingTest, BoxFrameStartsBelowPreviousLineGlyphs) {
+  parser.viewportHeight = 400;
+  open("p", nullptr);
+  text("Before");
+  close("p");
+  open("div", "border: 1px solid black");
+  open("p", nullptr);
+  text("Framed");
+  close("p");
+  close("div");
+  const auto boxes = elementsWithTag(TAG_PageBorderBox);
+  ASSERT_EQ(boxes.size(), 1u);
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(boxes[0]->yPos, lines[0]->yPos + GLYPH_HEIGHT);
+}
+
+TEST_F(ChapterTightSpacingTest, BorderedTableStartsBelowPreviousLineGlyphs) {
+  parser.viewportHeight = 400;
+  open("p", nullptr);
+  text("Before");
+  close("p");
+  const XML_Char* bordered[] = {"border", "1", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "table", bordered);
+  parser.tableColumnWidths = {240, 240};
+  parser.tableColumnCount = 2;
+  open("tr", nullptr);
+  for (const char* cell : {"alpha", "beta"}) {
+    open("td", nullptr);
+    text(cell);
+    close("td");
+  }
+  ASSERT_FALSE(parser.tableRowStacked);
+  close("tr");
+  close("table");
+  const auto boxes = elementsWithTag(TAG_PageBorderBox);
+  ASSERT_EQ(boxes.size(), 2u);
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_GE(lines.size(), 1u);
+  EXPECT_EQ(boxes[0]->yPos, lines[0]->yPos + GLYPH_HEIGHT);
+}
+
+TEST_F(ChapterTightSpacingTest, BorderedTableRowMovesWholeWhenRaisedRowDoesNotFit) {
+  parser.viewportHeight = 66;  // the row fits below the line's spacing, not below its glyphs
+  open("p", nullptr);
+  text("Before");
+  close("p");
+  const XML_Char* bordered[] = {"border", "1", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "table", bordered);
+  parser.tableColumnWidths = {240, 240};
+  parser.tableColumnCount = 2;
+  open("tr", nullptr);
+  for (const char* cell : {"alpha", "beta"}) {
+    open("td", nullptr);
+    text(cell);
+    close("td");
+  }
+  close("tr");
+  close("table");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_EQ(pages.size(), 2u);
+  std::map<PageElementTag, std::vector<int>> secondPage;
+  for (const auto& element : pages[1]->elements) secondPage[element->getTag()].push_back(element->yPos);
+  ASSERT_EQ(secondPage[TAG_PageLine].size(), 2u);
+  EXPECT_EQ(secondPage[TAG_PageLine][0], 3);  // 1 px border + 2 px gap
+  EXPECT_EQ(secondPage[TAG_PageLine][1], 3);
+  ASSERT_EQ(secondPage[TAG_PageBorderBox].size(), 2u);
+  EXPECT_EQ(secondPage[TAG_PageBorderBox][0], 0);
+  for (const auto& element : pages[0]->elements) EXPECT_NE(element->getTag(), TAG_PageBorderBox);
+}
+
+TEST_F(ChapterTightSpacingTest, StackedTableRuleStartsBelowRowGlyphs) {
+  parser.viewportHeight = 400;
+  open("table", nullptr);
+  open("tr", nullptr);
+  open("td", nullptr);
+  text("Only cell");
+  close("td");
+  close("tr");
+  close("table");
+  const auto rules = elementsWithTag(TAG_PageHorizontalRule);
+  ASSERT_EQ(rules.size(), 1u);
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 1u);
+  EXPECT_EQ(rules[0]->yPos, lines[0]->yPos + GLYPH_HEIGHT + 1);
+}
+
+TEST_F(ChapterTightSpacingTest, HorizontalRuleStartsBelowPreviousLineGlyphs) {
+  parser.viewportHeight = 400;
+  open("p", nullptr);
+  text("Before");
+  close("p");
+  open("hr", "margin-top: 1px");
+  close("hr");
+  const auto rules = elementsWithTag(TAG_PageHorizontalRule);
+  ASSERT_EQ(rules.size(), 1u);
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 1u);
+  EXPECT_EQ(rules[0]->yPos, lines[0]->yPos + GLYPH_HEIGHT);
+}
+
 TEST_F(ChapterBlockDecorationTest, MultiWordSpanStaysText) {
   open("p", nullptr);
   open("span", "float: left");
@@ -931,6 +1151,40 @@ TEST_F(ChapterBlockDecorationTest, BorderedBlockFramesItsTextAndInsetsIt) {
   EXPECT_GE(lines[0]->xPos, 6);  // 2 px border + 4 px gap
   EXPECT_GT(lines[0]->yPos, boxes[0]->yPos);
   EXPECT_EQ(lines[1]->xPos, 0);
+}
+
+TEST_F(ChapterBlockDecorationTest, BoxBottomPaddingSitsInsideItsFrame) {
+  open("div", "border: 1px solid black");
+  open("p", nullptr);
+  text("X");
+  close("p");
+  close("div");
+  for (const char* word : {"Y", "Z"}) {
+    open("p", nullptr);
+    text(word);
+    close("p");
+  }
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 3u);
+  EXPECT_EQ(lines[1]->yPos, lines[0]->yPos + 16 + 5);  // 4 px gap + 1 px border
+  EXPECT_EQ(lines[2]->yPos, lines[1]->yPos + 16);
+}
+
+TEST_F(ChapterBlockDecorationTest, BoxFrameUsesOnlyThePaddingItNeeds) {
+  open("div", "border: 1px solid black");
+  open("p", "margin-bottom: 2px");
+  text("X");
+  close("p");
+  close("div");
+  for (const char* word : {"Y", "Z"}) {
+    open("p", nullptr);
+    text(word);
+    close("p");
+  }
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 3u);
+  EXPECT_EQ(lines[1]->yPos, lines[0]->yPos + 16 + 5);
+  EXPECT_EQ(lines[2]->yPos, lines[1]->yPos + 16 + 2);  // the margin already covered 2 px of the padding
 }
 
 TEST_F(ChapterBlockDecorationTest, EmptyBorderedBlockDrawsARule) {
@@ -1071,7 +1325,7 @@ class ChapterInlineSizeTest : public ChapterBlockDecorationTest {
     ChapterBlockDecorationTest::SetUp();
     installBuiltinVariants(renderer);
     for (const int id : {NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID}) {
-      renderer.fontMap.emplace(id, EpdFontFamily(nullptr));
+      renderer.fontMap.emplace(id, EpdFontFamily(12, nullptr));
     }
     parser.fontId = NOTOSANS_14_FONT_ID;
   }

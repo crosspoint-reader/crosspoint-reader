@@ -139,6 +139,8 @@ struct Settings {
 } SETTINGS;
 struct MappedInputManager {
   enum class Button { Back };
+  bool touch = false;
+  bool hasTouch() const { return touch; }
   bool released = false;
   unsigned long heldMs = 0;
   bool longPress = false;
@@ -413,6 +415,21 @@ int main() {
   assert(parent.finished && !parent.result.isCancelled);
   reader.onLookupResult(parent.result);
   assert(reader.selectionOpened);
+  // Lookup exits reopen book selection only on buttons-only devices.
+  for (const bool touch : {false, true}) {
+    for (const bool cancelled : {false, true}) {
+      for (const bool controlsEnabled : {false, true}) {
+        SETTINGS.touchReaderControls = controlsEnabled;
+        DictionaryDefinitionActivity lookupParent, bookReader;
+        ActivityResult exitResult;
+        exitResult.isCancelled = cancelled;
+        lookupParent.onDefinitionResult(exitResult);
+        bookReader.mappedInput.touch = touch;
+        bookReader.onLookupResult(lookupParent.result);
+        assert(bookReader.selectionOpened == (!touch && !cancelled));
+      }
+    }
+  }
   // Long Back also exits at the first definition, where there are no ancestors.
   DictionaryDefinitionActivity root;
   root.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
@@ -501,7 +518,7 @@ class Dictionary {
     ++searches;
     return false;
   }
-  bool readDefinition(DictLocation, std::string&, LookupResult*, bool = false) { return false; }
+  bool readDefinition(DictLocation, std::string&, LookupResult*, bool = false, bool* = nullptr) { return false; }
   static std::string cleanWord(const char*);
   static void stemVariants(const std::string&, std::vector<std::string>&);
   bool lookup(const char*, std::string&, std::string&, LookupResult*);
