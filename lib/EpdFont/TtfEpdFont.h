@@ -109,11 +109,12 @@ class TtfEpdFont {
     uint16_t maxGlyphs = 0;
     bool twoBit = true;
     uint16_t sizePx = 0;
-    uint8_t srcIndex = 0;     // which Source this face initializes from
-    int weight = 400;         // design weight requested (wght axis / faux bold)
-    bool wantItalic = false;  // request italic from the source (axis or oblique)
-    bool inited = false;      // init attempted (lazy)
-    bool ready = false;       // FreeType face live
+    uint8_t srcIndex = 0;      // which Source this face initializes from
+    int weight = 400;          // design weight requested (wght axis / faux bold)
+    bool wantItalic = false;   // request italic from the source (axis or oblique)
+    bool inited = false;       // init attempted (lazy)
+    bool ready = false;        // FreeType face live
+    uint8_t initFailures = 0;  // consecutive failed initFace attempts
     // GSUB 'liga' resolution (fi fl ff ffi ffl), resolved once at initFace():
     // ligGid[i] is the raw glyph ID for U+FB00+i (0 = none), and ligPairs is
     // the EpdFont pair table (sorted by key) that routes applyLigatures() to

@@ -125,6 +125,7 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
     f.maxGlyphs = maxGlyphs;
     f.inited = false;
     f.ready = false;
+    f.initFailures = 0;
     // Flush the glyph/kern caches, not just the arena cursor: faultGlyph
     // consults the lookup tables before anything else, so entries rasterized
     // at a previous size would serve stale metrics — and their bitmaps get
@@ -142,6 +143,7 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
 
 void TtfEpdFont::initFace(Face& f) {
   if (f.inited && f.ready) return;
+  if (f.initFailures >= 2) return;
   const Source& s = sources_[f.srcIndex];
   if (!s.present) {
     f.ready = false;
@@ -160,10 +162,13 @@ void TtfEpdFont::initFace(Face& f) {
     f.ready = tryInit();
   }
   if (!f.ready) {
-    // Transient failure under heap pressure; leave f.inited false so a later fault can retry.
+    // Transient failure under heap pressure; leave f.inited false so a later fault can retry,
+    // but bound retries so a persistent failure doesn't thrash ensureFree on every glyph.
     f.inited = false;
+    f.initFailures++;
     return;
   }
+  f.initFailures = 0;
   f.inited = true;
   if (f.ready) {
     // Full auto-hinting + stem darkening pair with the BW-aware quantizer in
@@ -276,6 +281,7 @@ void TtfEpdFont::releaseResidentCaches() {
   if (evictionLocked_) return;  // mid-fault: this font's faces are live
   for (int i = 0; i < 4; ++i) {
     Face& f = faces_[i];
+    f.initFailures = 0;
     // Actually RELEASE the caches (swap-with-empty frees capacity; clear() alone
     // would not).
     flushFace(f);
