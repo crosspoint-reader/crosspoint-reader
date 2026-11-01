@@ -586,6 +586,16 @@ void setupDisplayAndFonts(bool seamless = false) {
 
 void setup() {
   BoardConfig::holdPowerRails();
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // A deep-sleep wake is the power-off fallback (the Plus's only deep sleep),
+  // woken by the expander's INT, which any key or the accelerometer can pull.
+  // Unless the power key is held, sleep again now: before the rest of setup, so
+  // a short press is still down, and without repeating the power-off pulses.
+  if (BoardConfig::isMetalioEInk4Plus() && esp_reset_reason() == ESP_RST_DEEPSLEEP &&
+      !freeink::metalioplus::powerKeyHeld()) {
+    powerManager.sleepOnExpanderKey();
+  }
+#endif
 
 #ifdef ENABLE_SERIAL_LOG
 #ifdef CROSSPOINT_WAIT_FOR_USB_SERIAL
