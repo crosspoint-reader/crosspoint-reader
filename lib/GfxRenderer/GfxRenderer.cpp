@@ -169,7 +169,7 @@ void GfxRenderer::ensureSdCardFontReady(const int fontId, const char* const* seg
 }
 
 void GfxRenderer::begin() {
-  uiScale_ = BoardConfig::ACTIVE.layoutScale > 0.0f ? BoardConfig::ACTIVE.layoutScale : 1.0f;
+  uiScale_ = BoardConfig::ACTIVE.uiScale;
   uiScaleActive_ = uiScale_ != 1.0f;
   frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
@@ -625,7 +625,7 @@ void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const 
 // efficient as possible.
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     fillRect(sp(x), sp(y), sp(x + 1) - sp(x), sp(y + 1) - sp(y), state);
     return;
   }
@@ -668,7 +668,7 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style,
                               const BidiUtils::BidiBaseDir baseDir) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getTextWidth(fontId, text, style, baseDir));
   }
   if (text == nullptr || *text == '\0') {
@@ -709,7 +709,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
                            const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,
                            const int8_t tracking) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     drawText(fontId, sp(x), sp(y), text, black, style, baseDir, tracking);
     return;
   }
@@ -855,7 +855,7 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     drawLine(sp(x1), sp(y1), sp(x2), sp(y2), spw(1), state);
     return;
   }
@@ -902,7 +902,7 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const int lineWidth, const bool state) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     drawLine(sp(x1), sp(y1), sp(x2), sp(y2), spw(lineWidth), state);
     return;
   }
@@ -911,12 +911,11 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const int lineWidth, 
   }
 }
 
-void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const bool state) const {
+void GfxRenderer::drawRect(int x, int y, int width, int height, const bool state) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = width, rh = height;
-    spRect(rx, ry, rw, rh);
-    drawRect(rx, ry, rw, rh, spw(1), state);
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    drawRect(x, y, width, height, spw(1), state);
     return;
   }
   drawLine(x, y, x + width - 1, y, state);
@@ -926,13 +925,11 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
 }
 
 // Border is inside the rectangle
-void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const int lineWidth,
-                           const bool state) const {
+void GfxRenderer::drawRect(int x, int y, int width, int height, const int lineWidth, const bool state) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = width, rh = height;
-    spRect(rx, ry, rw, rh);
-    drawRect(rx, ry, rw, rh, spw(lineWidth), state);
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    drawRect(x, y, width, height, spw(lineWidth), state);
     return;
   }
   // Keep the border inside [x, x+width) like the thin overload: the previous
@@ -949,7 +946,7 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
 void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir,
                           const int lineWidth, const bool state) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     drawArc(sp(maxRadius), sp(cx), sp(cy), xDir, yDir, spw(lineWidth), state);
     return;
   }
@@ -994,25 +991,17 @@ void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const
 // Border is inside the rectangle, rounded corners
 void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, const int height, const int lineWidth,
                                   const int cornerRadius, bool state) const {
-  if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = width, rh = height;
-    spRect(rx, ry, rw, rh);
-    drawRoundedRect(rx, ry, rw, rh, spw(lineWidth), sp(cornerRadius), state);
-    return;
-  }
   drawRoundedRect(x, y, width, height, lineWidth, cornerRadius, true, true, true, true, state);
 }
 
 // Border is inside the rectangle, rounded corners
-void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, const int height, const int lineWidth,
-                                  const int cornerRadius, bool roundTopLeft, bool roundTopRight, bool roundBottomLeft,
-                                  bool roundBottomRight, bool state) const {
+void GfxRenderer::drawRoundedRect(int x, int y, int width, int height, const int lineWidth, const int cornerRadius,
+                                  bool roundTopLeft, bool roundTopRight, bool roundBottomLeft, bool roundBottomRight,
+                                  bool state) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = width, rh = height;
-    spRect(rx, ry, rw, rh);
-    drawRoundedRect(rx, ry, rw, rh, spw(lineWidth), sp(cornerRadius), roundTopLeft, roundTopRight, roundBottomLeft,
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    drawRoundedRect(x, y, width, height, spw(lineWidth), sp(cornerRadius), roundTopLeft, roundTopRight, roundBottomLeft,
                     roundBottomRight, state);
     return;
   }
@@ -1064,12 +1053,11 @@ void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, con
   }
 }
 
-void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
+void GfxRenderer::fillRect(int x, int y, int width, int height, const bool state) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = width, rh = height;
-    spRect(rx, ry, rw, rh);
-    fillRect(rx, ry, rw, rh, state);
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    fillRect(x, y, width, height, state);
     return;
   }
   if (state) {
@@ -1106,12 +1094,11 @@ void GfxRenderer::drawPixelDither<Color::DarkGray>(const int x, const int y) con
   drawPixel(x, y, (x + y) % 2 == 0);  // TODO: maybe find a better pattern?
 }
 
-void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color) const {
+void GfxRenderer::fillRectDither(int x, int y, int width, int height, Color color) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = width, rh = height;
-    spRect(rx, ry, rw, rh);
-    fillRectDither(rx, ry, rw, rh, color);
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    fillRectDither(x, y, width, height, color);
     return;
   }
   switch (color) {
@@ -1302,13 +1289,12 @@ template void GfxRenderer::fillRectImpl<Color::White>(int, int, int, int) const;
 template void GfxRenderer::fillRectImpl<Color::LightGray>(int, int, int, int) const;
 template void GfxRenderer::fillRectImpl<Color::DarkGray>(int, int, int, int) const;
 
-void GfxRenderer::maskRoundedRectOutsideCorners(const int x, const int y, const int width, const int height,
-                                                const int radius, const Color color) const {
+void GfxRenderer::maskRoundedRectOutsideCorners(int x, int y, int width, int height, const int radius,
+                                                const Color color) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = width, rh = height;
-    spRect(rx, ry, rw, rh);
-    maskRoundedRectOutsideCorners(rx, ry, rw, rh, sp(radius), color);
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    maskRoundedRectOutsideCorners(x, y, width, height, sp(radius), color);
     return;
   }
   if (radius <= 0 || color == Color::Clear) {
@@ -1385,25 +1371,17 @@ void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const
 
 void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, const int height, const int cornerRadius,
                                   const Color color) const {
-  if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = width, rh = height;
-    spRect(rx, ry, rw, rh);
-    fillRoundedRect(rx, ry, rw, rh, sp(cornerRadius), color);
-    return;
-  }
   fillRoundedRect(x, y, width, height, cornerRadius, true, true, true, true, color);
 }
 
-void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, const int height, const int cornerRadius,
-                                  bool roundTopLeft, bool roundTopRight, bool roundBottomLeft, bool roundBottomRight,
+void GfxRenderer::fillRoundedRect(int x, int y, int width, int height, const int cornerRadius, bool roundTopLeft,
+                                  bool roundTopRight, bool roundBottomLeft, bool roundBottomRight,
                                   const Color color) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = width, rh = height;
-    spRect(rx, ry, rw, rh);
-    fillRoundedRect(rx, ry, rw, rh, sp(cornerRadius), roundTopLeft, roundTopRight, roundBottomLeft, roundBottomRight,
-                    color);
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    fillRoundedRect(x, y, width, height, sp(cornerRadius), roundTopLeft, roundTopRight, roundBottomLeft,
+                    roundBottomRight, color);
     return;
   }
   if (width <= 0 || height <= 0) {
@@ -1473,7 +1451,7 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
 
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     drawImageScaled(bitmap, sp(x), sp(y), width, height, sp(x + width) - sp(x), sp(y + height) - sp(y));
     return;
   }
@@ -1501,7 +1479,7 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int size) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     drawIconScaled(bitmap, sp(x), sp(y), size, sp(x + size) - sp(x));
     return;
   }
@@ -1557,13 +1535,16 @@ void GfxRenderer::drawImageScaled(const uint8_t bitmap[], const int x, const int
   drawImage(scaled.data(), x, y, outW, outHeight);
 }
 
-bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY, const bool whiteAsTransparent) const {
+bool GfxRenderer::drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, const float cropX,
+                             const float cropY, const bool whiteAsTransparent) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = maxWidth, rh = maxHeight;
-    spRect(rx, ry, rw, rh);
-    return drawBitmap(bitmap, rx, ry, rw, rh, cropX, cropY, whiteAsTransparent);
+    const PhysicalScope off(*this);
+    spRect(x, y, maxWidth, maxHeight);
+    // A box sized from bitmapWidth()/bitmapHeight() rounds back to within a
+    // pixel of the bitmap; draw that 1:1 instead of resampling it.
+    if (std::abs(maxWidth - bitmap.getWidth()) <= 1) maxWidth = bitmap.getWidth();
+    if (std::abs(maxHeight - bitmap.getHeight()) <= 1) maxHeight = bitmap.getHeight();
+    return drawBitmap(bitmap, x, y, maxWidth, maxHeight, cropX, cropY, whiteAsTransparent);
   }
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return false;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
@@ -1674,13 +1655,11 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   return true;
 }
 
-bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
-                                 const int maxHeight) const {
+bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = maxWidth, rh = maxHeight;
-    spRect(rx, ry, rw, rh);
-    return drawBitmap1Bit(bitmap, rx, ry, rw, rh);
+    const PhysicalScope off(*this);
+    spRect(x, y, maxWidth, maxHeight);
+    return drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
   }
   float scale = 1.0f;
   bool isScaled = false;
@@ -1754,13 +1733,6 @@ bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
 }
 
 void GfxRenderer::preserveImagePolarity(const int x, const int y, const int width, const int height) const {
-  if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    int rx = x, ry = y, rw = width, rh = height;
-    spRect(rx, ry, rw, rh);
-    preserveImagePolarity(rx, ry, rw, rh);
-    return;
-  }
   if (renderMode != BW || !display.isInverted() || _stripActive || !frameBuffer || width <= 0 || height <= 0) {
     return;
   }
@@ -1801,7 +1773,7 @@ void GfxRenderer::preserveImagePolarity(const int x, const int y, const int widt
 
 void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     std::vector<int> px(xPoints, xPoints + numPoints), py(yPoints, yPoints + numPoints);
     for (int i = 0; i < numPoints; ++i) {
       px[i] = sp(px[i]);
@@ -1899,10 +1871,6 @@ void GfxRenderer::endStripTarget() const {
 }
 
 bool GfxRenderer::glyphIntersectsStrip(int x0, int y0, int x1, int y1) const {
-  if (uiScaleActive_) {
-    const UiScaleOff off(this);
-    return glyphIntersectsStrip(sp(x0), sp(y0), sp(x1 + 1) - 1, sp(y1 + 1) - 1);
-  }
   if (!_stripActive) {
     return true;
   }
@@ -1961,7 +1929,7 @@ bool GfxRenderer::supportsAsyncGrayscaleBase() const { return grayscaleCapabilit
 
 size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     spRect(x, y, w, h);
     return readFramebufferRegion(x, y, w, h, dst, dstCapacity);
   }
@@ -1984,7 +1952,7 @@ size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* d
 
 void GfxRenderer::writeFramebufferRegion(int x, int y, int w, int h, const uint8_t* src) {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     spRect(x, y, w, h);
     writeFramebufferRegion(x, y, w, h, src);
     return;
@@ -2119,7 +2087,7 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
 int GfxRenderer::getScreenWidth() const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getScreenWidth());
   }
   switch (orientation) {
@@ -2137,7 +2105,7 @@ int GfxRenderer::getScreenWidth() const {
 
 int GfxRenderer::getScreenHeight() const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getScreenHeight());
   }
   switch (orientation) {
@@ -2155,7 +2123,7 @@ int GfxRenderer::getScreenHeight() const {
 
 void GfxRenderer::tapToLogical(float nx, float ny, int& outX, int& outY) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     tapToLogical(nx, ny, outX, outY);
     outX = lp(outX);
     outY = lp(outY);
@@ -2224,7 +2192,7 @@ static bool logicalRectToPhysicalBounds(GfxRenderer::Orientation orientation, in
 
 size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     spRect(lx, ly, lw, lh);
     return getRegionByteSize(lx, ly, lw, lh);
   }
@@ -2243,7 +2211,7 @@ size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
 
 bool GfxRenderer::copyRegionToBuffer(int lx, int ly, int lw, int lh, uint8_t* buf, size_t bufSize) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     spRect(lx, ly, lw, lh);
     return copyRegionToBuffer(lx, ly, lw, lh, buf, bufSize);
   }
@@ -2266,7 +2234,7 @@ bool GfxRenderer::copyRegionToBuffer(int lx, int ly, int lw, int lh, uint8_t* bu
 
 bool GfxRenderer::copyBufferToRegion(int lx, int ly, int lw, int lh, const uint8_t* buf, size_t bufSize) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     spRect(lx, ly, lw, lh);
     return copyBufferToRegion(lx, ly, lw, lh, buf, bufSize);
   }
@@ -2289,7 +2257,7 @@ bool GfxRenderer::copyBufferToRegion(int lx, int ly, int lw, int lh, const uint8
 
 int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style style) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getSpaceWidth(fontId, style));
   }
   // Advance table fast-path for SD card fonts during layout
@@ -2311,7 +2279,7 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
 int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
                                  const EpdFontFamily::Style style) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getSpaceAdvance(fontId, leftCp, rightCp, style));
   }
   // Advance table fast-path for SD card fonts during layout.
@@ -2337,7 +2305,7 @@ int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const 
 int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
                             const EpdFontFamily::Style style, const int8_t tracking) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getKerning(fontId, leftCp, rightCp, style, tracking));
   }
   const auto fontIt = fontMap.find(fontId);
@@ -2349,7 +2317,7 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style, const int8_t tracking,
                                  const BidiUtils::BidiBaseDir baseDir, const TextMeasureMode mode) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getTextAdvanceX(fontId, text, style, tracking, baseDir, mode));
   }
   // Match the font drawText would use for non-Latin strings (see resolveTextFontId).
@@ -2454,7 +2422,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 bool GfxRenderer::getCodepointMetrics(const int fontId, const uint32_t cp, const EpdFontFamily::Style style,
                                       int32_t& advanceFP, int& top) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     const bool ok = getCodepointMetrics(fontId, cp, style, advanceFP, top);
     advanceFP = static_cast<int32_t>(lroundf(advanceFP / uiScale_));
     top = lp(top);
@@ -2472,7 +2440,7 @@ bool GfxRenderer::getCodepointMetrics(const int fontId, const uint32_t cp, const
 int GfxRenderer::drawScaledCodepoint(const int fontId, const uint32_t cp, const EpdFontFamily::Style style, const int x,
                                      const int baselineY, const int scale256) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(drawScaledCodepoint(fontId, cp, style, sp(x), sp(baselineY), scale256));
   }
   if (scale256 <= 0) return 0;
@@ -2529,7 +2497,7 @@ int GfxRenderer::drawScaledCodepoint(const int fontId, const uint32_t cp, const 
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getFontAscenderSize(fontId));
   }
   const auto fontIt = fontMap.find(fontId);
@@ -2543,7 +2511,7 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
 
 int GfxRenderer::getLineHeight(const int fontId) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getLineHeight(fontId));
   }
   const auto fontIt = fontMap.find(fontId);
@@ -2557,7 +2525,7 @@ int GfxRenderer::getLineHeight(const int fontId) const {
 
 int GfxRenderer::getLineHeight(const int fontId, const float compression) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getLineHeight(fontId, compression));
   }
   const auto fontIt = fontMap.find(fontId);
@@ -2570,7 +2538,7 @@ int GfxRenderer::getLineHeight(const int fontId, const float compression) const 
 
 int GfxRenderer::getTextHeight(const int fontId) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     return lp(getTextHeight(fontId));
   }
   const auto fontIt = fontMap.find(fontId);
@@ -2584,7 +2552,7 @@ int GfxRenderer::getTextHeight(const int fontId) const {
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
                                       const EpdFontFamily::Style style) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     drawTextRotated90CW(fontId, sp(x), sp(y), text, black, style);
     return;
   }
@@ -2684,7 +2652,7 @@ void GfxRenderer::preconditionGrayscale() const { display.preconditionGrayscale(
 
 void GfxRenderer::preconditionGrayscale(int x, int y, int w, int h) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     spRect(x, y, w, h);
     preconditionGrayscale(x, y, w, h);
     return;
@@ -2824,7 +2792,7 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
   if (uiScaleActive_) {
-    const UiScaleOff off(this);
+    const PhysicalScope off(*this);
     getOrientedViewableTRBL(outTop, outRight, outBottom, outLeft);
     for (int* v : {outTop, outRight, outBottom, outLeft}) {
       if (v) *v = lp(*v);
