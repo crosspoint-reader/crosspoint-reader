@@ -19,7 +19,14 @@ the IP address shown on the device screen.
 | `GET` | `/files` | File manager page |
 | `GET` | `/settings` | Web settings page |
 | `GET` | `/fonts` | SD-card font manager page |
+| `GET` | `/plugins` | Plugins page (web settings of SD-card plugins) |
 | `GET` | `/js/jszip.min.js` | JavaScript asset used by the file manager |
+| `GET` | `/js/epub-optimizer.js` | File manager EPUB optimizer, loaded with JSZip only when needed |
+| `GET` | `/js/plugin-host.js` | Browser plugin host shared by the Plugins, File Manager, and `/plugins-run` pages |
+
+HTML page responses, including `304 Not Modified`, set the cookie `cpPlugins=1` while
+plugins are enabled and `cpPlugins=0` otherwise. The page header uses it to hide the
+Plugins link.
 
 ## Device Status
 
@@ -307,7 +314,8 @@ Response:
 
 ### `POST /api/fonts/upload`
 
-Uploads one `.cpfont` file into a family folder.
+Uploads one font file into a family folder: `.cpfont`, or `.ttf`/`.otf` on devices
+with external RAM (`vectorFonts: true` in `GET /api/fonts`).
 
 ```bash
 curl -X POST \
@@ -316,8 +324,9 @@ curl -X POST \
   http://crosspoint.local/api/fonts/upload
 ```
 
-The handler validates the family name, `.cpfont` filename, and `CPFONT` magic
-bytes before accepting the file.
+The handler validates the family name, filename extension, and magic bytes
+(`CPFONT`, or a TrueType/OpenType header for `.ttf`/`.otf`) before accepting the
+file.
 
 Successful response:
 
@@ -542,9 +551,10 @@ instructions plus WebSocket upload progress on the device screen.
 ## Plugin API
 
 Device capabilities for browser-side SD plugins (`plugin.js`). Plugins normally
-reach these through the `PluginHost` wrappers (`api.relay`, `api.crypto`,
-`api.fetchToSd`, `api.writeFile`); the raw contracts are below. Outbound TLS is
-encrypted but the peer is not verified (the transport ships no CA bundle).
+reach these through the plugin host wrappers in `/js/plugin-host.js`
+(`api.relay`, `api.crypto`, `api.fetchToSd`, `api.writeFile`); the raw
+contracts are below. Outbound TLS is encrypted but the peer is not verified
+(the transport ships no CA bundle).
 
 ### `GET /api/wallpaper-packs`
 
@@ -560,6 +570,8 @@ Installed plugins that ship a `plugin.js`:
 `[{"name":"<folder>","dir":"<root>/<folder>","title":"<title>","mount":"settings"}, ...]`.
 `dir` is where the plugin is installed (plugins keep their own files there);
 `title` and `mount` come from the plugin's `manifest.json` when present.
+Mount `settings` (the default) shows the card on the Plugins page (`/plugins`);
+mount `files` shows it in the File Manager.
 
 ### `GET /plugin?name=<plugin>&file=<file>`
 
@@ -581,8 +593,12 @@ to CORS). Body: `{"plugin":"<name>","method":"GET","url":"https://...","headers"
   as JSON `[["name","value"], ...]` in receive order, duplicates kept (every
   `Set-Cookie`). `api.relay()` resolves to `{status, headers, body}`.
 - **Redirects** are not followed: a 3xx comes back with its `location` header.
-- **Limits:** the upstream body is capped at 32KB; larger payloads belong on
-  `/api/fetch`.
+- **Limits:** the upstream body is capped at 32KB and is held in memory while
+  TLS is open. The relay also fails if buffering the body would leave less than
+  16KB of heap free, or if no free block is large enough, so on a DRAM-only
+  board a body under 32KB can still fail. Use `/api/fetch` for large files. A
+  GET that fails with 502 can be retried with `/api/fetch` (`api.relay()`
+  throws an error whose `status` is 502).
 - **Errors:** `400 {"error":"missing plugin/url"}`; `502 {"error":"relay failed; ..."}`
   for a transport failure, a truncated body, a body over the cap, or low memory
   (the device log names which).

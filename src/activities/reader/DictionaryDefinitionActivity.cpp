@@ -588,7 +588,7 @@ void DictionaryDefinitionActivity::loop() {
   int sx = 0;
   int sy = 0;
   const bool longPress = lookup && mappedInput.wasScreenLongPress(sx, sy);
-  const bool headerLongPress = longPress && HeaderBackTapTarget::contains(sx, sy);
+  const bool headerLongPress = longPress && HeaderBackTapTarget::containsUnpadded(sx, sy);
   if (headerLongPress || mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (lookup && (headerLongPress || mappedInput.getHeldTime() >= ReaderUtils::GO_BACK_OR_HOME_MS)) {
       ActivityResult result;

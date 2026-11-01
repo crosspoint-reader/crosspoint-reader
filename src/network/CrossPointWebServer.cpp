@@ -48,12 +48,15 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/PluginsPageHtml.generated.h"
 #include "html/RunnerPageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/assets/crosspoint_iconSvg.generated.h"
 #include "html/assets/iconsSvg.generated.h"
 #include "html/assets/webCss.generated.h"
+#include "html/js/epub_optimizerJs.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+#include "html/js/plugin_hostJs.generated.h"
 #include "util/BookCacheUtils.h"
 #include "util/DictionaryRegistry.h"
 #include "util/FirmwareIdentity.h"
@@ -220,6 +223,13 @@ void CrossPointWebServer::begin() {
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
+  server->on("/js/epub-optimizer.js", HTTP_GET, [this] {
+    sendStaticContent(server.get(), epub_optimizerJs, sizeof(epub_optimizerJs), epub_optimizerJsETag,
+                      "application/javascript");
+  });
+  server->on("/js/plugin-host.js", HTTP_GET, [this] {
+    sendStaticContent(server.get(), plugin_hostJs, sizeof(plugin_hostJs), plugin_hostJsETag, "application/javascript");
+  });
 
   server->on("/assets/web.css", HTTP_GET,
              [this] { sendStaticContent(server.get(), webCss, sizeof(webCss), webCssETag, "text/css"); });
@@ -272,6 +282,7 @@ void CrossPointWebServer::begin() {
   // Browser-side plugins (JS on the SD card) + their generic capabilities.
   server->on("/api/plugins", HTTP_GET, [this] { handlePluginList(); });
   server->on("/plugin", HTTP_GET, [this] { handlePluginFile(); });
+  server->on("/plugins", HTTP_GET, [this] { handlePluginsPage(); });
   server->on("/plugins-run", HTTP_GET, [this] { handlePluginRunnerPage(); });
   server->on("/api/plugin-jobs", HTTP_POST, [this] { handlePluginJobSubmit(); });
   server->on("/api/plugin-jobs/claim", HTTP_GET, [this] { handlePluginJobClaim(); });
@@ -496,6 +507,12 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
 
 static void sendStaticContent(WebServer* server, const char* data, size_t len, const char* etag,
                               const char* contentType) {
+  if (strcmp(contentType, "text/html") == 0) {
+    // Read by the page header to hide the Plugins link; sent on 304 too, so it
+    // stays current on every navigation without an extra request.
+    server->sendHeader("Set-Cookie", SETTINGS.pluginsEnabled ? "cpPlugins=1; Path=/; SameSite=Strict"
+                                                             : "cpPlugins=0; Path=/; SameSite=Strict");
+  }
   // Content is baked into flash at build time, so the ETag is stable for the
   // lifetime of a firmware image. Honor If-None-Match with a 304 so browsers
   // reuse their cache instead of re-downloading on every navigation.
@@ -1482,10 +1499,19 @@ void CrossPointWebServer::handleGetSettings() const {
         continue;
     }
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
-      LOG_DBG("WEB", "Skipping oversized setting JSON for: %s", s.key);
-      continue;
+    const char* json = output;
+    // Only entries over the stack buffer use the heap, e.g. fontFamily with many SD families.
+    std::unique_ptr<char[]> large;
+    size_t len = serializeJson(doc, output, outputSize);
+    if (len >= outputSize) {
+      len = measureJson(doc);
+      large.reset(new (std::nothrow) char[len + 1]);
+      if (!large) {
+        LOG_ERR("WEB", "OOM: setting JSON for %s (%zu bytes)", s.key, len);
+        continue;
+      }
+      serializeJson(doc, large.get(), len + 1);
+      json = large.get();
     }
 
     if (seenFirst) {
@@ -1493,7 +1519,7 @@ void CrossPointWebServer::handleGetSettings() const {
     } else {
       seenFirst = true;
     }
-    server->sendContent(output);
+    server->sendContent(json, len);
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
@@ -2056,7 +2082,7 @@ void CrossPointWebServer::handlePluginFile() const {
 //      headers in X-Relay-Headers ([[name, value], ...] JSON, duplicates kept)
 // Lets a plugin make an outbound HTTP(S) call the browser can't (CORS): the
 // device makes it via SecureNet. Sending the body raw avoids escaping it into
-// JSON on the device; PluginHost.relay() rebuilds {status, headers, body}.
+// JSON on the device; CrossPoint.relay() rebuilds {status, headers, body}.
 void CrossPointWebServer::handleRelay() {
   if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
@@ -2086,13 +2112,19 @@ void CrossPointWebServer::handleRelay() {
   // subscribed to the task WDT for the whole web-server session, so feed it
   // while a slow peer keeps the request waiting.
   static constexpr size_t RELAY_BODY_LIMIT = 32 * 1024;
+  // Heap kept free while the body is buffered. TLS already holds ~25 KB, and an
+  // exhausted heap stops Wi-Fi from receiving the ACKs that free the server's
+  // send buffers: the whole web server then stalls until the device is reset.
+  static constexpr size_t RELAY_HEAP_RESERVE = 16 * 1024;
   String respBody;
   pluginhttp::Headers respHeaders;
-  const int status =
-      pluginhttp::request(nullptr, url, method, body, headers, respBody, RELAY_BODY_LIMIT, &respHeaders, [] {
+  const int status = pluginhttp::request(
+      nullptr, url, method, body, headers, respBody, RELAY_BODY_LIMIT, &respHeaders,
+      [] {
         resetTaskWatchdogIfSubscribed();
         return false;  // never aborts; only feeds
-      });
+      },
+      RELAY_HEAP_RESERVE);
   // Transport failure, a truncated body, or one over the cap / out of memory
   // (the reason is logged by pluginhttp).
   if (status < 0) {
@@ -2709,6 +2741,12 @@ void CrossPointWebServer::handleBookKey() {
   server->send(200, "application/json", "{\"ok\":true}");
 }
 
+// Served even while plugins are disabled: its empty state tells the user how to enable them.
+void CrossPointWebServer::handlePluginsPage() const {
+  sendStaticContent(server.get(), PluginsPageHtml, sizeof(PluginsPageHtml), PluginsPageHtmlETag, "text/html");
+  LOG_DBG("WEB", "Served plugins page");
+}
+
 void CrossPointWebServer::handlePluginRunnerPage() const {
   if (rejectIfPluginsDisabled()) return;
   sendStaticContent(server.get(), RunnerPageHtml, sizeof(RunnerPageHtml), RunnerPageHtmlETag, "text/html");
@@ -3046,23 +3084,31 @@ void CrossPointWebServer::handleFontList() const {
   const_cast<SdCardFontSystem&>(sdFontSystem).refreshIfDirty();
   const auto& families = sdFontSystem.registry().getFamilies();
 
-  JsonDocument doc;
-  JsonArray arr = doc["families"].to<JsonArray>();
-  doc["maxFamilies"] = SdCardFontRegistry::MAX_SD_FAMILIES;
+  // Stream one family per chunk: with many families, the whole document plus
+  // its serialized copy does not fit in the heap of a DRAM-only board.
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  char head[80];
   // Vector (.ttf/.otf) fonts need PSRAM to stay resident; DRAM-only boards
   // only take pre-rendered .cpfont uploads.
-  doc["vectorFonts"] = HalMemory::getPsramHeap().totalBytes > 0;
+  snprintf(head, sizeof(head), "{\"maxFamilies\":%d,\"vectorFonts\":%s,\"families\":[",
+           SdCardFontRegistry::MAX_SD_FAMILIES, HalMemory::getPsramHeap().totalBytes > 0 ? "true" : "false");
+  server->sendContent(head);
 
+  JsonDocument doc;
+  // Reused for every family; reallocated only for a larger entry (a few hundred bytes).
+  std::unique_ptr<char[]> buf;
+  size_t bufSize = 0;
   for (const auto& family : families) {
-    JsonObject fObj = arr.add<JsonObject>();
-    fObj["name"] = family.name;
+    doc.clear();
+    doc["name"] = family.name;
 
-    JsonArray sizes = fObj["sizes"].to<JsonArray>();
+    JsonArray sizes = doc["sizes"].to<JsonArray>();
     for (uint8_t s : family.availableSizes()) {
       sizes.add(s);
     }
 
-    JsonArray files = fObj["files"].to<JsonArray>();
+    JsonArray files = doc["files"].to<JsonArray>();
     char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
     for (const auto& file : family.files) {
       if (!family.filePath(file, path, sizeof(path))) continue;
@@ -3080,9 +3126,29 @@ void CrossPointWebServer::handleFontList() const {
         fileObj["size"] = 0;
       }
     }
+
+    const size_t len = 1 + measureJson(doc);  // leading comma + entry
+    if (!doc.overflowed() && len + 1 > bufSize) {
+      buf.reset();  // free first so two buffers are never held at once
+      buf.reset(new (std::nothrow) char[len + 1]);
+      bufSize = buf ? len + 1 : 0;
+    }
+    if (doc.overflowed() || !buf) {
+      // Leave the JSON unterminated so the page reports a failed load, not a short list.
+      LOG_ERR("WEB", "OOM: font list entry");
+      server->sendContent("");
+      return;
+    }
+    buf[0] = ',';
+    serializeJson(doc, buf.get() + 1, bufSize - 1);
+    const size_t skip = &family == &families.front() ? 1 : 0;  // no comma before the first entry
+    server->sendContent(buf.get() + skip, len - skip);
+    yield();
+    resetTaskWatchdogIfSubscribed();  // each sendContent() is a blocking network write
   }
 
-  sendJson(doc);
+  server->sendContent("]}");
+  server->sendContent("");
 }
 
 void CrossPointWebServer::handleFontUploadData() {

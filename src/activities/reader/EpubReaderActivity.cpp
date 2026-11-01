@@ -552,7 +552,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         return;
       }
       startActivityForResult(std::move(lookup), [this](const ActivityResult& result) {
-        if (!result.isCancelled) openDictionaryWordSelect();
+        if (!result.isCancelled && !mappedInput.hasTouch()) openDictionaryWordSelect();
       });
       return;
     }

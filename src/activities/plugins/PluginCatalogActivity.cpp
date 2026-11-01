@@ -42,6 +42,7 @@
 #include "util/PluginPickerLayout.h"
 #include "util/QrUtils.h"
 #include "util/StringUtils.h"
+#include "util/UrlUtils.h"
 #include "util/WallpaperPackages.h"
 
 namespace fui = freeink::ui;
@@ -430,6 +431,7 @@ bool PluginCatalogActivity::loadBrowseListIndex(int& status) {
     Manifest::BrowseList entry;
     entry.title = variantToString(resolvePath(l, manifest.listsTitlePath));
     entry.url = variantToString(resolvePath(l, manifest.listsUrlPath));
+    UrlUtils::resolveServerPath(entry.url, url);
     entry.id = variantToString(resolvePath(l, manifest.listsIdPath));
     entry.kind = l["kind"] | "plugin";
     entry.itemsPath = l["items"] | "";
@@ -1368,6 +1370,9 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
 HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& item) {
   // Resolve the file URL: either the template itself, or one API hop away.
   std::string fileUrl;
+  // The file GET carries the download headers unless url_path answered with a
+  // full URL, which may be pre-signed and reject a second Authorization.
+  bool sendDownloadHeaders = manifest.dlUrlPath.empty();
   if (!manifest.dlUrlPath.empty()) {
     String response;
     int status = apiRequest(substitutedRequest(manifest.downloadReq, &item), response);
@@ -1383,6 +1388,7 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
       return HttpDownloader::HTTP_ERROR;
     }
     fileUrl = variantToString(resolvePath(doc.as<JsonVariantConst>(), manifest.dlUrlPath));
+    sendDownloadHeaders = UrlUtils::resolveServerPath(fileUrl, substituted(manifest.downloadReq.url, &item));
   } else {
     fileUrl = substituted(manifest.downloadReq.url, &item);
   }
@@ -1416,20 +1422,18 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
     return HttpDownloader::FILE_ERROR;
   }
 
-  // url_path already authenticated the JSON hop; the resolved file URL must not
-  // inherit those headers (S3 pre-signed GETs reject a second Authorization).
   const auto fetchFile = [&] {
     const std::vector<HttpDownloader::Header> fileHeaders =
-        manifest.dlUrlPath.empty() ? substitutedHeaders(manifest.downloadReq.headers, &item)
-                                   : std::vector<HttpDownloader::Header>{};
+        sendDownloadHeaders ? substitutedHeaders(manifest.downloadReq.headers, &item)
+                            : std::vector<HttpDownloader::Header>{};
     return downloadFile(pluginhttp::escapeUrl(fileUrl), dest, substituted(manifest.dlUser, &item),
                         substituted(manifest.dlPass, &item), fileHeaders);
   };
   session.reset();  // free browse TLS before the large file GET
   auto result = fetchFile();
-  // The direct GET carries the catalog's token templates (never a pre-signed
-  // url_path target): an expired password-grant token gets one mint-and-retry.
-  if (result == HttpDownloader::UNAUTHORIZED && manifest.dlUrlPath.empty() && manifest.hasPasswordGrant() &&
+  // A GET with the catalog's token templates gets one mint-and-retry when an
+  // expired password-grant token is refused.
+  if (result == HttpDownloader::UNAUTHORIZED && sendDownloadHeaders && manifest.hasPasswordGrant() &&
       refreshCredentialToken()) {
     result = fetchFile();
   }
@@ -1764,7 +1768,8 @@ void PluginCatalogActivity::showItemDetails(const int itemIndex) {
   if (!details.repository.empty()) spec.source = std::string(tr(STR_REPOSITORY)) + ": " + details.repository;
   if (!details.detailsUrl.empty()) {
     String response;
-    const std::string url = substituted(details.detailsUrl, &item);
+    std::string url = substituted(details.detailsUrl, &item);
+    UrlUtils::resolveServerPath(url, substituted(activeBrowseUrl(), nullptr));
     const int status = pluginhttp::request(session.get(), url, "GET", "", {}, response, MAX_ITEM_DETAILS_RESPONSE);
     const bool html = details.detailsFormat == "html";
     if (status < 200 || status >= 300 || response.length() == 0) {

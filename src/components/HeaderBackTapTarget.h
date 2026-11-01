@@ -23,5 +23,14 @@ inline void set(const int newX, const int newY, const int newW, const int newH) 
 
 inline void clear() { w = 0; }
 
-inline bool contains(const int tx, const int ty) { return w > 0 && tx >= x && tx < x + w && ty >= y && ty < y + h; }
+inline bool containsUnpadded(const int tx, const int ty) {
+  return w > 0 && tx >= x && tx < x + w && ty >= y && ty < y + h;
+}
+
+inline bool contains(const int tx, const int ty) {
+  // Keep near-miss Back taps out of the adjacent control-center tap band.
+  constexpr int TOUCH_PADDING = 12;
+  return w > 0 && tx >= x - TOUCH_PADDING && tx < x + w + TOUCH_PADDING && ty >= y - TOUCH_PADDING &&
+         ty < y + h + TOUCH_PADDING;
+}
 }  // namespace HeaderBackTapTarget
