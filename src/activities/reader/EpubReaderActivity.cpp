@@ -212,6 +212,13 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
 // key only; on other boards a press stops the build once the loop has debounced it.
 bool buttonContactClosed() { return gpio.rawInputActive(); }
 
+// Only single-page selections can be restored: the reader moves to the end page
+// after a clipping, so a multi-page range can no longer be mapped back.
+ClipSelectionActivity::Selection lookupReturnSelectionFor(const ClippingResult& clipping) {
+  if (clipping.startPageOffset != clipping.endPageOffset) return {};
+  return {0, 0, clipping.startWordIndex, clipping.endWordIndex, true};
+}
+
 }  // namespace
 
 EpubReaderActivity::~EpubReaderActivity() {
@@ -555,11 +562,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         requestUpdate();
         return;
       }
-      // Only single-page selections can be restored (the reader moves to the end page).
-      lookupReturnSelection = {};
-      if (clipping.startPageOffset == clipping.endPageOffset) {
-        lookupReturnSelection = {0, 0, clipping.startWordIndex, clipping.endWordIndex, true};
-      }
+      lookupReturnSelection = lookupReturnSelectionFor(clipping);
       startActivityForResult(std::move(lookup), [this](const ActivityResult& result) {
         if (!result.isCancelled && !mappedInput.hasTouch()) {
           pendingLookupSelection = lookupReturnSelection;
