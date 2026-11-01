@@ -9,6 +9,8 @@ source = (ROOT / "src/activities/reader/ClipSelectionActivity.cpp").read_text()
 reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
 header = (ROOT / "src/activities/reader/ClipSelectionActivity.h").read_text()
 word_box = "struct WordBox {" + header.split("struct WordBox {", 1)[1].split("  };", 1)[0] + "};"
+action_helpers = "\n".join(line for line in header.splitlines()
+                           if "int firstAction() const" in line or "int actionCount() const" in line)
 clean_word = "const char* cleanWordStart" + source.split("const char* cleanWordStart", 1)[1].split(
     "}  // namespace", 1
 )[0]
@@ -155,7 +157,7 @@ struct Renderer {
 };
 struct Theme {
   void drawSelectionHandle(const Renderer&, Rect, bool) const {}
-  void drawSelectionActions(const Renderer&, Rect, int = 3) const {}
+  void drawSelectionActions(const Renderer&, Rect, int = 3, int = 0) const {}
 } GUI;
 struct Input { bool hasTouch() const { return false; } };
 using GfxRenderer = Renderer;
@@ -191,11 +193,12 @@ bool selectionLowMemory(const int first, const int last) {
 }
 """ + clean_word + r"""
 struct ClipSelectionActivity {
-""" + word_box + r"""
+""" + word_box + action_helpers + r"""
   std::unique_ptr<WordBox[]> words = makeUniqueNoThrow<WordBox[]>(240);
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
   enum class Mode { Clip, Lookup, DefinitionLookup };
   Mode mode = Mode::Clip;
+  bool lookupAvailable = true;
   Renderer renderer;
   Input mappedInput;
   std::vector<std::unique_ptr<Page>> pages;
