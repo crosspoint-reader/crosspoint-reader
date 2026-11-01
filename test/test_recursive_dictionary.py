@@ -427,8 +427,14 @@ int main() {
         exitResult.isCancelled = cancelled;
         lookupParent.onDefinitionResult(exitResult);
         bookReader.mappedInput.touch = touch;
+        bookReader.lookupReturnSelection = {0, 0, 3, 5, true};
         bookReader.onLookupResult(lookupParent.result);
         assert(bookReader.selectionOpened == (!touch && !cancelled));
+        // The restored range is handed to the reopened selection only when it opens.
+        assert(bookReader.pendingLookupSelection.valid == bookReader.selectionOpened);
+        if (bookReader.selectionOpened) {
+          assert(bookReader.pendingLookupSelection.firstWord == 3 && bookReader.pendingLookupSelection.lastWord == 5);
+        }
       }
     }
   }
