@@ -178,6 +178,8 @@ void XtcReaderActivity::renderPage() {
   const uint16_t maxSrcY = pageHeight;
 
   if (bitDepth == 2) {
+    // XTC pages are rendered for the panel: draw them in physical pixels.
+    const GfxRenderer::PhysicalScope physical(renderer);
     const size_t planeSize = static_cast<size_t>(pageWidth) * ((static_cast<size_t>(pageHeight) + 7) / 8);
     const uint8_t* plane1 = pageBuffer;
     const uint8_t* plane2 = pageBuffer + planeSize;
@@ -259,6 +261,7 @@ void XtcReaderActivity::renderPage() {
     markPageRendered();
     return;
   } else {
+    const GfxRenderer::PhysicalScope physical(renderer);
     const size_t srcRowBytes = (pageWidth + 7) / 8;
 
     for (uint16_t srcY = 0; srcY < maxSrcY; srcY++) {
