@@ -227,6 +227,122 @@ CrossPointWebServer::CrossPointWebServer() {}
 
 CrossPointWebServer::~CrossPointWebServer() { stop(); }
 
+// One handler for every route. Each WebServer::on() call allocates a handler
+// object and a copy of its path; this table stays in flash instead. Matching
+// is the same as on(): exact path and method. Unlike on(), a non-multipart
+// body is not passed to the upload function, which reads server->upload()
+// and would dereference null; it is read like any other POST body.
+class CrossPointWebServer::RouteHandler final : public RequestHandler {
+ public:
+  explicit RouteHandler(CrossPointWebServer& owner) : owner_(owner) {}
+
+  bool canHandle(WebServer&, const HTTPMethod method, const String& uri) override {
+    return find(method, uri) != nullptr;
+  }
+  bool canUpload(WebServer&, const String& uri) override {
+    const Route* route = find(HTTP_POST, uri);
+    return route && route->upload;
+  }
+  bool handle(WebServer&, const HTTPMethod method, const String& uri) override {
+    const Route* route = find(method, uri);
+    if (!route) return false;
+    route->handle(owner_);
+    return true;
+  }
+  void upload(WebServer&, const String& uri, HTTPUpload&) override {
+    const Route* route = find(HTTP_POST, uri);
+    if (route && route->upload) route->upload(owner_);
+  }
+
+ private:
+  using Action = void (*)(CrossPointWebServer&);
+  struct Route {
+    const char* path;
+    HTTPMethod method;
+    Action handle;
+    Action upload;  // Multipart file parts, or nullptr
+  };
+
+  static const Route* find(const HTTPMethod method, const String& uri) {
+    using S = CrossPointWebServer;
+    static constexpr Route ROUTES[] = {
+        {"/", HTTP_GET, [](S& s) { s.handleRoot(); }, nullptr},
+        {"/files", HTTP_GET, [](S& s) { s.handleFileList(); }, nullptr},
+        {"/js/jszip.min.js", HTTP_GET, [](S& s) { s.handleJszip(); }, nullptr},
+        {"/js/epub-optimizer.js", HTTP_GET,
+         [](S& s) {
+           sendStaticContent(s.server.get(), epub_optimizerJs, sizeof(epub_optimizerJs), epub_optimizerJsETag,
+                             "application/javascript");
+         },
+         nullptr},
+        {"/js/plugin-host.js", HTTP_GET,
+         [](S& s) {
+           sendStaticContent(s.server.get(), plugin_hostJs, sizeof(plugin_hostJs), plugin_hostJsETag,
+                             "application/javascript");
+         },
+         nullptr},
+        {"/assets/web.css", HTTP_GET,
+         [](S& s) { sendStaticContent(s.server.get(), webCss, sizeof(webCss), webCssETag, "text/css"); }, nullptr},
+        {"/assets/icons.svg", HTTP_GET,
+         [](S& s) { sendStaticContent(s.server.get(), iconsSvg, sizeof(iconsSvg), iconsSvgETag, "image/svg+xml"); },
+         nullptr},
+        {"/assets/crosspoint-icon.svg", HTTP_GET,
+         [](S& s) {
+           sendStaticContent(s.server.get(), crosspoint_iconSvg, sizeof(crosspoint_iconSvg), crosspoint_iconSvgETag,
+                             "image/svg+xml");
+         },
+         nullptr},
+
+        {"/api/status", HTTP_GET, [](S& s) { s.handleStatus(); }, nullptr},
+        {"/api/files", HTTP_GET, [](S& s) { s.handleFileListData(); }, nullptr},
+        {"/download", HTTP_GET, [](S& s) { s.handleDownload(); }, nullptr},
+        {"/upload", HTTP_POST, [](S& s) { s.handleUploadPost(s.upload); }, [](S& s) { s.handleUpload(s.upload); }},
+        {"/mkdir", HTTP_POST, [](S& s) { s.handleCreateFolder(); }, nullptr},
+        {"/rename", HTTP_POST, [](S& s) { s.handleRename(); }, nullptr},
+        {"/move", HTTP_POST, [](S& s) { s.handleMove(); }, nullptr},
+        {"/delete", HTTP_POST, [](S& s) { s.handleDelete(); }, nullptr},
+
+        {"/settings", HTTP_GET, [](S& s) { s.handleSettingsPage(); }, nullptr},
+        {"/api/settings", HTTP_GET, [](S& s) { s.handleGetSettings(); }, nullptr},
+        {"/api/settings", HTTP_POST, [](S& s) { s.handlePostSettings(); }, nullptr},
+
+        {"/fonts", HTTP_GET, [](S& s) { s.handleFontsPage(); }, nullptr},
+        {"/api/fonts", HTTP_GET, [](S& s) { s.handleFontList(); }, nullptr},
+        {"/api/fonts/upload", HTTP_POST, [](S& s) { s.handleFontUpload(); }, [](S& s) { s.handleFontUploadData(); }},
+        {"/api/fonts/delete", HTTP_POST, [](S& s) { s.handleFontDelete(); }, nullptr},
+
+        {"/api/opds", HTTP_GET, [](S& s) { s.handleGetOpdsServers(); }, nullptr},
+        {"/api/opds", HTTP_POST, [](S& s) { s.handlePostOpdsServer(); }, nullptr},
+        {"/api/opds/delete", HTTP_POST, [](S& s) { s.handleDeleteOpdsServer(); }, nullptr},
+
+        // Browser-side plugins (JS on the SD card) + their generic capabilities.
+        {"/api/plugins", HTTP_GET, [](S& s) { s.handlePluginList(); }, nullptr},
+        {"/plugin", HTTP_GET, [](S& s) { s.handlePluginFile(); }, nullptr},
+        {"/plugins", HTTP_GET, [](S& s) { s.handlePluginsPage(); }, nullptr},
+        {"/plugins-run", HTTP_GET, [](S& s) { s.handlePluginRunnerPage(); }, nullptr},
+        {"/api/plugin-jobs", HTTP_POST, [](S& s) { s.handlePluginJobSubmit(); }, nullptr},
+        {"/api/plugin-jobs/claim", HTTP_GET, [](S& s) { s.handlePluginJobClaim(); }, nullptr},
+        {"/api/plugin-jobs/complete", HTTP_POST, [](S& s) { s.handlePluginJobComplete(); }, nullptr},
+        {"/api/plugin-jobs/status", HTTP_GET, [](S& s) { s.handlePluginJobStatus(); }, nullptr},
+        {"/api/relay", HTTP_POST, [](S& s) { s.handleRelay(); }, nullptr},
+        {"/api/crypto", HTTP_POST, [](S& s) { s.handleCrypto(); }, nullptr},
+        {"/api/fetch", HTTP_POST, [](S& s) { s.handleFetch(); }, nullptr},
+        {"/api/book-key", HTTP_POST, [](S& s) { s.handleBookKey(); }, nullptr},
+        {"/api/plugin-fs", HTTP_POST, [](S& s) { s.handlePluginFs(); }, [](S& s) { s.handlePluginFsUpload(); }},
+
+        {"/api/wifi", HTTP_GET, [](S& s) { s.handleGetWifiNetworks(); }, nullptr},
+        {"/api/wifi", HTTP_POST, [](S& s) { s.handlePostWifiNetwork(); }, nullptr},
+        {"/api/wifi/delete", HTTP_POST, [](S& s) { s.handleDeleteWifiNetwork(); }, nullptr},
+    };
+    for (const Route& route : ROUTES) {
+      if (route.method == method && uri == route.path) return &route;
+    }
+    return nullptr;
+  }
+
+  CrossPointWebServer& owner_;
+};
+
 void CrossPointWebServer::begin() {
   if (running) {
     LOG_DBG("WEB", "Web server already running");
@@ -291,81 +407,7 @@ void CrossPointWebServer::begin() {
 
   // Setup routes
   LOG_DBG("WEB", "Setting up routes...");
-  server->on("/", HTTP_GET, [this] { handleRoot(); });
-  server->on("/files", HTTP_GET, [this] { handleFileList(); });
-  server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
-  server->on("/js/epub-optimizer.js", HTTP_GET, [this] {
-    sendStaticContent(server.get(), epub_optimizerJs, sizeof(epub_optimizerJs), epub_optimizerJsETag,
-                      "application/javascript");
-  });
-  server->on("/js/plugin-host.js", HTTP_GET, [this] {
-    sendStaticContent(server.get(), plugin_hostJs, sizeof(plugin_hostJs), plugin_hostJsETag, "application/javascript");
-  });
-
-  server->on("/assets/web.css", HTTP_GET,
-             [this] { sendStaticContent(server.get(), webCss, sizeof(webCss), webCssETag, "text/css"); });
-  server->on("/assets/icons.svg", HTTP_GET,
-             [this] { sendStaticContent(server.get(), iconsSvg, sizeof(iconsSvg), iconsSvgETag, "image/svg+xml"); });
-  server->on("/assets/crosspoint-icon.svg", HTTP_GET, [this] {
-    sendStaticContent(server.get(), crosspoint_iconSvg, sizeof(crosspoint_iconSvg), crosspoint_iconSvgETag,
-                      "image/svg+xml");
-  });
-
-  server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
-  server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
-  server->on("/download", HTTP_GET, [this] { handleDownload(); });
-
-  // Upload endpoint with special handling for multipart form data
-  server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
-
-  // Create folder endpoint
-  server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
-
-  // Rename file endpoint
-  server->on("/rename", HTTP_POST, [this] { handleRename(); });
-
-  // Move file endpoint
-  server->on("/move", HTTP_POST, [this] { handleMove(); });
-
-  // Delete file/folder endpoint
-  server->on("/delete", HTTP_POST, [this] { handleDelete(); });
-
-  // Settings endpoints
-  server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
-  server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
-  server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
-
-  // Font management endpoints
-  server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
-  server->on("/api/fonts", HTTP_GET, [this] { handleFontList(); });
-  server->on("/api/fonts/upload", HTTP_POST, [this] { handleFontUpload(); }, [this] { handleFontUploadData(); });
-  server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
-
-  // OPDS server endpoints
-  server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });
-  server->on("/api/opds", HTTP_POST, [this] { handlePostOpdsServer(); });
-  server->on("/api/opds/delete", HTTP_POST, [this] { handleDeleteOpdsServer(); });
-
-  // Browser-side plugins (JS on the SD card) + their generic capabilities.
-  server->on("/api/plugins", HTTP_GET, [this] { handlePluginList(); });
-  server->on("/plugin", HTTP_GET, [this] { handlePluginFile(); });
-  server->on("/plugins", HTTP_GET, [this] { handlePluginsPage(); });
-  server->on("/plugins-run", HTTP_GET, [this] { handlePluginRunnerPage(); });
-  server->on("/api/plugin-jobs", HTTP_POST, [this] { handlePluginJobSubmit(); });
-  server->on("/api/plugin-jobs/claim", HTTP_GET, [this] { handlePluginJobClaim(); });
-  server->on("/api/plugin-jobs/complete", HTTP_POST, [this] { handlePluginJobComplete(); });
-  server->on("/api/plugin-jobs/status", HTTP_GET, [this] { handlePluginJobStatus(); });
-  server->on("/api/relay", HTTP_POST, [this] { handleRelay(); });
-  server->on("/api/crypto", HTTP_POST, [this] { handleCrypto(); });
-  server->on("/api/fetch", HTTP_POST, [this] { handleFetch(); });
-  server->on("/api/book-key", HTTP_POST, [this] { handleBookKey(); });
-  server->on("/api/plugin-fs", HTTP_POST, [this] { handlePluginFs(); }, [this] { handlePluginFsUpload(); });
-
-  // Wi-Fi credential endpoints
-  server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
-  server->on("/api/wifi", HTTP_POST, [this] { handlePostWifiNetwork(); });
-  server->on("/api/wifi/delete", HTTP_POST, [this] { handleDeleteWifiNetwork(); });
-
+  server->addHandler(new RouteHandler(*this));  // Deleted with the WebServer (stop() resets it)
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
@@ -1118,6 +1160,9 @@ void CrossPointWebServer::handleUploadPost(UploadState& state) const {
     const String error = state.error.isEmpty() ? "Unknown error during upload" : state.error;
     server->send(400, "text/plain", error);
   }
+  // A later POST without a file part must not repeat this result.
+  state.success = false;
+  state.error = "";
 }
 
 void CrossPointWebServer::handleCreateFolder() const {
@@ -3333,6 +3378,7 @@ void CrossPointWebServer::handleFontUpload() {
   } else {
     server->send(400, "application/json", "{\"error\":\"Invalid font file\"}");
   }
+  fontUpload.valid = false;  // A later POST without a file part must not repeat this result
 }
 
 void CrossPointWebServer::handleFontDelete() {
