@@ -445,6 +445,7 @@ void EpubReaderActivity::backgroundBuildTick() {
 
 void EpubReaderActivity::openDictionaryWordSelect() {
   if (SETTINGS.dictionaryName[0] == '\0') {
+    pendingLookupSelection = {};
     showDictionaryMessage = true;
     dictionaryMessageTime = millis();
     requestUpdate();
@@ -455,6 +456,8 @@ void EpubReaderActivity::openDictionaryWordSelect() {
 
 void EpubReaderActivity::startClipSelection(const int initialX, const int initialY,
                                             const ClipSelectionActivity::Mode mode) {
+  const auto restoreSelection = pendingLookupSelection;
+  pendingLookupSelection = {};
   if (!section || !epub || section->currentPage < 0 || section->currentPage >= section->pageCount) return;
 
   const int pageNumber = section->currentPage;
@@ -508,6 +511,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
 
   auto activity = makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, std::move(pages), marginLeft,
                                                            marginTop, initialX, initialY, mode);
+  if (activity && restoreSelection.valid) activity->setInitialSelection(restoreSelection);
   if (!activity) {
     LOG_ERR("CLIP", "Failed to allocate clipping selection activity");
     requestUpdate();
@@ -551,8 +555,16 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         requestUpdate();
         return;
       }
+      // Only single-page selections can be restored (the reader moves to the end page).
+      lookupReturnSelection = {};
+      if (clipping.startPageOffset == clipping.endPageOffset) {
+        lookupReturnSelection = {0, 0, clipping.startWordIndex, clipping.endWordIndex, true};
+      }
       startActivityForResult(std::move(lookup), [this](const ActivityResult& result) {
-        if (!result.isCancelled && !mappedInput.hasTouch()) openDictionaryWordSelect();
+        if (!result.isCancelled && !mappedInput.hasTouch()) {
+          pendingLookupSelection = lookupReturnSelection;
+          openDictionaryWordSelect();
+        }
       });
       return;
     }

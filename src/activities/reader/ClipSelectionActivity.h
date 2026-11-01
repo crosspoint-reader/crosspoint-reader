@@ -36,6 +36,9 @@ class ClipSelectionActivity final : public Activity {
                         std::span<const std::unique_ptr<Page>> borrowedPages, int marginLeft, int marginTop,
                         Selection selection, int initialX = -1, int initialY = -1);
 
+  // Restore a previous selection (page offsets relative to the first page) on enter.
+  void setInitialSelection(const Selection& selection) { initialSelection = selection; }
+
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;

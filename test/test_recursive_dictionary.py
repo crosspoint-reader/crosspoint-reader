@@ -213,6 +213,8 @@ struct DictionaryDefinitionActivity {
   bool messageVisible = false;
   bool finished = false;
   bool selectionOpened = false;
+  ClipSelectionActivity::Selection pendingLookupSelection;
+  ClipSelectionActivity::Selection lookupReturnSelection;
   ActivityResult result;
   std::unique_ptr<ClipSelectionActivity> child;
   ActivityResultHandler callback;
