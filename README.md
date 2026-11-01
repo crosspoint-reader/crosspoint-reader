@@ -28,6 +28,11 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 > windows-1251 / KOI8-R are handled. The conversion groundwork (streaming base64
 > decoder and legacy-encoding tables) is adapted from
 > [papyrix-reader](https://github.com/bigbag/papyrix-reader) by bigbag — many thanks!
+>
+> **Built-in fonts Lexend Deca and Bitter** (fork addition, all reading sizes):
+> TTF sources picked for crisp e-ink rendering with Cyrillic coverage are adapted
+> from [CrossInk](https://github.com/uxjulia/CrossInk) by uxjulia (fonts themselves
+> are OFL) — thanks for the curation!
 
 - **Touch reading**: follow EPUB links and look up words in the dictionary on touch-enabled devices.
 

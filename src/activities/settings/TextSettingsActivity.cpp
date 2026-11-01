@@ -81,6 +81,12 @@ void TextSettingsActivity::onEnter() {
   fonts_.clear();
   fonts_.reserve(CrossPointSettings::BUILTIN_FONT_COUNT + (registry_ ? registry_->getFamilyCount() : 0));
   fonts_.push_back({I18N.get(StrId::STR_NOTO_SANS), true, static_cast<uint8_t>(CrossPointSettings::NOTOSANS)});
+#ifndef OMIT_FONTS
+  // The extra built-in families compile in behind the same guard as their
+  // font objects in main.cpp (slim builds never register their ids).
+  fonts_.push_back({I18N.get(StrId::STR_LEXEND_DECA), true, static_cast<uint8_t>(CrossPointSettings::LEXENDDECA)});
+  fonts_.push_back({I18N.get(StrId::STR_BITTER), true, static_cast<uint8_t>(CrossPointSettings::BITTER)});
+#endif  // OMIT_FONTS
   if (registry_) {
     const auto& families = registry_->getFamilies();
     for (int i = 0; i < static_cast<int>(families.size()); i++) {

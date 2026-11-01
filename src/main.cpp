@@ -106,6 +106,37 @@ EpdFont notosans18BoldItalicFont(&notosans_18_bolditalic);
 EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, &notosans18ItalicFont,
                                    &notosans18BoldItalicFont);
 
+// Lexend Deca and Bitter (this fork; sources and pipeline from CrossInk)
+#define CROSSPOINT_EXTRA_FONT(fam, size)                  \
+  EpdFont fam##size##RegularFont(&fam##_##size##_regular); \
+  EpdFont fam##size##BoldFont(&fam##_##size##_bold);       \
+  EpdFont fam##size##ItalicFont(&fam##_##size##_italic);   \
+  EpdFont fam##size##BoldItalicFont(&fam##_##size##_bolditalic);
+CROSSPOINT_EXTRA_FONT(lexenddeca, 12)
+CROSSPOINT_EXTRA_FONT(lexenddeca, 14)
+CROSSPOINT_EXTRA_FONT(lexenddeca, 16)
+CROSSPOINT_EXTRA_FONT(lexenddeca, 18)
+EpdFontFamily lexenddeca12FontFamily(&lexenddeca12RegularFont, &lexenddeca12BoldFont, &lexenddeca12ItalicFont,
+                                     &lexenddeca12BoldItalicFont);
+EpdFontFamily lexenddeca14FontFamily(&lexenddeca14RegularFont, &lexenddeca14BoldFont, &lexenddeca14ItalicFont,
+                                     &lexenddeca14BoldItalicFont);
+EpdFontFamily lexenddeca16FontFamily(&lexenddeca16RegularFont, &lexenddeca16BoldFont, &lexenddeca16ItalicFont,
+                                     &lexenddeca16BoldItalicFont);
+EpdFontFamily lexenddeca18FontFamily(&lexenddeca18RegularFont, &lexenddeca18BoldFont, &lexenddeca18ItalicFont,
+                                     &lexenddeca18BoldItalicFont);
+CROSSPOINT_EXTRA_FONT(bitter, 12)
+CROSSPOINT_EXTRA_FONT(bitter, 14)
+CROSSPOINT_EXTRA_FONT(bitter, 16)
+CROSSPOINT_EXTRA_FONT(bitter, 18)
+EpdFontFamily bitter12FontFamily(&bitter12RegularFont, &bitter12BoldFont, &bitter12ItalicFont,
+                                 &bitter12BoldItalicFont);
+EpdFontFamily bitter14FontFamily(&bitter14RegularFont, &bitter14BoldFont, &bitter14ItalicFont,
+                                 &bitter14BoldItalicFont);
+EpdFontFamily bitter16FontFamily(&bitter16RegularFont, &bitter16BoldFont, &bitter16ItalicFont,
+                                 &bitter16BoldItalicFont);
+EpdFontFamily bitter18FontFamily(&bitter18RegularFont, &bitter18BoldFont, &bitter18ItalicFont,
+                                 &bitter18BoldItalicFont);
+#undef CROSSPOINT_EXTRA_FONT
 #endif  // OMIT_FONTS
 
 EpdFont smallFont(&ubuntu_8_regular);
@@ -546,6 +577,14 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
+  renderer.insertFont(LEXENDDECA_12_FONT_ID, lexenddeca12FontFamily);
+  renderer.insertFont(LEXENDDECA_14_FONT_ID, lexenddeca14FontFamily);
+  renderer.insertFont(LEXENDDECA_16_FONT_ID, lexenddeca16FontFamily);
+  renderer.insertFont(LEXENDDECA_18_FONT_ID, lexenddeca18FontFamily);
+  renderer.insertFont(BITTER_12_FONT_ID, bitter12FontFamily);
+  renderer.insertFont(BITTER_14_FONT_ID, bitter14FontFamily);
+  renderer.insertFont(BITTER_16_FONT_ID, bitter16FontFamily);
+  renderer.insertFont(BITTER_18_FONT_ID, bitter18FontFamily);
 #endif  // OMIT_FONTS
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
