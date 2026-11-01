@@ -10,9 +10,6 @@
 #if FREEINK_DEVICE_LILYGO
 #include <BoardT5S3.h>
 #endif
-#if FREEINK_DEVICE_METALIO_EINK4_PLUS
-#include <BoardMetalioEInk4Plus.h>  // links the board's EPDiy definition
-#endif
 
 // Global HalGPIO instance
 HalGPIO gpio;

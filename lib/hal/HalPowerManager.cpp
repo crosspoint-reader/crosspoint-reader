@@ -37,6 +37,11 @@ void HalPowerManager::begin() {
   // Board charger setup (Picco SGM41562: stock charge voltage and limits); a
   // no-op on boards without a configurable charger.
   if (BatteryMonitor::configureCharger()) LOG_INF("PWR", "Charger configured");
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // EPDiy's two line producers keep the S31 LCD stream fed only at 320 MHz.
+  // Rendering holds a Lock, so every draw runs at normalFreq.
+  setCpuFrequencyMhz(320);
+#endif
   normalFreq = getCpuFrequencyMhz();
   modeMutex = xSemaphoreCreateMutex();
   assert(modeMutex != nullptr);
@@ -152,6 +157,14 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton)
   // Deep sleep leaves the board, 4G modem and audio module powered, so cut
   // power instead; the button cold-boots it. Returns only on USB power.
   freeink::metalio::powerOff();
+#endif
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // The power-switch chip cuts power and the power key cold-boots the board.
+  // If it does not respond, deep sleep woken by the expander INT instead.
+  freeink::metalioplus::powerOff();
+  if (!freeink::metalioplus::prepareKeyWake()) freeink::metalioplus::waitForPowerKeyThenRestart();
+  freeink::PowerManager::armWakeOnPins(1ULL << freeink::metalioplus::EXPANDER_INT_GPIO, true);
+  freeink::PowerManager::deepSleep();
 #endif
 
   if (wakeOnHeldButton) {
