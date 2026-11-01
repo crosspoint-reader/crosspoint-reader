@@ -10,6 +10,8 @@
 #include "components/UITheme.h"
 #include "util/HtmlToPlainText.h"
 
+#include <algorithm>
+
 namespace {
 
 constexpr unsigned long POPUP_DURATION_MS = 1500;

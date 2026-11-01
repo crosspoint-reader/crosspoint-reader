@@ -1128,32 +1128,41 @@ bool EpubReaderActivity::tryFootnotePopup(const std::string& hrefStr) {
     anchor = hrefStr.substr(hashPos + 1);
   }
 
-  // Viewport identical to the reader's build (margins + status bar), so the
-  // target's section cache is reusable by the normal jump later.
-  int top, right, bottom, left;
+  // The probe section lays out through the renderer (and the framebuffer loan
+  // touches render buffers), so the whole build runs under the render lock —
+  // the same discipline the reader's own section builds follow. `top`/`left`
+  // also position the popup frame, so they live outside the lock scope.
+  int top = 0, right = 0, bottom = 0, left = 0;
   renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
-  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
-  const uint16_t viewportWidth = renderer.getScreenWidth() - left - right - 2 * SETTINGS.screenMargin;
-  const uint16_t viewportHeight =
-      renderer.getScreenHeight() - top - bottom - statusBarHeight - 2 * SETTINGS.screenMargin;
-  const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight);
+  std::string noteText;
+  {
+    RenderLock lock;
+    // Viewport identical to the reader's build, so the target's section cache
+    // is reusable by the normal jump later.
+    const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+    const uint16_t viewportWidth =
+        renderer.getScreenWidth() - (left + SETTINGS.screenMargin) - (right + SETTINGS.screenMargin);
+    const uint16_t viewportHeight = renderer.getScreenHeight() - (top + SETTINGS.screenMargin) -
+                                    std::max<uint16_t>(SETTINGS.screenMargin, statusBarHeight);
+    const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight);
 
-  Section probe(epub, targetSpineIndex, renderer);
-  if (!probe.loadSectionFile(renderSpec)) {
-    GfxRenderer::FrameBufferLoan loan(renderer);
-    if (!probe.createSectionFile(renderSpec)) {
-      LOG_ERR("ERS", "Footnote popup build failed for %s", hrefStr.c_str());
-      return false;
+    Section probe(epub, targetSpineIndex, renderer);
+    if (!probe.loadSectionFile(renderSpec)) {
+      GfxRenderer::FrameBufferLoan loan(renderer);
+      if (!probe.createSectionFile(renderSpec)) {
+        LOG_ERR("ERS", "Footnote popup build failed for %s", hrefStr.c_str());
+        return false;
+      }
     }
-  }
-  // A multi-page target is chapter-sized content: not a popup footnote.
-  if (probe.pageCount > 3) return false;
+    // A multi-page target is chapter-sized content: not a popup footnote.
+    if (probe.pageCount > 3) return false;
 
-  if (!anchor.empty()) {
-    const auto anchorPage = probe.findAnchor(anchor);
-    if (anchorPage) probe.currentPage = *anchorPage;
+    if (!anchor.empty()) {
+      const auto anchorPage = probe.findAnchor(anchor);
+      if (anchorPage) probe.currentPage = *anchorPage;
+    }
+    noteText = probe.getTextFromSectionFile();
   }
-  std::string noteText = probe.getTextFromSectionFile();
   if (noteText.size() < 2) return false;
 
   // Title: the footnote's marker number when the page knows it, else the

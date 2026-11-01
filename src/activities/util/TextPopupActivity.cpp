@@ -37,6 +37,20 @@ TextPopupActivity::TextPopupActivity(GfxRenderer& renderer, MappedInputManager& 
 void TextPopupActivity::onEnter() {
   Activity::onEnter();
   fontId = SETTINGS.getReaderFontId();
+  // Direct-use activities (footnote popup) hand their text to the constructor:
+  // lay it out now. Subclasses that produce text later (dictionary) start
+  // empty and call showText() once their payload is ready.
+  if (!text.empty() && lines.empty()) {
+    layoutFrame();
+    if (!wrapText()) {
+      text.clear();
+      text.shrink_to_fit();
+    }
+  }
+  // The first frame never paints without this: nothing else requests an
+  // update for a direct-use popup (the dictionary path asks from its own
+  // lookup flow), so the screen would wait for the next input event.
+  requestUpdate();
 }
 
 void TextPopupActivity::layoutFrame() {
