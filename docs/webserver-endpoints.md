@@ -236,6 +236,15 @@ fields plus type-specific fields.
 curl http://crosspoint.local/api/settings
 ```
 
+`?keys=` takes a comma-separated list of setting keys, without spaces, and
+returns only those items in the same array format and in settings-list order.
+Unknown keys are ignored. A plugin that needs one or two settings should use it
+instead of reading the whole list.
+
+```bash
+curl 'http://crosspoint.local/api/settings?keys=koServerUrl,dictionaryName'
+```
+
 Example item:
 
 ```json

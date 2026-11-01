@@ -72,6 +72,7 @@ namespace {
 // For JSON POSTs, that includes the complete "plain" body. Expose a narrowly
 // scoped release operation so large request bodies do not remain resident
 // between requests, and so outbound TLS can reuse that memory immediately.
+// It also closes a client whose reply stalls.
 class CrossPointHttpServer final : public WebServer {
  public:
   explicit CrossPointHttpServer(uint16_t port) : WebServer(port) {}
@@ -88,6 +89,28 @@ class CrossPointHttpServer final : public WebServer {
       _postArgs = nullptr;
     }
     _postArgsLen = 0;
+  }
+
+ protected:
+  // NetworkClient::write gives up after ten seconds without progress and
+  // returns a short count, but WebServer ignores it and writes the next chunk,
+  // so a stalled reply blocks the server for minutes. Close the client instead:
+  // later writes then fail at once and the handler soon returns.
+  size_t _currentClientWrite(const char* b, const size_t l) override {
+    return checkedWrite(l, WebServer::_currentClientWrite(b, l));
+  }
+  size_t _currentClientWrite_P(PGM_P b, const size_t l) override {
+    return checkedWrite(l, WebServer::_currentClientWrite_P(b, l));
+  }
+
+ private:
+  size_t checkedWrite(const size_t wanted, const size_t sent) {
+    if (sent < wanted && _currentClient.connected()) {
+      LOG_ERR("WEB", "Client stalled after %u of %u bytes, closing it", static_cast<unsigned>(sent),
+              static_cast<unsigned>(wanted));
+      _currentClient.stop();
+    }
+    return sent;
   }
 };
 
@@ -141,6 +164,55 @@ bool isProtectedItemName(const String& name) {
     if (name.equals(item)) {
       return true;
     }
+  }
+  return false;
+}
+
+// Collects a streamed reply into ~1 KB chunks. Each sendContent() is three
+// socket writes; hundreds of tiny writes fill lwIP's send queue (errno 11) and
+// stall the single-threaded server for seconds while other requests wait.
+// A Print, so serializeJson() writes straight into the chunk buffer.
+class ChunkedReply final : public Print {
+ public:
+  explicit ChunkedReply(WebServer& server) : server_(server) {}
+  using Print::write;
+  size_t write(uint8_t c) override { return write(&c, 1); }
+  size_t write(const uint8_t* data, size_t len) override {
+    if (used_ + len > sizeof(buffer_)) flush();
+    if (len >= sizeof(buffer_)) {
+      server_.sendContent(reinterpret_cast<const char*>(data), len);
+      return len;
+    }
+    memcpy(buffer_ + used_, data, len);
+    used_ += len;
+    return len;
+  }
+  void flush() override {
+    if (used_ == 0) return;
+    server_.sendContent(buffer_, used_);
+    used_ = 0;
+  }
+  // Ends the chunked stream after the buffered data.
+  void end() {
+    flush();
+    server_.sendContent("");
+  }
+
+ private:
+  WebServer& server_;
+  char buffer_[1024];
+  size_t used_ = 0;
+};
+
+// True if key is one of the comma-separated names in list.
+bool listContainsKey(const String& list, const char* key) {
+  const size_t keyLen = strlen(key);
+  for (const char* p = list.c_str(); *p;) {
+    const char* comma = strchr(p, ',');
+    const size_t len = comma ? static_cast<size_t>(comma - p) : strlen(p);
+    if (len == keyLen && strncmp(p, key, len) == 0) return true;
+    if (!comma) break;
+    p = comma + 1;
   }
   return false;
 }
@@ -1414,19 +1486,22 @@ void CrossPointWebServer::handleGetSettings() const {
   // three built-in fonts.
   std::vector<DictionaryEntry> dictionaries;
   DictionaryRegistry::discover(dictionaries);
-  const auto& settings = getSettingsList(&sdFontSystem.registry(), &dictionaries);
+  // ?keys=a,b returns only those settings, so a plugin need not read the whole list.
+  const String keys = server->arg("keys");
+  const auto wants = [&keys](const char* key) { return key && (keys.isEmpty() || listContainsKey(keys, key)); };
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
-  server->sendContent("[");
+  ChunkedReply reply(*server);
+  reply.write("[");
 
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
   bool seenFirst = false;
   JsonDocument doc;
 
-  for (const auto& s : settings) {
-    if (!s.key || s.webHidden) continue;  // Skip ACTION-only entries
+  // One entry at a time: building the whole list first can exhaust the heap
+  // right after a plugin relay.
+  forEachSetting(&sdFontSystem.registry(), &dictionaries, wants, [&](const SettingInfo& s) {
+    if (s.webHidden) return;
 
     doc.clear();
     doc["key"] = s.key;
@@ -1491,36 +1566,23 @@ void CrossPointWebServer::handleGetSettings() const {
         break;
       }
       default:
-        continue;
+        return;
     }
 
-    const char* json = output;
-    // Only entries over the stack buffer use the heap, e.g. fontFamily with many SD families.
-    std::unique_ptr<char[]> large;
-    size_t len = serializeJson(doc, output, outputSize);
-    if (len >= outputSize) {
-      len = measureJson(doc);
-      large.reset(new (std::nothrow) char[len + 1]);
-      if (!large) {
-        LOG_ERR("WEB", "OOM: setting JSON for %s (%zu bytes)", s.key, len);
-        continue;
-      }
-      serializeJson(doc, large.get(), len + 1);
-      json = large.get();
+    // A truncated options list would shift option indexes, so skip the entry instead.
+    if (doc.overflowed()) {
+      LOG_ERR("WEB", "OOM: setting JSON for %s", s.key);
+      return;
     }
-
-    if (seenFirst) {
-      server->sendContent(",");
-    } else {
-      seenFirst = true;
-    }
-    server->sendContent(json, len);
+    if (seenFirst) reply.write(',');
+    seenFirst = true;
+    serializeJson(doc, reply);
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
-    resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
-  }
+    resetTaskWatchdogIfSubscribed();  // Reset watchdog: writing a full chunk blocks on the network
+  });
 
-  server->sendContent("]");
-  server->sendContent("");
+  reply.write("]");
+  reply.end();
   LOG_DBG("WEB", "Served settings API");
 }
 
