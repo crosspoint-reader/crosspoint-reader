@@ -11,7 +11,6 @@
 #include <cstring>
 #include <string_view>
 
-#include "../../lib/Epub/Epub/CjkBreaks.h"
 #include "DictZip.h"
 #include "DictionaryRegistry.h"
 #include "StringUtils.h"
@@ -805,9 +804,9 @@ std::string Dictionary::cleanWord(const char* word) {
     const unsigned char* cpStart = p;
     const uint32_t cp = utf8NextCodepoint(&p);
     if (isVariationSelector(cp) || !utf8IsWordChar(cp)) continue;
-    // CJK opening/closing punctuation is only stripped at the matching edge.
-    if (!wordStart && !CjkBreaks::isNoBreakAfterCjkPunctuation(cp)) wordStart = cpStart;
-    if (wordStart && !CjkBreaks::isNoBreakBeforeCjkPunctuation(cp)) wordEnd = p;
+    // Punctuation (including CJK brackets) is already excluded by utf8IsWordChar.
+    if (!wordStart) wordStart = cpStart;
+    wordEnd = p;
   }
   if (!wordStart || !wordEnd) return "";
   return std::string(reinterpret_cast<const char*>(wordStart), wordEnd - wordStart);
