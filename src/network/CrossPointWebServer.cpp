@@ -3141,28 +3141,38 @@ void CrossPointWebServer::handleFontsPage() const {
   LOG_DBG("WEB", "Served fonts page");
 }
 
-// Adds the size of each family file, in family.files order, from one listing
-// of the folder holding them: opening each file by path walks the folders again
-// for every file, which is slow with many families. Unreadable files report 0.
-static void addFontFileSizes(const SdCardFontFamilyInfo& family, JsonArray fileSizes) {
-  for (size_t i = 0; i < family.files.size(); i++) fileSizes.add(0);
+// Adds {name, size} for each family file, in family.files order. The sizes come
+// from one listing of the folder holding the files: opening each file by path
+// walks the folders again for every file, which is slow with many families.
+// Unreadable files report size 0.
+static void addFontFiles(const SdCardFontFamilyInfo& family, JsonArray files) {
   char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
-  if (family.files.empty() || !family.filePath(family.files.front(), path, sizeof(path))) return;
-  *strrchr(path, '/') = '\0';
-  HalFile dir = Storage.open(path);
+  char folder[sizeof(path)] = "";
+  for (const auto& file : family.files) {
+    if (!family.filePath(file, path, sizeof(path))) continue;
+    char* slash = strrchr(path, '/');
+    JsonObject entry = files.add<JsonObject>();
+    entry["name"] = slash ? slash + 1 : path;
+    entry["size"] = 0;
+    if (slash && !folder[0]) {
+      *slash = '\0';
+      strcpy(folder, path);
+    }
+  }
+  if (!folder[0]) return;
+  HalFile dir = Storage.open(folder);
   if (!dir) return;
 
   char entryName[128];
   size_t found = 0;
-  while (found < family.files.size()) {
-    HalFile entry = dir.openNextFile();
-    if (!entry) break;
-    if (entry.isDirectory()) continue;
-    entry.getName(entryName, sizeof(entryName));
-    for (size_t i = 0; i < family.files.size(); i++) {
-      if (!family.filePath(family.files[i], path, sizeof(path))) continue;
-      if (strcmp(strrchr(path, '/') + 1, entryName) == 0) {
-        fileSizes[i] = static_cast<unsigned long>(entry.size());
+  while (found < files.size()) {
+    HalFile item = dir.openNextFile();
+    if (!item) break;
+    if (item.isDirectory()) continue;
+    item.getName(entryName, sizeof(entryName));
+    for (JsonObject entry : files) {
+      if (strcmp(entry["name"] | "", entryName) == 0) {
+        entry["size"] = static_cast<unsigned long>(item.size());
         found++;
         break;
       }
@@ -3197,7 +3207,7 @@ void CrossPointWebServer::handleFontList() const {
       sizes.add(s);
     }
 
-    addFontFileSizes(family, doc["files"].to<JsonArray>());
+    addFontFiles(family, doc["files"].to<JsonArray>());
 
     if (doc.overflowed()) {
       // Leave the JSON unterminated so the page reports a failed load, not a short list.
