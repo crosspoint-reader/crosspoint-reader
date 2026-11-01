@@ -96,6 +96,12 @@ endpoints (`/api/relay`, `/api/crypto`, `/api/fetch`, `/api/plugin-fs`). See
 `docs/webserver-endpoints.md` for the endpoints and the sd-plugins repository
 for the JS contract.
 
+`plugin.js` must call `CrossPoint.registerPlugin(fn)` while the script runs,
+not after an `await` or from a timer; a later call is ignored. A script that has
+not loaded after 30 seconds, or an `fn` that throws or returns a rejected
+promise, shows "Failed to load plugin." A script that arrives after the 30
+seconds still renders.
+
 ## Surface 2: the plugin job queue (external automation)
 
 External systems (a companion app, a script) can trigger plugin actions
@@ -136,8 +142,9 @@ Plugins register handlers in `plugin.js`:
 
 ```js
 api.registerAction('myaction', async (args) => {
-  // runs in the hosting page; throw -> state "error" with {error: message}
-  return { anything: 'small' };  // -> state "done" with this result
+  // runs in the hosting page; throw, or return a value JSON.stringify throws
+  // on (BigInt, circular structure), -> state "error" with {error: message}
+  return { anything: 'small' };  // -> state "done" with this result ({} for undefined/null)
 });
 ```
 
@@ -581,6 +588,7 @@ browser-side.
 | The plugin's own folder (keep its data here) | `api.dir` |
 | Crypto (hash, HMAC via SHA, AES, RSA) | `api.crypto(op, fields)` or browser `crypto.subtle` |
 | Create / delete / move SD files | same-origin `/mkdir`, `/delete`, `/move` |
+| Read a few reader settings | same-origin `GET /api/settings?keys=a,b` (returns only the settings you ask for) |
 | On-device catalog/browse/download | `device.json` (this document) |
 | External app triggers an action | `api.registerAction(name, fn)` + `/api/plugin-jobs` |
 

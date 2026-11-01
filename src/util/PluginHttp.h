@@ -85,9 +85,12 @@ void loadConfigFile(const std::string& file, Headers& out);
 // (including OAuth polling's 4xx bodies), or -1 on OOM, truncation, or transport failure.
 // responseHeaders (optional) receives the response headers in receive order,
 // duplicates kept. shouldAbort (optional) is polled in every wait loop.
+// heapReserve (0 = no check): fail instead of growing the buffer when that would
+// leave less than heapReserve bytes free, or when no free block is large enough.
 int request(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
             const std::string& body, const Headers& headers, String& out, size_t maxResponse,
-            Headers* responseHeaders = nullptr, const std::function<bool()>& shouldAbort = nullptr);
+            Headers* responseHeaders = nullptr, const std::function<bool()>& shouldAbort = nullptr,
+            size_t heapReserve = 0);
 
 // Same request, body streamed to a file on SD instead of DRAM.
 int requestToFile(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
