@@ -566,6 +566,14 @@ void CrossPointWebServer::handleStatus() const {
 #else
   doc["device"] = BoardConfig::ACTIVE.name;
 #endif
+  // Portrait short x long edge, so the EPUB optimizer can size images for
+  // panels it has no built-in profile for.
+  {
+    const uint16_t w = BoardConfig::ACTIVE.displayWidth;
+    const uint16_t h = BoardConfig::ACTIVE.displayHeight;
+    doc["screenWidth"] = std::min(w, h);
+    doc["screenHeight"] = std::max(w, h);
+  }
 
   char snBuf[33] = {0};
   bool valid = false;
