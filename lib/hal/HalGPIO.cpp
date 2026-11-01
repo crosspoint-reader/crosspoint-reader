@@ -283,6 +283,15 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
       coldBootImpliesPowerButton()) {
     return WakeupReason::PowerButton;
   }
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // The Plus sleeps powered off, and its power switch cuts power even on USB;
+  // plugging USB in does not turn it back on (measured), so a cold boot with
+  // USB connected is the power key too.
+  if (BoardConfig::isMetalioEInk4Plus() && wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED &&
+      resetReason == ESP_RST_POWERON) {
+    return WakeupReason::PowerButton;
+  }
+#endif
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected) {
     return WakeupReason::AfterFlash;
   }
