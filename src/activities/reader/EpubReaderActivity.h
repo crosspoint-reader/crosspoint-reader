@@ -187,6 +187,7 @@ class EpubReaderActivity final : public ReaderActivity {
   void showTextRowPopup(int row);
   // Persist + re-paginate + re-render under the open panel (live preview).
   void applyTextSettingLive();
+  void stepFontSize(int direction);
   void paintOverlayPopup();
   // Persist the reader text settings, (re)load the selected SD font, and
   // re-paginate the current chapter so changes apply without re-opening the book.

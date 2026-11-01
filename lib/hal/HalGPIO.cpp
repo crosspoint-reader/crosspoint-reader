@@ -198,6 +198,13 @@ bool HalGPIO::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEn
   return inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
 }
 
+bool HalGPIO::wasPinch(float& scale) const {
+  float nx = 0.0f;
+  float ny = 0.0f;
+  unsigned long durationMs = 0;
+  return inputMgr.wasMultiTouchPinch(scale, nx, ny, durationMs);
+}
+
 bool HalGPIO::wasTouchActivity() const { return inputMgr.wasTouchActivity(); }
 
 void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {

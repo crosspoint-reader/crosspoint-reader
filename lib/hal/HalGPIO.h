@@ -118,6 +118,8 @@ class HalGPIO {
   void suppressTouchContact();
   unsigned long lastTouchHeldMs() const;
   bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
+  // Two-finger pinch on release: scale < 1 pinched in, > 1 spread apart.
+  bool wasPinch(float& scale) const;
   bool wasTouchActivity() const;
   void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
 
