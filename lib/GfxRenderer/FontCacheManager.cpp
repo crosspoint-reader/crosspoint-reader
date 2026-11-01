@@ -29,6 +29,7 @@ void FontCacheManager::clearCache() {
 }
 
 void FontCacheManager::releaseSdFontCaches() {
+  if (releaseCb_) releaseCb_(releaseCtx_);
   if (fontDecompressor_) fontDecompressor_->clearCache();
   for (auto& [id, font] : sdCardFonts_) {
     font->releaseResidentCaches();
@@ -45,14 +46,17 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
   // funnels through (reader endScanAndPrewarm, the settings preview, UI text),
   // so building here covers them all. accumulate=false means "this is the whole
   // glyph set for this render" → replace; accumulate=true → add incrementally.
-  // styleMask is ignored: a TTF face has no synthesized bold/italic here.
 #if CROSSPOINT_VECTOR_FONTS
   auto tit = ttfFonts_.find(fontId);
   if (tit != ttfFonts_.end() && tit->second) {
-    if (accumulate) {
-      tit->second->addCoverage(utf8Text);
-    } else {
-      tit->second->build(utf8Text);
+    for (uint8_t i = 0; i < 4; ++i) {
+      if (styleMask & (1 << i)) {
+        if (accumulate) {
+          tit->second->addCoverage(utf8Text, i);
+        } else {
+          tit->second->build(utf8Text, i);
+        }
+      }
     }
     return;
   }
