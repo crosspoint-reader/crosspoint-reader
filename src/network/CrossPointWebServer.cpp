@@ -17,6 +17,7 @@
 #include <Memory.h>
 #include <ResumableFetch.h>
 #include <SecureHttpClient.h>
+#include <Utf8.h>
 #include <Util.h>
 #include <WiFi.h>
 #include <WolfsslCrypto.h>
@@ -46,18 +47,22 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/PluginsPageHtml.generated.h"
 #include "html/RunnerPageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/assets/crosspoint_iconSvg.generated.h"
 #include "html/assets/iconsSvg.generated.h"
 #include "html/assets/webCss.generated.h"
+#include "html/js/epub_optimizerJs.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+#include "html/js/plugin_hostJs.generated.h"
 #include "util/BookCacheUtils.h"
 #include "util/DictionaryRegistry.h"
 #include "util/FirmwareIdentity.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
 #include "util/TaskWatchdog.h"
+#include "util/UrlUtils.h"
 
 static void sendStaticContent(WebServer* server, const char* data, size_t len, const char* etag,
                               const char* contentType);
@@ -197,11 +202,33 @@ void CrossPointWebServer::begin() {
   // are answered in handleNotFound().
   server->enableCORS(true);
 
+  // Redirect captive-portal checks to the home page so the OS opens it (see
+  // https://en.wikipedia.org/wiki/Captive_portal#Detection). This runs before
+  // the handlers because WebDAV claims every GET. Checks are GET or HEAD; other
+  // methods are never redirected, as their body is already handled by then.
+  // Host comes from the collected headers: hostHeader() keeps the last value.
+  if (apMode) {
+    server->addMiddleware([](WebServer& s, Middleware::Callback next) {
+      const bool check = s.method() == HTTP_GET || s.method() == HTTP_HEAD;
+      if (!check || !UrlUtils::isForeignHost(s.header("Host").c_str())) return next();
+      s.sendHeader("Location", "http://" + WiFi.softAPIP().toString() + "/", true);
+      s.send(302, "text/plain", "");
+      return true;
+    });
+  }
+
   // Setup routes
   LOG_DBG("WEB", "Setting up routes...");
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
+  server->on("/js/epub-optimizer.js", HTTP_GET, [this] {
+    sendStaticContent(server.get(), epub_optimizerJs, sizeof(epub_optimizerJs), epub_optimizerJsETag,
+                      "application/javascript");
+  });
+  server->on("/js/plugin-host.js", HTTP_GET, [this] {
+    sendStaticContent(server.get(), plugin_hostJs, sizeof(plugin_hostJs), plugin_hostJsETag, "application/javascript");
+  });
 
   server->on("/assets/web.css", HTTP_GET,
              [this] { sendStaticContent(server.get(), webCss, sizeof(webCss), webCssETag, "text/css"); });
@@ -250,6 +277,7 @@ void CrossPointWebServer::begin() {
   // Browser-side plugins (JS on the SD card) + their generic capabilities.
   server->on("/api/plugins", HTTP_GET, [this] { handlePluginList(); });
   server->on("/plugin", HTTP_GET, [this] { handlePluginFile(); });
+  server->on("/plugins", HTTP_GET, [this] { handlePluginsPage(); });
   server->on("/plugins-run", HTTP_GET, [this] { handlePluginRunnerPage(); });
   server->on("/api/plugin-jobs", HTTP_POST, [this] { handlePluginJobSubmit(); });
   server->on("/api/plugin-jobs/claim", HTTP_GET, [this] { handlePluginJobClaim(); });
@@ -270,10 +298,11 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
   // Collect WebDAV headers and register handler
-  // If-None-Match is collected so static pages and plugin files can answer conditional GETs with 304
-  const char* collectedHeaders[] = {"Depth",      "Destination", "Overwrite",    "If",
-                                    "Lock-Token", "Timeout",     "If-None-Match"};
-  server->collectHeaders(collectedHeaders, 7);
+  // If-None-Match is collected so static pages and plugin files can answer conditional GETs with 304,
+  // and Host for the captive-portal check
+  const char* collectedHeaders[] = {"Depth",      "Destination", "Overwrite",     "If",
+                                    "Lock-Token", "Timeout",     "If-None-Match", "Host"};
+  server->collectHeaders(collectedHeaders, 8);
   server->addHandler(new WebDAVHandler());  // Note: WebDAVHandler will be deleted by WebServer when server is stopped
   LOG_DBG("WEB", "WebDAV handler initialized");
 
@@ -473,6 +502,12 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
 
 static void sendStaticContent(WebServer* server, const char* data, size_t len, const char* etag,
                               const char* contentType) {
+  if (strcmp(contentType, "text/html") == 0) {
+    // Read by the page header to hide the Plugins link; sent on 304 too, so it
+    // stays current on every navigation without an extra request.
+    server->sendHeader("Set-Cookie", SETTINGS.pluginsEnabled ? "cpPlugins=1; Path=/; SameSite=Strict"
+                                                             : "cpPlugins=0; Path=/; SameSite=Strict");
+  }
   // Content is baked into flash at build time, so the ETag is stable for the
   // lifetime of a firmware image. Honor If-None-Match with a 304 so browsers
   // reuse their cache instead of re-downloading on every navigation.
@@ -505,15 +540,6 @@ void CrossPointWebServer::handleNotFound() const {
   // here. The Access-Control-Allow-* headers are added by enableCORS().
   if (server->method() == HTTP_OPTIONS) {
     server->send(204, "text/plain", "");
-    return;
-  }
-
-  // in AP mode, redirect unmatched browser/captive-portal requests to "/" so the OS auto-opens the browser
-  // API requests (/api/*) still return 404 so XHR errors surface correctly
-  // see https://en.wikipedia.org/wiki/Captive_portal#Detection
-  if (apMode && !server->uri().startsWith("/api/")) {
-    server->sendHeader("Location", "/", true);
-    server->send(302, "text/plain", "");
     return;
   }
 
@@ -1468,10 +1494,19 @@ void CrossPointWebServer::handleGetSettings() const {
         continue;
     }
 
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
-      LOG_DBG("WEB", "Skipping oversized setting JSON for: %s", s.key);
-      continue;
+    const char* json = output;
+    // Only entries over the stack buffer use the heap, e.g. fontFamily with many SD families.
+    std::unique_ptr<char[]> large;
+    size_t len = serializeJson(doc, output, outputSize);
+    if (len >= outputSize) {
+      len = measureJson(doc);
+      large.reset(new (std::nothrow) char[len + 1]);
+      if (!large) {
+        LOG_ERR("WEB", "OOM: setting JSON for %s (%zu bytes)", s.key, len);
+        continue;
+      }
+      serializeJson(doc, large.get(), len + 1);
+      json = large.get();
     }
 
     if (seenFirst) {
@@ -1479,7 +1514,7 @@ void CrossPointWebServer::handleGetSettings() const {
     } else {
       seenFirst = true;
     }
-    server->sendContent(output);
+    server->sendContent(json, len);
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
@@ -2008,7 +2043,7 @@ void CrossPointWebServer::handlePluginFile() const {
 //      headers in X-Relay-Headers ([[name, value], ...] JSON, duplicates kept)
 // Lets a plugin make an outbound HTTP(S) call the browser can't (CORS): the
 // device makes it via SecureNet. Sending the body raw avoids escaping it into
-// JSON on the device; PluginHost.relay() rebuilds {status, headers, body}.
+// JSON on the device; CrossPoint.relay() rebuilds {status, headers, body}.
 void CrossPointWebServer::handleRelay() {
   if (rejectIfPluginsDisabled()) return;
   JsonDocument req;
@@ -2251,8 +2286,8 @@ void CrossPointWebServer::handleCrypto() {
   sendJson(resp);
 }
 
-// POST /api/fetch {plugin, url, dest, headers?, offset?, maxBytes?}
-//   -> {status, bytes, complete, total?}
+// POST /api/fetch {plugin, url, dest, headers?, offset?, maxBytes?, method?, body?}
+//   -> {status, bytes, complete, total?, error?, body?}
 // Device downloads a URL straight to SD, so a large body never passes through
 // the browser.
 void CrossPointWebServer::handleFetch() {
@@ -2267,6 +2302,42 @@ void CrossPointWebServer::handleFetch() {
   if (segmentLimit > FETCH_MAX_SEGMENT_SIZE) segmentLimit = FETCH_MAX_SEGMENT_SIZE;
   if (url.empty() || !protectedpaths::isPluginPath(dest)) {
     server->send(400, "application/json", "{\"error\":\"bad url/dest\"}");
+    return;
+  }
+  const JsonVariantConst methodField = req["method"];
+  if (!methodField.isNull() && !methodField.is<const char*>()) {
+    server->send(400, "application/json", "{\"error\":\"method must be a string\"}");
+    return;
+  }
+  std::string method = methodField | "GET";
+  std::transform(method.begin(), method.end(), method.begin(),
+                 [](unsigned char c) { return static_cast<char>(toupper(c)); });
+  // HEAD would wait for a body that never comes; other verbs are not plugin downloads.
+  if (method != "GET" && method != "POST" && method != "PUT" && method != "PATCH" && method != "DELETE") {
+    server->send(400, "application/json", "{\"error\":\"unsupported method\"}");
+    return;
+  }
+  // The body stays in DRAM, and goes out as one TLS record, while the session
+  // needs its heap: keep it small, and check it before copying.
+  static constexpr size_t FETCH_MAX_REQUEST_BODY = 4 * 1024;
+  const JsonVariantConst bodyField = req["body"];
+  if (!bodyField.isNull() && !bodyField.is<const char*>()) {
+    server->send(400, "application/json", "{\"error\":\"body must be a string\"}");
+    return;
+  }
+  // JsonString keeps the decoded length, so a \u0000 in the body is sent too.
+  const JsonString rawBody = bodyField.as<JsonString>();
+  if (rawBody.size() > FETCH_MAX_REQUEST_BODY) {
+    server->send(400, "application/json", "{\"error\":\"body over 4KB\"}");
+    return;
+  }
+  const std::string requestBody = rawBody.isNull() ? std::string() : std::string(rawBody.c_str(), rawBody.size());
+  // Only a GET without a body resumes and follows redirects. Any other request
+  // is sent once: replaying it could repeat its effect, and its headers must
+  // not follow a redirect.
+  const bool resumable = method == "GET" && requestBody.empty();
+  if (!resumable && (requestedOffset != 0 || segmentLimit != 0)) {
+    server->send(400, "application/json", "{\"error\":\"offset and maxBytes need a GET without a body\"}");
     return;
   }
 
@@ -2383,36 +2454,72 @@ void CrossPointWebServer::handleFetch() {
     written = 0;
     return Storage.openFileForWrite("PLG", part, file);
   };
-  // The write callback only runs when bytes arrive; with the 60s no-data
-  // timeout a server stall would starve this task's WDT subscription.
-  // shouldAbort is polled in every wait loop, and by connect().
+  // A failed single request's first bytes, so the plugin can tell why. The
+  // resumable GET's transport discards error bodies.
+  static constexpr size_t FETCH_ERROR_BODY_LIMIT = 512;
+  std::string errorBody;
   const auto feedWatchdog = [&] {
     resetTaskWatchdogIfSubscribed();
     keepBrowserAlive();
     return false;  // never aborts; only feeds
   };
-  const freeink::FetchResult result = freeink::fetchResumable(
-      url, options,
-      [&](freeink::SecureHttpClient& http, const bool sameOrigin) {
-        http.setUserAgent("CrossPoint");
-        // The SecureNet transport ships no CA bundle, so peer verification always
-        // fails (wolfSSL -188); skip it like HttpDownloader does. Traffic stays
-        // TLS-encrypted, just unauthenticated — matching the prior library-lending flow.
-        http.setInsecure();
-        // Some delivery servers assemble books on the fly and can stall mid-body
-        // while packaging; the default 15s no-data timeout truncates those downloads.
-        http.setTimeout(60000);
-        // The plugin's headers (typically its Authorization) stay with the
-        // starting origin; a redirect to another server gets none of them.
-        if (sameOrigin && !requestHeaders.empty()) {
-          // Handshake before the client copies the headers: a several-KB session
-          // cookie would otherwise take heap the handshake needs. A failed connect
-          // is retried, and reported, by the request itself.
-          http.connect(feedWatchdog);
-          for (const auto& header : requestHeaders) http.addHeader(header.first, header.second);
-        }
-      },
-      sink, feedWatchdog);
+  const auto configureClient = [](freeink::SecureHttpClient& http) {
+    http.setUserAgent("CrossPoint");
+    // The SecureNet transport ships no CA bundle, so peer verification always
+    // fails (wolfSSL -188); skip it like HttpDownloader does. Traffic stays
+    // TLS-encrypted, just unauthenticated — matching the prior library-lending flow.
+    http.setInsecure();
+    // Some delivery servers assemble books on the fly and can stall mid-body
+    // while packaging; the default 15s no-data timeout truncates those downloads.
+    http.setTimeout(60000);
+  };
+  freeink::FetchResult result;
+  if (resumable) {
+    result = freeink::fetchResumable(
+        url, options,
+        [&](freeink::SecureHttpClient& http, const bool sameOrigin) {
+          configureClient(http);
+          // The plugin's headers (typically its Authorization) stay with the
+          // starting origin; a redirect to another server gets none of them.
+          if (sameOrigin && !requestHeaders.empty()) {
+            // Handshake before the client copies the headers: a several-KB session
+            // cookie would otherwise take heap the handshake needs. A failed connect
+            // is retried, and reported, by the request itself.
+            http.connect(feedWatchdog);
+            for (const auto& header : requestHeaders) http.addHeader(header.first, header.second);
+          }
+        },
+        sink,
+        // The write callback only runs when bytes arrive; with the 60s no-data
+        // timeout a server stall would starve this task's WDT subscription.
+        // shouldAbort is polled in every wait loop, and by connect().
+        feedWatchdog);
+  } else {
+    freeink::SecureHttpClient http;  // redirects are not followed (SDK default)
+    configureClient(http);
+    if (http.begin(url)) {
+      // Same reason as above: handshake before copying the headers.
+      if (!requestHeaders.empty()) http.connect(feedWatchdog);
+      for (const auto& header : requestHeaders) http.addHeader(header.first, header.second);
+      result.status = http.sendRequest(
+          method.c_str(), reinterpret_cast<const uint8_t*>(requestBody.data()), requestBody.size(),
+          [&](const uint8_t* data, size_t len) {
+            const int status = http.getStatus();
+            if (status >= 200 && status < 300) return sink.write(data, len);
+            errorBody.append(reinterpret_cast<const char*>(data),
+                             std::min(len, FETCH_ERROR_BODY_LIMIT - errorBody.size()));
+            resetTaskWatchdogIfSubscribed();
+            return errorBody.size() < FETCH_ERROR_BODY_LIMIT;  // stop once the limit is kept
+          },
+          feedWatchdog);
+      result.bytes = written;
+      result.total = http.hasContentLength() ? http.getContentLength() : 0;
+      result.stopped = sdFull;
+      result.complete = result.status >= 200 && result.status < 300 && http.responseComplete() && !sdFull;
+    } else {
+      result.status = -1;
+    }
+  }
   if (file.isOpen()) {
     file.flush();
     file.close();
@@ -2444,6 +2551,9 @@ void CrossPointWebServer::handleFetch() {
   if (!ok2xx) {
     Storage.remove(part.c_str());
     resp["error"] = status < 0 ? "transport failure" : "http status";
+    // The cap may have cut a UTF-8 character: drop its partial tail.
+    errorBody.resize(utf8SafeTruncateBuffer(errorBody.data(), static_cast<int>(errorBody.size())));
+    if (!errorBody.empty()) resp["body"] = errorBody;
   } else if (complete && !Storage.replaceFile(part.c_str(), dest.c_str())) {
     Storage.remove(part.c_str());
     complete = false;
@@ -2584,6 +2694,12 @@ void CrossPointWebServer::handleBookKey() {
     return;
   }
   server->send(200, "application/json", "{\"ok\":true}");
+}
+
+// Served even while plugins are disabled: its empty state tells the user how to enable them.
+void CrossPointWebServer::handlePluginsPage() const {
+  sendStaticContent(server.get(), PluginsPageHtml, sizeof(PluginsPageHtml), PluginsPageHtmlETag, "text/html");
+  LOG_DBG("WEB", "Served plugins page");
 }
 
 void CrossPointWebServer::handlePluginRunnerPage() const {
@@ -2923,23 +3039,31 @@ void CrossPointWebServer::handleFontList() const {
   const_cast<SdCardFontSystem&>(sdFontSystem).refreshIfDirty();
   const auto& families = sdFontSystem.registry().getFamilies();
 
-  JsonDocument doc;
-  JsonArray arr = doc["families"].to<JsonArray>();
-  doc["maxFamilies"] = SdCardFontRegistry::MAX_SD_FAMILIES;
+  // Stream one family per chunk: with many families, the whole document plus
+  // its serialized copy does not fit in the heap of a DRAM-only board.
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  char head[80];
   // Vector (.ttf/.otf) fonts need PSRAM to stay resident; DRAM-only boards
   // only take pre-rendered .cpfont uploads.
-  doc["vectorFonts"] = HalMemory::getPsramHeap().totalBytes > 0;
+  snprintf(head, sizeof(head), "{\"maxFamilies\":%d,\"vectorFonts\":%s,\"families\":[",
+           SdCardFontRegistry::MAX_SD_FAMILIES, HalMemory::getPsramHeap().totalBytes > 0 ? "true" : "false");
+  server->sendContent(head);
 
+  JsonDocument doc;
+  // Reused for every family; reallocated only for a larger entry (a few hundred bytes).
+  std::unique_ptr<char[]> buf;
+  size_t bufSize = 0;
   for (const auto& family : families) {
-    JsonObject fObj = arr.add<JsonObject>();
-    fObj["name"] = family.name;
+    doc.clear();
+    doc["name"] = family.name;
 
-    JsonArray sizes = fObj["sizes"].to<JsonArray>();
+    JsonArray sizes = doc["sizes"].to<JsonArray>();
     for (uint8_t s : family.availableSizes()) {
       sizes.add(s);
     }
 
-    JsonArray files = fObj["files"].to<JsonArray>();
+    JsonArray files = doc["files"].to<JsonArray>();
     char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
     for (const auto& file : family.files) {
       if (!family.filePath(file, path, sizeof(path))) continue;
@@ -2957,9 +3081,29 @@ void CrossPointWebServer::handleFontList() const {
         fileObj["size"] = 0;
       }
     }
+
+    const size_t len = 1 + measureJson(doc);  // leading comma + entry
+    if (!doc.overflowed() && len + 1 > bufSize) {
+      buf.reset();  // free first so two buffers are never held at once
+      buf.reset(new (std::nothrow) char[len + 1]);
+      bufSize = buf ? len + 1 : 0;
+    }
+    if (doc.overflowed() || !buf) {
+      // Leave the JSON unterminated so the page reports a failed load, not a short list.
+      LOG_ERR("WEB", "OOM: font list entry");
+      server->sendContent("");
+      return;
+    }
+    buf[0] = ',';
+    serializeJson(doc, buf.get() + 1, bufSize - 1);
+    const size_t skip = &family == &families.front() ? 1 : 0;  // no comma before the first entry
+    server->sendContent(buf.get() + skip, len - skip);
+    yield();
+    resetTaskWatchdogIfSubscribed();  // each sendContent() is a blocking network write
   }
 
-  sendJson(doc);
+  server->sendContent("]}");
+  server->sendContent("");
 }
 
 void CrossPointWebServer::handleFontUploadData() {

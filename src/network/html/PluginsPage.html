@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plugins - CrossPoint Reader</title>
+  <link rel="stylesheet" href="/assets/web.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/crosspoint-icon.svg" />
+</head>
+<body class="web-ui">
+  <!--#include file="shared/Header.html.inc" -->
+<main class="page-content">
+  <div id="plugin-container"></div>
+  <div class="card" id="empty-state" hidden>
+    <p class="empty-state">No plugins with web settings. Check that <b>Settings &rarr; Connectivity &rarr; Plugins</b> is on and that a plugin is installed on the SD card.</p>
+  </div>
+</main>
+<!--#include file="shared/Footer.html.inc" -->
+
+<script src="/js/plugin-host.js"></script>
+<script>
+  (async () => {
+    // The plugin host and the plugin list are separate requests and can fail on a busy device.
+    if (typeof loadPlugins !== 'function' || !(await loadPlugins('settings'))) {
+      document.querySelector('#empty-state p').textContent = 'Could not load plugins. Reload the page.';
+    } else if (document.getElementById('plugin-container').children.length) {
+      return;
+    }
+    document.getElementById('empty-state').hidden = false;
+  })();
+</script>
+</body>
+</html>

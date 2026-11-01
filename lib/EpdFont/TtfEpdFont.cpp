@@ -296,7 +296,7 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
   // presentation codepoints (whose glyphs commonly have no cmap entry at all).
   freeink::font::FtFont::GlyphId gid = f.ft.glyphId(cp);
   if (gid == 0 && cp >= 0xFB00u && cp <= 0xFB04u) gid = f.ligGid[cp - 0xFB00u];
-  if (gid == 0) return nullptr;
+  if (gid == 0 && cp != REPLACEMENT_GLYPH) return nullptr;
 
   // Glyph-ID render at the exact fractional ppem. The metrics pass costs a
   // second glyph load per MISS only (hits come from the cache) and yields the

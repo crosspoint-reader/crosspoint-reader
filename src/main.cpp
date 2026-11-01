@@ -385,14 +385,17 @@ static void deliverSleepPluginEvents(const bool allowNetwork) {
   // reader.exit only fires later, inside goToSleep() — after this drain. Carry
   // the book and progress on sleep.enter itself so a sync handler bound to it
   // pushes current progress on THIS connection, not the next one.
-  pluginevents::Var vars[2];
+  pluginevents::Var vars[3];
   size_t varCount = 0;
   char percent[8];
+  char endPercent[8];
   const ScreenshotInfo info = activityManager.getScreenshotInfo();
   if (info.readerType != ScreenshotInfo::ReaderType::None && !APP_STATE.openEpubPath.empty()) {
     snprintf(percent, sizeof(percent), "%d", info.progressPercent);
+    snprintf(endPercent, sizeof(endPercent), "%d", info.endProgressPercent);
     vars[varCount++] = {"book", APP_STATE.openEpubPath.c_str()};
     vars[varCount++] = {"percent", percent};
+    vars[varCount++] = {"end_percent", endPercent};
   }
   pluginevents::emit(pluginevents::Event::SleepEnter, vars, varCount);
   if (!allowNetwork) return;

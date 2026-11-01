@@ -331,7 +331,7 @@ STR_PLUGIN_HUB_INSTALL_DESCRIPTION: "Rəsmi və icma plaqinlərinə baxıb qura�
 STR_PLUGIN_HUB_INSTALLED: "Plaqin mərkəzi quraşdırıldı"
 STR_PLUGIN_HUB_INSTALLED_HINT: "Başlamaq üçün Plaqinlər bölməsini aç."
 STR_NO_PLUGINS_INSTALLED: "Cihaz ekranı olan plaqin quraşdırılmayıb"
-STR_PLUGIN_NOT_SIGNED_IN: "Daxil olmamısan. Veb tənzimləmələr səhifəsini aç və plaqin vasitəsilə daxil ol."
+STR_PLUGIN_NOT_SIGNED_IN: "Daxil olmamısan. Veb plaqinlər səhifəsini aç və plaqin vasitəsilə daxil ol."
 STR_PLUGIN_MANIFEST_INVALID: "Plaqinin manifest faylı yoxdur və ya yanlışdır"
 STR_PLUGIN_SIGN_IN: "Daxil ol"
 STR_PLUGIN_SIGN_IN_HINT: "Hələ daxil olmamısan"
