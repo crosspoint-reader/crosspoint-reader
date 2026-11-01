@@ -153,14 +153,16 @@ void BaseTheme::drawCoverPlaceholder(const GfxRenderer& renderer, Rect rect) {
 bool BaseTheme::drawCoverThumbFill(const GfxRenderer& renderer, const Bitmap& bitmap, Rect slot, const int xOffset) {
   if (slot.width <= 0 || slot.height <= 0) return false;
   // xOffset nudges the centered art sideways; the clip stays on the slot.
-  const int x = slot.x + (slot.width - bitmap.getWidth()) / 2 + xOffset;
-  const int y = slot.y + (slot.height - bitmap.getHeight()) / 2;
+  const int bw = renderer.bitmapWidth(bitmap);
+  const int bh = renderer.bitmapHeight(bitmap);
+  const int x = slot.x + (slot.width - bw) / 2 + xOffset;
+  const int y = slot.y + (slot.height - bh) / 2;
   const auto clip = renderer.getClipRect();
   const int left = std::max(slot.x, clip[0]);
   const int top = std::max(slot.y, clip[1]);
   renderer.setClipRect(left, top, std::max(0, std::min(slot.x + slot.width, clip[0] + clip[2]) - left),
                        std::max(0, std::min(slot.y + slot.height, clip[1] + clip[3]) - top));
-  const bool drawn = renderer.drawBitmap(bitmap, x, y, bitmap.getWidth(), bitmap.getHeight());
+  const bool drawn = renderer.drawBitmap(bitmap, x, y, bw, bh);
   renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
   return drawn;
 }
@@ -519,8 +521,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
         hasCoverImage = true;
-        const int imgWidth = bitmap.getWidth();
-        const int imgHeight = bitmap.getHeight();
+        const int imgWidth = renderer.bitmapWidth(bitmap);
+        const int imgHeight = renderer.bitmapHeight(bitmap);
 
         // Calculate width based on aspect ratio, maintaining baseHeight
         if (imgWidth > 0 && imgHeight > 0) {

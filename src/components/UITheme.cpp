@@ -1,5 +1,6 @@
 #include "UITheme.h"
 
+#include <BoardConfig.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
@@ -8,6 +9,7 @@
 #include <Memory.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 #include "MappedInputManager.h"
@@ -138,10 +140,14 @@ Rect UITheme::getHeaderRect(const GfxRenderer& renderer, bool hasFrontButtonHint
               safe.width + renderer.getScreenWidth() - content.width, metrics.headerHeight};
 }
 
+int UITheme::coverThumbPixels(const int coverHeight) {
+  return static_cast<int>(lroundf(static_cast<float>(coverHeight) * BoardConfig::ACTIVE.uiScale));
+}
+
 std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight) {
   size_t pos = coverBmpPath.find("[HEIGHT]", 0);
   if (pos != std::string::npos) {
-    coverBmpPath.replace(pos, 8, std::to_string(coverHeight));
+    coverBmpPath.replace(pos, 8, std::to_string(coverThumbPixels(coverHeight)));
   }
   return coverBmpPath;
 }
