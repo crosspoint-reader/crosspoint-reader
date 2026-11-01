@@ -145,3 +145,21 @@ TEST(FontCacheManagerTest, IncrementalPrewarmRequestsAccumulation) {
   ASSERT_EQ(1, font.prewarmCallCount);
   EXPECT_TRUE(font.prewarmCalls[0].accumulate);
 }
+
+TEST(FontCacheManagerTest, MovedScopeAdvancesPoolBoundariesOnlyOnce) {
+  const std::map<int, EpdFontFamily> fonts;
+  const std::map<int, SdCardFont*> sdFonts;
+  FontCacheManager manager(fonts, sdFonts, kNoTtfFonts);
+  auto& pool = manager.getSdGlyphPool();
+  EXPECT_EQ(0U, pool.depth);
+  {
+    auto original = manager.createPrewarmScope();
+    EXPECT_EQ(1U, pool.depth);
+    auto moved = std::move(original);
+    moved.endScanAndPrewarm();
+    EXPECT_EQ(1U, pool.depth);
+    EXPECT_EQ(1U, pool.boundaries);
+  }
+  EXPECT_EQ(0U, pool.depth);
+  EXPECT_EQ(2U, pool.boundaries);
+}

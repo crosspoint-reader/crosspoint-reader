@@ -235,7 +235,7 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
   const int fontId = SETTINGS.getReaderFontId();
   // SD-card fonts: merge every definition codepoint into the persistent
   // advance table up front. Otherwise each unseen codepoint measured below
-  // falls back to an on-demand glyph load from SD (8-slot overflow ring).
+  // falls back to an on-demand glyph record read from SD.
   renderer.ensureSdCardFontReady(fontId, definition.c_str(), 0x03 /* REGULAR + BOLD */);
 
   const BodyArea body = bodyArea();

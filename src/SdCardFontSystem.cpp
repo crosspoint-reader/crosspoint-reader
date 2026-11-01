@@ -1,5 +1,6 @@
 #include "SdCardFontSystem.h"
 
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -360,10 +361,22 @@ bool SdCardFontSystem::loadCpfontVariant(const SdCardFontFamilyInfo& family, con
   // CJK subsets), so skip it on a tight heap: the text then stays at the reader size.
   static constexpr size_t MIN_VARIANT_FREE_BLOCK = 48 * 1024;
   if (ESP.getMaxAllocHeap() < MIN_VARIANT_FREE_BLOCK) {
+    // The shared glyph pool retains chunks between pages; during a page scan none of
+    // them is in use, so free them before giving up. A page's draw passes retry this
+    // gate per glyph run, so trim only while scanning, and not again while the heap
+    // is no better than when the last trim fell short.
+    auto* fcm = renderer_->getFontCacheManager();
+    if (fcm && fcm->isScanning() && ESP.getFreeHeap() > variantTrimFreeHeap_ && fcm->trimSdGlyphPool() &&
+        ESP.getMaxAllocHeap() < MIN_VARIANT_FREE_BLOCK) {
+      variantTrimFreeHeap_ = ESP.getFreeHeap();
+    }
+  }
+  if (ESP.getMaxAllocHeap() < MIN_VARIANT_FREE_BLOCK) {
     LOG_DBG("SDFS", "Skipping %upt variant: largest free block %u", pointSize,
             static_cast<unsigned>(ESP.getMaxAllocHeap()));
     return false;
   }
+  variantTrimFreeHeap_ = 0;
   if (cpfontVariants_.size() >= MAX_CPFONT_VARIANTS) {
     const auto oldest = std::min_element(cpfontVariants_.begin(), cpfontVariants_.end(),
                                          [](const auto& a, const auto& b) { return a.lastUse < b.lastUse; });
