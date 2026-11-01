@@ -92,7 +92,7 @@
           // Vector families report size 0 (rendered at any size).
           const sizes = (f.sizes || []).filter(s => s > 0);
           const sizeText = sizes.length ? sizes.join(', ') + 'pt' : 'scalable';
-          const filesSizes = (f.files || []).map(fi => formatSize(fi.size)).join(' + ');
+          const filesSizes = (f.files || []).map(size => formatSize(size)).join(' + ');
           meta.textContent = sizeText + ' · ' + filesSizes;
           info.appendChild(meta);
 

@@ -309,17 +309,20 @@ Response:
 ```json
 {
   "maxFamilies": 128,
+  "vectorFonts": false,
   "families": [
     {
       "name": "Literata",
       "sizes": [12, 14, 16, 18],
-      "files": [
-        {"name": "Literata_12.cpfont", "size": 123456}
-      ]
+      "files": [123456, 145678, 167890, 189012]
     }
   ]
 }
 ```
+
+`files` lists the size in bytes of each font file in the family, one number per
+file. It does not line up with `sizes`: a TTF/OTF family has `sizes: [0]` and one
+file per style. `0` means the file could not be read.
 
 ### `POST /api/fonts/upload`
 
