@@ -96,6 +96,9 @@ class CrossPointWebServer {
   String formatFileSize(size_t bytes) const;
   bool isEpubFile(const String& filename) const;
 
+  // Dispatches every route from one table, defined in the .cpp file.
+  class RouteHandler;
+
   // Request handlers
   void handleRoot() const;
   void handleJszip() const;
