@@ -1,10 +1,10 @@
 #pragma once
 
-#include <algorithm>
-#include <cmath>
-
 #include <EpdFontFamily.h>
 #include <HalDisplay.h>
+
+#include <algorithm>
+#include <cmath>
 
 namespace BidiUtils {
 // Paragraph base direction for the Unicode BiDi algorithm (UAX#9).
@@ -55,9 +55,7 @@ class GfxRenderer {
   struct UiScaleOff {
     const GfxRenderer* renderer;
     bool previous;
-    explicit UiScaleOff(const GfxRenderer* r) : renderer(r), previous(r->uiScaleActive_) {
-      r->uiScaleActive_ = false;
-    }
+    explicit UiScaleOff(const GfxRenderer* r) : renderer(r), previous(r->uiScaleActive_) { r->uiScaleActive_ = false; }
     ~UiScaleOff() { renderer->uiScaleActive_ = previous; }
   };
   int sp(const int v) const { return static_cast<int>(lroundf(static_cast<float>(v) * uiScale_)); }
@@ -73,7 +71,6 @@ class GfxRenderer {
   }
   void drawIconScaled(const uint8_t bitmap[], int x, int y, int size, int outSize) const;
   void drawImageScaled(const uint8_t bitmap[], int x, int y, int width, int height, int outWidth, int outHeight) const;
-
 
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
 

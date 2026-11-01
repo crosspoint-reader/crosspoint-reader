@@ -1,7 +1,5 @@
 #include "GfxRenderer.h"
 
-#include <vector>
-
 #include <BidiUtils.h>
 #include <BoardConfig.h>
 #include <BuildScratch.h>
@@ -14,6 +12,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <vector>
 
 #include "../Memory/Memory.h"
 #include "FontCacheManager.h"
