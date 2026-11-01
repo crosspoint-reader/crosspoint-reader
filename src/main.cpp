@@ -627,6 +627,21 @@ void setup() {
     WiFi.onEvent(applyTxCap, ARDUINO_EVENT_WIFI_STA_START);
     WiFi.onEvent(applyTxCap, ARDUINO_EVENT_WIFI_AP_START);
   }
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // The AP dropped the S31 for missing ACKs (802.11 reason 34) seconds after
+  // joining and NTP replies went missing. Alongside the profile's 15 dBm TX cap:
+  // no modem sleep from station start (the web server only turns it off once it
+  // starts, after the NTP wait) and 802.11b/g/n only (the S31's 11ax runs on a
+  // pre-release driver). Set before the station connects.
+  WiFi.onEvent(
+      [](arduino_event_id_t, arduino_event_info_t) {
+        esp_err_t err = esp_wifi_set_ps(WIFI_PS_NONE);
+        if (err != ESP_OK) LOG_ERR("WIFI", "Disabling power save failed: %d", err);
+        err = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+        if (err != ESP_OK) LOG_ERR("WIFI", "Limiting to 802.11b/g/n failed: %d", err);
+      },
+      ARDUINO_EVENT_WIFI_STA_START);
+#endif
 
   const auto wakeupReason = gpio.getWakeupReason();
   // Sample the wake hold now — a click wake is released within milliseconds of
