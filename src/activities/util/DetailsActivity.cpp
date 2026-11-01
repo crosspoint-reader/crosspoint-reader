@@ -93,6 +93,7 @@ void DetailsActivity::loop() {
 }
 
 void DetailsActivity::confirm() {
+  if (spec.actionLabel.empty()) return;
   setResult(ActivityResult{});
   finish();
 }

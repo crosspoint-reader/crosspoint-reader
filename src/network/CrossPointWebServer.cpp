@@ -1981,6 +1981,10 @@ void CrossPointWebServer::handleWallpaperPackList() const {
     item["version"] = pack.version;
     item["selected"] = pack.id == SETTINGS.wallpaperPackId;
   }
+  if (doc.overflowed()) {
+    server->send(503, "application/json", "{\"error\":\"out of memory\"}");
+    return;
+  }
   sendJson(doc);
 }
 

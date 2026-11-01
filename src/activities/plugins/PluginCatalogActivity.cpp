@@ -621,6 +621,7 @@ void PluginCatalogActivity::enterPluginPicker() {
                                            StrId::STR_EVENT_SLEEP};
   static_assert(sizeof(EVENT_LABELS) / sizeof(EVENT_LABELS[0]) == static_cast<size_t>(pluginevents::Event::COUNT));
   for (auto& plugin : installedPlugins) {
+    if (plugin.isWallpaperPack) continue;
     const uint8_t mask = pluginevents::subscriptionMask(plugin.name.c_str());
     if (mask == 0) continue;
     std::string events;
@@ -679,12 +680,13 @@ void PluginCatalogActivity::confirmUninstallPlugin(const int pickerIndex) {
 
   char message[256];
   if (plugin.isWallpaperPack)
-    snprintf(message, sizeof(message), "Uninstall wallpaper pack %s?", plugin.title.c_str());
+    snprintf(message, sizeof(message), tr(STR_WALLPAPER_UNINSTALL_PROMPT), plugin.title.c_str());
   else
     snprintf(message, sizeof(message), tr(STR_PLUGIN_UNINSTALL_CONFIRM), plugin.title.c_str());
   auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(
-      renderer, mappedInput, plugin.isWallpaperPack ? "Uninstall Wallpaper Pack" : tr(STR_PLUGIN_UNINSTALL_TITLE),
-      message, tr(STR_CANCEL), tr(STR_PLUGIN_UNINSTALL));
+      renderer, mappedInput,
+      plugin.isWallpaperPack ? tr(STR_WALLPAPER_UNINSTALL_TITLE) : tr(STR_PLUGIN_UNINSTALL_TITLE), message,
+      tr(STR_CANCEL), tr(STR_PLUGIN_UNINSTALL));
   if (!confirmation) {
     LOG_ERR("PCAT", "OOM: plugin uninstall confirmation");
     return;
@@ -1114,33 +1116,28 @@ bool PluginCatalogActivity::resolveWallpaperRelease(const Item& item, wallpaperp
 
 void PluginCatalogActivity::computeInstallStatus() {
   if (browsingWallpaperPacks()) {
+    auto& registry = WallpaperPackRegistry::getInstance();
+    if (manifest.tracksInstalls()) registry.scan();
+    const auto& installed = registry.choices();
     for (auto& item : items) {
       wallpaperpackages::Release release;
-      if (!resolveWallpaperRelease(item, release)) {
-        item.status = "Not for this display";
+      item.wallpaperCompatible = resolveWallpaperRelease(item, release);
+      if (!item.wallpaperCompatible) {
+        item.status = tr(STR_WALLPAPER_NOT_FOR_DISPLAY);
         continue;
       }
       if (!manifest.tracksInstalls()) {
         item.status.clear();
         continue;
       }
-      std::string raw;
-      const std::string manifestFile =
-          "/.crosspoint/wallpapers/" + release.name + ".crosspoint-wallpaper/manifest.json";
-      if (!Storage.readFileToString("WPK", manifestFile, wallpaperpackages::MAX_MANIFEST_BYTES, raw)) {
+      const auto it = std::find_if(installed.begin(), installed.end(),
+                                   [&](const WallpaperPackChoice& pack) { return pack.id == release.name; });
+      if (it == installed.end()) {
         item.status = "v" + item.version;
         continue;
       }
-      JsonDocument installed;
-      if (deserializeJson(installed, raw) != DeserializationError::Ok ||
-          strcmp(installed["kind"] | "", "wallpaper-pack") != 0 ||
-          strcmp(installed["name"] | "", release.name.c_str()) != 0) {
-        item.status = "v" + item.version;
-        continue;
-      }
-      const std::string version = installed["version"] | "";
       item.status =
-          PluginLocations::isNewerVersion(item.version, version) ? tr(STR_UPDATE_AVAILABLE) : tr(STR_INSTALLED);
+          PluginLocations::isNewerVersion(item.version, it->version) ? tr(STR_UPDATE_AVAILABLE) : tr(STR_INSTALLED);
     }
     return;
   }
@@ -1237,6 +1234,8 @@ void PluginCatalogActivity::pollAuth() {
 }
 
 void PluginCatalogActivity::downloadItem(const int itemIndex) {
+  if (itemIndex < 0 || itemIndex >= static_cast<int>(items.size())) return;
+  if (browsingWallpaperPacks() && !items[itemIndex].wallpaperCompatible) return;
   // Own only the selected item's metadata while TLS needs the catalog's heap.
   Item item;
   {
@@ -1792,7 +1791,8 @@ void PluginCatalogActivity::showItemDetails(const int itemIndex) {
   addFact(item.status);
 
   const bool updateAvailable = item.status == tr(STR_UPDATE_AVAILABLE);
-  spec.actionLabel = updateAvailable ? tr(STR_UPDATE) : (manifest.tracksInstalls() ? tr(STR_INSTALL) : tr(STR_FETCH));
+  if (!browsingWallpaperPacks() || item.wallpaperCompatible)
+    spec.actionLabel = updateAvailable ? tr(STR_UPDATE) : (manifest.tracksInstalls() ? tr(STR_INSTALL) : tr(STR_FETCH));
 
   auto detailsActivity = makeUniqueNoThrow<DetailsActivity>(renderer, mappedInput, std::move(spec));
   if (!detailsActivity) {
@@ -1988,8 +1988,8 @@ void PluginCatalogActivity::rebuildRowItems() {
       rowItems.push_back(header);
     };
     for (size_t i = 0; i < installedPlugins.size(); ++i) {
-      if (static_cast<int>(i) == pinned && wallpaper > pinned) addHeader("Plugins");
-      if (static_cast<int>(i) == wallpaper) addHeader("Wallpaper Packs");
+      if (static_cast<int>(i) == pinned && wallpaper > pinned) addHeader(tr(STR_PLUGINS));
+      if (static_cast<int>(i) == wallpaper) addHeader(tr(STR_WALLPAPER_PACKS));
       const auto& plugin = installedPlugins[i];
       if (plugin.isWallpaperPack) {
         addRow(plugin.title.c_str(), plugin.description.c_str(), ">");
