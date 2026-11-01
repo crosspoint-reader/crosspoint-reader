@@ -585,8 +585,12 @@ to CORS). Body: `{"plugin":"<name>","method":"GET","url":"https://...","headers"
   as JSON `[["name","value"], ...]` in receive order, duplicates kept (every
   `Set-Cookie`). `api.relay()` resolves to `{status, headers, body}`.
 - **Redirects** are not followed: a 3xx comes back with its `location` header.
-- **Limits:** the upstream body is capped at 32KB; larger payloads belong on
-  `/api/fetch`.
+- **Limits:** the upstream body is capped at 32KB and is held in memory while
+  TLS is open. The relay also fails if buffering the body would leave less than
+  16KB of heap free, or if no free block is large enough, so on a DRAM-only
+  board a body under 32KB can still fail. Use `/api/fetch` for large files. A
+  GET that fails with 502 can be retried with `/api/fetch` (`api.relay()`
+  throws an error whose `status` is 502).
 - **Errors:** `400 {"error":"missing plugin/url"}`; `502 {"error":"relay failed; ..."}`
   for a transport failure, a truncated body, a body over the cap, or low memory
   (the device log names which).

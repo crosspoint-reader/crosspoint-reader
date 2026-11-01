@@ -2073,13 +2073,19 @@ void CrossPointWebServer::handleRelay() {
   // subscribed to the task WDT for the whole web-server session, so feed it
   // while a slow peer keeps the request waiting.
   static constexpr size_t RELAY_BODY_LIMIT = 32 * 1024;
+  // Heap kept free while the body is buffered. TLS already holds ~25 KB, and an
+  // exhausted heap stops Wi-Fi from receiving the ACKs that free the server's
+  // send buffers: the whole web server then stalls until the device is reset.
+  static constexpr size_t RELAY_HEAP_RESERVE = 16 * 1024;
   String respBody;
   pluginhttp::Headers respHeaders;
-  const int status =
-      pluginhttp::request(nullptr, url, method, body, headers, respBody, RELAY_BODY_LIMIT, &respHeaders, [] {
+  const int status = pluginhttp::request(
+      nullptr, url, method, body, headers, respBody, RELAY_BODY_LIMIT, &respHeaders,
+      [] {
         resetTaskWatchdogIfSubscribed();
         return false;  // never aborts; only feeds
-      });
+      },
+      RELAY_HEAP_RESERVE);
   // Transport failure, a truncated body, or one over the cap / out of memory
   // (the reason is logged by pluginhttp).
   if (status < 0) {
