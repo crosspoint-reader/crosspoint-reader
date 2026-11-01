@@ -797,36 +797,27 @@ void CrossPointWebServer::handleFileListData() const {
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
-  server->sendContent("[");
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
+  ChunkedReply reply(*server);
+  reply.write("[");
   bool seenFirst = false;
   JsonDocument doc;
 
-  scanFiles(currentPath.c_str(), [this, &output, &doc, seenFirst](const FileInfo& info) mutable {
+  scanFiles(currentPath.c_str(), [&reply, &doc, &seenFirst](const FileInfo& info) {
     doc.clear();
     doc["name"] = info.name;
     doc["size"] = info.size;
     doc["isDirectory"] = info.isDirectory;
     doc["isEpub"] = info.isEpub;
-
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
-      // JSON output truncated; skip this entry to avoid sending malformed JSON
-      LOG_DBG("WEB", "Skipping file entry with oversized JSON for name: %s", info.name.c_str());
+    if (doc.overflowed()) {
+      LOG_ERR("WEB", "OOM: file entry JSON for %s", info.name.c_str());
       return;
     }
-
-    if (seenFirst) {
-      server->sendContent(",");
-    } else {
-      seenFirst = true;
-    }
-    server->sendContent(output);
+    if (seenFirst) reply.write(',');
+    seenFirst = true;
+    serializeJson(doc, reply);
   });
-  server->sendContent("]");
-  // End of streamed response, empty chunk to signal client
-  server->sendContent("");
+  reply.write("]");
+  reply.end();
   LOG_DBG("WEB", "Served file listing page for path: %s", currentPath.c_str());
 }
 
