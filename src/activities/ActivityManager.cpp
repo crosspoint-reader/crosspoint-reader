@@ -373,6 +373,20 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // Leaving a book: its anti-aliased greys and the fast page turns before them
+  // leave traces that a changed-pixels-only update keeps, so draw Home clean
+  // (every pixel), as the vendor firmware does on a screen change from greys.
+  // Screens opened from the book (menu, footnotes, dictionary, clip selection)
+  // sit on the stack above the reader, so look through it. Matches the reader
+  // activity names "EpubReader" and "XtcReader".
+  if (BoardConfig::isMetalioEInk4Plus()) {
+    const auto isReader = [](const Activity* a) { return a && (a->name == "EpubReader" || a->name == "XtcReader"); };
+    bool fromBook = isReader(currentActivity.get());
+    for (const auto& a : stackActivities) fromBook = fromBook || isReader(a.get());
+    if (fromBook) cleanInitialRefresh = true;
+  }
+#endif
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
