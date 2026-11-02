@@ -110,9 +110,9 @@ TEST(TextBlockDisplay, FocusSplitWordsDrawTheirLogicalText) {
   ASSERT_TRUE(block.valid());
   GfxRenderer renderer;
   block.render(renderer, 0, 0, 0);
-  ASSERT_EQ(renderer.drawnTexts.size(), 2u);
-  EXPECT_EQ(renderer.drawnTexts[0], "abc");
-  EXPECT_EQ(renderer.drawnTexts[1], "def");
+  ASSERT_EQ(renderer.textDraws.size(), 2u);
+  EXPECT_EQ(renderer.textDraws[0].text, "abc");
+  EXPECT_EQ(renderer.textDraws[1].text, "def");
 }
 
 TEST(TextBlockDisplay, RenderDrawsTheStoredDisplayForm) {
@@ -122,7 +122,7 @@ TEST(TextBlockDisplay, RenderDrawsTheStoredDisplayForm) {
   ASSERT_TRUE(block.valid());
   GfxRenderer renderer;
   block.render(renderer, 0, 0, 0);
-  ASSERT_EQ(renderer.drawnTexts.size(), 2u);
-  EXPECT_EQ(renderer.drawnTexts[0], "hello");
-  EXPECT_EQ(renderer.drawnTexts[1], kShaped);
+  ASSERT_EQ(renderer.textDraws.size(), 2u);
+  EXPECT_EQ(renderer.textDraws[0].text, "hello");
+  EXPECT_EQ(renderer.textDraws[1].text, kShaped);
 }

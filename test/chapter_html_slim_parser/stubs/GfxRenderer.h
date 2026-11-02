@@ -20,6 +20,7 @@ enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 
 
 class GfxRenderer {
  public:
+  int boldGlyphAdvance = 8;
   mutable size_t fontPreparations = 0;
   std::function<void()> onFontPrepare;
   enum class TextMeasureMode { Layout, Rendered };
@@ -56,11 +57,17 @@ class GfxRenderer {
     const char* text;
     const char* display;
   };
+  struct TextDraw {
+    int x;
+    std::string text;
+    EpdFontFamily::Style style;
+    BidiUtils::BidiBaseDir direction;
+  };
   // Every string drawText received, in order (a laid-out word's display form when it has one).
-  mutable std::vector<std::string> drawnTexts;
-  void drawText(int, int, int, const char* text, bool, EpdFontFamily::Style,
-                BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO, int8_t = 0) const {
-    drawnTexts.emplace_back(text);
+  mutable std::vector<TextDraw> textDraws;
+  void drawText(int, int x, int, const char* text, bool, EpdFontFamily::Style style,
+                BidiUtils::BidiBaseDir direction = BidiUtils::BidiBaseDir::AUTO, int8_t = 0) const {
+    textDraws.push_back({x, text, style, direction});
   }
   void drawText(int font, int x, int y, const LaidOutText& text, bool black, EpdFontFamily::Style style,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const {
@@ -73,10 +80,16 @@ class GfxRenderer {
   int getScreenWidth() const { return 480; }
   int getScreenHeight() const { return 800; }
   std::map<int, int> fontLineHeights;
+  std::map<int, float> fontSizePixels;
   std::map<int, int> fontAscenders;
-  int getLineHeight(int fontId, float compression = 1.0f) const {
+  int getLineHeight(int fontId) const {
     const auto found = fontLineHeights.find(fontId);
-    return found == fontLineHeights.end() ? 16 : static_cast<int>(found->second * compression);
+    return found == fontLineHeights.end() ? 16 : found->second;
+  }
+  int getLineHeight(int fontId, float compression) const {
+    const auto found = fontSizePixels.find(fontId);
+    const float size = found == fontSizePixels.end() ? getLineHeight(fontId) : found->second;
+    return static_cast<int>(size * compression + 0.5f);
   }
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void setFontVariantProvider(const FontVariantProvider& provider) { fontVariantProvider_ = provider; }
@@ -104,7 +117,7 @@ class GfxRenderer {
       if (utf8IsCombiningMark(cp)) continue;
       const uint32_t measured = (style & EpdFontFamily::SMALL_CAPS) ? utf8SmallCapsUpper(cp) : cp;
       if (sdFont && !preparedAdvances.count({fontId, static_cast<uint8_t>(style) & 3, measured})) ++coldMeasurements;
-      width += 8 + trackingBetween(previous, cp, tracking);
+      width += ((style & EpdFontFamily::BOLD) ? boldGlyphAdvance : 8) + trackingBetween(previous, cp, tracking);
       previous = cp;
     }
     return width;

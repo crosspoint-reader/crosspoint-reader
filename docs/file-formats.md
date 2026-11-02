@@ -90,13 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 68
+### Version 74
 
-Version 68 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
+Version 74 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
 Tamil, Telugu, Kannada, Malayalam, Sinhala) in the book's language. Fonts with
 shaping data form conjuncts, reph and positioned marks from the font's
 OpenType tables (lib/OtShaper), and other fonts reorder pre-base vowel signs;
-both change word widths, so cached word positions from version 67 no longer
+both change word widths, so cached word positions from version 73 no longer
 match. TextBlock's former `hasFocus` byte became a flags byte: bit 1 adds a
 `displayBytes` count (after `paragraphStartWord`), a `displayOff[]` table and
 a `display[]` blob that hold each complex-script word in the form layout
@@ -107,6 +107,51 @@ memory was short keeps the unshaped form it was measured in. Words without a
 display entry are resolved from `text[]` when drawn. Older completed and
 partial section caches rebuild automatically; book metadata and reading
 progress are kept.
+
+### Version 73
+
+Version 73 keeps the binary layout and rebuilds completed and partial sections.
+TrueType vector fonts now render and advance the .notdef glyph for missing
+characters instead of omitting them. Cached line breaks and word positions change
+for text containing glyph fallbacks. Book metadata and saved progress are kept.
+
+### Version 72
+
+Version 72 makes ruby layout closer to how Chromium browser render text with
+ruby characters by default (`ruby-align: space-around; ruby-overhang: auto;`)
+Ruby annotation can overhang neighboring base text by at most the smaller of
+half the ruby edge-character width and 1/4 of the neighboring word width. When
+the ruby annotation is wider than its base text, spacing is inserted between
+every character in the base text as well as at the start and the end of the
+base text so that it becomes the same length as the ruby annotation.
+
+### Version 71
+
+Version 71 keeps the binary layout and rebuilds completed and partial sections.
+Focus split offsets now locate the bold prefix in RTL words and the regular
+suffix in LTR words. Book metadata and saved progress are kept.
+
+### Version 70
+
+Version 70 preserves the binary layout but rebuilds completed and partial
+sections because SD-font layout now rounds each scaled glyph advance to pixels,
+matching unkerned drawing. Cached line breaks and word positions change.
+Book metadata and saved progress are kept.
+
+### Version 69
+
+Version 69 preserves the binary layout but rebuilds completed and partial
+sections because line spacing now multiplies font size instead of the font's
+newline distance (`advanceY`). Clipping layout signatures also distinguish the
+new calculation so old page-local word ranges are not reused for a new layout.
+Book metadata and saved progress are kept.
+
+### Version 68
+
+Version 68 preserves the binary layout but rebuilds completed and partial
+sections to remove mid-line hyphens left by drop-cap layout. The lines beside
+the drop cap use bounded greedy wrapping; the rest keep their usual wrapping.
+Book metadata and saved progress are kept.
 
 ### Version 67
 
@@ -370,7 +415,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 68
+#define EXPECTED_VERSION 74
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -436,7 +481,7 @@ struct BlockStyle {
 
 struct TextBlock {
     u16 wordCount;
-    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v68)")]];
+    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v74)")]];
     u16 textBytes [[comment("Total size of text[], including one NUL per word")]];
     u16 paragraphStartWord [[comment("Visual index of the paragraph's first logical word, 0xFFFF = continuation line")]];
     if ((flags & 2) != 0) {

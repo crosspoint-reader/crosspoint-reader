@@ -25,7 +25,7 @@
 //   SourceRange sourceRanges[wordCount]  chapter codepoint offsets, [start, end)
 //   uint16_t textOff[wordCount]        byte offset of word i's text in text[]
 //   int16_t  xpos[wordCount]
-//   uint16_t focusSuffixX[wordCount]   present only when focusPresent
+//   uint16_t focusSplitX[wordCount]    present only when focusPresent
 //   uint16_t displayOff[wordCount]     present only when displayPresent; NO_DISPLAY = none
 //   uint8_t  styles[wordCount]
 //   uint8_t  focusBoundary[wordCount]  present only when focusPresent
@@ -44,10 +44,9 @@
 // Focus split semantics (unchanged from the vector layout): boundary N > 0
 // means the first N bytes of word i render bold, the remainder in the base
 // style. N is bounded to 9 codepoints (<= 36 UTF-8 bytes) by the clamp in
-// ParsedText::addWord. focusSuffixX is the pre-computed pixel offset from the
-// word start to the regular suffix. Both arrays are omitted from the arena
-// entirely when no word on the line has a split (zero per-word RAM cost when
-// focus reading is disabled).
+// ParsedText::addWord. focusSplitX is the pre-computed pixel offset from the
+// word start to the second visual run (bold prefix in RTL, regular suffix in LTR).
+// Both arrays are omitted when no word on the line has a split.
 class TextBlock final : public Block {
  public:
   // The unused high bit of the cached style byte carries clipping metadata.
@@ -88,8 +87,8 @@ class TextBlock final : public Block {
   const SourceRange* sourceRanges = nullptr;
   const uint16_t* textOffArr = nullptr;
   const int16_t* xposArr = nullptr;
-  const uint16_t* focusSuffixXArr = nullptr;  // null when !focusPresent
-  const uint16_t* displayOffArr = nullptr;    // null when !displayPresent
+  const uint16_t* focusSplitXArr = nullptr;  // null when !focusPresent
+  const uint16_t* displayOffArr = nullptr;   // null when !displayPresent
   const uint8_t* stylesArr = nullptr;
   const uint8_t* focusBoundaryArr = nullptr;  // null when !focusPresent
   const char* textArr = nullptr;
@@ -115,7 +114,7 @@ class TextBlock final : public Block {
   // displayWords is empty, or sized like words with "" for words that draw as is.
   explicit TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
-                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle(),
+                     const std::vector<uint16_t>& focusSplitX, const BlockStyle& blockStyle = BlockStyle(),
                      std::vector<std::string> rubyTexts = {}, std::vector<LinkSpan> linkSpans = {},
                      const std::vector<SourceRange>& ranges = {}, uint16_t paragraphStartWord = UINT16_MAX,
                      const std::vector<std::string>& displayWords = {});
@@ -174,7 +173,7 @@ class TextBlock final : public Block {
   }
   bool wordHasDiscretionaryHyphen(const uint16_t i) const { return (stylesArr[i] & DISCRETIONARY_HYPHEN_FLAG) != 0; }
   uint8_t focusBoundary(const uint16_t i) const { return focusPresent ? focusBoundaryArr[i] : 0; }
-  uint16_t focusSuffixX(const uint16_t i) const { return focusPresent ? focusSuffixXArr[i] : 0; }
+  uint16_t focusSplitX(const uint16_t i) const { return focusPresent ? focusSplitXArr[i] : 0; }
   bool hasRuby() const;
   int getRubyShift(int ascender) const { return hasRuby() ? (ascender / 2) : 0; }
   const std::vector<std::string>& getRubyTexts() const { return rubyTexts; }

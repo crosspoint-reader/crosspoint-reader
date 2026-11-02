@@ -27,7 +27,7 @@ namespace {
 // Longest measurable/drawable span. Wrapped lines stay under the screen width
 // (far below this); only pathological unbreakable tokens are split at this cap.
 constexpr size_t MAX_LINE_BYTES = 191;
-constexpr float PLAIN_TEXT_LINE_SPACING = 1.5f;
+constexpr float PLAIN_TEXT_LINE_SPACING = 2.0f;
 constexpr size_t HEAP_HEADROOM = 8 * 1024;
 constexpr unsigned long MESSAGE_DURATION_MS = 1500;
 constexpr size_t SELECTION_PAGE_WINDOW = 3;
@@ -383,9 +383,11 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
   // Keep only navigation metadata while inflating and laying out another entry.
   content.releasePayload();
   if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
+#if defined(ENABLE_SERIAL_LOG) && LOG_LEVEL >= 2
   const auto heap = HalMemory::getInternalHeap();
   LOG_DBG("DICT", "Navigation after release: free=%u largest=%u", static_cast<unsigned>(heap.freeBytes),
           static_cast<unsigned>(heap.largestBlockBytes));
+#endif
   Definition next;
   auto result = Dictionary::LookupResult::Found;
   const char* word = back ? lookup->history[lookup->depth - 1].query.c_str() : lookup->pendingWord.c_str();
@@ -586,7 +588,7 @@ void DictionaryDefinitionActivity::loop() {
   int sx = 0;
   int sy = 0;
   const bool longPress = lookup && mappedInput.wasScreenLongPress(sx, sy);
-  const bool headerLongPress = longPress && HeaderBackTapTarget::contains(sx, sy);
+  const bool headerLongPress = longPress && HeaderBackTapTarget::containsUnpadded(sx, sy);
   if (headerLongPress || mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (lookup && (headerLongPress || mappedInput.getHeldTime() >= ReaderUtils::GO_BACK_OR_HOME_MS)) {
       ActivityResult result;

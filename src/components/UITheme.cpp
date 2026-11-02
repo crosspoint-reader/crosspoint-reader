@@ -130,6 +130,14 @@ Rect UITheme::getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButton
   return safeArea;
 }
 
+Rect UITheme::getHeaderRect(const GfxRenderer& renderer, bool hasFrontButtonHints, bool hasSideButtonHints) {
+  const Rect safe = getScreenSafeArea(renderer, hasFrontButtonHints, hasSideButtonHints);
+  const Rect content = getContentArea(renderer);
+  const ThemeMetrics metrics = getMetrics();
+  return Rect{safe.x - content.x, safe.y - content.y + metrics.topPadding,
+              safe.width + renderer.getScreenWidth() - content.width, metrics.headerHeight};
+}
+
 std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight) {
   size_t pos = coverBmpPath.find("[HEIGHT]", 0);
   if (pos != std::string::npos) {

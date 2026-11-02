@@ -1,6 +1,7 @@
 #include "SdCardFontSystem.h"
 
 #include <Fnv1a.h>
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <IndicScripts.h>
@@ -75,6 +76,14 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   cpfontVariants_.reserve(MAX_CPFONT_VARIANTS);
 #if CROSSPOINT_VECTOR_FONTS
   ttfVariants_.reserve(MAX_TTF_VARIANTS);
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->setReleaseCallback(
+        [](void* ctx) {
+          auto* self = static_cast<SdCardFontSystem*>(ctx);
+          if (self->renderer_) self->clearTtfVariants(*self->renderer_);
+        },
+        this);
+  }
 #endif
   FontVariantProvider provider;
   provider.ctx = this;
@@ -661,10 +670,15 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   // 3=bold-italic). A single-file family (loose .ttf, or a folder with one file)
   // supplies only regular; TtfEpdFont then derives bold/italic from the wght axis
   // or an oblique shear. Extra files upgrade those styles to the real designs.
+  char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
   for (const auto& file : family.files) {
     const uint8_t role = file.style < 4 ? file.style : 0;
     if (ttfSources_[role].present) continue;  // registry already deduped by role
-    openTtfSource(role, file.path);
+    if (!family.filePath(file, path, sizeof(path))) {
+      LOG_ERR("SDFS", "Vector font path too long in family %s", family.name.c_str());
+      continue;
+    }
+    openTtfSource(role, path);
   }
   if (!ttfSources_[0].present) {
     // Possibly a transient SD read failure: keep the user's selection so the

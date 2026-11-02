@@ -75,14 +75,17 @@ bool extractChunkSlice(HalFile& file, uint32_t compressedOffset, uint32_t compre
   };
   if (extractSize == 0) return true;
 
-  // Largest block FIRST. Every allocation here is carved from the same big free
-  // run, so taking the ~3KB ChunkSource before the 32KB ring left the ring's
-  // block 12 bytes short on device (largest=32756 against need=32768) even on a
-  // barely fragmented heap. Ordering by size removes that failure mode: the ring
-  // gets the big block while it is still whole, and the small buffers fit in
-  // what remains — or in one of the smaller free blocks.
-  auto window = makeUniqueNoThrow<uint8_t[]>(InflateReader::RING_BYTES);
-  if (!window) return fail(ExtractError::LowMemory);
+  // The 32KB deflate window is taken as four 8KB segments: a fragmented heap
+  // loses its last 32KB contiguous block long before it runs short of 32KB in
+  // total. Segments go first, ahead of the ~2KB ChunkSource, so they get the
+  // large free runs before the small buffers split them.
+  std::unique_ptr<uint8_t[]> window[InflateReader::RING_SEGMENTS];
+  uint8_t* segments[InflateReader::RING_SEGMENTS];
+  for (size_t i = 0; i < InflateReader::RING_SEGMENTS; i++) {
+    window[i] = makeUniqueNoThrow<uint8_t[]>(InflateReader::RING_SEGMENT_BYTES);
+    if (!window[i]) return fail(ExtractError::LowMemory);
+    segments[i] = window[i].get();
+  }
 
   auto src = makeUniqueNoThrow<ChunkSource>();
   if (!src) return fail(ExtractError::LowMemory);
@@ -94,9 +97,9 @@ bool extractChunkSlice(HalFile& file, uint32_t compressedOffset, uint32_t compre
   if (!file.seekSet(compressedOffset)) return fail(ExtractError::ReadError);
 
   // `window` outlives the reader (declared above it, destroyed after), as
-  // initWithRing() requires.
-  if (!src->reader.initWithRing(window.get())) return fail(ExtractError::LowMemory);
-  // initWithRing() leaves source/source_limit null, so the very first byte
+  // initWithSegments() requires.
+  if (!src->reader.initWithSegments(segments)) return fail(ExtractError::LowMemory);
+  // initWithSegments() leaves source/source_limit null, so the very first byte
   // already comes through the callback. Set it after, which resets state.
   src->reader.setReadCallback(&chunkReadCb);
 

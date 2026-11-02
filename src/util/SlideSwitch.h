@@ -4,8 +4,10 @@
 
 #include "CrossPointSettings.h"
 
-// A slide switch bound to the frontlight owns its on/off state, so the UI must
-// not offer its own light toggle or switch the light on behind the switch.
-inline bool slideSwitchOwnsLight() {
-  return gpio.hasToggleSwitch() && SETTINGS.slideSwitchAction == CrossPointSettings::SLIDE_SWITCH_FRONTLIGHT;
+// A slide switch owns the state of the function it is bound to, so the UI must
+// not offer its own toggle for that function or change it behind the switch.
+inline bool slideSwitchOwns(const uint8_t action) {
+  return gpio.hasToggleSwitch() && SETTINGS.slideSwitchAction == action;
 }
+
+inline bool slideSwitchOwnsLight() { return slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_FRONTLIGHT); }

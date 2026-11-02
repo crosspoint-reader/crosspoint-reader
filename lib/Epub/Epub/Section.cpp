@@ -76,11 +76,17 @@ namespace {
 // v65: Count literal spaces after hyphens and ellipses when justifying text.
 // v66: Omit carried no-break spaces at the start of wrapped lines.
 // v67: Count only stretchable literal spaces after visual text reordering.
-// v68: Indic text is measured as shaped glyphs (OpenType conjuncts, reph, positioned
+// v68: Leave text below drop caps unsplit until it is laid out at full width.
+// v69: Line spacing multiplies font size instead of advanceY.
+// v70: SD-font layout rounds each scaled glyph advance to match drawing.
+// v71: Focus split offsets follow the visual run order for RTL words.
+// v72: Make ruby rendering closer to how Chromium renders ruby by default.
+// v73: TrueType vector fonts load and advance .notdef for missing glyphs.
+// v74: Indic text is measured as shaped glyphs (OpenType conjuncts, reph, positioned
 //      marks, in the book's language; reordered vowel signs for fonts without shaping
 //      data), and TextBlocks store each complex-script word's drawn form so page turns
 //      never shape.
-constexpr uint8_t SECTION_FILE_VERSION = 68;
+constexpr uint8_t SECTION_FILE_VERSION = 74;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

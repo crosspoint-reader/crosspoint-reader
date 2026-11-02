@@ -1,5 +1,6 @@
 #include "PluginHttp.h"
 
+#include <HalMemory.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <SecureHttpClient.h>
@@ -17,16 +18,20 @@ namespace {
 constexpr size_t MAX_TOKEN_FILE_SIZE = 2 * 1024;
 
 // Resolves the caller's reused TLS session (or `tmp`) into a configured,
-// connected client, or nullptr if begin() failed.
+// connected client, or nullptr if begin() or the connection failed.
 freeink::SecureHttpClient* openClient(freeink::SecureHttpClient* session, freeink::SecureHttpClient& tmp,
-                                      const std::string& url, const pluginhttp::Headers& headers) {
+                                      const std::string& url, const pluginhttp::Headers& headers,
+                                      const std::function<bool()>& shouldAbort = nullptr) {
   freeink::SecureHttpClient& http = session ? *session : tmp;
   http.setUserAgent("CrossPoint");
   // Same trust posture as every other SecureNet consumer: no CA bundle ships
   // with the transport, so verification is skipped; traffic stays encrypted.
   http.setInsecure();
   http.setTimeout(30000);
-  if (!http.begin(url)) return nullptr;
+  if (!http.begin(pluginhttp::escapeUrl(url))) return nullptr;
+  // Handshake first: the client's copy of a large header (a session cookie can
+  // be several KB) would otherwise take heap the handshake needs.
+  if (!http.connect(shouldAbort)) return nullptr;
   for (const auto& h : headers) http.addHeader(h.first, h.second);
   return &http;
 }
@@ -118,6 +123,24 @@ std::string urlEncodeQuery(const std::string& s) {
   return out;
 }
 
+std::string escapeUrl(const std::string& url) {
+  const auto kept = [](const unsigned char c) { return c > 0x20 && c < 0x7F; };
+  const size_t escaped =
+      std::count_if(url.begin(), url.end(), [&](const char c) { return !kept(static_cast<unsigned char>(c)); });
+  std::string out;
+  out.reserve(url.size() + 2 * escaped);
+  for (const unsigned char c : url) {
+    if (kept(c)) {
+      out += static_cast<char>(c);
+    } else {
+      char buf[4];
+      snprintf(buf, sizeof(buf), "%%%02X", c);
+      out += buf;
+    }
+  }
+  return out;
+}
+
 std::string inPluginDir(const std::string& pluginDir, const char* path) {
   if (!path || !path[0] || path[0] == '/') return path ? path : "";
   return pluginDir + "/" + path;
@@ -187,10 +210,10 @@ void loadConfigFile(const std::string& file, Headers& out) {
 
 int request(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
             const std::string& body, const Headers& headers, String& out, const size_t maxResponse,
-            Headers* responseHeaders, const std::function<bool()>& shouldAbort) {
+            Headers* responseHeaders, const std::function<bool()>& shouldAbort, const size_t heapReserve) {
   WifiPowerSaveGuard psGuard;
   freeink::SecureHttpClient tmp;
-  freeink::SecureHttpClient* httpPtr = openClient(session, tmp, url, headers);
+  freeink::SecureHttpClient* httpPtr = openClient(session, tmp, url, headers, shouldAbort);
   if (!httpPtr) return -1;
   freeink::SecureHttpClient& http = *httpPtr;
 
@@ -205,8 +228,35 @@ int request(freeink::SecureHttpClient* session, const std::string& url, const st
           return false;
         }
         const size_t needed = out.length() + len;
-        // Grow geometrically instead of reallocating for every network chunk.
-        if (needed > reserved) reserved = std::min(maxResponse, std::max(needed, reserved * 2));
+        if (needed > reserved) {
+          // Reserve the whole body once when its length is known; otherwise grow
+          // geometrically instead of reallocating for every network chunk. A
+          // chunked body's Content-Length, if any, is not its size.
+          const bool knownLength = http.hasContentLength() && http.getHeader("transfer-encoding").empty();
+          size_t want = knownLength ? std::max(needed, http.getContentLength())
+                                    : std::min(maxResponse, std::max(needed, reserved * 2));
+          if (want > maxResponse) {
+            LOG_ERR("PHTP", "Response of %u bytes is over the %u byte cap", (unsigned)want, (unsigned)maxResponse);
+            overflow = true;
+            return false;
+          }
+          // Counts the old and new buffer together, as realloc may move it, and
+          // the up to 16 bytes String adds to the block.
+          const auto fits = [&](size_t size) {
+            if (heapReserve == 0) return true;
+            const HalMemory::HeapStats heap = HalMemory::getDefaultHeap();
+            return heap.freeBytes >= size + heapReserve && heap.largestBlockBytes >= size + 16;
+          };
+          if (!knownLength && !fits(want)) want = needed;
+          if (!fits(want)) {
+            const HalMemory::HeapStats heap = HalMemory::getDefaultHeap();
+            LOG_ERR("PHTP", "Response needs %u bytes, only %u free (largest block %u)", (unsigned)want,
+                    (unsigned)heap.freeBytes, (unsigned)heap.largestBlockBytes);
+            overflow = true;
+            return false;
+          }
+          reserved = want;
+        }
         if (!out.reserve(reserved) || !out.concat(reinterpret_cast<const char*>(data), len)) {
           overflow = true;
           return false;

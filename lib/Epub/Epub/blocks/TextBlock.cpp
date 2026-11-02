@@ -8,8 +8,10 @@
 #include <Serialization.h>
 
 #include <cstring>
+#include <string_view>
 
 #include "../../../../src/fontIds.h"
+#include "../CjkBreaks.h"
 
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes,
                             const bool hasDisplay, const uint16_t displayBytes) {
@@ -34,7 +36,7 @@ void TextBlock::bindArenaPointers() {
   xposArr = reinterpret_cast<const int16_t*>(base + wc * 2);
   size_t off = wc * 4;
   if (focusPresent) {
-    focusSuffixXArr = reinterpret_cast<const uint16_t*>(base + off);
+    focusSplitXArr = reinterpret_cast<const uint16_t*>(base + off);
     off += wc * 2;
   }
   if (displayPresent) {
@@ -55,7 +57,7 @@ void TextBlock::bindArenaPointers() {
 
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
-                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,
+                     const std::vector<uint16_t>& focusSplitX, const BlockStyle& blockStyle,
                      std::vector<std::string> rubyTexts, std::vector<LinkSpan> linkSpans,
                      const std::vector<SourceRange>& ranges, const uint16_t paragraphStartWord,
                      const std::vector<std::string>& displayWords)
@@ -78,12 +80,12 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   if ((!ranges.empty() && ranges.size() != words.size()) || words.size() != wordXpos.size() ||
       words.size() != wordStyles.size() || words.size() > 10000 ||
       (paragraphStartWord != UINT16_MAX && paragraphStartWord >= words.size()) ||
-      (hasFocus && (words.size() != focusBoundary.size() || words.size() != focusSuffixX.size())) ||
+      (hasFocus && (words.size() != focusBoundary.size() || words.size() != focusSplitX.size())) ||
       (hasDisplay && words.size() != displayWords.size())) {
-    LOG_ERR("TXB", "Construction failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u)",
+    LOG_ERR("TXB", "Construction failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, splitX=%u)",
             static_cast<uint32_t>(words.size()), static_cast<uint32_t>(wordXpos.size()),
             static_cast<uint32_t>(wordStyles.size()), static_cast<uint32_t>(focusBoundary.size()),
-            static_cast<uint32_t>(focusSuffixX.size()));
+            static_cast<uint32_t>(focusSplitX.size()));
     isValid = false;
     return;
   }
@@ -158,10 +160,10 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
     text[off++] = '\0';
   }
   if (focusPresent) {
-    auto* suffixX = const_cast<uint16_t*>(focusSuffixXArr);
+    auto* splitX = const_cast<uint16_t*>(focusSplitXArr);
     auto* boundary = const_cast<uint8_t*>(focusBoundaryArr);
     for (uint16_t i = 0; i < numWords; i++) {
-      suffixX[i] = focusSuffixX[i];
+      splitX[i] = focusSplitX[i];
       boundary[i] = focusBoundary[i];
     }
   }
@@ -249,13 +251,26 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
   // Resolve ruby positions. Layout (extractLine) has already reserved extraStartOffset on the
   // left and extraEndOffset on the right, so the centered rubyX is always within the page margins.
   struct RubyDrawInfo {
-    int x;
-    std::string text;
-    BidiUtils::BidiBaseDir baseDir;
+    int x = 0;  // spread == 0: centered x. spread > 0: left edge of the base text.
+    std::string_view text;
+    BidiUtils::BidiBaseDir baseDir{};
+    // ruby-align: space-around. >0 when the ruby is narrower than its base: the width difference
+    // to distribute over the ruby tokens. 0 means plain centering.
+    int spread = 0;
+    // Gap before the first and after the last ruby token. Uncapped it is spread / 2n, but it is
+    // limited to half a base character; the inner gaps absorb the remainder.
+    int edge = 0;
+    std::vector<size_t> breaks;  // token boundaries inside `text` (see CjkBreaks)
+  };
+  // Copies ruby token k of s (tokens are delimited by br) into out.
+  const auto rubyToken = [](std::string_view s, const std::vector<size_t>& br, const size_t k, std::string& out) {
+    const size_t b = k == 0 ? 0 : br[k - 1];
+    const size_t e = k == br.size() ? s.size() : br[k];
+    out.assign(s.data() + b, e - b);
   };
   const bool blockHasRuby = hasRuby();
   std::vector<RubyDrawInfo> rubies;
-  if (blockHasRuby) {
+  if (blockHasRuby && !scanning) {
     rubies.resize(numWords);
     for (uint16_t i = 0; i < numWords; i++) {
       if (i < rubyTexts.size() && !rubyTexts[i].empty() && (wordStyle(i) & EpdFontFamily::RUBY_CONTINUE) == 0) {
@@ -263,15 +278,54 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
         while (i + groupWordCount < numWords && (wordStyle(i + groupWordCount) & EpdFontFamily::RUBY_CONTINUE) != 0) {
           groupWordCount++;
         }
-        int groupActualWidth = 0;
-        for (int k = 0; k < groupWordCount; ++k) {
-          groupActualWidth += renderer.getTextAdvanceX(fontId, laidOutWord(i + k), wordStyle(i + k), tracking);
-        }
+        // Whole-string width: the same measure layout uses to decide whether the ruby overhangs.
         const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP, tracking);
         const int leaderWordX = xposArr[i] + x;
         const auto baseDir =
             static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(wordText(i), blockStyle.isRtl ? 1 : 0));
-        rubies[i] = {leaderWordX - (rubyWidth - groupActualWidth) / 2, rubyTexts[i], baseDir};
+
+        const int lastWordIdx = i + groupWordCount - 1;
+        const int lastWordWidth =
+            renderer.getTextAdvanceX(fontId, laidOutWord(lastWordIdx), wordStyle(lastWordIdx), tracking);
+        const int groupActualWidth = (xposArr[lastWordIdx] + lastWordWidth) - xposArr[i];
+
+        RubyDrawInfo& info = rubies[i];
+        info.text = rubyTexts[i];
+        info.baseDir = baseDir;
+        info.x = leaderWordX - (rubyWidth - groupActualWidth) / 2;  // default: centered
+
+        // CSS Ruby ruby-align: space-around. When the ruby is narrower than its base, the free space is
+        // split so that each gap between ruby characters is twice the gap at either end; the centers
+        // still coincide. A ruby with a single token (e.g. Latin text) degenerates to centering.
+        if (rubyWidth < groupActualWidth) {
+          auto breaks = CjkBreaks::characterBreakByteOffsets(rubyTexts[i]);
+          if (!breaks.empty()) {
+            int tokenSum = 0;
+            std::string tok;
+            for (size_t k = 0; k <= breaks.size(); ++k) {
+              rubyToken(info.text, breaks, k, tok);
+              tokenSum += renderer.getTextAdvanceX(fontId, tok.c_str(), EpdFontFamily::SUP, tracking);
+            }
+            if (tokenSum < groupActualWidth) {
+              // Count base characters (UTF-8 lead bytes) to get the average base character width.
+              int baseChars = 0;
+              for (int k = 0; k < groupWordCount; ++k) {
+                for (const char* p = wordText(i + k); *p; ++p) {
+                  if ((static_cast<uint8_t>(*p) & 0xC0) != 0x80) baseChars++;
+                }
+              }
+              baseChars = std::max(baseChars, 1);
+              // CSS Ruby: the start/end spacing is capped at half the size of one base character.
+              const int edgeCap = groupActualWidth / (2 * baseChars);
+
+              const int n = static_cast<int>(breaks.size()) + 1;
+              info.x = leaderWordX;
+              info.spread = groupActualWidth - tokenSum;
+              info.edge = std::min(info.spread / (2 * n), edgeCap);
+              info.breaks = std::move(breaks);
+            }
+          }
+        }
         i += groupWordCount - 1;
       }
     }
@@ -337,10 +391,10 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
     const int drawX = wordX;
 
     if (boundary > 0) {
-      // Focus split: draw bold prefix, then the regular suffix at a pre-computed x offset.
+      // Place the logical prefix on the right for RTL words. Each run is reordered by drawText.
       // The bold prefix is bounded to 9 codepoints by the clamp on targetBoldChars in
       // ParsedText::addWord; 9 UTF-8 codepoints occupy at most 9 * 4 = 36 bytes, +1 for null = 37.
-      // suffixX is computed at cache-creation time to avoid font metric lookups at render time.
+      // The split offset is computed at cache-creation time to avoid font metric lookups at render time.
       static constexpr size_t MAX_FOCUS_PREFIX_BYTES = 9 * 4 + 1;
       char boldBuf[40];
       static_assert(sizeof(boldBuf) >= MAX_FOCUS_PREFIX_BYTES,
@@ -350,8 +404,11 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
           std::min<size_t>({static_cast<size_t>(boundary), static_cast<size_t>(wordTextLen(i)), sizeof(boldBuf) - 1});
       memcpy(boldBuf, word, boldLen);
       boldBuf[boldLen] = '\0';
-      renderer.drawText(wordFont, drawX, wordY, boldBuf, true, boldStyle, baseDir, tracking);
-      const int suffixX = drawX + focusSuffixXArr[i];
+      // Numeric runs keep LTR order even inside an RTL paragraph. Match layout.
+      const bool rtl = BidiUtils::startsWithRtl(word);
+      const int prefixX = drawX + (rtl ? focusSplitXArr[i] : 0);
+      const int suffixX = drawX + (rtl ? 0 : focusSplitXArr[i]);
+      renderer.drawText(wordFont, prefixX, wordY, boldBuf, true, boldStyle, baseDir, tracking);
       renderer.drawText(wordFont, suffixX, wordY, word + boldLen, true, currentStyle, baseDir, tracking);
     } else {
       renderer.drawText(wordFont, drawX, wordY, laidOut, true, currentStyle, baseDir, tracking);
@@ -360,9 +417,31 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
     // Horizontal ruby text rendering
     if (blockHasRuby && i < rubyTexts.size() && !rubyTexts[i].empty() &&
         (wordStyle(i) & EpdFontFamily::RUBY_CONTINUE) == 0) {
-      const int rubyY = wordY - ascender;
-      renderer.drawText(fontId, rubies[i].x, rubyY, rubies[i].text.c_str(), true, EpdFontFamily::SUP, rubies[i].baseDir,
-                        tracking);
+      if (scanning) {
+        renderer.drawText(fontId, 0, 0, rubyTexts[i].c_str(), true, EpdFontFamily::SUP);
+      } else {
+        const int rubyY = wordY - ascender;
+        const RubyDrawInfo& ruby = rubies[i];
+        if (ruby.spread == 0) {
+          renderer.drawText(fontId, ruby.x, rubyY, rubyTexts[i].c_str(), true, EpdFontFamily::SUP, ruby.baseDir,
+                            tracking);
+        } else {
+          // The edge gap is capped (see layout), so the remaining space is split evenly over the n-1
+          // gaps between tokens. Token k starts after the edge gap plus k inner gaps. Computed from k
+          // rather than by accumulating a rounded gap, so rounding error does not build up.
+          const int n = static_cast<int>(ruby.breaks.size()) + 1;  // n >= 2 here
+          const int innerTotal = ruby.spread - 2 * ruby.edge;
+          int pen = 0;
+          std::string tok;
+          for (int k = 0; k < n; ++k) {
+            const int tokenIndex = ruby.baseDir == BidiUtils::BidiBaseDir::RTL ? n - 1 - k : k;
+            rubyToken(ruby.text, ruby.breaks, static_cast<size_t>(tokenIndex), tok);
+            const int gx = ruby.x + pen + ruby.edge + (innerTotal * k + (n - 1) / 2) / (n - 1);
+            renderer.drawText(fontId, gx, rubyY, tok.c_str(), true, EpdFontFamily::SUP, ruby.baseDir, tracking);
+            pen += renderer.getTextAdvanceX(fontId, tok.c_str(), EpdFontFamily::SUP, tracking);
+          }
+        }
+      }
     }
 
     if (scanning) {
