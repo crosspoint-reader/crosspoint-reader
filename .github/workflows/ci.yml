@@ -102,6 +102,10 @@ jobs:
             asset: firmware-eego_a4.bin
           - env: picco
             asset: firmware-picco.bin
+          - env: metalio_eink4_plus
+            asset: firmware-metalio_eink4_plus.bin
+            # ESP32-S31: pioarduino's 61.04.00-RC1 platform needs PlatformIO Core 6.2.
+            core: 6.2.0
     steps:
       - uses: actions/checkout@v6
         with:
@@ -119,7 +123,7 @@ jobs:
 
       - name: Install PlatformIO Core
         run: |
-          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v${{ matrix.core || '6.1.19' }}.zip
           # platform-espressif32's builder/main.py imports these unconditionally; its own
           # penv bootstrap (builder/penv_setup.py) is supposed to install them automatically
           # but isn't picking them up reliably in this runner image, so pin them explicitly.
@@ -147,7 +151,7 @@ jobs:
           # core on the same version as the outer core installed above.
           # See https://github.com/pioarduino/platform-espressif32/issues/529
           pio pkg install -e ${{ matrix.env }}
-          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==${{ matrix.core || '6.1.19' }}"
           ~/.platformio/penv/bin/pio --version
 
       - name: Build ${{ matrix.env }} firmware
