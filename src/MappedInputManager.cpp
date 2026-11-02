@@ -424,21 +424,6 @@ void MappedInputManager::acceptEdgeSwipe(bool accepted) const {
   gpio.suppressTouchContact();
 }
 
-bool MappedInputManager::wasEdgeSwipe(const freeink::ui::ScreenEdge edge) const {
-  using edge_swipe::Edge;
-  switch (edge) {
-    case fui::ScreenEdge::Left:
-      return edgeEvent == Edge::Left;
-    case fui::ScreenEdge::Right:
-      return edgeEvent == Edge::Right;
-    case fui::ScreenEdge::Top:
-      return edgeEvent == Edge::Top;
-    case fui::ScreenEdge::Bottom:
-      return edgeEvent == Edge::Bottom;
-  }
-  return false;
-}
-
 bool MappedInputManager::wasBackGesture() const {
   // Tap on the header back button (rect recorded by BaseTheme::drawHeader;
   // empty on screens without one). Folded into Button::Back alongside the
@@ -454,8 +439,7 @@ bool MappedInputManager::wasBackGesture() const {
       return true;
     }
   }
-  // Side-edge gestures remain separate from ordinary in-screen swipes.
-  return wasEdgeSwipe(fui::ScreenEdge::Left) || wasEdgeSwipe(fui::ScreenEdge::Right);
+  return edgeEvent == edge_swipe::Edge::Left;
 }
 
 bool MappedInputManager::wasTopEdgeDownSwipe() const {
@@ -464,7 +448,7 @@ bool MappedInputManager::wasTopEdgeDownSwipe() const {
          fui::edgeSwipe(fui::ScreenEdge::Top, sx, sy, ex, ey, renderer.getScreenWidth(), renderer.getScreenHeight());
 }
 
-bool MappedInputManager::wasBottomEdgeUpSwipe() const { return wasEdgeSwipe(fui::ScreenEdge::Bottom); }
+bool MappedInputManager::wasBottomEdgeUpSwipe() const { return edgeEvent == edge_swipe::Edge::Bottom; }
 
 bool MappedInputManager::wasMenuGesture() const { return wasTopEdgeDownSwipe(); }
 

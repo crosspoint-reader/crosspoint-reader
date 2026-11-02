@@ -8,11 +8,6 @@
 #include "util/RemoteButtonInput.h"
 
 class GfxRenderer;
-namespace freeink {
-namespace ui {
-enum class ScreenEdge : uint8_t;
-}
-}  // namespace freeink
 
 class MappedInputManager {
  public:
@@ -95,7 +90,7 @@ class MappedInputManager {
   RowTouch colTouch(int& col, int left, int colStep, int colCount, int yStart, int yEnd, int colWidth = 0) const;
 
   SwipeDir wasSwipe(int* startX = nullptr, int* startY = nullptr) const;
-  // Back = inward swipe from either side edge. Public so reader page turns
+  // Back = inward swipe from the left edge. Public so reader page turns
   // can exclude navigation gestures.
   bool wasBackGesture() const;
   void acceptEdgeSwipe(bool accepted) const;
@@ -150,8 +145,6 @@ class MappedInputManager {
   bool areSidePageButtonsSwapped() const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
-  // Recovered edge classification; wrappers give each edge its board meaning.
-  bool wasEdgeSwipe(freeink::ui::ScreenEdge edge) const;
   bool wasTopEdgeDownSwipe() const;
   bool wasBottomEdgeUpSwipe() const;
   // Fetch the pending swipe (if any) and map both endpoints to logical screen coords

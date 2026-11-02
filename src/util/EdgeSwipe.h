@@ -13,7 +13,6 @@ inline Edge classify(int sx, int sy, int ex, int ey, int width, int height) {
   const int band = std::clamp(std::min(width, height) * 8 / 100, 20, 48);
   if (std::abs(dx) > std::abs(dy)) {
     if (dx > 0 && sx <= band) return Edge::Left;
-    if (dx < 0 && sx >= width - band) return Edge::Right;
   } else {
     if (dy > 0 && sy <= band) return Edge::Top;
     if (dy < 0 && sy >= height - band) return Edge::Bottom;

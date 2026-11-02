@@ -15,14 +15,10 @@ void drawEdgeSwipeHint(const GfxRenderer& renderer, edge_swipe::Edge edge, int s
   int x = 0, y = 0, w = 48, h = 144;
   switch (edge) {
     case Edge::Left:
+    case Edge::Right:
       bits = leftBits;
       mask = leftMask;
-      y = std::clamp(startY - 72, 0, std::max(0, sh - h));
-      break;
-    case Edge::Right:
-      bits = rightBits;
-      mask = rightMask;
-      x = std::max(0, sw - w);
+      x = edge == Edge::Right ? std::max(0, sw - w) : 0;
       y = std::clamp(startY - 72, 0, std::max(0, sh - h));
       break;
     case Edge::Bottom:
@@ -45,7 +41,10 @@ void drawEdgeSwipeHint(const GfxRenderer& renderer, edge_swipe::Edge edge, int s
     for (int col = 0; col < w; col += 8) {
       const uint8_t pixels = bitReader.next(), opaque = maskReader.next();
       for (int bit = 0; bit < 8; ++bit) {
-        if (opaque & (0x80 >> bit)) renderer.drawPixel(x + col + bit, y + row, !(pixels & (0x80 >> bit)));
+        if (opaque & (0x80 >> bit)) {
+          const int pixelX = edge == Edge::Right ? w - 1 - col - bit : col + bit;
+          renderer.drawPixel(x + pixelX, y + row, !(pixels & (0x80 >> bit)));
+        }
       }
     }
   }

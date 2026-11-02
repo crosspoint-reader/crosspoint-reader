@@ -14,6 +14,7 @@
 
 #include "CrossPointSettings.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "components/EdgeSwipeHint.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -443,13 +444,24 @@ void BmpViewerActivity::loop() {
   // Keep CPU awake/polling so 1st click works
   Activity::loop();
 
-  auto openSibling = [this](const int delta) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    activityManager.goToFileBrowser(filePath);
+    return;
+  }
+
+  int swipeStartY = 0;
+  const auto swipe = mappedInput.wasSwipe(nullptr, &swipeStartY);
+  auto openSibling = [this, swipe, swipeStartY](const int delta) {
     if (currentImageIndex < 0) {
       return false;
     }
     const int nextIndex = currentImageIndex + delta;
     if (siblingImages.size() <= 1 || nextIndex < 0 || nextIndex >= static_cast<int>(siblingImages.size())) {
       return false;
+    }
+    if (swipe == MappedInputManager::SwipeDir::Left && SETTINGS.swipeHints) {
+      RenderLock lock;
+      drawEdgeSwipeHint(renderer, edge_swipe::Edge::Right, 0, swipeStartY);
     }
     currentImageIndex = nextIndex;
     std::string dirPath = FsHelpers::extractFolderPath(filePath);
@@ -459,12 +471,6 @@ void BmpViewerActivity::loop() {
     return true;
   };
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    activityManager.goToFileBrowser(filePath);
-    return;
-  }
-
-  const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Left) {
     openSibling(1);
     return;
