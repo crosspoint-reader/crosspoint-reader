@@ -22,9 +22,11 @@ class TtfEpdFont;
 #include <cstring>
 #include <map>
 #include <string>
+#include <memory>
 #include <vector>
 
 #include "Bitmap.h"
+#include "ScaledFont.h"
 #include "FontVariantProvider.h"
 
 namespace glyphBitmap {
@@ -80,6 +82,7 @@ class GfxRenderer {
   uint32_t frameBufferSize = HalDisplay::BUFFER_SIZE;
   std::vector<uint8_t*> bwBufferChunks;
   std::map<int, EpdFontFamily> fontMap;
+  std::vector<std::unique_ptr<ScaledFont>> scaledFaces_;  // faces built by insertUiFont()
   // Mutable because ensureSdCardFontReady() is const (called from layout code
   // that holds a const GfxRenderer&) but triggers SD card reads and heap
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
@@ -166,6 +169,10 @@ class GfxRenderer {
   // Setup
   void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
+  // Registers a UI font drawn at the board's UI scale: under a scale other than
+  // 1 its glyphs are scaled from `font` at runtime, so text keeps its size
+  // relative to the scaled layout. Call after begin().
+  void insertUiFont(int fontId, const EpdFontFamily& font);
   // Clears both the flash-font map and any SD-font registration for fontId.
   // Coupled to avoid dangling SdCardFont* in sdCardFonts_ when callers free
   // the underlying SdCardFont and forget the SD-side unregister.

@@ -270,6 +270,33 @@ void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   }
 }
 
+void GfxRenderer::insertUiFont(const int fontId, const EpdFontFamily& font) {
+  if (uiScale_ == 1.0f || fontMap.count(fontId) != 0) {
+    insertFont(fontId, font);
+    return;
+  }
+  // One scaled face per distinct source face; a style the family lacks stays
+  // null so the scaled family falls back the same way the source does.
+  const EpdFontData* regularData = font.getData(EpdFontFamily::REGULAR);
+  const EpdFont* faces[4] = {};
+  const EpdFontFamily::Style styles[4] = {EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::ITALIC,
+                                          EpdFontFamily::BOLD_ITALIC};
+  for (int i = 0; i < 4; ++i) {
+    const EpdFontData* data = font.getData(styles[i]);
+    if (i > 0 && data == regularData) continue;
+    auto face = std::make_unique<ScaledFont>();
+    if (!face->init(*this, *data, uiScale_)) {
+      LOG_ERR("GFX", "Font %d: cannot scale, drawing it unscaled", fontId);
+      insertFont(fontId, font);
+      return;
+    }
+    faces[i] = face->font();
+    scaledFaces_.push_back(std::move(face));
+  }
+  const auto pointSize = static_cast<uint16_t>(font.getSizeInPixels() * uiScale_ * 72.0f / FONT_RASTER_DPI + 0.5f);
+  insertFont(fontId, EpdFontFamily(pointSize, faces[0], faces[1], faces[2], faces[3]));
+}
+
 int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const EpdFontFamily::Style style) const {
   if (fallbackFontMap_.empty() || text == nullptr || *text == '\0') {
     return fontId;
@@ -1493,17 +1520,35 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
   drawIconScaled(bitmap, x, y, size, size);
 }
 
-// drawIcon at outSize x outSize physical pixels, nearest-neighbour from the
+// Ink of output pixel (dstX, dstY) when a srcW x srcH 1-bit mask is scaled to
+// dstW x dstH: bilinear coverage of the four nearest source pixels, inked from
+// half coverage, so curves and diagonals step evenly instead of in blocks.
+template <typename InkAt>
+static bool smoothInk(const InkAt& inkAt, const int srcW, const int srcH, const int dstX, const int dstY,
+                      const int dstW, const int dstH) {
+  // Source position of the output pixel centre, 8.8 fixed point.
+  const int sx = ((2 * dstX + 1) * srcW * 128) / dstW - 128;
+  const int sy = ((2 * dstY + 1) * srcH * 128) / dstH - 128;
+  const int x0 = sx >> 8, y0 = sy >> 8, fx = sx & 0xFF, fy = sy & 0xFF;
+  const auto at = [&](const int x, const int y) {
+    return x >= 0 && y >= 0 && x < srcW && y < srcH && inkAt(x, y) ? 1 : 0;
+  };
+  const int upper = at(x0, y0) * (256 - fx) + at(x0 + 1, y0) * fx;
+  const int lower = at(x0, y0 + 1) * (256 - fx) + at(x0 + 1, y0 + 1) * fx;
+  return (upper * (256 - fy) + lower * fy) * 2 >= 256 * 256;
+}
+
+// drawIcon at outSize x outSize physical pixels, smoothly scaled from the
 // size x size source.
 void GfxRenderer::drawIconScaled(const uint8_t bitmap[], const int x, const int y, const int size,
                                  const int outSize) const {
   const int rowBytes = (size + 7) / 8;
+  const auto inkAt = [&](const int col, const int row) {
+    return ((bitmap[row * rowBytes + (col >> 3)] >> (7 - (col & 7))) & 1) == 0;
+  };
   for (int row = 0; row < outSize; row++) {
-    const int srcRow = row * size / outSize;
     for (int col = 0; col < outSize; col++) {
-      const int srcCol = col * size / outSize;
-      const uint8_t byte = bitmap[srcRow * rowBytes + (srcCol >> 3)];
-      const bool ink = ((byte >> (7 - (srcCol & 7))) & 1) == 0;
+      const bool ink = size == outSize ? inkAt(col, row) : smoothInk(inkAt, size, size, col, row, outSize, outSize);
       if (ink) {
         drawPixel(x + (outSize - 1 - row), y + col, true);
       }
@@ -1512,7 +1557,7 @@ void GfxRenderer::drawIconScaled(const uint8_t bitmap[], const int x, const int 
 }
 
 // drawImage of a width x height panel-native bitmap at outWidth x outHeight,
-// nearest-neighbour through a temporary enlarged copy.
+// smoothly scaled through a temporary enlarged copy.
 void GfxRenderer::drawImageScaled(const uint8_t bitmap[], const int x, const int y, const int width, const int height,
                                   const int outWidth, const int outHeight) const {
   if (outWidth == width && outHeight == height) {
@@ -1523,11 +1568,12 @@ void GfxRenderer::drawImageScaled(const uint8_t bitmap[], const int x, const int
   const int outW = (outWidth + 7) & ~7;
   const int outRowBytes = outW / 8;
   std::vector<uint8_t> scaled(static_cast<size_t>(outRowBytes) * outHeight, 0xFF);
+  const auto inkAt = [&](const int col, const int row) {
+    return !(bitmap[row * srcRowBytes + (col >> 3)] & (0x80 >> (col & 7)));
+  };
   for (int row = 0; row < outHeight; ++row) {
-    const int srcRow = row * height / outHeight;
     for (int col = 0; col < outWidth; ++col) {
-      const int srcCol = col * width / outWidth;
-      if (!(bitmap[srcRow * srcRowBytes + (srcCol >> 3)] & (0x80 >> (srcCol & 7)))) {
+      if (smoothInk(inkAt, width, height, col, row, outWidth, outHeight)) {
         scaled[row * outRowBytes + (col >> 3)] &= static_cast<uint8_t>(~(0x80 >> (col & 7)));
       }
     }

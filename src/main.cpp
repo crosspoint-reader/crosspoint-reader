@@ -109,26 +109,6 @@ EpdFontFamily notosans18FontFamily(18, &notosans18RegularFont, &notosans18BoldFo
 
 #endif  // OMIT_FONTS
 
-#if FREEINK_DEVICE_METALIO_EINK4_PLUS
-// The E0470A14-AF panel (684x1216 portrait) takes UI faces 1.6x the default
-// slots, sized on hardware. UI metrics derive from the body font's line height
-// and scale with it.
-#include <builtinFonts/ubuntu_13_regular.h>
-#include <builtinFonts/ubuntu_16_bold.h>
-#include <builtinFonts/ubuntu_16_regular.h>
-#include <builtinFonts/ubuntu_19_bold.h>
-#include <builtinFonts/ubuntu_19_regular.h>
-EpdFont smallFont(&ubuntu_13_regular);
-EpdFontFamily smallFontFamily(13, &smallFont);
-
-EpdFont ui10RegularFont(&ubuntu_16_regular);
-EpdFont ui10BoldFont(&ubuntu_16_bold);
-EpdFontFamily ui10FontFamily(16, &ui10RegularFont, &ui10BoldFont);
-
-EpdFont ui12RegularFont(&ubuntu_19_regular);
-EpdFont ui12BoldFont(&ubuntu_19_bold);
-EpdFontFamily ui12FontFamily(19, &ui12RegularFont, &ui12BoldFont);
-#else
 EpdFont smallFont(&ubuntu_8_regular);
 EpdFontFamily smallFontFamily(8, &smallFont);
 
@@ -139,7 +119,6 @@ EpdFontFamily ui10FontFamily(10, &ui10RegularFont, &ui10BoldFont);
 EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(12, &ui12RegularFont, &ui12BoldFont);
-#endif
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
@@ -574,9 +553,10 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
 #endif  // OMIT_FONTS
-  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
-  renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  // UI faces follow the board's UI scale; reader fonts keep their own sizes.
+  renderer.insertUiFont(UI_10_FONT_ID, ui10FontFamily);
+  renderer.insertUiFont(UI_12_FONT_ID, ui12FontFamily);
+  renderer.insertUiFont(SMALL_FONT_ID, smallFontFamily);
 
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);
