@@ -36,6 +36,17 @@ TEST(EncryptionManifestProbe, AesStillRequiresSdkValidation) {
   EXPECT_TRUE(probe.needsProtectionCheck());
 }
 
+TEST(EncryptionManifestProbe, Aes256StillRequiresSdkValidation) {
+  EncryptionManifestProbe probe;
+  ASSERT_TRUE(probe.setup());
+  const std::string xml = R"(<encryption xmlns:e="http://www.w3.org/2001/04/xmlenc#"><e:EncryptedData>
+    <e:EncryptionMethod Algorithm = 'http://www.w3.org/2001/04/xmlenc#aes256-cbc'/>
+    <e:CipherData><e:CipherReference URI="chapter.xhtml"/></e:CipherData></e:EncryptedData></encryption>)";
+  for (const unsigned char byte : xml) ASSERT_EQ(probe.write(byte), 1u);
+  ASSERT_TRUE(probe.finish());
+  EXPECT_TRUE(probe.needsProtectionCheck());
+}
+
 TEST(EncryptionManifestProbe, TruncatedManifestFailsValidation) {
   EncryptionManifestProbe probe;
   ASSERT_TRUE(probe.setup());

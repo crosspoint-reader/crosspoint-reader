@@ -44,6 +44,7 @@ class BleSettingsActivity final : public UiListActivity {
   std::vector<std::string> labels;
   std::string status;
   uint32_t shownSignature = 0;
+  uint32_t radioVisit = 0;
   unsigned long lastPollMs = 0;
   bleturner::Action learnAction = bleturner::Action::None;
   char learnAddr[18]{};

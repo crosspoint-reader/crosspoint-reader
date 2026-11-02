@@ -2,7 +2,7 @@ name: CI (build)
 
 on:
   push:
-    branches: [master]
+    branches: [develop]
   pull_request:
 
 permissions:
@@ -65,7 +65,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini', 'scripts/patch_pioarduino_cache.py') }}
           restore-keys: pio-v2-${{ runner.os }}-
 
       - name: Install cppcheck runtime dependency
@@ -100,6 +100,8 @@ jobs:
             asset: firmware-metalio_eink4.bin
           - env: eego_a4
             asset: firmware-eego_a4.bin
+          - env: picco
+            asset: firmware-picco.bin
     steps:
       - uses: actions/checkout@v6
         with:
@@ -130,7 +132,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-v3-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+          key: pio-v3-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini', 'scripts/patch_pioarduino_cache.py') }}
           restore-keys: pio-v3-${{ runner.os }}-${{ matrix.env }}-
 
       - name: Pin pioarduino core inside the platform penv
@@ -183,7 +185,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build
+          sudo apt-get install -y cmake ninja-build zlib1g-dev
 
       - name: Cache googletest source
         uses: actions/cache@v4

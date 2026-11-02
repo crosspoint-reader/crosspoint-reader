@@ -26,4 +26,20 @@ std::string encodeUnsafeUrlChars(const std::string& url);
  */
 std::string buildUrl(const std::string& serverUrl, const std::string& path);
 
+/**
+ * A server-relative path from a response ("/x", not "//host/x") gets the
+ * origin (scheme, host, and port) of requestUrl, the request that returned it.
+ * Returns true when path was changed.
+ */
+bool resolveServerPath(std::string& path, const std::string& requestUrl);
+
+/**
+ * True when an HTTP Host header ("name[:port]") names another site. On the
+ * reader's hotspot an IP literal, a .local name or a single-label name can only
+ * mean the reader; any other name is an OS captive-portal check (or a site the
+ * user typed) that the hotspot's DNS answered with the reader's address. An
+ * empty or null host is not foreign.
+ */
+bool isForeignHost(const char* hostHeader);
+
 }  // namespace UrlUtils

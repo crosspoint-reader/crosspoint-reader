@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "PluginCatalogPaging.h"
 #include "activities/CatalogActivity.h"
 #include "components/OptionPopup.h"
 #include "network/HttpDownloader.h"
@@ -20,6 +21,7 @@ class SecureHttpClient;
 // Picker entry; an empty manifestPath marks an inert browser-only plugin.
 struct PluginRef {
   std::string name;          // folder name
+  std::string dir;           // exact discovered installation directory
   std::string title;         // from device.json or manifest.json (falls back to name)
   std::string description;   // one-line summary, if provided
   std::string manifestPath;  // device.json path, "" for a web-only plugin
@@ -50,7 +52,7 @@ class PluginCatalogActivity final : public CatalogActivity {
     std::string configFile;
     // JSON uses dotted field paths; XML uses element/attribute selectors.
     std::string browseFormat;
-    // Browse request: templates may use {token}, {cfg.KEY}, {page}, {limit}.
+    // Browse request: templates may use {token}, {cfg.KEY}, {page}, {offset}, {limit}.
     pluginhttp::RequestSpec browseReq;
     std::string itemsPath;  // JSON: dotted path to the item array; "" = response root
     // JSON field paths (dotted); XML field selectors ("elem", "elem@attr", "@attr").
@@ -75,12 +77,17 @@ class PluginCatalogActivity final : public CatalogActivity {
     // Named JSON views override the browse URL/body; Back returns to their picker.
     struct BrowseList {
       std::string title, url, body;
+      std::string id;  // fills {list_id}, so lists can share one browse url
       std::string noticeTitle, noticeMessage, noticeConfirm, noticeCancel;
       bool hasNotice() const { return !noticeMessage.empty(); }
     };
     std::vector<BrowseList> browseLists;
-    // Optional remote index that supplies the named JSON views dynamically.
+    // Optional remote index whose views follow the manifest's own lists,
+    // read with its own headers from the array and entry fields below.
     std::string browseListsUrl;
+    pluginhttp::Headers listsHeaders;
+    std::string listsItemsPath, listsTitlePath, listsUrlPath, listsIdPath, listsRequiresPath;
+    size_t fixedListCount = 0;  // leading browseLists entries from the manifest
     // JSON search overrides URL/body independently; empty fields reuse browse.
     std::string searchUrl, searchBody;
     bool hasSearch() const { return (!searchUrl.empty() || !searchBody.empty()) && browseFormat != "xml"; }
@@ -150,6 +157,8 @@ class PluginCatalogActivity final : public CatalogActivity {
   int page = 1;
   bool hasMore = false;
   int currentList = -1;  // index into manifest.browseLists; -1 = none/default
+  // browseListsUrl was fetched, or failed while fixed lists remain to show.
+  bool listIndexLoaded = false;
   std::string searchQuery;
   bool searchActive = false;
   // Reuse browse TLS; release in the picker and before a single-file download.
@@ -175,7 +184,8 @@ class PluginCatalogActivity final : public CatalogActivity {
   bool wantsListPicker() const;
   void openList(int index);
   bool loadManifest();
-  bool loadBrowseListIndex();
+  // `status` is the index request's HTTP status (200 when there is no index).
+  bool loadBrowseListIndex(int& status);
   bool loadToken();
   void loadConfig();
   bool saveToken(const std::string& value);
@@ -195,6 +205,9 @@ class PluginCatalogActivity final : public CatalogActivity {
   int listCount() const override { return rowCount(); }
   // Row dispatch: pager rows page, picker rows pick, item rows open/download.
   void activateIndex(int index) override;
+  void onRowLongPress(int index) override;
+  bool handleButtons() override;
+  void confirmUninstallPlugin(int pickerIndex);
   void render(RenderLock&& lock) override;
   void buildScreen(UiScreen& screen) override;
   bool handleCustomInput() override;
@@ -209,6 +222,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   // Browse url/body with the selected browse list's overrides applied.
   const std::string& activeBrowseUrl() const;
   const std::string& activeBrowseBody() const;
+  plugincatalogpaging::Paging browsePaging() const;
   // Copies `headers` with `substituted()` applied to each value.
   pluginhttp::Headers substitutedHeaders(const pluginhttp::Headers& headers, const Item* item) const;
   void fetchPage(int newPage);

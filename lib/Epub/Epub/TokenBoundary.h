@@ -14,9 +14,9 @@ namespace TokenBoundary {
 constexpr bool allowsBreak(const bool continues, const bool noSpaceBefore) { return !continues || noSpaceBefore; }
 
 // Ordinary word gaps and CJK zero-width gaps participate in justification. Attached text does
-// not, except for a literal space token such as a non-breaking space represented as content.
-constexpr bool isJustifiableGap(const bool continues, const bool noSpaceBefore, const bool isSpaceToken) {
-  return !continues || (isSpaceToken && !noSpaceBefore);
+// not, except for a literal space token with a continuation, including one after a hyphen or ellipsis.
+constexpr bool isJustifiableGap(const bool continues, const bool isStretchableSpace) {
+  return !continues || isStretchableSpace;
 }
 
 // Soft hyphens become visible only when their conditional break is taken. U+2011 exists to forbid

@@ -4,6 +4,9 @@
 #pragma once
 #include <cstdint>
 
+// fontconvert.py, fontconvert_sdcard.py and the vector loader rasterize point sizes at this DPI.
+constexpr uint16_t FONT_RASTER_DPI = 150;
+
 /// Font metrics use "fixed-point 4" (4 fractional bits, i.e. 1/16-pixel
 /// resolution).  Both the 12.4 glyph advances (uint16_t) and the 4.4 kern
 /// values (int8_t) share the same 4 fractional bits, so they can be freely

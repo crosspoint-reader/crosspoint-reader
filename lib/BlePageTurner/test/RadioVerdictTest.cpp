@@ -14,6 +14,7 @@ RadioInputs reading(const Phase phase) {
   in.enabled = true;
   in.where = Where::Reader;
   in.pageShown = true;
+  in.hasBond = true;
   in.heap = {kStartFreeBytes, kMinimumLargestBlockBytes};
   return in;
 }
@@ -38,6 +39,7 @@ TEST(RadioVerdictTest, Table) {
       {"idle: turned off", with(Phase::Idle, [](RadioInputs& i) { i.enabled = false; }), Why::Off},
       {"idle: card busy", with(Phase::Idle, [](RadioInputs& i) { i.storageBusy = true; }), Why::StorageBusy},
       {"idle: home", with(Phase::Idle, [](RadioInputs& i) { i.where = Where::Elsewhere; }), Why::NotReading},
+      {"idle: no remote chosen", with(Phase::Idle, [](RadioInputs& i) { i.hasBond = false; }), Why::NoBond},
       {"idle: page not painted", with(Phase::Idle, [](RadioInputs& i) { i.pageShown = false; }), Why::PageNotShown},
       {"idle: build holds it", with(Phase::Idle, [](RadioInputs& i) { i.heldForBuild = i.idleStopped = true; }),
        Why::BuildNeedsHeap},
