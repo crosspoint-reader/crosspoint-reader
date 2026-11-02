@@ -2167,42 +2167,67 @@ void CrossPointWebServer::handleRelay() {
   LOG_DBG("WEB", "Relay TLS start: heap %u, max block %u: %s", (unsigned)ESP.getFreeHeap(),
           (unsigned)ESP.getMaxAllocHeap(), url.c_str());
 
-  // One bounded body buffer; larger payloads use /api/fetch. This task is
-  // subscribed to the task WDT for the whole web-server session, so feed it
-  // while a slow peer keeps the request waiting.
-  static constexpr size_t RELAY_BODY_LIMIT = 32 * 1024;
-  // Heap kept free while the body is buffered. TLS already holds ~25 KB, and an
-  // exhausted heap stops Wi-Fi from receiving the ACKs that free the server's
-  // send buffers: the whole web server then stalls until the device is reset.
-  static constexpr size_t RELAY_HEAP_RESERVE = 16 * 1024;
-  String respBody;
-  pluginhttp::Headers respHeaders;
-  const int status = pluginhttp::request(
-      nullptr, url, method, body, headers, respBody, RELAY_BODY_LIMIT, &respHeaders,
+  // The body is forwarded as it arrives and never buffered whole; the cap keeps
+  // large files on /api/fetch.
+  static constexpr size_t RELAY_BODY_LIMIT = 64 * 1024;
+  size_t sent = 0;
+  bool chunked = false;
+  bool complete = false;
+  const int status = pluginhttp::requestStream(
+      nullptr, url, method, body, headers,
+      [&](const int upstreamStatus, const pluginhttp::Headers& respHeaders, const long contentLength) {
+        if (contentLength > static_cast<long>(RELAY_BODY_LIMIT)) {
+          LOG_ERR("WEB", "Relay body of %ld bytes is over the %u byte cap", contentLength,
+                  static_cast<unsigned>(RELAY_BODY_LIMIT));
+          return false;
+        }
+        String headersJson;
+        {  // TLS is open: free the document before the header copies below
+          JsonDocument headersDoc;
+          JsonArray headerArray = headersDoc.to<JsonArray>();
+          for (const auto& h : respHeaders) {
+            JsonArray pair = headerArray.add<JsonArray>();
+            pair.add(h.first);
+            pair.add(h.second);
+          }
+          serializeJson(headersDoc, headersJson);
+        }
+        server->sendHeader("X-Relay-Status", String(upstreamStatus));
+        server->sendHeader("X-Relay-Headers", headersJson);
+        chunked = contentLength < 0;
+        server->setContentLength(chunked ? CONTENT_LENGTH_UNKNOWN : static_cast<size_t>(contentLength));
+        server->send(200, "application/octet-stream", "");
+        return true;
+      },
+      [&](const uint8_t* data, const size_t len) {
+        if (len > RELAY_BODY_LIMIT - sent) {
+          LOG_ERR("WEB", "Relay body is over the %u byte cap", static_cast<unsigned>(RELAY_BODY_LIMIT));
+          return false;
+        }
+        server->sendContent(reinterpret_cast<const char*>(data), len);
+        sent += len;
+        return server->client().connected() != 0;
+      },
+      complete,
       [] {
+        // This task is subscribed to the task WDT for the whole web-server
+        // session: feed it while a slow peer keeps the request waiting.
         resetTaskWatchdogIfSubscribed();
         return false;  // never aborts; only feeds
-      },
-      RELAY_HEAP_RESERVE);
-  // Transport failure, a truncated body, or one over the cap / out of memory
-  // (the reason is logged by pluginhttp).
+      });
+  // Nothing sent yet: a transport failure or a body over the cap (the device
+  // log names which).
   if (status < 0) {
     server->send(502, "application/json", "{\"error\":\"relay failed; large bodies need /api/fetch\"}");
     return;
   }
-
-  JsonDocument headersDoc;
-  JsonArray headerArray = headersDoc.to<JsonArray>();
-  for (const auto& h : respHeaders) {
-    JsonArray pair = headerArray.add<JsonArray>();
-    pair.add(h.first);
-    pair.add(h.second);
+  // The 200 is already out. Closing early makes the browser's read fail instead
+  // of returning a short body.
+  if (!complete) {
+    server->client().stop();
+    return;
   }
-  String headersJson;
-  serializeJson(headersDoc, headersJson);
-  server->sendHeader("X-Relay-Status", String(status));
-  server->sendHeader("X-Relay-Headers", headersJson);
-  server->send(200, "application/octet-stream", respBody);
+  if (chunked) server->sendContent("");
 }
 
 namespace {}  // namespace
