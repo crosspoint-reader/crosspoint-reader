@@ -544,17 +544,21 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
       }
       int top, right, bottom, left;
       renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+      std::string chapter = chapterTitle;
+      if (section && currentSpineIndex == spineIndex) {
+        const int selectedTocIndex = section->getTocIndexForPage(startPage);
+        if (selectedTocIndex >= 0) chapter = epub->getTocItem(selectedTocIndex).title;
+      }
       VocabularyContext vocabulary;
       vocabulary.title = std::move(bookTitle);
       vocabulary.author = std::move(author);
-      vocabulary.chapter = std::move(chapterTitle);
+      vocabulary.chapter = std::move(chapter);
       vocabulary.page = startPage + 1;
       vocabulary.spine = spineIndex;
       vocabulary.startOffset = clipping.startOffset;
       if (!vocabularyMetadata) {
         auto metadata = makeUniqueNoThrow<Epub::SyncMetadata>();
-        if (metadata) {
-          epub->loadSyncMetadata(*metadata);
+        if (metadata && epub->loadSyncMetadata(*metadata)) {
           vocabularyMetadata = std::move(metadata);
         }
       }

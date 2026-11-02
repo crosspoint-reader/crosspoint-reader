@@ -40,10 +40,35 @@ class RecordWriter {
 
   void quoted(const std::string& text, size_t maxBytes) {
     put('"');
-    const size_t size = utf8SafeTruncateBuffer(text.data(), std::min(text.size(), maxBytes));
+    const size_t limit = std::min(text.size(), maxBytes);
+    const size_t size = limit < text.size() ? utf8SafeTruncateBuffer(text.data(), limit) : limit;
     static constexpr char HEX_DIGITS[] = "0123456789abcdef";
     for (size_t i = 0; i < size; ++i) {
       const unsigned char c = static_cast<unsigned char>(text[i]);
+      if (c >= 0x80) {
+        const size_t count = c >= 0xC2 && c <= 0xDF ? 2 : c >= 0xE0 && c <= 0xEF ? 3 : c >= 0xF0 && c <= 0xF4 ? 4 : 0;
+        bool valid = count != 0 && count <= size - i;
+        for (size_t j = 1; valid && j < count; ++j) {
+          if ((static_cast<unsigned char>(text[i + j]) & 0xC0) != 0x80) valid = false;
+        }
+        if (valid && count == 3) {
+          const auto second = static_cast<unsigned char>(text[i + 1]);
+          if ((c == 0xE0 && second < 0xA0) || (c == 0xED && second >= 0xA0)) valid = false;
+        }
+        if (valid && count == 4) {
+          const auto second = static_cast<unsigned char>(text[i + 1]);
+          if ((c == 0xF0 && second < 0x90) || (c == 0xF4 && second >= 0x90)) valid = false;
+        }
+        if (valid) {
+          for (size_t j = 0; j < count; ++j) put(text[i + j]);
+          i += count - 1;
+        } else {
+          put(static_cast<char>(0xEF));
+          put(static_cast<char>(0xBF));
+          put(static_cast<char>(0xBD));
+        }
+        continue;
+      }
       if (c == '"' || c == '\\') {
         put('\\');
         put(static_cast<char>(c));
@@ -86,6 +111,57 @@ time_t validLookupTime() {
   const time_t systemTime = time(nullptr);
   return systemTime >= 1577836800 ? systemTime : 0;
 }
+// A bounded structural check lets us preserve a final JSON object without a newline.
+// Vocabulary records have a flat JSON schema; the check also respects quoted braces.
+bool isCompleteJsonObject(HalFile& file, const size_t start, const size_t end) {
+  if (start >= end || !file.seek(start)) return false;
+  char buffer[128];
+  char nesting[8] = {};
+  size_t depth = 0;
+  bool inString = false;
+  bool escaped = false;
+  bool complete = false;
+  for (size_t position = start; position < end;) {
+    const size_t bytes = std::min(end - position, sizeof(buffer));
+    if (file.read(buffer, bytes) != static_cast<int>(bytes)) return false;
+    position += bytes;
+    for (size_t i = 0; i < bytes; ++i) {
+      const char c = buffer[i];
+      if (complete) {
+        if (c != ' ' && c != '\t' && c != '\r') return false;
+      } else if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (c == '\\') {
+          escaped = true;
+        } else if (c == '"') {
+          inString = false;
+        } else if (static_cast<unsigned char>(c) < 0x20) {
+          return false;
+        }
+      } else if (c == '"') {
+        if (depth == 0) return false;
+        inString = true;
+      } else if (c == '{' || c == '[') {
+        if (depth == 0 && (c != '{' || position - bytes + i != start)) return false;
+        if (depth >= sizeof(nesting)) return false;
+        nesting[depth++] = c;
+      } else if (c == '}' || c == ']') {
+        if (depth == 0 || nesting[depth - 1] != (c == '}' ? '{' : '[')) return false;
+        if (--depth == 0) complete = true;
+      } else if (depth == 0 || static_cast<unsigned char>(c) < 0x20) {
+        return false;
+      }
+    }
+  }
+  return complete && !inString && !escaped;
+}
+bool recoverTail(HalFile& file, const size_t start, const size_t size) {
+  if (isCompleteJsonObject(file, start, size)) {
+    return file.seek(size) && file.write(static_cast<uint8_t>('\n')) == 1;
+  }
+  return file.truncate(start) && file.seek(start);
+}
 bool recoverIncompleteRecord(HalFile& file) {
   const size_t size = file.fileSize();
   if (size == 0) return true;
@@ -108,12 +184,12 @@ bool recoverIncompleteRecord(HalFile& file) {
     for (size_t i = count; i > 0; --i) {
       if (chunk[i - 1] == '\n') {
         const size_t newSize = cursor + i;
-        return file.truncate(newSize) && file.seek(newSize);
+        return recoverTail(file, newSize, size);
       }
     }
     scanned += count;
   }
-  if (cursor == 0) return file.truncate(0) && file.seek(0);
+  if (cursor == 0) return recoverTail(file, 0, size);
   LOG_ERR("VOCAB", "Incomplete vocabulary record exceeds recovery limit");
   return false;
 }
@@ -134,16 +210,14 @@ bool VocabularyStore::append(const VocabularyContext& context, const std::string
       // Avoid interpreting an incomplete trailing HTML tag or entity as text.
       const size_t lastTagStart = definition.rfind('<', bytes - 1);
       const size_t lastTagEnd = definition.rfind('>', bytes - 1);
-      if (lastTagStart != std::string::npos &&
-          (lastTagEnd == std::string::npos || lastTagStart > lastTagEnd)) {
+      if (lastTagStart != std::string::npos && (lastTagEnd == std::string::npos || lastTagStart > lastTagEnd)) {
         bytes = lastTagStart;
       }
       if (bytes > 0) {
         const size_t lastEntityStart = definition.rfind('&', bytes - 1);
         const size_t lastEntityEnd = definition.rfind(';', bytes - 1);
         if (lastEntityStart != std::string::npos &&
-            (lastEntityEnd == std::string::npos || lastEntityStart > lastEntityEnd) &&
-            bytes - lastEntityStart <= 18) {
+            (lastEntityEnd == std::string::npos || lastEntityStart > lastEntityEnd) && bytes - lastEntityStart <= 18) {
           bytes = lastEntityStart;
         }
       }
@@ -156,6 +230,7 @@ bool VocabularyStore::append(const VocabularyContext& context, const std::string
     }
     plain = htmlToPlainText(definition, DICTIONARY_PLAIN_HEADWORD_MARKER, bytes);
     std::replace(plain.begin(), plain.end(), DICTIONARY_PLAIN_HEADWORD_MARKER, ' ');
+    if (plain.empty()) return false;
     exportedDefinition = &plain;
   }
 
@@ -190,9 +265,10 @@ bool VocabularyStore::append(const VocabularyContext& context, const std::string
   record.quoted(headword, MAX_WORD_BYTES);
   record.raw(",\"definition\":");
   const auto& text = *exportedDefinition;
-  size_t definitionBytes = utf8SafeTruncateBuffer(text.data(), std::min(text.size(), MAX_DEFINITION_BYTES));
+  size_t definitionBytes = std::min(text.size(), MAX_DEFINITION_BYTES);
+  if (definitionBytes < text.size()) definitionBytes = utf8SafeTruncateBuffer(text.data(), definitionBytes);
   const bool definitionTruncated = sourceTruncated || definitionBytes < text.size();
-  if (definitionTruncated && definitionBytes > 0) {
+  if (definitionBytes < text.size() && definitionBytes > 0) {
     const size_t lastLine = text.rfind('\n', definitionBytes - 1);
     if (lastLine != std::string::npos && lastLine >= definitionBytes / 2) {
       definitionBytes = lastLine;
@@ -234,7 +310,8 @@ bool VocabularyStore::append(const VocabularyContext& context, const std::string
 
   const bool written = record.finish();
   if (!written && !file.truncate(originalSize)) LOG_ERR("VOCAB", "Failed to restore partial vocabulary record");
-  file.flush();
+  const bool closed = file.close();
+  if (!closed) LOG_ERR("VOCAB", "Failed to flush vocabulary record");
   if (!written) LOG_ERR("VOCAB", "Could not append vocabulary record");
-  return written;
+  return written && closed;
 }
