@@ -4,7 +4,7 @@
 #     --svgdir <freeink-sdk>/libs/assets/Icons/lucide/icons \
 #     --sizes 24,32 --out src/components/icons/listIcons.h
 # then run ./bin/clang-format-fix -g.
-#
+# Licenses and copyright notices: freeink-sdk/libs/assets/Icons/lucide/LICENSE.
 # Stock Lucide icons ONLY. Hand-modified icons (sun-filled, moon-filled) live in
 # customListIcons.h, which is not generated — a full regeneration of listIcons.h
 # is safe and must not touch that file.
