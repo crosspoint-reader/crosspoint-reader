@@ -216,6 +216,8 @@ bool buttonContactClosed() { return gpio.rawInputActive(); }
 // after a clipping, so a multi-page range can no longer be mapped back.
 ClipSelectionActivity::Selection lookupReturnSelectionFor(const ClippingResult& clipping) {
   if (clipping.startPageOffset != clipping.endPageOffset) return {};
+  // The restored cursor lands on lastWord, so make that the end the user was extending.
+  if (clipping.cursorAtStart) return {0, 0, clipping.endWordIndex, clipping.startWordIndex, true};
   return {0, 0, clipping.startWordIndex, clipping.endWordIndex, true};
 }
 
