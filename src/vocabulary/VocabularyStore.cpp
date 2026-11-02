@@ -38,12 +38,14 @@ class RecordWriter {
     raw(digits);
   }
 
-  void quoted(const std::string& text, size_t maxBytes) {
+  bool quoted(const std::string& text, size_t maxBytes, size_t maxInputBytes = static_cast<size_t>(-1)) {
     put('"');
-    const size_t limit = std::min(text.size(), maxBytes);
+    const size_t limit = std::min({text.size(), maxBytes, maxInputBytes});
     const size_t size = limit < text.size() ? utf8SafeTruncateBuffer(text.data(), limit) : limit;
     static constexpr char HEX_DIGITS[] = "0123456789abcdef";
-    for (size_t i = 0; i < size; ++i) {
+    size_t encodedBytes = 0;
+    size_t i = 0;
+    for (; i < size; ++i) {
       const unsigned char c = static_cast<unsigned char>(text[i]);
       if (c >= 0x80) {
         const size_t count = c >= 0xC2 && c <= 0xDF ? 2 : c >= 0xE0 && c <= 0xEF ? 3 : c >= 0xF0 && c <= 0xF4 ? 4 : 0;
@@ -59,6 +61,9 @@ class RecordWriter {
           const auto second = static_cast<unsigned char>(text[i + 1]);
           if ((c == 0xF0 && second < 0x90) || (c == 0xF4 && second >= 0x90)) valid = false;
         }
+        const size_t encodedLength = valid ? count : 3;
+        if (encodedLength > maxBytes - encodedBytes) break;
+        encodedBytes += encodedLength;
         if (valid) {
           for (size_t j = 0; j < count; ++j) put(text[i + j]);
           i += count - 1;
@@ -69,6 +74,8 @@ class RecordWriter {
         }
         continue;
       }
+      if (encodedBytes == maxBytes) break;
+      ++encodedBytes;
       if (c == '"' || c == '\\') {
         put('\\');
         put(static_cast<char>(c));
@@ -81,6 +88,7 @@ class RecordWriter {
       }
     }
     put('"');
+    return i < text.size();
   }
 
   bool finish() { return flush() && good; }
@@ -267,7 +275,7 @@ bool VocabularyStore::append(const VocabularyContext& context, const std::string
   const auto& text = *exportedDefinition;
   size_t definitionBytes = std::min(text.size(), MAX_DEFINITION_BYTES);
   if (definitionBytes < text.size()) definitionBytes = utf8SafeTruncateBuffer(text.data(), definitionBytes);
-  const bool definitionTruncated = sourceTruncated || definitionBytes < text.size();
+  bool definitionTruncated = sourceTruncated || definitionBytes < text.size();
   if (definitionBytes < text.size() && definitionBytes > 0) {
     const size_t lastLine = text.rfind('\n', definitionBytes - 1);
     if (lastLine != std::string::npos && lastLine >= definitionBytes / 2) {
@@ -277,7 +285,7 @@ bool VocabularyStore::append(const VocabularyContext& context, const std::string
       if (lastSpace != std::string::npos && lastSpace >= definitionBytes / 2) definitionBytes = lastSpace;
     }
   }
-  record.quoted(text, definitionBytes);
+  if (record.quoted(text, MAX_DEFINITION_BYTES, definitionBytes)) definitionTruncated = true;
   record.raw(",\"definition_truncated\":");
   record.raw(definitionTruncated ? "true" : "false");
   record.raw(",\"title\":");
