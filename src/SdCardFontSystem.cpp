@@ -1,5 +1,6 @@
 #include "SdCardFontSystem.h"
 
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -76,6 +77,14 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   cpfontVariants_.reserve(MAX_CPFONT_VARIANTS);
 #if CROSSPOINT_VECTOR_FONTS
   ttfVariants_.reserve(MAX_TTF_VARIANTS);
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->setReleaseCallback(
+        [](void* ctx) {
+          auto* self = static_cast<SdCardFontSystem*>(ctx);
+          if (self->renderer_) self->clearTtfVariants(*self->renderer_);
+        },
+        this);
+  }
 #endif
   FontVariantProvider provider;
   provider.ctx = this;

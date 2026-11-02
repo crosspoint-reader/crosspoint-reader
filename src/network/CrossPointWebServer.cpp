@@ -73,6 +73,7 @@ namespace {
 // For JSON POSTs, that includes the complete "plain" body. Expose a narrowly
 // scoped release operation so large request bodies do not remain resident
 // between requests, and so outbound TLS can reuse that memory immediately.
+// It also closes a client whose reply stalls.
 class CrossPointHttpServer final : public WebServer {
  public:
   explicit CrossPointHttpServer(uint16_t port) : WebServer(port) {}
@@ -89,6 +90,28 @@ class CrossPointHttpServer final : public WebServer {
       _postArgs = nullptr;
     }
     _postArgsLen = 0;
+  }
+
+ protected:
+  // NetworkClient::write gives up after ten seconds without progress and
+  // returns a short count, but WebServer ignores it and writes the next chunk,
+  // so a stalled reply blocks the server for minutes. Close the client instead:
+  // later writes then fail at once and the handler soon returns.
+  size_t _currentClientWrite(const char* b, const size_t l) override {
+    return checkedWrite(l, WebServer::_currentClientWrite(b, l));
+  }
+  size_t _currentClientWrite_P(PGM_P b, const size_t l) override {
+    return checkedWrite(l, WebServer::_currentClientWrite_P(b, l));
+  }
+
+ private:
+  size_t checkedWrite(const size_t wanted, const size_t sent) {
+    if (sent < wanted && _currentClient.connected()) {
+      LOG_ERR("WEB", "Client stalled after %u of %u bytes, closing it", static_cast<unsigned>(sent),
+              static_cast<unsigned>(wanted));
+      _currentClient.stop();
+    }
+    return sent;
   }
 };
 
@@ -146,6 +169,55 @@ bool isProtectedItemName(const String& name) {
   return false;
 }
 
+// Collects a streamed reply into ~1 KB chunks. Each sendContent() is three
+// socket writes; hundreds of tiny writes fill lwIP's send queue (errno 11) and
+// stall the single-threaded server for seconds while other requests wait.
+// A Print, so serializeJson() writes straight into the chunk buffer.
+class ChunkedReply final : public Print {
+ public:
+  explicit ChunkedReply(WebServer& server) : server_(server) {}
+  using Print::write;
+  size_t write(uint8_t c) override { return write(&c, 1); }
+  size_t write(const uint8_t* data, size_t len) override {
+    if (used_ + len > sizeof(buffer_)) flush();
+    if (len >= sizeof(buffer_)) {
+      server_.sendContent(reinterpret_cast<const char*>(data), len);
+      return len;
+    }
+    memcpy(buffer_ + used_, data, len);
+    used_ += len;
+    return len;
+  }
+  void flush() override {
+    if (used_ == 0) return;
+    server_.sendContent(buffer_, used_);
+    used_ = 0;
+  }
+  // Ends the chunked stream after the buffered data.
+  void end() {
+    flush();
+    server_.sendContent("");
+  }
+
+ private:
+  WebServer& server_;
+  char buffer_[1024];
+  size_t used_ = 0;
+};
+
+// True if key is one of the comma-separated names in list.
+bool listContainsKey(const String& list, const char* key) {
+  const size_t keyLen = strlen(key);
+  for (const char* p = list.c_str(); *p;) {
+    const char* comma = strchr(p, ',');
+    const size_t len = comma ? static_cast<size_t>(comma - p) : strlen(p);
+    if (len == keyLen && strncmp(p, key, len) == 0) return true;
+    if (!comma) break;
+    p = comma + 1;
+  }
+  return false;
+}
+
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -155,6 +227,126 @@ bool isProtectedItemName(const String& name) {
 CrossPointWebServer::CrossPointWebServer() {}
 
 CrossPointWebServer::~CrossPointWebServer() { stop(); }
+
+// One handler for every route. Each WebServer::on() call allocates a handler
+// object and a copy of its path; this table stays in flash instead. Matching
+// is the same as on(): exact path and method. Unlike on(), a non-multipart
+// body is not passed to the upload function, which reads server->upload()
+// and would dereference null; it is read like any other POST body.
+class CrossPointWebServer::RouteHandler final : public RequestHandler {
+ public:
+  explicit RouteHandler(CrossPointWebServer& owner) : owner_(owner) {}
+
+  bool canHandle(WebServer&, const HTTPMethod method, const String& uri) override {
+    return find(method, uri) != nullptr;
+  }
+  bool canUpload(WebServer&, const String& uri) override {
+    const Route* route = find(HTTP_POST, uri);
+    return route && route->upload;
+  }
+  bool handle(WebServer&, const HTTPMethod method, const String& uri) override {
+    const Route* route = find(method, uri);
+    if (!route) return false;
+    route->handle(owner_);
+    return true;
+  }
+  void upload(WebServer&, const String& uri, HTTPUpload&) override {
+    const Route* route = find(HTTP_POST, uri);
+    if (route && route->upload) route->upload(owner_);
+  }
+
+ private:
+  using Action = void (*)(CrossPointWebServer&);
+  struct Route {
+    const char* path;
+    HTTPMethod method;
+    Action handle;
+    Action upload;  // Multipart file parts, or nullptr
+  };
+
+  static const Route* find(const HTTPMethod method, const String& uri) {
+    using S = CrossPointWebServer;
+    static constexpr Route ROUTES[] = {
+        {"/", HTTP_GET, [](S& s) { s.handleRoot(); }, nullptr},
+        {"/files", HTTP_GET, [](S& s) { s.handleFileList(); }, nullptr},
+        {"/js/jszip.min.js", HTTP_GET, [](S& s) { s.handleJszip(); }, nullptr},
+        {"/js/epub-optimizer.js", HTTP_GET,
+         [](S& s) {
+           sendStaticContent(s.server.get(), epub_optimizerJs, sizeof(epub_optimizerJs), epub_optimizerJsETag,
+                             "application/javascript");
+         },
+         nullptr},
+        {"/js/plugin-host.js", HTTP_GET,
+         [](S& s) {
+           sendStaticContent(s.server.get(), plugin_hostJs, sizeof(plugin_hostJs), plugin_hostJsETag,
+                             "application/javascript");
+         },
+         nullptr},
+        {"/assets/web.css", HTTP_GET,
+         [](S& s) { sendStaticContent(s.server.get(), webCss, sizeof(webCss), webCssETag, "text/css"); }, nullptr},
+        {"/assets/icons.svg", HTTP_GET,
+         [](S& s) { sendStaticContent(s.server.get(), iconsSvg, sizeof(iconsSvg), iconsSvgETag, "image/svg+xml"); },
+         nullptr},
+        {"/assets/crosspoint-icon.svg", HTTP_GET,
+         [](S& s) {
+           sendStaticContent(s.server.get(), crosspoint_iconSvg, sizeof(crosspoint_iconSvg), crosspoint_iconSvgETag,
+                             "image/svg+xml");
+         },
+         nullptr},
+
+        {"/api/status", HTTP_GET, [](S& s) { s.handleStatus(); }, nullptr},
+        {"/api/files", HTTP_GET, [](S& s) { s.handleFileListData(); }, nullptr},
+        {"/download", HTTP_GET, [](S& s) { s.handleDownload(); }, nullptr},
+        {"/upload", HTTP_POST, [](S& s) { s.handleUploadPost(s.upload); }, [](S& s) { s.handleUpload(s.upload); }},
+        {"/mkdir", HTTP_POST, [](S& s) { s.handleCreateFolder(); }, nullptr},
+        {"/rename", HTTP_POST, [](S& s) { s.handleRename(); }, nullptr},
+        {"/move", HTTP_POST, [](S& s) { s.handleMove(); }, nullptr},
+        {"/delete", HTTP_POST, [](S& s) { s.handleDelete(); }, nullptr},
+
+        {"/settings", HTTP_GET, [](S& s) { s.handleSettingsPage(); }, nullptr},
+        {"/api/settings", HTTP_GET, [](S& s) { s.handleGetSettings(); }, nullptr},
+        {"/api/settings", HTTP_POST, [](S& s) { s.handlePostSettings(); }, nullptr},
+
+        {"/fonts", HTTP_GET, [](S& s) { s.handleFontsPage(); }, nullptr},
+        {"/api/fonts", HTTP_GET, [](S& s) { s.handleFontList(); }, nullptr},
+        {"/api/fonts/upload", HTTP_POST, [](S& s) { s.handleFontUpload(); }, [](S& s) { s.handleFontUploadData(); }},
+        {"/api/fonts/delete", HTTP_POST, [](S& s) { s.handleFontDelete(); }, nullptr},
+
+        {"/api/opds", HTTP_GET, [](S& s) { s.handleGetOpdsServers(); }, nullptr},
+        {"/api/opds", HTTP_POST, [](S& s) { s.handlePostOpdsServer(); }, nullptr},
+        {"/api/opds/delete", HTTP_POST, [](S& s) { s.handleDeleteOpdsServer(); }, nullptr},
+
+        // Wallpaper packs are data assets, not browser-side plugins.
+        {"/api/wallpaper-packs", HTTP_GET, [](S& s) { s.handleWallpaperPackList(); }, nullptr},
+        {"/api/wallpaper-packs/delete", HTTP_POST, [](S& s) { s.handleWallpaperPackDelete(); }, nullptr},
+
+        // Browser-side plugins (JS on the SD card) + their generic capabilities.
+        {"/api/plugins", HTTP_GET, [](S& s) { s.handlePluginList(); }, nullptr},
+        {"/plugin", HTTP_GET, [](S& s) { s.handlePluginFile(); }, nullptr},
+        {"/plugins", HTTP_GET, [](S& s) { s.handlePluginsPage(); }, nullptr},
+        {"/plugins-run", HTTP_GET, [](S& s) { s.handlePluginRunnerPage(); }, nullptr},
+        {"/api/plugin-jobs", HTTP_POST, [](S& s) { s.handlePluginJobSubmit(); }, nullptr},
+        {"/api/plugin-jobs/claim", HTTP_GET, [](S& s) { s.handlePluginJobClaim(); }, nullptr},
+        {"/api/plugin-jobs/complete", HTTP_POST, [](S& s) { s.handlePluginJobComplete(); }, nullptr},
+        {"/api/plugin-jobs/status", HTTP_GET, [](S& s) { s.handlePluginJobStatus(); }, nullptr},
+        {"/api/relay", HTTP_POST, [](S& s) { s.handleRelay(); }, nullptr},
+        {"/api/crypto", HTTP_POST, [](S& s) { s.handleCrypto(); }, nullptr},
+        {"/api/fetch", HTTP_POST, [](S& s) { s.handleFetch(); }, nullptr},
+        {"/api/book-key", HTTP_POST, [](S& s) { s.handleBookKey(); }, nullptr},
+        {"/api/plugin-fs", HTTP_POST, [](S& s) { s.handlePluginFs(); }, [](S& s) { s.handlePluginFsUpload(); }},
+
+        {"/api/wifi", HTTP_GET, [](S& s) { s.handleGetWifiNetworks(); }, nullptr},
+        {"/api/wifi", HTTP_POST, [](S& s) { s.handlePostWifiNetwork(); }, nullptr},
+        {"/api/wifi/delete", HTTP_POST, [](S& s) { s.handleDeleteWifiNetwork(); }, nullptr},
+    };
+    for (const Route& route : ROUTES) {
+      if (route.method == method && uri == route.path) return &route;
+    }
+    return nullptr;
+  }
+
+  CrossPointWebServer& owner_;
+};
 
 void CrossPointWebServer::begin() {
   if (running) {
@@ -220,85 +412,7 @@ void CrossPointWebServer::begin() {
 
   // Setup routes
   LOG_DBG("WEB", "Setting up routes...");
-  server->on("/", HTTP_GET, [this] { handleRoot(); });
-  server->on("/files", HTTP_GET, [this] { handleFileList(); });
-  server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
-  server->on("/js/epub-optimizer.js", HTTP_GET, [this] {
-    sendStaticContent(server.get(), epub_optimizerJs, sizeof(epub_optimizerJs), epub_optimizerJsETag,
-                      "application/javascript");
-  });
-  server->on("/js/plugin-host.js", HTTP_GET, [this] {
-    sendStaticContent(server.get(), plugin_hostJs, sizeof(plugin_hostJs), plugin_hostJsETag, "application/javascript");
-  });
-
-  server->on("/assets/web.css", HTTP_GET,
-             [this] { sendStaticContent(server.get(), webCss, sizeof(webCss), webCssETag, "text/css"); });
-  server->on("/assets/icons.svg", HTTP_GET,
-             [this] { sendStaticContent(server.get(), iconsSvg, sizeof(iconsSvg), iconsSvgETag, "image/svg+xml"); });
-  server->on("/assets/crosspoint-icon.svg", HTTP_GET, [this] {
-    sendStaticContent(server.get(), crosspoint_iconSvg, sizeof(crosspoint_iconSvg), crosspoint_iconSvgETag,
-                      "image/svg+xml");
-  });
-
-  server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
-  server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
-  server->on("/download", HTTP_GET, [this] { handleDownload(); });
-
-  // Upload endpoint with special handling for multipart form data
-  server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
-
-  // Create folder endpoint
-  server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
-
-  // Rename file endpoint
-  server->on("/rename", HTTP_POST, [this] { handleRename(); });
-
-  // Move file endpoint
-  server->on("/move", HTTP_POST, [this] { handleMove(); });
-
-  // Delete file/folder endpoint
-  server->on("/delete", HTTP_POST, [this] { handleDelete(); });
-
-  // Settings endpoints
-  server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
-  server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
-  server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
-
-  // Font management endpoints
-  server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
-  server->on("/api/fonts", HTTP_GET, [this] { handleFontList(); });
-  server->on("/api/fonts/upload", HTTP_POST, [this] { handleFontUpload(); }, [this] { handleFontUploadData(); });
-  server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
-
-  // OPDS server endpoints
-  server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });
-  server->on("/api/opds", HTTP_POST, [this] { handlePostOpdsServer(); });
-  server->on("/api/opds/delete", HTTP_POST, [this] { handleDeleteOpdsServer(); });
-
-  // Wallpaper packs are data assets, not browser-side plugins.
-  server->on("/api/wallpaper-packs", HTTP_GET, [this] { handleWallpaperPackList(); });
-  server->on("/api/wallpaper-packs/delete", HTTP_POST, [this] { handleWallpaperPackDelete(); });
-
-  // Browser-side plugins (JS on the SD card) + their generic capabilities.
-  server->on("/api/plugins", HTTP_GET, [this] { handlePluginList(); });
-  server->on("/plugin", HTTP_GET, [this] { handlePluginFile(); });
-  server->on("/plugins", HTTP_GET, [this] { handlePluginsPage(); });
-  server->on("/plugins-run", HTTP_GET, [this] { handlePluginRunnerPage(); });
-  server->on("/api/plugin-jobs", HTTP_POST, [this] { handlePluginJobSubmit(); });
-  server->on("/api/plugin-jobs/claim", HTTP_GET, [this] { handlePluginJobClaim(); });
-  server->on("/api/plugin-jobs/complete", HTTP_POST, [this] { handlePluginJobComplete(); });
-  server->on("/api/plugin-jobs/status", HTTP_GET, [this] { handlePluginJobStatus(); });
-  server->on("/api/relay", HTTP_POST, [this] { handleRelay(); });
-  server->on("/api/crypto", HTTP_POST, [this] { handleCrypto(); });
-  server->on("/api/fetch", HTTP_POST, [this] { handleFetch(); });
-  server->on("/api/book-key", HTTP_POST, [this] { handleBookKey(); });
-  server->on("/api/plugin-fs", HTTP_POST, [this] { handlePluginFs(); }, [this] { handlePluginFsUpload(); });
-
-  // Wi-Fi credential endpoints
-  server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
-  server->on("/api/wifi", HTTP_POST, [this] { handlePostWifiNetwork(); });
-  server->on("/api/wifi/delete", HTTP_POST, [this] { handleDeleteWifiNetwork(); });
-
+  server->addHandler(new RouteHandler(*this));  // Deleted with the WebServer (stop() resets it)
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
@@ -688,36 +802,27 @@ void CrossPointWebServer::handleFileListData() const {
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
-  server->sendContent("[");
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
+  ChunkedReply reply(*server);
+  reply.write("[");
   bool seenFirst = false;
   JsonDocument doc;
 
-  scanFiles(currentPath.c_str(), [this, &output, &doc, seenFirst](const FileInfo& info) mutable {
+  scanFiles(currentPath.c_str(), [&reply, &doc, &seenFirst](const FileInfo& info) {
     doc.clear();
     doc["name"] = info.name;
     doc["size"] = info.size;
     doc["isDirectory"] = info.isDirectory;
     doc["isEpub"] = info.isEpub;
-
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) {
-      // JSON output truncated; skip this entry to avoid sending malformed JSON
-      LOG_DBG("WEB", "Skipping file entry with oversized JSON for name: %s", info.name.c_str());
+    if (doc.overflowed()) {
+      LOG_ERR("WEB", "OOM: file entry JSON for %s", info.name.c_str());
       return;
     }
-
-    if (seenFirst) {
-      server->sendContent(",");
-    } else {
-      seenFirst = true;
-    }
-    server->sendContent(output);
+    if (seenFirst) reply.write(',');
+    seenFirst = true;
+    serializeJson(doc, reply);
   });
-  server->sendContent("]");
-  // End of streamed response, empty chunk to signal client
-  server->sendContent("");
+  reply.write("]");
+  reply.end();
   LOG_DBG("WEB", "Served file listing page for path: %s", currentPath.c_str());
 }
 
@@ -1051,6 +1156,9 @@ void CrossPointWebServer::handleUploadPost(UploadState& state) const {
     const String error = state.error.isEmpty() ? "Unknown error during upload" : state.error;
     server->send(400, "text/plain", error);
   }
+  // A later POST without a file part must not repeat this result.
+  state.success = false;
+  state.error = "";
 }
 
 void CrossPointWebServer::handleCreateFolder() const {
@@ -1419,19 +1527,22 @@ void CrossPointWebServer::handleGetSettings() const {
   // three built-in fonts.
   std::vector<DictionaryEntry> dictionaries;
   DictionaryRegistry::discover(dictionaries);
-  const auto& settings = getSettingsList(&sdFontSystem.registry(), &dictionaries);
+  // ?keys=a,b returns only those settings, so a plugin need not read the whole list.
+  const String keys = server->arg("keys");
+  const auto wants = [&keys](const char* key) { return key && (keys.isEmpty() || listContainsKey(keys, key)); };
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
-  server->sendContent("[");
+  ChunkedReply reply(*server);
+  reply.write("[");
 
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
   bool seenFirst = false;
   JsonDocument doc;
 
-  for (const auto& s : settings) {
-    if (!s.key || s.webHidden) continue;  // Skip ACTION-only entries
+  // One entry at a time: building the whole list first can exhaust the heap
+  // right after a plugin relay.
+  forEachSetting(&sdFontSystem.registry(), &dictionaries, wants, [&](const SettingInfo& s) {
+    if (s.webHidden) return;
 
     doc.clear();
     doc["key"] = s.key;
@@ -1496,36 +1607,23 @@ void CrossPointWebServer::handleGetSettings() const {
         break;
       }
       default:
-        continue;
+        return;
     }
 
-    const char* json = output;
-    // Only entries over the stack buffer use the heap, e.g. fontFamily with many SD families.
-    std::unique_ptr<char[]> large;
-    size_t len = serializeJson(doc, output, outputSize);
-    if (len >= outputSize) {
-      len = measureJson(doc);
-      large.reset(new (std::nothrow) char[len + 1]);
-      if (!large) {
-        LOG_ERR("WEB", "OOM: setting JSON for %s (%zu bytes)", s.key, len);
-        continue;
-      }
-      serializeJson(doc, large.get(), len + 1);
-      json = large.get();
+    // A truncated options list would shift option indexes, so skip the entry instead.
+    if (doc.overflowed()) {
+      LOG_ERR("WEB", "OOM: setting JSON for %s", s.key);
+      return;
     }
-
-    if (seenFirst) {
-      server->sendContent(",");
-    } else {
-      seenFirst = true;
-    }
-    server->sendContent(json, len);
+    if (seenFirst) reply.write(',');
+    seenFirst = true;
+    serializeJson(doc, reply);
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
-    resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
-  }
+    resetTaskWatchdogIfSubscribed();  // Reset watchdog: writing a full chunk blocks on the network
+  });
 
-  server->sendContent("]");
-  server->sendContent("");
+  reply.write("]");
+  reply.end();
   LOG_DBG("WEB", "Served settings API");
 }
 
@@ -3083,26 +3181,63 @@ void CrossPointWebServer::handleFontsPage() const {
   LOG_DBG("WEB", "Served fonts page");
 }
 
+// Adds {name, size} for each family file, in family.files order. The sizes come
+// from one listing of the folder holding the files: opening each file by path
+// walks the folders again for every file, which is slow with many families.
+// Unreadable files report size 0.
+static void addFontFiles(const SdCardFontFamilyInfo& family, JsonArray files) {
+  char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
+  char folder[sizeof(path)] = "";
+  for (const auto& file : family.files) {
+    if (!family.filePath(file, path, sizeof(path))) continue;
+    char* slash = strrchr(path, '/');
+    JsonObject entry = files.add<JsonObject>();
+    entry["name"] = slash ? slash + 1 : path;
+    entry["size"] = 0;
+    if (slash && !folder[0]) {
+      *slash = '\0';
+      strcpy(folder, path);
+    }
+  }
+  if (!folder[0]) return;
+  HalFile dir = Storage.open(folder);
+  if (!dir) return;
+
+  char entryName[128];
+  size_t found = 0;
+  while (found < files.size()) {
+    HalFile item = dir.openNextFile();
+    if (!item) break;
+    if (item.isDirectory()) continue;
+    item.getName(entryName, sizeof(entryName));
+    for (JsonObject entry : files) {
+      if (strcmp(entry["name"] | "", entryName) == 0) {
+        entry["size"] = static_cast<unsigned long>(item.size());
+        found++;
+        break;
+      }
+    }
+  }
+}
+
 void CrossPointWebServer::handleFontList() const {
   // Pick up any uploads/deletes that happened since the last reader load.
   const_cast<SdCardFontSystem&>(sdFontSystem).refreshIfDirty();
   const auto& families = sdFontSystem.registry().getFamilies();
 
-  // Stream one family per chunk: with many families, the whole document plus
+  // Serialize one family at a time: with many families, the whole document plus
   // its serialized copy does not fit in the heap of a DRAM-only board.
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
+  ChunkedReply reply(*server);
   char head[80];
   // Vector (.ttf/.otf) fonts need PSRAM to stay resident; DRAM-only boards
   // only take pre-rendered .cpfont uploads.
   snprintf(head, sizeof(head), "{\"maxFamilies\":%d,\"vectorFonts\":%s,\"families\":[",
            SdCardFontRegistry::MAX_SD_FAMILIES, HalMemory::getPsramHeap().totalBytes > 0 ? "true" : "false");
-  server->sendContent(head);
+  reply.write(head);
 
   JsonDocument doc;
-  // Reused for every family; reallocated only for a larger entry (a few hundred bytes).
-  std::unique_ptr<char[]> buf;
-  size_t bufSize = 0;
   for (const auto& family : families) {
     doc.clear();
     doc["name"] = family.name;
@@ -3112,47 +3247,22 @@ void CrossPointWebServer::handleFontList() const {
       sizes.add(s);
     }
 
-    JsonArray files = doc["files"].to<JsonArray>();
-    char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
-    for (const auto& file : family.files) {
-      if (!family.filePath(file, path, sizeof(path))) continue;
-      JsonObject fileObj = files.add<JsonObject>();
-      // Extract filename from full path
-      const char* name = strrchr(path, '/');
-      fileObj["name"] = name ? name + 1 : path;
+    addFontFiles(family, doc["files"].to<JsonArray>());
 
-      // Stat the file for size
-      HalFile f;
-      if (Storage.openFileForRead("WEB", path, f)) {
-        fileObj["size"] = static_cast<unsigned long>(f.size());
-        f.close();
-      } else {
-        fileObj["size"] = 0;
-      }
-    }
-
-    const size_t len = 1 + measureJson(doc);  // leading comma + entry
-    if (!doc.overflowed() && len + 1 > bufSize) {
-      buf.reset();  // free first so two buffers are never held at once
-      buf.reset(new (std::nothrow) char[len + 1]);
-      bufSize = buf ? len + 1 : 0;
-    }
-    if (doc.overflowed() || !buf) {
+    if (doc.overflowed()) {
       // Leave the JSON unterminated so the page reports a failed load, not a short list.
       LOG_ERR("WEB", "OOM: font list entry");
-      server->sendContent("");
+      reply.end();
       return;
     }
-    buf[0] = ',';
-    serializeJson(doc, buf.get() + 1, bufSize - 1);
-    const size_t skip = &family == &families.front() ? 1 : 0;  // no comma before the first entry
-    server->sendContent(buf.get() + skip, len - skip);
+    if (&family != &families.front()) reply.write(',');
+    serializeJson(doc, reply);
     yield();
-    resetTaskWatchdogIfSubscribed();  // each sendContent() is a blocking network write
+    resetTaskWatchdogIfSubscribed();  // writing a full chunk blocks on the network
   }
 
-  server->sendContent("]}");
-  server->sendContent("");
+  reply.write("]}");
+  reply.end();
 }
 
 void CrossPointWebServer::handleFontUploadData() {
@@ -3318,6 +3428,7 @@ void CrossPointWebServer::handleFontUpload() {
   } else {
     server->send(400, "application/json", "{\"error\":\"Invalid font file\"}");
   }
+  fontUpload.valid = false;  // A later POST without a file part must not repeat this result
 }
 
 void CrossPointWebServer::handleFontDelete() {

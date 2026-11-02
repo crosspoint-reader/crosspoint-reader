@@ -3,19 +3,20 @@
 // and calls its registered render fn with a container + a small api. A plugin
 // is just JS on the SD; adding one needs no firmware change.
 window.CrossPoint = window.CrossPoint || {
-  _pending: null,
-  registerPlugin(fn) { this._pending = fn; },
+  // The render fn is stored on the registering script element, so a timed-out
+  // script that runs late cannot hand its fn to the plugin loading after it.
+  registerPlugin(fn) { if (document.currentScript) document.currentScript.cpRender = fn; },
   // --- plugin job queue -------------------------------------------------
   // A plugin registers named actions; external systems enqueue jobs with
   // POST /api/plugin-jobs, and any open page hosting the plugin (File
   // Manager, Plugins, or the headless /plugins-run page) claims and
   // executes them here, then posts the result back for the caller to poll.
-  _actions: {},
+  _actions: Object.create(null),  // no inherited keys: a plugin may be named "constructor"
   _actionBusy: false,
   _actionTimer: null,
   _pendingCompletion: null,
   registerAction(pluginName, action, fn) {
-    (this._actions[pluginName] = this._actions[pluginName] || {})[action] = fn;
+    (this._actions[pluginName] = this._actions[pluginName] || Object.create(null))[action] = fn;
     if (!this._actionTimer) this._actionTimer = setInterval(() => this._pollJobs(), 2500);
   },
   async _pollJobs() {
@@ -34,9 +35,12 @@ window.CrossPoint = window.CrossPoint || {
         if (!fn) {
           result = { error: 'unknown action: ' + job.action };
         } else {
-          try { result = (await fn(job.args || {})) || {}; ok = true; }
+          try { result = (await fn(job.args || {})) ?? {}; ok = true; }
           catch (e) { result = { error: String((e && e.message) || e) }; }
         }
+        // An unsendable result would block the queue: completion retries forever.
+        try { JSON.stringify(result); }
+        catch (e) { ok = false; result = { error: 'result is not JSON-serializable: ' + e.message }; }
         this._pendingCompletion = { id: job.id, claim: job.claim, ok, result };
         if (!(await this._sendCompletion())) return;
       }
@@ -88,7 +92,7 @@ window.CrossPoint = window.CrossPoint || {
     const list = JSON.parse(new TextDecoder().decode(Uint8Array.from(raw, (c) => c.charCodeAt(0))));
     return { status: Number(r.headers.get('X-Relay-Status')), headers: list, body: await r.text() };
   },
-  crypto(op, fields) { return this._post('/api/crypto', Object.assign({ op }, fields || {})); },
+  crypto(op, fields) { return this._post('/api/crypto', Object.assign({}, fields, { op })); },
   async writeFile(plugin, path, dataB64) {
     // Decode in the browser and send the bytes as a multipart file part: the
     // device streams file parts to SD, so embedded NULs and large bodies
@@ -125,6 +129,12 @@ window.CrossPoint = window.CrossPoint || {
         plugin, url, dest, headers: headers || {}, offset, maxBytes
       });
       if (result.complete !== false) return result;
+      if (result.error) {
+        // The device dropped the partial file; resuming would only hide this error.
+        const err = new Error('/api/fetch: ' + result.error + (result.status ? ' (HTTP ' + result.status + ')' : ''));
+        err.result = result;
+        throw err;
+      }
       if (!Number.isFinite(result.bytes) || result.bytes <= offset) {
         throw new Error('/api/fetch made no progress');
       }
@@ -133,9 +143,13 @@ window.CrossPoint = window.CrossPoint || {
   }
 };
 
+// A script that neither loads nor fails in this time is shown as failed, so
+// one stalled request does not hold back the plugins after it.
+const PLUGIN_SCRIPT_TIMEOUT_MS = 30000;
+
 // beforeLoad runs once, before the first matching plugin script; a failure
 // there does not stop the plugins from loading. Resolves to false when the
-// plugin list cannot be loaded.
+// container or the plugin list is missing.
 async function loadPlugins(mount, beforeLoad) {
   const host = document.getElementById('plugin-container');
   if (!host) return false;
@@ -154,33 +168,57 @@ async function loadPlugins(mount, beforeLoad) {
     container.className = 'card';
     container.id = 'plugin-' + p.name;
     host.appendChild(container);
-    CrossPoint._pending = null;
-    try {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = '/plugin?name=' + encodeURIComponent(p.name) + '&file=plugin.js';
-        s.onload = resolve; s.onerror = () => reject(new Error('load ' + p.name));
-        document.body.appendChild(s);
-      });
-      if (typeof CrossPoint._pending === 'function') {
-        CrossPoint._pending(container, {
-          name: p.name,
-          dir: p.dir,
-          relay: (m, u, h, b) => CrossPoint.relay(p.name, m, u, h, b),
-          crypto: (op, f) => CrossPoint.crypto(op, f),
-          writeFile: (path, d) => CrossPoint.writeFile(p.name, path, d),
-          fetchToSd: (u, dest, h, o) => CrossPoint.fetchToSd(p.name, u, dest, h, o),
-          registerAction: (a, fn) => CrossPoint.registerAction(p.name, a, fn),
-          pluginFile: (f) => '/plugin?name=' + encodeURIComponent(p.name) + '&file=' + encodeURIComponent(f)
-        });
-      }
-    } catch (e) {
+    const showFailure = () => {
       const h = document.createElement('h2');
       h.textContent = p.title || p.name;
       const msg = document.createElement('p');
       msg.style.color = '#c0392b';
       msg.textContent = 'Failed to load plugin.';
       container.replaceChildren(h, msg);
+    };
+    const s = document.createElement('script');
+    const render = () => {
+      if (typeof s.cpRender !== 'function') return;
+      const rendered = s.cpRender(container, {
+        name: p.name,
+        dir: p.dir,
+        relay: (m, u, h, b) => CrossPoint.relay(p.name, m, u, h, b),
+        crypto: (op, f) => CrossPoint.crypto(op, f),
+        writeFile: (path, d) => CrossPoint.writeFile(p.name, path, d),
+        fetchToSd: (u, dest, h, o) => CrossPoint.fetchToSd(p.name, u, dest, h, o),
+        registerAction: (a, fn) => CrossPoint.registerAction(p.name, a, fn),
+        pluginFile: (f) => '/plugin?name=' + encodeURIComponent(p.name) + '&file=' + encodeURIComponent(f)
+      });
+      // Not awaited: the next plugin loads while an async render runs.
+      if (rendered && typeof rendered.then === 'function') {
+        rendered.then(null, (e) => { console.warn('Plugin render failed:', p.name, e); showFailure(); });
+      }
+    };
+    const loaded = new Promise((resolve, reject) => {
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('load ' + p.name));
+    });
+    s.src = '/plugin?name=' + encodeURIComponent(p.name) + '&file=plugin.js';
+    document.body.appendChild(s);
+    let timer;
+    const timedOut = new Promise((resolve) => { timer = setTimeout(resolve, PLUGIN_SCRIPT_TIMEOUT_MS, true); });
+    try {
+      if (await Promise.race([loaded.then(() => false), timedOut])) {
+        // Move on to the next plugin, but still render this one if its script arrives.
+        showFailure();
+        loaded.then(() => {
+          if (typeof s.cpRender !== 'function') return;
+          container.replaceChildren();
+          render();
+        }).catch(showFailure);
+        continue;
+      }
+      render();
+    } catch (e) {
+      console.warn('Plugin load failed:', p.name, e);
+      showFailure();
+    } finally {
+      clearTimeout(timer);
     }
   }
   return true;
