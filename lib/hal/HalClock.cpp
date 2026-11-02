@@ -108,7 +108,13 @@ bool HalClock::syncFromNTP() {
       dt.minute = static_cast<uint8_t>(timeinfo.tm_min);
       dt.second = static_cast<uint8_t>(timeinfo.tm_sec);
       dt.weekday = static_cast<uint8_t>(timeinfo.tm_wday);
-      const bool ok = _sdkRtc.set(dt);
+      // One retry: on the Metalio Plus the shared I2C bus has NACKed this write
+      // while WiFi was busy.
+      bool ok = _sdkRtc.set(dt);
+      if (!ok) {
+        delay(10);
+        ok = _sdkRtc.set(dt);
+      }
       if (ok) {
         _cachedUtc = epochFromUtc(dt);
         _hasCachedTime = true;

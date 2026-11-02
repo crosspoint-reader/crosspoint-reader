@@ -198,6 +198,13 @@ bool HalGPIO::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEn
   return inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
 }
 
+bool HalGPIO::wasPinch(float& scale) const {
+  float nx = 0.0f;
+  float ny = 0.0f;
+  unsigned long durationMs = 0;
+  return inputMgr.wasMultiTouchPinch(scale, nx, ny, durationMs);
+}
+
 bool HalGPIO::wasTouchActivity() const { return inputMgr.wasTouchActivity(); }
 
 void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
@@ -283,6 +290,15 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
       coldBootImpliesPowerButton()) {
     return WakeupReason::PowerButton;
   }
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // The Plus sleeps powered off, and its power switch cuts power even on USB;
+  // plugging USB in does not turn it back on (measured), so a cold boot with
+  // USB connected is the power key too.
+  if (BoardConfig::isMetalioEInk4Plus() && wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED &&
+      resetReason == ESP_RST_POWERON) {
+    return WakeupReason::PowerButton;
+  }
+#endif
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected) {
     return WakeupReason::AfterFlash;
   }

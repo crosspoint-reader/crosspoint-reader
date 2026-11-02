@@ -42,7 +42,9 @@ Response:
   "rssi": -45,
   "freeHeap": 123456,
   "uptime": 3600,
-  "device": "X4"
+  "device": "X4",
+  "screenWidth": 480,
+  "screenHeight": 800
 }
 ```
 
@@ -58,7 +60,9 @@ Response:
 | `freeHeap` | number | Free heap in bytes |
 | `uptime` | number | Seconds since boot |
 | `deviceId` | string | With `?plugin=<name>`: 64 hex chars, stable per device and plugin (SHA-256 of an on-device NVS secret and the name); omitted if NVS is unavailable |
-| `device` | string | `"X3"` or `"X4"` hardware detection |
+| `device` | string | `"X3"` or `"X4"` on the C3 build (hardware detection); on other builds the board profile name, e.g. `"metalio_eink4_plus"` |
+| `screenWidth` | number | Panel's short edge in pixels (portrait width); the Files page sizes optimized EPUB images to it on boards it has no built-in profile for |
+| `screenHeight` | number | Panel's long edge in pixels (portrait height) |
 
 ## File Management
 

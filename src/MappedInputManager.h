@@ -71,6 +71,8 @@ class MappedInputManager {
   // the long-press opened. The SDK owns that latch and self-clears it once the
   // contact ends.
   bool wasScreenLongPress(int& x, int& y) const;
+  // Two-finger pinch on release (multi-touch boards): scale < 1 in, > 1 out.
+  bool wasPinch(float& scale) const { return gpio.wasPinch(scale); }
   bool isScreenTouchHeld(int& x, int& y) const;
   // Raw release edge, also true when the contact ended in a swipe or drag-off
   // (which wasScreenTapped never reports). InputSnapshot builders forward it

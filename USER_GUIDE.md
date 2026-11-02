@@ -655,6 +655,10 @@ This feature can be disabled in the **[Controls Settings](#363-controls)** to he
 
 Auto Page Turn automatically advances pages at a set interval, useful for hands-free reading. This feature can be enabled and configured from the **[Reader Menu](#5-reader-menu)** while reading an EPUB.
 
+### Pinch to Change Font Size (Metalio E-Ink4-Plus only)
+
+With touch reader controls on, spread two fingers apart on an EPUB page to step up to the next installed font size, or pinch them together to step down. The size is saved like the **Reader Font Size** setting.
+
 ### Tilt Page Turn (X3 only)
 
 On the **Xteink X3**, the gyroscope can be used to turn pages by tilting the device. This feature is available in the Controls settings.

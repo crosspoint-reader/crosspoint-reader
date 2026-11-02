@@ -901,6 +901,15 @@ void EpubReaderActivity::loop() {
     }
   }
 
+  // Two-finger pinch steps the font size: spread apart = larger, pinch in = smaller.
+  // Metalio E-Ink4-Plus only until the other multi-touch boards are tested.
+  float pinchScale = 1.0f;
+  if (!atEndOfBook && SETTINGS.touchReaderControls && BoardConfig::isMetalioEInk4Plus() &&
+      mappedInput.wasPinch(pinchScale)) {
+    stepFontSize(pinchScale > 1.0f ? 1 : -1);
+    return;
+  }
+
   // Link taps take priority over the reader-menu and page-turn zones.
   if (!atEndOfBook && !currentPageLinks.empty() && SETTINGS.touchReaderControls && mappedInput.hasTouch()) {
     int touchX = 0;
@@ -2525,6 +2534,22 @@ void EpubReaderActivity::applyTextSettingLive() {
   applyReaderTextSettings();
   discardOverlayPage();  // the stored page is laid out with the old settings
   requestUpdate();
+}
+
+// One step through the point sizes the active family ships, clamped at both ends.
+void EpubReaderActivity::stepFontSize(const int direction) {
+  const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.sdFontFamilyName);
+  if (sizes.empty()) return;
+  const uint8_t cur = snapToNearestPointSize(sizes, SETTINGS.fontPointSize);
+  int idx = 0;
+  for (size_t i = 0; i < sizes.size(); ++i) {
+    if (sizes[i] == cur) idx = static_cast<int>(i);
+  }
+  const int next = std::clamp(idx + direction, 0, static_cast<int>(sizes.size()) - 1);
+  if (next == idx && sizes[next] == SETTINGS.fontPointSize) return;
+  SETTINGS.fontPointSize = sizes[next];
+  haptic_feedback::touchAction();
+  applyTextSettingLive();
 }
 
 // Settings-style option pickers for the Text panel's enum rows. Every

@@ -11,7 +11,7 @@
 
 #include "HalGPIO.h"
 
-#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_PICCO
+#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_PICCO || FREEINK_DEVICE_METALIO_EINK4_PLUS
 #include <HalFrontlight.h>
 #endif
 
@@ -86,6 +86,21 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   xSemaphoreGive(modeMutex);
 }
 
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+void HalPowerManager::sleepOnExpanderKey() const {
+  // A sleep with no valid wake source could only end with a reset.
+  if (esp_sleep_is_valid_wakeup_gpio(freeink::metalioplus::EXPANDER_INT_GPIO) &&
+      freeink::metalioplus::prepareKeyWake()) {
+    // armWakeOnPins keeps the RTC domain's pull-up on GPIO2 through the sleep
+    // (the board also has an external one).
+    freeink::PowerManager::armWakeOnPins(1ULL << freeink::metalioplus::EXPANDER_INT_GPIO, true);
+    freeink::PowerManager::deepSleep();
+  }
+  setCpuFrequencyMhz(LOW_POWER_FREQ);
+  freeink::metalioplus::waitForPowerKeyThenRestart();
+}
+#endif
+
 void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton) const {
 #if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_PICCO
   // The frontlight driver and touch share I2C; turn the light off before touch
@@ -159,12 +174,14 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton)
   freeink::metalio::powerOff();
 #endif
 #if FREEINK_DEVICE_METALIO_EINK4_PLUS
-  // The power-switch chip cuts power and the power key cold-boots the board.
-  // If it does not respond, deep sleep woken by the expander INT instead.
+  // The power-switch chip cuts power and the power key cold-boots the board;
+  // it cuts power with USB connected too. Still running means it did not
+  // respond: try once more, then fall back to a key-wake deep sleep. The light
+  // goes off first because that fallback can end up staying awake.
+  Frontlight.setOn(false);
   freeink::metalioplus::powerOff();
-  if (!freeink::metalioplus::prepareKeyWake()) freeink::metalioplus::waitForPowerKeyThenRestart();
-  freeink::PowerManager::armWakeOnPins(1ULL << freeink::metalioplus::EXPANDER_INT_GPIO, true);
-  freeink::PowerManager::deepSleep();
+  freeink::metalioplus::powerOff();
+  sleepOnExpanderKey();
 #endif
 
   if (wakeOnHeldButton) {
