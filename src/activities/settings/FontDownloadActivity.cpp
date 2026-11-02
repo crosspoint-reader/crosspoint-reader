@@ -158,13 +158,19 @@ bool FontDownloadActivity::internString(const char* text, StrRef& outRef) {
 }
 
 bool FontDownloadActivity::fetchAndParseManifest() {
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->releaseSdFontCaches();
+  }
+  // Rescan installed families before any TLS or JSON buffers exist. The rescan
+  // frees and reallocates every registry entry, which fragments the heap if it
+  // runs while the manifest DOM and the catalog arena are live.
+  clearManifest();
+  fontInstaller_.refreshRegistry();
+
   // Download manifest to a temp file on SD card to avoid holding both
   // TLS buffers and the full JSON string in RAM simultaneously.
   static constexpr const char* MANIFEST_TMP = "/fonts_manifest.tmp";
 
-  if (auto* fcm = renderer.getFontCacheManager()) {
-    fcm->releaseSdFontCaches();
-  }
   if (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
       ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC) {
     LOG_ERR("FONT", "Low heap for manifest (%u free, %u max block)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
@@ -228,8 +234,6 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 
   baseUrl_ = doc["baseUrl"] | "";
   downloadUrl_.reserve(baseUrl_.size() + 128);
-  clearManifest();
-  fontInstaller_.refreshRegistry();
 
   JsonArray groupsArr = doc["scriptGroups"].as<JsonArray>();
   JsonArray familiesArr = doc["families"].as<JsonArray>();
@@ -836,9 +840,6 @@ void FontDownloadActivity::rebuildFamilyRowItems() {
         item.value = tr(STR_UPDATE_AVAILABLE);
       } else if (family.installed) {
         item.value = tr(STR_INSTALLED);
-        // Dimmed but still tappable (opens the delete prompt): visual-only
-        // disabled state, the row stays enabled for hit registration.
-        item.state = fui::StateDisabled;
       }
     }
     item.actionValue = static_cast<int16_t>(i);
@@ -858,8 +859,8 @@ bool FontDownloadActivity::handleCustomInput() {
   if (state_ == COMPLETE) {
     int x = 0;
     int y = 0;
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
       {
         RenderLock lock(*this);
         state_ = FAMILY_LIST;
@@ -868,40 +869,23 @@ bool FontDownloadActivity::handleCustomInput() {
       requestUpdate();
     }
   } else if (state_ == ERROR) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       {
         RenderLock lock(*this);
         state_ = FAMILY_LIST;
         rowsDirty_ = true;  // the failed download reset installed/hasUpdate
       }
       requestUpdate();
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (downloadingFamilyIndex_ >= 0 && downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
-        downloadFamily(families_[downloadingFamilyIndex_]);
-        requestUpdateAndWait();
-        return true;
-      } else {
-        {
-          RenderLock lock(*this);
-          state_ = FAMILY_LIST;
-          rowsDirty_ = true;
-        }
-        requestUpdate();
-      }
     } else {
       int x = 0;
       int y = 0;
-      if (mappedInput.wasScreenTapped(x, y)) {
+      if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
         if (downloadingFamilyIndex_ >= 0 && downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
           downloadFamily(families_[downloadingFamilyIndex_]);
           requestUpdateAndWait();
           return true;
         }
-        {
-          RenderLock lock(*this);
-          state_ = FAMILY_LIST;
-          rowsDirty_ = true;
-        }
+        onWifiSelectionComplete(true);
         requestUpdate();
       }
     }
@@ -924,12 +908,9 @@ std::string FontDownloadActivity::formatSize(size_t bytes) {
   return buf;
 }
 
-void FontDownloadActivity::render(RenderLock&&) {
+void FontDownloadActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  renderer.clearScreen();
 
   const char* headerSubtitle = nullptr;
   if (state_ == FAMILY_LIST && hasGroupScreen()) {
@@ -940,19 +921,13 @@ void FontDownloadActivity::render(RenderLock&&) {
   }
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FONT_BROWSER),
                  headerSubtitle);
+}
 
-  const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto centerY = (pageHeight - lineHeight) / 2;
-
-  if (state_ == LOADING_MANIFEST) {
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_LOADING_FONT_LIST));
-  } else if (state_ == GROUP_LIST) {
-    renderUi();
+void FontDownloadActivity::drawFooter() {
+  if (state_ == GROUP_LIST) {
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == FAMILY_LIST) {
-    renderUi();
-
     const bool hasVisibleFamilies = !filteredIndices_.empty();
     const char* confirmLabel = !hasVisibleFamilies            ? ""
                                : isSelectedFamilyDeletable()  ? tr(STR_DELETE)
@@ -961,6 +936,25 @@ void FontDownloadActivity::render(RenderLock&&) {
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, hasVisibleFamilies ? tr(STR_DIR_UP) : "",
                                               hasVisibleFamilies ? tr(STR_DIR_DOWN) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
+}
+
+void FontDownloadActivity::render(RenderLock&& lock) {
+  if (state_ == GROUP_LIST || state_ == FAMILY_LIST) {
+    UiListActivity::render(std::move(lock));
+    return;
+  }
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto centerY = (pageHeight - lineHeight) / 2;
+  renderer.clearScreen();
+  drawChrome();
+
+  if (state_ == LOADING_MANIFEST) {
+    renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_LOADING_FONT_LIST));
   } else if (state_ == DOWNLOADING) {
     const auto& family = families_[downloadingFamilyIndex_];
 

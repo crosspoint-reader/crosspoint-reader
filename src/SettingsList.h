@@ -17,62 +17,43 @@
 #include "HomeButtonSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
+#include "ReaderLineSpacing.h"
 #include "activities/settings/SettingsActivity.h"
 #include "components/UITheme.h"
 #include "util/DictionaryRegistry.h"
+#include "util/SlideSwitch.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
 inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
-  // Built-in font labels (StrId)
-  std::vector<StrId> enumValues = {StrId::STR_NOTO_SANS};
-  // Runtime string labels for SD card fonts
-  std::vector<std::string> enumStringValues;
-
-  // Reserve: first CrossPointSettings::BUILTIN_FONT_COUNT entries use StrId, rest use strings
-  if (registry) {
-    const auto& families = registry->getFamilies();
-    enumStringValues.reserve(families.size());
-    std::transform(families.begin(), families.end(), std::back_inserter(enumStringValues),
-                   [](const SdCardFontFamilyInfo& f) { return f.name; });
-  }
-
-  // Capture the SD font count for the lambdas
-  const int sdFontCount = static_cast<int>(enumStringValues.size());
-
-  // Total option count = built-in + SD card families
-  // For the combined enumStringValues: we need all entries as strings (built-in names + SD names)
-  // The render code checks enumStringValues first, then enumValues. So we build enumStringValues
-  // with all options when SD fonts are present.
+  // The render code checks enumStringValues first, then enumValues, so with SD
+  // fonts present every option (built-in first) is listed as a string.
   std::vector<std::string> allStringValues;
-  if (sdFontCount > 0) {
+  if (registry && registry->getFamilyCount() > 0) {
+    const auto& families = registry->getFamilies();
+    allStringValues.reserve(CrossPointSettings::BUILTIN_FONT_COUNT + families.size());
     allStringValues.push_back(I18N.get(StrId::STR_NOTO_SANS));
-    allStringValues.insert(allStringValues.end(), enumStringValues.begin(), enumStringValues.end());
+    std::transform(families.begin(), families.end(), std::back_inserter(allStringValues),
+                   [](const SdCardFontFamilyInfo& f) { return f.name; });
   }
 
   SettingInfo s;
   s.nameId = StrId::STR_FONT_FAMILY;
   s.type = SettingType::ENUM;
-  s.enumValues = std::move(enumValues);
+  s.enumValues = {StrId::STR_NOTO_SANS};
   s.enumStringValues = std::move(allStringValues);
   s.key = "fontFamily";
   s.category = StrId::STR_CAT_READER;
   s.inTextSettings = true;  // matches the static font-family entry it replaces
 
-  // Capture registry families by copy for the lambdas
-  std::vector<std::string> sdFamilyNames;
-  if (registry) {
-    const auto& families = registry->getFamilies();
-    sdFamilyNames.reserve(families.size());
-    std::transform(families.begin(), families.end(), std::back_inserter(sdFamilyNames),
-                   [](const SdCardFontFamilyInfo& f) { return f.name; });
-  }
-
-  s.valueGetter = [sdFamilyNames]() -> uint8_t {
+  // The lambdas read the registry instead of copying the names: it is only
+  // rescanned while no list built from it is in use, so the indexes match.
+  s.valueGetter = [registry]() -> uint8_t {
     // If an SD card font is selected, find its index
-    if (SETTINGS.sdFontFamilyName[0] != '\0') {
-      for (int i = 0; i < static_cast<int>(sdFamilyNames.size()); i++) {
-        if (sdFamilyNames[i] == SETTINGS.sdFontFamilyName) {
+    if (registry && SETTINGS.sdFontFamilyName[0] != '\0') {
+      const auto& families = registry->getFamilies();
+      for (size_t i = 0; i < families.size(); i++) {
+        if (families[i].name == SETTINGS.sdFontFamilyName) {
           return static_cast<uint8_t>(CrossPointSettings::BUILTIN_FONT_COUNT + i);
         }
       }
@@ -81,14 +62,15 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
     return SETTINGS.fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? SETTINGS.fontFamily : 0;
   };
 
-  s.valueSetter = [sdFamilyNames](uint8_t v) {
+  s.valueSetter = [registry](uint8_t v) {
     if (v < CrossPointSettings::BUILTIN_FONT_COUNT) {
       SETTINGS.fontFamily = v;
       SETTINGS.sdFontFamilyName[0] = '\0';
-    } else {
-      int sdIdx = v - CrossPointSettings::BUILTIN_FONT_COUNT;
-      if (sdIdx < static_cast<int>(sdFamilyNames.size())) {
-        strncpy(SETTINGS.sdFontFamilyName, sdFamilyNames[sdIdx].c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
+    } else if (registry) {
+      const size_t sdIdx = v - CrossPointSettings::BUILTIN_FONT_COUNT;
+      const auto& families = registry->getFamilies();
+      if (sdIdx < families.size()) {
+        strncpy(SETTINGS.sdFontFamilyName, families[sdIdx].name.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
         SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
       }
     }
@@ -104,8 +86,8 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
 // toJson/fromJson — the generic loop skips dynamic entries), while the ENUM
 // contract shared with the web UI stays index-based.
 inline SettingInfo buildFontSizeSetting(const SdCardFontRegistry* registry) {
-  // Captured by copy: getSettingsList() returns by value and the lambdas outlive
-  // this call, so they must not reference the registry.
+  // Captured by copy so the indexes keep matching the option labels built here,
+  // even if the family changes later.
   const std::vector<uint8_t> sizes = readerFontPointSizes(registry, SETTINGS.sdFontFamilyName);
 
   // "pt" is deliberately not translated — see the matching note in
@@ -139,6 +121,8 @@ inline SettingInfo buildFontSizeSetting(const SdCardFontRegistry* registry) {
   return s;
 }
 
+inline constexpr char DICTIONARY_SETTING_KEY[] = "dictionaryName";
+
 // Build the dictionary selection setting dynamically from the folders discovered
 // under /dictionaries. "None" plus one option per dictionary; the selected folder
 // name persists in SETTINGS.dictionaryName (saved/loaded manually in
@@ -151,7 +135,7 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 
   SettingInfo s;
   s.nameId = StrId::STR_DICTIONARY;
-  s.key = "dictionaryName";  // web settings API; persisted by name, not by the generic loop
+  s.key = DICTIONARY_SETTING_KEY;  // web settings API; persisted by name, not by the generic loop
   s.type = SettingType::ENUM;
   s.enumStringValues.reserve(folderNames.size() + 1);
   s.enumStringValues.push_back(I18N.get(StrId::STR_NONE_OPT));
@@ -214,29 +198,50 @@ inline SettingInfo buildLongPressMenuSetting() {
                                   setLongPressMenuFromDisplayValue, "longPressMenuFunction", StrId::STR_CAT_CONTROLS);
 }
 
+struct ShortPowerButtonOption {
+  StrId label;
+  uint8_t value;
+};
+
+// Menu order differs from the persisted enum order, so map by value.
+inline std::vector<ShortPowerButtonOption> shortPowerButtonOptions() {
+  std::vector<ShortPowerButtonOption> options = {{StrId::STR_IGNORE, CrossPointSettings::IGNORE},
+                                                 {StrId::STR_SLEEP, CrossPointSettings::SLEEP},
+                                                 {StrId::STR_PAGE_TURN, CrossPointSettings::PAGE_TURN},
+                                                 {StrId::STR_FORCE_REFRESH, CrossPointSettings::FORCE_REFRESH},
+                                                 {StrId::STR_FOOTNOTES, CrossPointSettings::FOOTNOTES}};
+  options.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
+  if (BoardConfig::hasTouch()) {
+    options.push_back({StrId::STR_CONFIRM, CrossPointSettings::PWR_CONFIRM});
+  } else {
+    options.push_back({StrId::STR_SAVE_CLIPPING, CrossPointSettings::CREATE_CLIPPING});
+  }
+  // Touch boards without a home key have no button for these shortcuts.
+  if (BoardConfig::hasTouch() && !BoardConfig::hasHomeKey()) {
+    options.push_back({StrId::STR_BOOKMARK_OPTION, CrossPointSettings::PWR_BOOKMARK});
+    options.push_back({StrId::STR_KOSYNC, CrossPointSettings::PWR_SYNC});
+    options.push_back({StrId::STR_READER_MENU, CrossPointSettings::PWR_READER_MENU});
+  }
+  return options;
+}
+
 inline std::vector<StrId> buildShortPowerButtonValues() {
-  std::vector<StrId> values = {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-                               StrId::STR_FOOTNOTES};
-  values.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
-  if (BoardConfig::hasTouch()) values.push_back(StrId::STR_CONFIRM);
-  values.push_back(StrId::STR_SAVE_CLIPPING);
+  std::vector<StrId> values;
+  for (const auto& option : shortPowerButtonOptions()) values.push_back(option.label);
   return values;
 }
 
 inline uint8_t shortPowerButtonDisplayValue() {
-  const uint8_t raw = SETTINGS.shortPwrBtn;
-  if (raw <= CrossPointSettings::FOOTNOTES) return raw;
-  if (raw == CrossPointSettings::CREATE_CLIPPING) return BoardConfig::hasTouch() ? 6 : 5;
-  if (raw == CrossPointSettings::PWR_CONFIRM && BoardConfig::hasTouch()) return 5;
+  const auto options = shortPowerButtonOptions();
+  for (size_t i = 0; i < options.size(); i++) {
+    if (options[i].value == SETTINGS.shortPwrBtn) return static_cast<uint8_t>(i);
+  }
   return CrossPointSettings::IGNORE;
 }
 
 inline void setShortPowerButtonFromDisplayValue(const uint8_t displayValue) {
-  if (!BoardConfig::hasTouch() && displayValue == 5) {
-    SETTINGS.shortPwrBtn = CrossPointSettings::CREATE_CLIPPING;
-    return;
-  }
-  SETTINGS.shortPwrBtn = displayValue;
+  const auto options = shortPowerButtonOptions();
+  SETTINGS.shortPwrBtn = displayValue < options.size() ? options[displayValue].value : CrossPointSettings::IGNORE;
 }
 
 inline SettingInfo buildShortPowerButtonSetting() {
@@ -251,44 +256,100 @@ inline std::vector<StrId> homeThemeValues() {
   return {VALUES, VALUES + count};
 }
 
-// Shared immutable list for persistence and as the base for UI settings.
-// Constructed once; persistence borrows it without copying SettingInfo entries.
-const std::vector<SettingInfo>& getBaseSettingsList();
+using SettingVisitor = void (*)(void* context, SettingInfo& info);
 
-// UI callers own a copy for runtime filtering and font/dictionary options.
-inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
-                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
-  const auto& baseList = getBaseSettingsList();
-  std::vector<SettingInfo> v;
-  v.reserve(baseList.size() + (dictionaries && !dictionaries->empty() ? 1 : 0));
-  v.insert(v.end(), baseList.begin(), baseList.end());
-  // Frontlit and lightless variants of a board share one binary (EEGO A4);
-  // presence is the I2C probe result from Frontlight.begin(). UI-only: the probe
-  // has not run at load time, so the base list must keep the persisted key.
-  if (!Frontlight.present()) {
-    v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE; }),
-            v.end());
+// Visits synchronously in list order. Borrowed references are valid only during
+// the callback; move from the descriptor to retain ownership. Its board conditions
+// must be fixed before settings load, or load and save would see different keys.
+void forEachBaseSetting(SettingVisitor visit, void* context);
+
+template <typename Fn>
+void forEachBaseSetting(Fn& fn) {
+  forEachBaseSetting([](void* context, SettingInfo& info) { (*static_cast<Fn*>(context))(info); }, &fn);
+}
+
+// Number of entries forEachBaseSetting() visits.
+size_t countBaseSettings();
+
+// True if this board hides the setting at runtime. UI-only: the probes have not
+// run at load time, so the base list keeps these keys persisted.
+inline bool isHiddenOnDevice(const SettingInfo& s) {
+  switch (s.nameId) {
+    // Frontlit and lightless variants of a board share one binary (EEGO A4);
+    // presence is the I2C probe result from Frontlight.begin(). The slide
+    // switch's position owns its bound function (the light at boot too).
+    case StrId::STR_RESTORE_LIGHT_ON_WAKE:
+      return !Frontlight.present() || slideSwitchOwnsLight();
+    case StrId::STR_NIGHT_MODE:
+      return slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE);
+    case StrId::STR_TOUCH_READER_CONTROLS:
+      return slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_TOUCH_CONTROLS);
+    // Tilt page turn needs an IMU with a gyroscope. A failed probe on one boot
+    // must not drop the saved value.
+    case StrId::STR_TILT_PAGE_TURN:
+      return !halTiltSensor.isAvailable();
+    // Clock settings need the RTC, as on the device (ClockSettingsActivity).
+    case StrId::STR_CLOCK:
+    case StrId::STR_CLOCK_FORMAT:
+    case StrId::STR_TIMEZONE:
+    case StrId::STR_CLOCK_DST:
+    case StrId::STR_CLOCK_IN_HEADER:
+    case StrId::STR_CLOCK_SYNCED:
+      return !halClock.isAvailable();
+    // Hidden on touch boards: the Home button actions (X4 Pro) or the short
+    // power click (other touch boards) cover these shortcuts.
+    case StrId::STR_LONG_PRESS_MENU:
+      return BoardConfig::hasTouch();
+    default:
+      return false;
   }
-  if (registry && registry->getFamilyCount() > 0) {
-    auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });
-    if (it != v.end()) {
-      *it = buildFontFamilySetting(registry);
-    }
-  }
-  {
+}
+
+// Replaces the font family and size entries with options built from the fonts
+// present; other entries are left unchanged.
+inline void buildFontOptions(SettingInfo& s, const SdCardFontRegistry* registry) {
+  if (s.nameId == StrId::STR_FONT_FAMILY && registry && registry->getFamilyCount() > 0) {
+    s = buildFontFamilySetting(registry);
+  } else if (s.nameId == StrId::STR_FONT_SIZE) {
     // Unconditional: even with no SD fonts installed the sizes come from the
     // built-in family rather than a fixed Small/Medium/Large/XL enum.
-    auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_SIZE; });
-    if (it != v.end()) {
-      *it = buildFontSizeSetting(registry);
-    }
+    s = buildFontSizeSetting(registry);
   }
-  if (dictionaries && !dictionaries->empty()) {
-    // Insert at the end of the Reader category (just before the first Controls entry).
-    auto it =
-        std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.category == StrId::STR_CAT_CONTROLS; });
-    v.insert(it, buildDictionarySetting(*dictionaries));
-  }
+}
+
+// Visits the settings shown on this device in list order, one at a time, for
+// callers that need not hold the whole list in memory. Entries whose key
+// wants(key) rejects are skipped before their options are built; wants gets
+// nullptr for entries without a key (actions). The visited entry is valid only
+// during the callback; move from it to keep it.
+template <typename Wants, typename Visit>
+void forEachSetting(const SdCardFontRegistry* registry, const std::vector<DictionaryEntry>* dictionaries, Wants wants,
+                    Visit visit) {
+  bool dictionaryPending = dictionaries && !dictionaries->empty();
+  const auto visitDictionary = [&] {
+    dictionaryPending = false;
+    if (!wants(DICTIONARY_SETTING_KEY)) return;
+    SettingInfo s = buildDictionarySetting(*dictionaries);
+    visit(s);
+  };
+  auto each = [&](SettingInfo& s) {
+    if (isHiddenOnDevice(s)) return;
+    if (dictionaryPending && s.category == StrId::STR_CAT_CONTROLS) visitDictionary();
+    if (!wants(s.key)) return;
+    buildFontOptions(s, registry);
+    visit(s);
+  };
+  forEachBaseSetting(each);
+  if (dictionaryPending) visitDictionary();
+}
+
+// UI callers own the list for runtime filtering and font/dictionary options.
+inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
+                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
+  std::vector<SettingInfo> v;
+  // Room for every base entry and the dictionary, so the list never reallocates.
+  v.reserve(countBaseSettings() + (dictionaries && !dictionaries->empty() ? 1 : 0));
+  forEachSetting(
+      registry, dictionaries, [](const char*) { return true; }, [&v](SettingInfo& s) { v.push_back(std::move(s)); });
   return v;
 }

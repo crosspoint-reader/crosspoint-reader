@@ -504,8 +504,8 @@ bool decodeStyleWire(const uint8_t (&in)[STYLE_WIRE_BYTES], CssStyle& style) {
   const uint8_t fontWeight = in[offset++];
   const uint8_t textDecoration = in[offset++];
   const uint8_t direction = in[offset++];
-  if (textAlign > static_cast<uint8_t>(CssTextAlign::None) || fontStyle > static_cast<uint8_t>(CssFontStyle::Italic) ||
-      fontWeight > static_cast<uint8_t>(CssFontWeight::Bold) || (textDecoration & ~CSS_TEXT_DECORATION_MASK) != 0 ||
+  if (textAlign > static_cast<uint8_t>(CssTextAlign::None) || fontStyle > static_cast<uint8_t>(CssFontStyle::Inherit) ||
+      fontWeight > static_cast<uint8_t>(CssFontWeight::Inherit) || (textDecoration & ~CSS_TEXT_DECORATION_MASK) != 0 ||
       direction > static_cast<uint8_t>(CssTextDirection::Rtl)) {
     return false;
   }
@@ -798,6 +798,7 @@ CssTextAlign CssParser::interpretAlignment(std::string_view val) {
 CssFontStyle CssParser::interpretFontStyle(std::string_view val) {
   val = trimAsciiWhitespace(val);
 
+  if (iequalsAscii(val, "inherit")) return CssFontStyle::Inherit;
   if (iequalsAscii(val, "italic") || iequalsAscii(val, "oblique")) return CssFontStyle::Italic;
   return CssFontStyle::Normal;
 }
@@ -805,6 +806,7 @@ CssFontStyle CssParser::interpretFontStyle(std::string_view val) {
 CssFontWeight CssParser::interpretFontWeight(std::string_view val) {
   val = trimAsciiWhitespace(val);
 
+  if (iequalsAscii(val, "inherit")) return CssFontWeight::Inherit;
   // Named values
   if (iequalsAscii(val, "bold") || iequalsAscii(val, "bolder")) return CssFontWeight::Bold;
   if (iequalsAscii(val, "normal") || iequalsAscii(val, "lighter")) return CssFontWeight::Normal;

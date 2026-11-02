@@ -81,7 +81,7 @@ struct RadioInputs {
   uint32_t idleMs;    // since a remote was last connected (or the radio came up)
   Heap heap;
   bool connectionBusy = false;
-  bool hasBond = false;  // a remote has been chosen (Config::peerAddr): the only reason to start at Home
+  bool hasBond = false;  // a remote has been chosen (Config::peerAddr): a book or Home starts the radio only for one
 };
 
 // The ONE answer to "may the radio be on now". Everything that starts, keeps or stops the
@@ -101,6 +101,7 @@ constexpr Why radioVerdict(const RadioInputs& in, const Profile& profile = activ
         return in.idleStopped ? Why::IdleNoLink : Why::Ok;
       }
       if (in.where != Where::Reader) return Why::NotReading;
+      if (!in.hasBond) return Why::NoBond;
       if (!in.pageShown) return Why::PageNotShown;
       // A radio stopped for a starved build waits for the page, not for a key: restarting it
       // on a key release starved the build again and the start held the loop for 2.85 s (X3,
@@ -151,6 +152,7 @@ struct NoteInputs {
   bool refused;        // this visit's radio start was refused (heap rules, rollback)
   uint32_t runningMs;  // how long the radio has been up without a break in this visit
   bool acknowledged;   // a page turn was applied
+  bool hasBond;        // a remote has been chosen
 };
 
 // The ONE answer to "what does the status bar say about the remote now".
@@ -158,11 +160,11 @@ constexpr LinkNote nextLinkNote(const LinkNote note, const NoteInputs& in) {
   if (!in.enabled || !in.reading) return LinkNote::None;
   // Every visit starts over. A remote still linked has nothing to wait for, and a radio off for
   // idleness does not try until a key of the device wakes it.
-  if (in.entered) return in.linked || in.idleStopped ? LinkNote::None : LinkNote::Connecting;
+  if (in.entered) return in.linked || in.idleStopped || !in.hasBond ? LinkNote::None : LinkNote::Connecting;
   switch (note) {
     case LinkNote::Connecting:
       if (in.linked) return LinkNote::None;
-      return in.refused || in.runningMs >= kLinkNoteFailMs ? LinkNote::Failed : LinkNote::Connecting;
+      return in.refused || !in.hasBond || in.runningMs >= kLinkNoteFailMs ? LinkNote::Failed : LinkNote::Connecting;
     case LinkNote::Failed:
     case LinkNote::Connected:
     case LinkNote::LowMemory:

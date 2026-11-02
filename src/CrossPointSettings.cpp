@@ -13,6 +13,7 @@
 
 #include "I18nKeys.h"
 #include "ReaderFontSizes.h"
+#include "ReaderLineSpacing.h"
 #include "SettingsList.h"
 #include "fontIds.h"
 #include "util/ParagraphIndentMigration.h"
@@ -67,10 +68,10 @@ uint8_t CrossPointSettings::sleepTimeoutEnumToMinutes(const uint8_t legacyValue)
 void CrossPointSettings::toJson(JsonDocument& doc) const {
   const CrossPointSettings& s = *this;
 
-  for (const auto& info : getBaseSettingsList()) {
-    if (!info.key) continue;
+  auto visit = [&](const SettingInfo& info) {
+    if (!info.key) return;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
-    if (!info.valuePtr && !info.stringOffset) continue;
+    if (!info.valuePtr && !info.stringOffset) return;
 
     if (info.stringOffset) {
       const char* strPtr = (const char*)&s + info.stringOffset;
@@ -84,7 +85,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
     } else {
       doc[info.key] = s.*(info.valuePtr);
     }
-  }
+  };
+  forEachBaseSetting(visit);
 
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   doc["frontButtonBack"] = frontButtonBack;
@@ -127,10 +129,10 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
 
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
 
-  for (const auto& info : getBaseSettingsList()) {
-    if (!info.key) continue;
+  auto visit = [&](const SettingInfo& info) {
+    if (!info.key) return;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
-    if (!info.valuePtr && !info.stringOffset) continue;
+    if (!info.valuePtr && !info.stringOffset) return;
 
     if (info.stringOffset) {
       // destPtr starts out holding the struct-initializer default; it stays that
@@ -140,7 +142,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
         LOG_ERR("CPS", "Misconfigured SettingInfo: stringMaxLen is 0 for key '%s'", info.key);
         destPtr[0] = '\0';
         needsResave = true;
-        continue;
+        return;
       }
 
       bool loaded = false;
@@ -186,7 +188,8 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       }
       s.*(info.valuePtr) = v;
     }
-  }
+  };
+  forEachBaseSetting(visit);
 
   // Plugin System did not exist in older settings files. Preserve the behavior
   // of users who already have SD plugins installed, while keeping the new
@@ -221,6 +224,12 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN, SLEEP_TIMEOUT_COUNT, (uint8_t)SLEEP_10_MIN);
     sleepTimeoutMinutes = sleepTimeoutEnumToMinutes(legacyValue);
+    needsResave = true;
+  }
+  // "lineSpacing" saves predate the 1.0 option: Tight/Normal/Wide/Extra Wide (0..3) become 1.1..1.45.
+  if (doc["lineHeight"].isNull() && doc["lineSpacing"].is<uint8_t>()) {
+    const int legacyValue = doc["lineSpacing"].as<uint8_t>();
+    lineSpacing = legacyValue + 1 < LINE_COMPRESSION_COUNT ? static_cast<uint8_t>(legacyValue + 1) : LINE_SPACING_120;
     needsResave = true;
   }
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
@@ -333,42 +342,14 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.embeddedStyle = embeddedStyle != 0;
-  spec.imageRendering = imageRendering;
+  // Same layout as Display, so switching between them keeps the section cache.
+  spec.imageRendering = imageRendering == IMAGES_DISPLAY_BW ? static_cast<uint8_t>(IMAGES_DISPLAY) : imageRendering;
   spec.focusReadingEnabled = focusReadingEnabled != 0;
   return spec;
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
-  // SD card and vector fonts get a wider scale than the built-ins: their
-  // faces carry their own (often generous) natural line height, so the old
-  // Bookerly-tuned 1.1/1.2 steps were visually near-indistinguishable. At
-  // 12pt in portrait (~760px viewport) this scale spans ~26/24/19/15 lines
-  // per page — each step reads as a clearly different density.
-  if (sdFontFamilyName[0] != '\0') {
-    switch (lineSpacing) {
-      case TIGHT:
-        return 0.95f;
-      case NORMAL:
-      default:
-        return 1.0f;
-      case WIDE:
-        return 1.3f;
-      case EXTRA_WIDE:
-        return 1.6f;
-    }
-  }
-
-  switch (lineSpacing) {
-    case TIGHT:
-      return 0.90f;
-    case NORMAL:
-    default:
-      return 0.95f;
-    case WIDE:
-      return 1.0f;
-    case EXTRA_WIDE:
-      return 1.05f;
-  }
+  return LINE_SPACING_MULTIPLIERS[lineSpacing < LINE_COMPRESSION_COUNT ? lineSpacing : LINE_SPACING_120];
 }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {

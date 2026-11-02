@@ -1,4 +1,5 @@
 #pragma once
+#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -33,10 +34,12 @@ class Section {
   };
   // Held only while an incremental build is in progress (see startBuild). Carries the
   // live parser plus the strings it references (the parser stores them by reference)
-  // and the in-RAM page-offset table.
+  // and the in-RAM page-offset table. The table is a deque so it grows in small chunks: a vector
+  // doubling past 1024 pages needs 24 KB contiguous, and a failed allocation aborts. The deque
+  // (like the parser's anchor list) takes one ~0.5 KB node as soon as the build starts.
   struct BuildContext {
     std::unique_ptr<ChapterHtmlSlimParser> parser;
-    std::vector<PageLutEntry> lut;
+    std::deque<PageLutEntry> lut;
     std::string parsePath;
     std::string contentBase;
     std::string imageBasePath;
@@ -98,7 +101,10 @@ class Section {
   bool startBuild(const ReaderRenderSpec& spec, const std::function<void()>& popupFn = nullptr);
   // Lay out up to maxPages more pages (maxPages <= 0 = build to completion). Returns
   // false on error (the build is abandoned). Sets isBuildComplete() when finished.
-  bool buildSomeMore(int maxPages);
+  // yieldNow, when given, is asked after every parse step (1 KB of HTML, whose callbacks may
+  // lay out and write several pages); true ends the call early so the caller can serve input.
+  // The next call resumes where this one left off.
+  bool buildSomeMore(int maxPages, bool (*yieldNow)() = nullptr);
   bool isBuilding() const { return static_cast<bool>(build_); }
   bool isBuildComplete() const { return buildComplete_; }
   // Best-known total page count: the exact pageCount once finalized, or a smoothed byte-based

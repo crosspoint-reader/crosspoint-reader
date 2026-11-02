@@ -43,6 +43,9 @@ struct Subscriber {
   char dir[64] = {0};       // "<root>/<name>"
   uint8_t mask = 0;         // bit per Event
   uint8_t connectMask = 0;  // events whose handler declares "connect": true
+  // Hash of each handler's "require_meta" key, 0 = unfiltered. A hash keeps
+  // emit() free of manifest reads; a collision only queues an extra event.
+  uint32_t metaKeyHash[static_cast<size_t>(pluginevents::Event::COUNT)] = {};
 };
 Subscriber subscribers[MAX_EVENT_PLUGINS];
 
@@ -56,6 +59,19 @@ int eventFromName(const char* name) {
 }
 
 std::string outboxPath(const Subscriber& sub) { return std::string(sub.dir) + OUTBOX_NAME; }
+
+// FNV-1a, never 0 (0 marks an unfiltered handler).
+uint32_t metaKeyHash(const char* key) {
+  uint32_t hash = 2166136261u;
+  for (; *key; key++) hash = (hash ^ static_cast<uint8_t>(*key)) * 16777619u;
+  return hash == 0 ? 1 : hash;
+}
+
+// The book an event is about: "book", or "path" for book.downloaded.
+const char* eventBook(JsonVariantConst vars) {
+  const char* book = vars["book"] | "";
+  return book[0] != '\0' ? book : (vars["path"] | "");
+}
 
 }  // namespace
 
@@ -87,14 +103,23 @@ void refreshSubscriptions() {
     if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) continue;
     uint8_t mask = 0;
     uint8_t connectMask = 0;
+    uint32_t metaHashes[static_cast<size_t>(Event::COUNT)] = {};
     for (JsonPairConst kv : doc["events"].as<JsonObjectConst>()) {
       const int e = eventFromName(kv.key().c_str());
       if (e < 0) {
         LOG_DBG("PEVT", "%s: unknown event '%s' ignored", entry.name.c_str(), kv.key().c_str());
         continue;
       }
+      // A filter that is not a string must not fall back to "every book".
+      JsonVariantConst requireMeta = kv.value()["require_meta"];
+      if (!requireMeta.isNull() && !requireMeta.is<const char*>()) {
+        LOG_ERR("PEVT", "%s: %s require_meta is not a string; handler ignored", entry.name.c_str(), kv.key().c_str());
+        continue;
+      }
       mask |= static_cast<uint8_t>(1u << e);
       if (kv.value()["connect"] | false) connectMask |= static_cast<uint8_t>(1u << e);
+      const char* requiredMeta = requireMeta | "";
+      if (requiredMeta[0] != '\0') metaHashes[e] = metaKeyHash(requiredMeta);
     }
     // sleep.enter exists to act before the chip powers down (sleep image,
     // pre-sleep sync), so subscribing implies "connect": true; requiring the
@@ -107,6 +132,7 @@ void refreshSubscriptions() {
     strncpy(sub.dir, entry.dir.c_str(), sizeof(sub.dir) - 1);
     sub.mask = mask;
     sub.connectMask = connectMask;
+    memcpy(sub.metaKeyHash, metaHashes, sizeof(metaHashes));
     LOG_DBG("PEVT", "%s subscribes mask=0x%02x", sub.name, sub.mask);
   }
 }
@@ -170,8 +196,29 @@ void emit(const Event e, const Var* vars, const size_t varCount) {
     return;
   }
 
+  // The book's sidecar, read once and shared by every filtered handler.
+  pluginhttp::Headers meta;
+  bool metaLoaded = false;
   for (const auto& sub : subscribers) {
     if (sub.name[0] == '\0' || !(sub.mask & eventBit(e))) continue;
+    const uint32_t wanted = sub.metaKeyHash[static_cast<size_t>(e)];
+    if (wanted != 0) {
+      // Filtered at queue time, so other books' events take no outbox space
+      // and never make the sleep path bring WiFi up.
+      if (!metaLoaded) {
+        const char* book = eventBook(doc["vars"]);
+        if (book[0] != '\0') pluginhttp::loadConfigFile(std::string(book) + ".meta.json", meta);
+        metaLoaded = true;
+      }
+      bool matched = false;
+      for (const auto& kv : meta) {
+        if (!kv.second.empty() && metaKeyHash(kv.first.c_str()) == wanted) {
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) continue;
+    }
     const std::string path = outboxPath(sub);
     HalFile file = Storage.open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND);
     if (!file || !file.isOpen()) {
@@ -309,7 +356,7 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
   // flat fields written at download time) as {meta.*} variables, e.g. a
   // service book id for a sync handler.
   pluginhttp::Headers meta;
-  const char* book = vars["book"] | "";
+  const char* book = eventBook(vars);
   if (book[0] != '\0') {
     pluginhttp::loadConfigFile(std::string(book) + ".meta.json", meta);
     for (auto& kv : meta) kv.first = "{meta." + kv.first + "}";

@@ -40,7 +40,18 @@ class HalPowerManager {
 
   // Setup wake up GPIO and enter deep sleep
   // Should be called inside main loop() to handle the currentLockMode
-  void startDeepSleep(HalGPIO& gpio) const;
+  // wakeOnHeldButton: arm the wake without waiting for the power button's
+  // release, so a press that is still down wakes the device straight back up
+  // through the normal power-button wake path.
+  void startDeepSleep(HalGPIO& gpio, bool wakeOnHeldButton = false) const;
+
+#if FREEINK_DEVICE_PICCO
+  // While USB powers the device, light-sleep instead of deep sleep (deep sleep
+  // cannot observe the charger), calling onStatus whenever the charging state
+  // or percentage changes. Returns true when the power button ended the hold,
+  // false when USB went away or was never present.
+  bool holdWhileUsbPowered(HalGPIO& gpio, void (*onStatus)(bool charging, uint16_t percent)) const;
+#endif
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;

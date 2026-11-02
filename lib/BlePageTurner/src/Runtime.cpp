@@ -300,6 +300,7 @@ void stepLinkNote(const bool entered, const bool acknowledged) {
                !attemptInFlight.load(std::memory_order_acquire);
   in.runningMs = noteRadioUp ? port::nowMs() - noteRadioUpSinceMs : 0;
   in.acknowledged = acknowledged;
+  in.hasBond = config->peerAddr[0] != '\0';
   LinkNote note = nextLinkNote(linkNoteNow.load(std::memory_order_relaxed), in);
   if (visit.manualConnect && in.refused && note == LinkNote::Failed) {
     const Why refused = startRefusal.load(std::memory_order_relaxed);

@@ -126,7 +126,7 @@ class ParsedText {
                                         std::vector<bool>& noSpaceBeforeVec);
   std::vector<size_t> computeHyphenatedLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                                   std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
-                                                  std::vector<bool>& noSpaceBeforeVec);
+                                                  std::vector<bool>& noSpaceBeforeVec, size_t maxLines);
   bool hyphenateWordAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
                             std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks);
   void extractLine(size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths,
@@ -179,8 +179,9 @@ class ParsedText {
   uint8_t sizeSlotsInUse() const { return sizeSlotCount; }
   float sizeSlotScale(uint8_t slot) const { return sizeSlotScales[slot]; }
   void setSizeSlotFontId(uint8_t slot, int32_t fontId) { sizeSlotFontIds[slot] = fontId; }
+  // A set stop flag abandons extraction; the caller must discard this block.
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
                              bool includeLastLine = true, int8_t characterSpacing = 0, uint8_t wordSpacingPercent = 100,
-                             size_t maxLines = SIZE_MAX);
+                             size_t maxLines = SIZE_MAX, const bool* stopRequested = nullptr);
 };
