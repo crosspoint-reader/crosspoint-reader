@@ -109,15 +109,26 @@ EpdFontFamily notosans18FontFamily(18, &notosans18RegularFont, &notosans18BoldFo
 
 #endif  // OMIT_FONTS
 
-EpdFont smallFont(&ubuntu_8_regular);
+// Boards with a UI scale draw the UI faces from 2-bit sources, scaled at
+// runtime (GfxRenderer::insertUiFont): their grey edges keep stem widths even
+// after scaling. Unscaled boards keep the 1-bit faces; the faces a build does
+// not pick are dropped by the linker.
+#include <builtinFonts/ubuntu_10_bold_2bit.h>
+#include <builtinFonts/ubuntu_10_regular_2bit.h>
+#include <builtinFonts/ubuntu_12_bold_2bit.h>
+#include <builtinFonts/ubuntu_12_regular_2bit.h>
+#include <builtinFonts/ubuntu_8_regular_2bit.h>
+constexpr bool kScaledUi = BoardConfig::DEFAULT_DEVICE.uiScale != 1.0f;
+
+EpdFont smallFont(kScaledUi ? &ubuntu_8_regular_2bit : &ubuntu_8_regular);
 EpdFontFamily smallFontFamily(8, &smallFont);
 
-EpdFont ui10RegularFont(&ubuntu_10_regular);
-EpdFont ui10BoldFont(&ubuntu_10_bold);
+EpdFont ui10RegularFont(kScaledUi ? &ubuntu_10_regular_2bit : &ubuntu_10_regular);
+EpdFont ui10BoldFont(kScaledUi ? &ubuntu_10_bold_2bit : &ubuntu_10_bold);
 EpdFontFamily ui10FontFamily(10, &ui10RegularFont, &ui10BoldFont);
 
-EpdFont ui12RegularFont(&ubuntu_12_regular);
-EpdFont ui12BoldFont(&ubuntu_12_bold);
+EpdFont ui12RegularFont(kScaledUi ? &ubuntu_12_regular_2bit : &ubuntu_12_regular);
+EpdFont ui12BoldFont(kScaledUi ? &ubuntu_12_bold_2bit : &ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(12, &ui12RegularFont, &ui12BoldFont);
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.

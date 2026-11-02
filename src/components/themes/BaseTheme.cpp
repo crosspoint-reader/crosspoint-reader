@@ -55,59 +55,6 @@ void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int 
 
 }  // namespace
 
-void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
-  // Top line
-  renderer.drawLine(x + 1, y, x + battWidth - 3, y);
-  // Bottom line
-  renderer.drawLine(x + 1, y + rectHeight - 1, x + battWidth - 3, y + rectHeight - 1);
-  // Left line
-  renderer.drawLine(x, y + 1, x, y + rectHeight - 2);
-  // Battery end
-  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rectHeight - 2);
-  renderer.drawPixel(x + battWidth - 1, y + 3);
-  renderer.drawPixel(x + battWidth - 1, y + rectHeight - 4);
-  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rectHeight - 5);
-}
-
-void BaseTheme::drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY) {
-  // Draw lightning bolt (white/inverted on black fill for visibility)
-  renderer.drawLine(boltX + 4, boltY + 0, boltX + 5, boltY + 0, false);
-  renderer.drawLine(boltX + 3, boltY + 1, boltX + 4, boltY + 1, false);
-  renderer.drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 2, false);
-  renderer.drawLine(boltX + 3, boltY + 3, boltX + 4, boltY + 3, false);
-  renderer.drawLine(boltX + 2, boltY + 4, boltX + 3, boltY + 4, false);
-  renderer.drawLine(boltX + 1, boltY + 5, boltX + 4, boltY + 5, false);
-  renderer.drawLine(boltX + 2, boltY + 6, boltX + 3, boltY + 6, false);
-  renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, false);
-}
-
-void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const {
-  const bool charging = gpio.isUsbConnected();
-
-  const int maxFillWidth = rect.width - 5;
-  const int fillHeight = rect.height - 4;
-  if (maxFillWidth <= 0 || fillHeight <= 0) {
-    return;
-  }
-  // +1 to round up so we always fill at least one pixel
-  int filledWidth = percentage * maxFillWidth / 100 + 1;
-  if (filledWidth > maxFillWidth) {
-    filledWidth = maxFillWidth;
-  }
-
-  // When charging, ensure minimum fill so lightning bolt is fully visible
-  constexpr int minFillForBolt = 8;
-  if (charging && filledWidth < minFillForBolt) {
-    filledWidth = std::min(minFillForBolt, maxFillWidth);
-  }
-
-  renderer.fillRect(rect.x + 2, rect.y + 2, filledWidth, fillHeight);
-
-  if (charging) {
-    drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2);
-  }
-}
-
 void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   // Left aligned: icon on left, percentage on right (reader mode)
   const uint16_t percentage = powerManager.getBatteryPercentage();
@@ -128,12 +75,21 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText.c_str());
+    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width + 2, rect.y, percentageText.c_str());
   }
 
-  const Rect iconRect{rect.x, y, rect.width, rect.height};
-  drawBatteryOutline(renderer, rect.x, y, rect.width, rect.height);
-  fillBatteryIcon(renderer, iconRect, percentage);
+  namespace fui = freeink::ui;
+  fui::GfxRendererFrame<1> ui(renderer, SMALL_FONT_ID);
+  fui::BatteryIndicatorProps props;
+  props.percent = static_cast<uint8_t>(std::min<uint16_t>(percentage, 100));
+  props.charging = gpio.isUsbConnected();
+  props.glyphWidth = static_cast<int16_t>(rect.width);
+  props.glyphHeight = static_cast<int16_t>(rect.height);
+  // The SDK glyph width excludes its two-pixel terminal nub.
+  fui::batteryIndicator(ui.frame,
+                        fui::Rect{static_cast<int16_t>(rect.x), static_cast<int16_t>(y),
+                                  static_cast<int16_t>(rect.width + 2), static_cast<int16_t>(rect.height)},
+                        props);
 }
 
 void BaseTheme::drawCoverPlaceholder(const GfxRenderer& renderer, Rect rect) {
@@ -892,7 +848,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     GUI.drawBatteryLeft(renderer,
                         Rect{leftClusterX + leftClusterWidth, textY, metrics.batteryWidth, metrics.batteryHeight},
                         showBatteryPercentage);
-    int batteryWidth = metrics.batteryWidth;
+    int batteryWidth = metrics.batteryWidth + 2;
 
     if (showBatteryPercentage) {
       const uint16_t percentage = powerManager.getBatteryPercentage();

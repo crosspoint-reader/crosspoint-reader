@@ -126,28 +126,60 @@ const uint8_t* ScaledFont::scaleGlyph(const uint32_t index) {
 
   const int dstW = dst.width;
   const int dstH = dst.height;
-  uint8_t* out = allocZeroed((static_cast<size_t>(dstW) * dstH + 3) / 4);
-  if (!out) return nullptr;
-  // Source position of each destination pixel centre, 16.16 fixed point.
+  // Source position of each destination pixel centre, 16.16 fixed point,
+  // shifted by (ox, oy) in 1/256 source pixels.
   const int32_t step = (256 << 16) / scale256_;
   const int32_t origin = step / 2 - (1 << 15);
+  constexpr int FULL = 3 << 16;  // interpolated coverage of solid black
+  const auto coverageAt = [&](const int dx, const int dy, const int ox, const int oy) {
+    const int32_t sx = origin + dx * step + (ox << 8);
+    const int32_t sy = origin + dy * step + (oy << 8);
+    const int x0 = sx >> 16, y0 = sy >> 16, fx = (sx >> 8) & 0xFF, fy = (sy >> 8) & 0xFF;
+    const int upper = sample(x0, y0) * (256 - fx) + sample(x0 + 1, y0) * fx;
+    const int lower = sample(x0, y0 + 1) * (256 - fx) + sample(x0 + 1, y0 + 1) * fx;
+    return upper * (256 - fy) + lower * fy;
+  };
+
+  // Grid fit: at a fractional scale each source column lands at a different
+  // pixel phase, so equal stems round to unequal widths. Shift the sampling
+  // grid by up to 3/8 of a source pixel, horizontally then vertically, to the
+  // offset whose pixels are least ambiguous (closest to white or black).
+  const auto ambiguity = [&](const int ox, const int oy) {
+    int64_t total = 0;
+    for (int dy = 0; dy < dstH; ++dy) {
+      for (int dx = 0; dx < dstW; ++dx) {
+        const int c = coverageAt(dx, dy, ox, oy);
+        total += std::min(c, FULL - c);
+      }
+    }
+    return total;
+  };
+  const auto bestOffset = [&](const auto& ambiguityFor) {
+    int best = 0;
+    int64_t bestAmbiguity = ambiguityFor(0);
+    for (int offset = -96; offset <= 96; offset += 32) {
+      const int64_t a = offset == 0 ? bestAmbiguity : ambiguityFor(offset);
+      if (a < bestAmbiguity) {
+        bestAmbiguity = a;
+        best = offset;
+      }
+    }
+    return best;
+  };
+  const int ox = bestOffset([&](const int o) { return ambiguity(o, 0); });
+  const int oy = bestOffset([&](const int o) { return ambiguity(ox, o); });
+
+  uint8_t* out = allocZeroed((static_cast<size_t>(dstW) * dstH + 3) / 4);
+  if (!out) return nullptr;
+  // The B/W pass paints every non-white level, so INK_FROM sets the stroke
+  // weight: with the grid fit, 30% coverage matched the stem widths of
+  // natively rasterized Ubuntu at 1.6x from 2-bit sources. The three ink
+  // levels split the rest of the range.
+  constexpr int INK_FROM = FULL * 3 / 10;
   for (int dy = 0; dy < dstH; ++dy) {
-    const int32_t sy = origin + dy * step;
-    const int y0 = sy >> 16;
-    const int fy = (sy >> 8) & 0xFF;
     for (int dx = 0; dx < dstW; ++dx) {
-      const int32_t sx = origin + dx * step;
-      const int x0 = sx >> 16;
-      const int fx = (sx >> 8) & 0xFF;
-      const int upper = sample(x0, y0) * (256 - fx) + sample(x0 + 1, y0) * fx;
-      const int lower = sample(x0, y0 + 1) * (256 - fx) + sample(x0 + 1, y0 + 1) * fx;
-      // Interpolated coverage, 3 << 16 = black. The B/W pass paints every
-      // non-white level, so ink starts at half coverage (as for drop caps) and
-      // the three ink levels split the upper half; a lower start fattens every
-      // stroke by the interpolated rim.
-      const int coverage = upper * (256 - fy) + lower * fy;
-      constexpr int HALF = 3 << 15;
-      const int level = coverage < HALF ? 0 : std::min(3, 1 + (coverage - HALF) / (1 << 15));
+      const int coverage = coverageAt(dx, dy, ox, oy);
+      const int level = coverage < INK_FROM ? 0 : std::min(3, 1 + 3 * (coverage - INK_FROM) / (FULL - INK_FROM));
       const int pos = dy * dstW + dx;
       out[pos >> 2] |= static_cast<uint8_t>(level << ((3 - (pos & 3)) * 2));
     }
