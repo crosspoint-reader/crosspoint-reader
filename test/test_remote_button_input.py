@@ -67,6 +67,7 @@ struct HalHaptics {
 bool MappedInputManager::mapButton(Button b, bool (HalGPIO::*fn)(uint8_t) const) const {
   return (gpio.*fn)(static_cast<uint8_t>(b));
 }
+void MappedInputManager::updateEdgeSwipe() const {}
 bool MappedInputManager::wasBackGesture() const { return false; }
 MappedInputManager::SwipeDir MappedInputManager::wasSwipe(int*, int*) const { return SwipeDir::None; }
 """ + "\n".join(methods) + r"""

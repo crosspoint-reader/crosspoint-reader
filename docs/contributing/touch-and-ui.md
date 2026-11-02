@@ -121,7 +121,7 @@ Three gestures are handled once, for every screen. Activities must not add their
 
 Side and bottom recognition uses a band of 8% of the shorter logical screen dimension, clamped to 20–48 pixels. Movement squared must exceed 2499. Recognition can fire while held; release coordinates have no additional duration gate. Exact diagonals use the vertical axis. Top-edge controls retain the SDK release classifier and top 14% band. `Activity::acceptsBackGesture()` preserves page-turn ownership on a reading surface while allowing Back in reader panels and footnotes. Only accepted navigation suppresses the remaining contact.
 
-Side and bottom Home hints use the recovered masked artwork at fixed pixel dimensions. No hint is drawn for the top edge or the Home-key board's bottom menu action. The next screen paint replaces the hint; there is no dwell timer.
+Side and bottom Home hints use the recovered masked artwork at fixed pixel dimensions. No hint is drawn for the top edge or the Home-key board's bottom menu action. Hints default to on and can be disabled in Display. Accepted edge actions report zero held time so a slow swipe cannot trigger long Back. Side hints request a repaint even if Back does not navigate; there is no dwell timer. The artwork uses lossless byte-run compression.
 
 Because the back gesture arrives as `Button::Back`, most button-era activities gain back-swipe support with zero changes.
 

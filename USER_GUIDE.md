@@ -59,7 +59,7 @@ The device utilises the standard buttons on the Xteink X4 (in the same layout as
 
 ### Touch navigation
 
-On touch devices, pull inward from either side edge to go Back. A small arrow appears before navigation. While reading a page, side swipes remain available for page turns; Back gestures also work in reader panels and footnotes. Pull inward from the bottom edge to go Home; a Home icon appears before the screen changes. On devices with a Home key, the bottom gesture can open the reader menu while reading when **Show Reader Menu** is set to **Swipe Up**. Pull down from the top edge to open the control center.
+On touch devices, pull inward from either side edge to go Back. A small arrow appears before navigation. While reading a page, side swipes remain available for page turns; Back gestures also work in reader panels and footnotes. Pull inward from the bottom edge to go Home; a Home icon appears before the screen changes. On devices with a Home key, the bottom gesture can open the reader menu while reading when **Show Reader Menu** is set to **Swipe Up**. Pull down from the top edge to open the control center. Turn off **Settings → Display → Swipe Hints** to hide the Back and Home hints without disabling gestures. Hints are on by default.
 
 ### Button Layout
 

@@ -40,11 +40,13 @@ void drawEdgeSwipeHint(const GfxRenderer& renderer, edge_swipe::Edge edge, int s
   // Rotation can add one byte per physical row. RenderLock serializes this shared scratch.
   static uint8_t underlay[1024];
   if (!renderer.copyRegionToBuffer(x, y, w, h, underlay, sizeof(underlay))) return;
+  BitmapRunReader bitReader(bits), maskReader(mask);
   for (int row = 0; row < h; ++row) {
-    for (int col = 0; col < w; ++col) {
-      const int offset = row * (w / 8) + col / 8;
-      const uint8_t bit = 0x80 >> (col % 8);
-      if (mask[offset] & bit) renderer.drawPixel(x + col, y + row, !(bits[offset] & bit));
+    for (int col = 0; col < w; col += 8) {
+      const uint8_t pixels = bitReader.next(), opaque = maskReader.next();
+      for (int bit = 0; bit < 8; ++bit) {
+        if (opaque & (0x80 >> bit)) renderer.drawPixel(x + col + bit, y + row, !(pixels & (0x80 >> bit)));
+      }
     }
   }
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);

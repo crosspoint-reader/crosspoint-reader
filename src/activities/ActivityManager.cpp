@@ -130,12 +130,14 @@ void ActivityManager::loop() {
     mappedInput.acceptEdgeSwipe((side && currentActivity->acceptsBackGesture()) || (bottom && bottomAccepted));
     edge = mappedInput.edgeSwipe(edgeX, edgeY);
     const bool sideHint = side && edge != edge_swipe::Edge::None;
-    if (sideHint) {
+    if (sideHint && SETTINGS.swipeHints) {
       RenderLock lock;
       drawEdgeSwipeHint(renderer, edge, edgeX, edgeY);
+      // Clear the hint even when the activity consumes Back without navigating.
+      requestUpdate();
     }
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
-      {
+      if (SETTINGS.swipeHints) {
         RenderLock lock;
         drawEdgeSwipeHint(renderer, edge, edgeX, edgeY);
       }
