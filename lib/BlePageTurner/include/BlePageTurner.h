@@ -184,8 +184,8 @@ struct Status {
   bool scanning;
   bool connected;
   bool connecting;
-  bool idleStopped;     // stopped for idleness, until a key or the user starts it again
-  bool readerDeferred;  // the book's start was refused for memory
+  bool idleStopped;      // stopped for idleness, until a key or the user starts it again
+  bool readerDeferred;   // the book's start was refused for memory
   bool buildFitsBeside;  // running, and a chapter build fits next to it (RadioPolicy.h, S31 only)
 };
 Status status();
