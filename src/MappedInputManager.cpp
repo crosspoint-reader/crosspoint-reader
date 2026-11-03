@@ -28,7 +28,14 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
   powerButtonInput.update(isPowerHeld(), powerReleased || sharedConfirmRelease,
                           (powerHeld || powerReleased) ? gpio.getPowerButtonHeldTime() : 0,
                           SETTINGS.getPowerButtonDuration());
-  if (!buttonBuffer.capture(sampleButtons(), bufferButtons && !deferHomeButtonAction)) {
+  auto buttons = sampleButtons();
+  if (wasPowerReleaseConsumed()) {
+    // A shared Confirm click emits both edges on release.
+    const auto mask = 1u << (sharedConfirmRelease ? HalGPIO::BTN_CONFIRM : HalGPIO::BTN_POWER);
+    buttons.pressed &= ~mask;
+    buttons.released &= ~mask;
+  }
+  if (!buttonBuffer.capture(buttons, bufferButtons && !deferHomeButtonAction)) {
     LOG_ERR("INPUT", "Button queue overflow; discarding input until release");
   }
   const bool pagePressed =
@@ -554,6 +561,8 @@ bool MappedInputManager::wasReleased(const Button button) const {
       SETTINGS.doublePwrBtn != CrossPointSettings::IGNORE) {
     return false;  // Classified clicks are dispatched once through homeAction.
   }
+  // A delayed release can already have fired its long action in this dispatch.
+  if (replayButtons && (longPressFiredButtons & (1u << static_cast<uint8_t>(button))) != 0) return false;
   if (button == Button::Confirm && remoteInput.button == RemoteButton::Confirm) return true;
   if (button == Button::Back && remoteInput.button == RemoteButton::Back) return true;
   if ((button == Button::NavNext || button == Button::Right) && remoteInput.button == RemoteButton::Next) return true;

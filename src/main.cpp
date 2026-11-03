@@ -1069,6 +1069,7 @@ void loop() {
   static bool screenshotComboActive = false;
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
     mappedInputManager.resetPowerButtonInput();
+    mappedInputManager.resetButtonBuffer(mappedInputManager.buffersButtons());
     screenshotComboActive = true;
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
@@ -1082,6 +1083,8 @@ void loop() {
   }
   if (screenshotComboActive) {
     mappedInputManager.resetPowerButtonInput();
+    // Consume queued edges and any Down contact that outlives the shortcut.
+    mappedInputManager.resetButtonBuffer(mappedInputManager.buffersButtons());
     if (gpio.isPressed(HalGPIO::BTN_POWER)) return;
     if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
       screenshotButtonsReleased = true;
