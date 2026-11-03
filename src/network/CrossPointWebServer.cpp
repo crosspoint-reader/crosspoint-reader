@@ -1593,7 +1593,8 @@ void CrossPointWebServer::handleGetSettings() const {
     doc.clear();
     doc["key"] = s.key;
     doc["name"] = I18N.get(s.nameId);
-    doc["category"] = I18N.get(s.category);
+    // No category: persisted and readable by plugins, but not a row on the settings page.
+    if (s.category != StrId::STR_NONE_OPT) doc["category"] = I18N.get(s.category);
 
     switch (s.type) {
       case SettingType::TOGGLE: {

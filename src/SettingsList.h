@@ -280,6 +280,11 @@ inline bool isHiddenOnDevice(const SettingInfo& s) {
     // switch's position owns its bound function (the light at boot too).
     case StrId::STR_RESTORE_LIGHT_ON_WAKE:
       return !Frontlight.present() || slideSwitchOwnsLight();
+    case StrId::STR_BRIGHTNESS:
+    case StrId::STR_FRONTLIGHT:
+      return !Frontlight.present();
+    case StrId::STR_WARMTH:
+      return !Frontlight.present() || !Frontlight.hasColorTemperature();
     case StrId::STR_NIGHT_MODE:
       return slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE);
     case StrId::STR_TOUCH_READER_CONTROLS:
