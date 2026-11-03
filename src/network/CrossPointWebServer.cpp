@@ -1696,7 +1696,7 @@ void CrossPointWebServer::handlePostSettings() {
   for (const auto& s : settings) {
     if (!s.key || s.webHidden || s.type != SettingType::STRING || s.stringSetter || s.stringMaxLen == 0) continue;
     if (!doc[s.key].is<const char*>()) continue;
-    if (strlen(doc[s.key].as<const char*>()) >= s.stringMaxLen) {
+    if (doc[s.key].as<std::string>().size() >= s.stringMaxLen) {
       server->send(400, "text/plain",
                    String(I18N.get(s.nameId)) + ": at most " + String(s.stringMaxLen - 1) + " bytes");
       return;

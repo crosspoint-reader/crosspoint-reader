@@ -541,18 +541,20 @@
         '</div>';
     });
     return html + '<div class="item-actions">' +
-      '<button class="btn-small btn-save-server" onclick="saveOpdsDownloadOptions(this)"' + (opdsDownloadUnsaved() ? '' : ' disabled') + '>Save</button>' +
+      '<button class="btn-small btn-save-server" id="opds-download-save" onclick="saveOpdsDownloadOptions()"' + (opdsDownloadUnsaved() ? '' : ' disabled') + '>Save</button>' +
       '</div></div>';
   }
 
   // An edit made while the save is in flight keeps the button enabled.
-  async function saveOpdsDownloadOptions(btn) {
+  async function saveOpdsDownloadOptions() {
     if (!await saveSettings()) return;
     OPDS_DOWNLOAD_KEYS.map(findSetting).filter(Boolean).forEach(function(s) {
       const current = getValue(s);
       if (current !== undefined) s.value = current;
     });
-    btn.disabled = !opdsDownloadUnsaved();
+    // Looked up again: the OPDS section may have redrawn during the save.
+    const btn = document.getElementById('opds-download-save');
+    if (btn) btn.disabled = !opdsDownloadUnsaved();
   }
 
   function renderOpdsSection(loadFailed) {
