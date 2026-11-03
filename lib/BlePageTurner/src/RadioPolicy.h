@@ -47,10 +47,21 @@ inline constexpr size_t kS3StackLargestDrop = 45056;
 // is six of the largest request (24,576 B), wider than the four the census alone would justify.
 inline constexpr size_t kS3InternalAllocMax = 4096;
 inline constexpr size_t kS3MinimumLargest = 6 * kS3InternalAllocMax;
+// S31 (Metalio Plus, FREEINK_BLE_STACK_S31): ESP-IDF's prebuilt host and the controller blocks it marks
+// safe go to PSRAM (src/platform/S31NimbleMemory.cpp). Measured 02/11/2026 on the Bluetooth screen: free
+// 126,904 / largest 94,196 before the stack, 91,564 / 61,428 after, so it took 35,340 B of internal RAM
+// and 32,768 B of the largest block. Malloc and new above 4,096 B go to PSRAM as on the S3 (the same
+// CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL), so the reader keeps the S3's room.
+inline constexpr size_t kS31StackBytes = 35340 + 4096;  // measured, plus a margin of one allocator page
+inline constexpr size_t kS31StackLargestDrop = 32768;
 inline constexpr Profile kX3Profile{kStackBytes, kStartFreeBytes, kMinimumLargestBlockBytes, 0};
 inline constexpr Profile kS3Profile{kS3StackBytes, kS3StackBytes + kS3MinimumLargest, kS3MinimumLargest,
                                     kS3MinimumLargest + kS3StackLargestDrop + 2048};
-#ifdef FREEINK_BLE_STACK_IN_PSRAM
+inline constexpr Profile kS31Profile{kS31StackBytes, kS31StackBytes + kS3MinimumLargest, kS3MinimumLargest,
+                                     kS3MinimumLargest + kS31StackLargestDrop + 2048};
+#if defined(FREEINK_BLE_STACK_S31)
+inline constexpr const Profile& activeProfile() { return kS31Profile; }
+#elif defined(FREEINK_BLE_STACK_IN_PSRAM)
 inline constexpr const Profile& activeProfile() { return kS3Profile; }
 #else
 inline constexpr const Profile& activeProfile() { return kX3Profile; }
