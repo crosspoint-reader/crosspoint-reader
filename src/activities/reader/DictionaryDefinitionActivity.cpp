@@ -565,16 +565,14 @@ void DictionaryDefinitionActivity::startSelection(const int x, const int y) {
       return;
     }
     lookup->pendingWord = selected.text;
+    lock.unlock();
+    if (!lookup->pendingWord.empty()) navigateDefinition(false);
   });
 }
 
 void DictionaryDefinitionActivity::loop() {
   if (initialLayoutFailed) {
     if (millis() - messageTime >= MESSAGE_DURATION_MS) finish();
-    return;
-  }
-  if (lookup && !lookup->pendingWord.empty()) {
-    navigateDefinition(false);
     return;
   }
   if (messageVisible && millis() - messageTime >= MESSAGE_DURATION_MS) {

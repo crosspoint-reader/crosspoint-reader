@@ -87,7 +87,13 @@ template<typename... Args> void logDebug(Args&&...) {}
 
 enum class StrId { STR_DICT_LOOKING_UP, STR_DICT_NOT_FOUND, STR_DICT_LOW_MEMORY, STR_DICT_READ_FAILED,
                    STR_DICT_DECOMPRESS_ERROR, STR_DICT_RESTORE_FAILED, STR_DICT_HISTORY_FULL };
-struct RenderLock { ~RenderLock() {} };
+int renderLockDepth = 0;
+struct RenderLock {
+  bool locked = true;
+  RenderLock() { ++renderLockDepth; }
+  void unlock() { if (locked) { --renderLockDepth; locked = false; } }
+  ~RenderLock() { unlock(); }
+};
 unsigned long millis() { return 0; }
 struct HalMemory {
   struct Heap { size_t freeBytes = 1024 * 1024, largestBlockBytes = 1024 * 1024; };
@@ -218,7 +224,7 @@ struct DictionaryDefinitionActivity {
   ActivityResultHandler callback;
   BodyArea bodyArea() const { return {0, 0, 12, 20}; }
   void requestUpdate() {}
-  void requestUpdateAndWait() {}
+  void requestUpdateAndWait() { assert(renderLockDepth == 0); }
   void finish() { finished = true; }
   void setResult(ActivityResult&& next) { result = std::move(next); }
   void openDictionaryWordSelect() { selectionOpened = true; }
@@ -259,8 +265,17 @@ int main() {
            view.content.pages.capacity() == 0 && view.content.lines.capacity() == 0 &&
            view.renderer.cache.released;
   };
-  view.lookup->pendingWord = "alias";
-  view.navigateDefinition(false);
+  // The selection result completes lookup outside buffered input dispatch.
+  view.startSelection();
+  ClippingResult lookupSelection;
+  lookupSelection.text = "alias";
+  lookupSelection.startPageOffset = 0;
+  lookupSelection.endPageOffset = 1;
+  lookupSelection.startWordIndex = 2;
+  lookupSelection.endWordIndex = 0;
+  view.child.reset();
+  view.callback(ActivityResult{std::move(lookupSelection)});
+  assert(view.lookup->pendingWord.empty() && renderLockDepth == 0);
   assert(view.lookup->depth == 1 && view.content.text == dictionary.entries.at(20));
   assert(view.content.text == "other definition");
   dictionary.failRead = true;
