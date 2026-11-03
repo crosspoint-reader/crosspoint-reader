@@ -24,6 +24,9 @@
 #include <base64.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
+#include <fcntl.h>
+#include <lwip/sockets.h>
+#include <unistd.h>
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/hash.h>
 
@@ -137,6 +140,30 @@ size_t wsLastProgressSent = 0;
 String wsLastCompleteName;
 size_t wsLastCompleteSize = 0;
 unsigned long wsLastCompleteAt = 0;
+// millis() of each client's last event, 0 for a free slot.
+uint32_t wsLastActivity[WEBSOCKETS_SERVER_CLIENT_MAX] = {};
+
+// A client that vanishes mid-upload (phone asleep, Wi-Fi lost) would keep its
+// slot and the upload lock until TCP gives up. Clients send START right after
+// connecting and then data without pause, so close one that has sent nothing
+// for two minutes; a browser runs timers in a hidden tab only once a minute.
+// A ping heartbeat would not do: the Calibre plugin does not answer pings while
+// it uploads.
+constexpr uint32_t WS_IDLE_TIMEOUT_MS = 120000;
+
+void closeIdleWsClients(WebSocketsServer& ws) {
+  const uint32_t now = millis();
+  for (uint8_t i = 0; i < WEBSOCKETS_SERVER_CLIENT_MAX; i++) {
+    if (wsLastActivity[i] == 0) {
+      // Time a new client from its first sight, so one that never finishes the
+      // handshake (and so never raises an event) is closed too.
+      if (ws.clientIsConnected(i)) wsLastActivity[i] = now;
+    } else if (now - wsLastActivity[i] > WS_IDLE_TIMEOUT_MS && ws.clientIsConnected(i)) {
+      LOG_INF("WS", "Client %u sent nothing for %u s, closing it", i, (unsigned)(WS_IDLE_TIMEOUT_MS / 1000));
+      ws.disconnect(i);  // Its DISCONNECTED event frees the slot's time
+    }
+  }
+}
 
 String normalizeWebPath(const String& inputPath) {
   if (inputPath.isEmpty() || inputPath == "/") {
@@ -425,13 +452,14 @@ void CrossPointWebServer::begin() {
   // Start WebSocket server for fast binary uploads
   LOG_DBG("WEB", "Starting WebSocket server on port %d...", wsPort);
   wsServer.reset(new WebSocketsServer(wsPort));
+  std::fill(std::begin(wsLastActivity), std::end(wsLastActivity), 0);
   wsInstance = const_cast<CrossPointWebServer*>(this);
   wsServer->begin();
   wsServer->onEvent(wsEventCallback);
   LOG_DBG("WEB", "WebSocket server started");
 
-  udpActive = udp.begin(LOCAL_UDP_PORT);
-  LOG_DBG("WEB", "Discovery UDP %s on port %d", udpActive ? "enabled" : "failed", LOCAL_UDP_PORT);
+  openDiscoverySocket();
+  LOG_DBG("WEB", "Discovery UDP %s on port %d", discoverySocket >= 0 ? "enabled" : "failed", LOCAL_UDP_PORT);
 
   // Do not subscribe the serving task to the task watchdog. Arduino WebServer
   // permits five-second client and ACK waits, which can consume the entire
@@ -455,7 +483,7 @@ void CrossPointWebServer::suspendTransferServices() {
     wsServer->close();
     wsServer.reset();
   }
-  if (udpActive) udp.stop();
+  closeDiscoverySocket();
   LOG_DBG("WEB", "Transfer services suspended, heap %u, max block %u", (unsigned)ESP.getFreeHeap(),
           (unsigned)ESP.getMaxAllocHeap());
 }
@@ -466,13 +494,14 @@ void CrossPointWebServer::resumeTransferServices() {
     auto* ws = new (std::nothrow) WebSocketsServer(wsPort);
     if (ws) {
       wsServer.reset(ws);
+      std::fill(std::begin(wsLastActivity), std::end(wsLastActivity), 0);
       wsServer->begin();
       wsServer->onEvent(wsEventCallback);
     } else {
       LOG_ERR("WEB", "OOM: WebSocket server restart");
     }
   }
-  if (udpActive) udpActive = udp.begin(LOCAL_UDP_PORT);
+  openDiscoverySocket();
   LOG_DBG("WEB", "Transfer services resumed, heap %u, max block %u", (unsigned)ESP.getFreeHeap(),
           (unsigned)ESP.getMaxAllocHeap());
 }
@@ -525,10 +554,7 @@ void CrossPointWebServer::stop() {
     LOG_DBG("WEB", "WebSocket server stopped");
   }
 
-  if (udpActive) {
-    udp.stop();
-    udpActive = false;
-  }
+  closeDiscoverySocket();
 
   // Brief delay to allow any in-flight handleClient() calls to complete
   delay(20);
@@ -577,29 +603,54 @@ void CrossPointWebServer::handleClient() {
   // Handle WebSocket events
   if (wsServer) {
     wsServer->loop();
+    closeIdleWsClients(*wsServer);
   }
 
-  // Respond to discovery broadcasts
-  if (udpActive) {
-    int packetSize = udp.parsePacket();
-    if (packetSize > 0) {
-      char buffer[16];
-      int len = udp.read(buffer, sizeof(buffer) - 1);
-      if (len > 0) {
-        buffer[len] = '\0';
-        if (strcmp(buffer, "hello") == 0) {
-          String hostname = WiFi.getHostname();
-          if (hostname.isEmpty()) {
-            hostname = "crosspoint";
-          }
-          String message = "crosspoint (on " + hostname + ");" + String(wsPort);
-          udp.beginPacket(udp.remoteIP(), udp.remotePort());
-          udp.write(reinterpret_cast<const uint8_t*>(message.c_str()), message.length());
-          udp.endPacket();
-        }
-      }
-    }
+  answerDiscovery();
+}
+
+// Discovery uses a plain socket: NetworkUDP keeps a 1,460-byte send buffer
+// while it is open, for a reply of a few dozen bytes.
+void CrossPointWebServer::openDiscoverySocket() {
+  if (discoverySocket >= 0) return;
+  const int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  if (fd < 0) return;
+  sockaddr_in addr = {};
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(LOCAL_UDP_PORT);
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  if (bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0 ||
+      fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK) < 0) {
+    close(fd);
+    return;
   }
+  discoverySocket = fd;
+}
+
+void CrossPointWebServer::closeDiscoverySocket() {
+  if (discoverySocket < 0) return;
+  close(discoverySocket);
+  discoverySocket = -1;
+}
+
+// Answers a "hello" broadcast with the device name and WebSocket port.
+void CrossPointWebServer::answerDiscovery() const {
+  if (discoverySocket < 0) return;
+  char buffer[16];
+  sockaddr_in from = {};
+  socklen_t fromLen = sizeof(from);
+  const int len =
+      recvfrom(discoverySocket, buffer, sizeof(buffer) - 1, 0, reinterpret_cast<sockaddr*>(&from), &fromLen);
+  if (len <= 0) return;
+  buffer[len] = '\0';
+  if (strcmp(buffer, "hello") != 0) return;
+  const char* hostname = WiFi.getHostname();
+  char message[96];
+  const int messageLen = snprintf(message, sizeof(message), "crosspoint (on %s);%u",
+                                  hostname && hostname[0] ? hostname : "crosspoint", static_cast<unsigned>(wsPort));
+  if (messageLen <= 0) return;
+  sendto(discoverySocket, message, std::min(static_cast<size_t>(messageLen), sizeof(message) - 1), 0,
+         reinterpret_cast<sockaddr*>(&from), fromLen);
 }
 
 CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() const {
@@ -2167,42 +2218,67 @@ void CrossPointWebServer::handleRelay() {
   LOG_DBG("WEB", "Relay TLS start: heap %u, max block %u: %s", (unsigned)ESP.getFreeHeap(),
           (unsigned)ESP.getMaxAllocHeap(), url.c_str());
 
-  // One bounded body buffer; larger payloads use /api/fetch. This task is
-  // subscribed to the task WDT for the whole web-server session, so feed it
-  // while a slow peer keeps the request waiting.
-  static constexpr size_t RELAY_BODY_LIMIT = 32 * 1024;
-  // Heap kept free while the body is buffered. TLS already holds ~25 KB, and an
-  // exhausted heap stops Wi-Fi from receiving the ACKs that free the server's
-  // send buffers: the whole web server then stalls until the device is reset.
-  static constexpr size_t RELAY_HEAP_RESERVE = 16 * 1024;
-  String respBody;
-  pluginhttp::Headers respHeaders;
-  const int status = pluginhttp::request(
-      nullptr, url, method, body, headers, respBody, RELAY_BODY_LIMIT, &respHeaders,
+  // The body is forwarded as it arrives and never buffered whole; the cap keeps
+  // large files on /api/fetch.
+  static constexpr size_t RELAY_BODY_LIMIT = 64 * 1024;
+  size_t sent = 0;
+  bool chunked = false;
+  bool complete = false;
+  const int status = pluginhttp::requestStream(
+      nullptr, url, method, body, headers,
+      [&](const int upstreamStatus, const pluginhttp::Headers& respHeaders, const long contentLength) {
+        if (contentLength > static_cast<long>(RELAY_BODY_LIMIT)) {
+          LOG_ERR("WEB", "Relay body of %ld bytes is over the %u byte cap", contentLength,
+                  static_cast<unsigned>(RELAY_BODY_LIMIT));
+          return false;
+        }
+        String headersJson;
+        {  // TLS is open: free the document before the header copies below
+          JsonDocument headersDoc;
+          JsonArray headerArray = headersDoc.to<JsonArray>();
+          for (const auto& h : respHeaders) {
+            JsonArray pair = headerArray.add<JsonArray>();
+            pair.add(h.first);
+            pair.add(h.second);
+          }
+          serializeJson(headersDoc, headersJson);
+        }
+        server->sendHeader("X-Relay-Status", String(upstreamStatus));
+        server->sendHeader("X-Relay-Headers", headersJson);
+        chunked = contentLength < 0;
+        server->setContentLength(chunked ? CONTENT_LENGTH_UNKNOWN : static_cast<size_t>(contentLength));
+        server->send(200, "application/octet-stream", "");
+        return true;
+      },
+      [&](const uint8_t* data, const size_t len) {
+        if (len > RELAY_BODY_LIMIT - sent) {
+          LOG_ERR("WEB", "Relay body is over the %u byte cap", static_cast<unsigned>(RELAY_BODY_LIMIT));
+          return false;
+        }
+        server->sendContent(reinterpret_cast<const char*>(data), len);
+        sent += len;
+        return server->client().connected() != 0;
+      },
+      complete,
       [] {
+        // This task is subscribed to the task WDT for the whole web-server
+        // session: feed it while a slow peer keeps the request waiting.
         resetTaskWatchdogIfSubscribed();
         return false;  // never aborts; only feeds
-      },
-      RELAY_HEAP_RESERVE);
-  // Transport failure, a truncated body, or one over the cap / out of memory
-  // (the reason is logged by pluginhttp).
+      });
+  // Nothing sent yet: a transport failure or a body over the cap (the device
+  // log names which).
   if (status < 0) {
     server->send(502, "application/json", "{\"error\":\"relay failed; large bodies need /api/fetch\"}");
     return;
   }
-
-  JsonDocument headersDoc;
-  JsonArray headerArray = headersDoc.to<JsonArray>();
-  for (const auto& h : respHeaders) {
-    JsonArray pair = headerArray.add<JsonArray>();
-    pair.add(h.first);
-    pair.add(h.second);
+  // The 200 is already out. Closing early makes the browser's read fail instead
+  // of returning a short body.
+  if (!complete) {
+    server->client().stop();
+    return;
   }
-  String headersJson;
-  serializeJson(headersDoc, headersJson);
-  server->sendHeader("X-Relay-Status", String(status));
-  server->sendHeader("X-Relay-Headers", headersJson);
-  server->send(200, "application/octet-stream", respBody);
+  if (chunked) server->sendContent("");
 }
 
 namespace {}  // namespace
@@ -2813,8 +2889,9 @@ void CrossPointWebServer::handlePluginRunnerPage() const {
 }
 
 CrossPointWebServer::PluginJob* CrossPointWebServer::allocPluginJob() {
+  if (!pluginJobs) pluginJobs = makeUniqueNoThrow<PluginJob[]>(MAX_PLUGIN_JOBS);
   PluginJob* best = nullptr;
-  for (auto& job : pluginJobs) {
+  for (PluginJob& job : pluginJobSlots()) {
     if (job.state == JOB_EMPTY) return &job;
     const bool finished = job.state == JOB_DONE || job.state == JOB_ERROR;
     if (finished && (!best || job.updatedAt < best->updatedAt)) best = &job;
@@ -2844,7 +2921,8 @@ void CrossPointWebServer::handlePluginJobSubmit() {
   }
   PluginJob* job = allocPluginJob();
   if (!job) {
-    server->send(503, "application/json", "{\"error\":\"job queue full\"}");
+    server->send(503, "application/json",
+                 pluginJobs ? "{\"error\":\"job queue full\"}" : "{\"error\":\"out of memory\"}");
     return;
   }
   *job = PluginJob{};
@@ -2865,7 +2943,7 @@ void CrossPointWebServer::handlePluginJobClaim() {
   if (rejectIfPluginsDisabled()) return;
   const String plugin = server->arg("plugin");
   const uint32_t now = millis();
-  for (auto& job : pluginJobs) {
+  for (PluginJob& job : pluginJobSlots()) {
     if (job.state == JOB_RUNNING && now - job.updatedAt > PLUGIN_JOB_LEASE_MS) {
       job.state = JOB_PENDING;
       job.updatedAt = now;
@@ -2892,7 +2970,7 @@ void CrossPointWebServer::handlePluginJobComplete() {
   if (!readJsonBody(req)) return;
   const uint32_t id = req["id"] | 0;
   const uint32_t claim = req["claim"] | 0;
-  for (auto& job : pluginJobs) {
+  for (PluginJob& job : pluginJobSlots()) {
     if (job.id != id) continue;
     if (job.state == JOB_DONE || job.state == JOB_ERROR) {
       server->send(200, "application/json", "{\"ok\":true}");
@@ -2926,7 +3004,7 @@ void CrossPointWebServer::handlePluginJobStatus() {
   if (rejectIfPluginsDisabled()) return;
   const uint32_t id = strtoul(server->arg("id").c_str(), nullptr, 10);
   static constexpr const char* STATE_NAMES[] = {"empty", "pending", "running", "done", "error"};
-  for (auto& job : pluginJobs) {
+  for (PluginJob& job : pluginJobSlots()) {
     if (job.id != id || job.state == JOB_EMPTY) continue;
     const std::string msg = "{\"id\":" + std::to_string(id) + ",\"state\":\"" + STATE_NAMES[job.state] +
                             "\",\"result\":" + (job.result[0] ? job.result : "null") + "}";
@@ -2953,6 +3031,7 @@ void CrossPointWebServer::wsEventCallback(uint8_t num, WStype_t type, uint8_t* p
 //   3. Server sends TEXT "PROGRESS:<received>:<total>" after each chunk
 //   4. Server sends TEXT "DONE" or "ERROR:<message>" when complete
 void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+  if (num < WEBSOCKETS_SERVER_CLIENT_MAX) wsLastActivity[num] = type == WStype_DISCONNECTED ? 0 : millis();
   switch (type) {
     case WStype_DISCONNECTED:
       LOG_DBG("WS", "Client %u disconnected", num);
