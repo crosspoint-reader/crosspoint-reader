@@ -265,13 +265,17 @@ bool applyNightSchedule() {
   const auto boundary = nightschedule::latestBoundary(now, SETTINGS.nightScheduleOnSlot, SETTINGS.nightScheduleOffSlot);
   if (boundary.at == 0 || boundary.at == APP_STATE.nightScheduleBoundary) return false;
 
+  // Night mode is saved before the boundary, so a power loss between the two
+  // saves reapplies the boundary on the next boot instead of skipping it.
+  const bool changed = (SETTINGS.screenInverted != 0) != boundary.nightOn;
+  if (changed) {
+    SETTINGS.screenInverted = boundary.nightOn ? 1 : 0;
+    SETTINGS.saveToFile();
+  }
   APP_STATE.nightScheduleBoundary = boundary.at;
   APP_STATE.saveToFile();
   LOG_INF("NIGHT", "Schedule boundary: night mode %s", boundary.nightOn ? "on" : "off");
-  if ((SETTINGS.screenInverted != 0) == boundary.nightOn) return false;
-  SETTINGS.screenInverted = boundary.nightOn ? 1 : 0;
-  SETTINGS.saveToFile();
-  return true;
+  return changed;
 }
 
 bool handleX4ProFrontlightDoubleClick() {
