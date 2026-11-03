@@ -57,5 +57,21 @@ TEST(RadioVerdictS31Test, TheS3NumbersWouldRefuseAnS31HomeThatFits) {
   EXPECT_EQ(radioVerdict(in, kS31Profile), Why::HeapLow);
 }
 
+// A chapter build runs beside the S31's stack: the remote stays linked through a chapter change.
+TEST(RadioVerdictS31Test, AChapterBuildFitsBesideTheS31StackOnly) {
+  EXPECT_TRUE(kS31Profile.buildsBesideStack);
+  EXPECT_FALSE(kS3Profile.buildsBesideStack);
+  EXPECT_FALSE(kX3Profile.buildsBesideStack);
+  EXPECT_TRUE(buildFitsBesideRadio(kBookAfter, kS31Profile)) << "measured in a book with the radio up";
+  EXPECT_TRUE(buildFitsBesideRadio(kPairingAfter, kS31Profile));
+  EXPECT_FALSE(buildFitsBesideRadio(kBookAfter, kS3Profile));
+  EXPECT_FALSE(buildFitsBesideRadio(kBookAfter, kX3Profile));
+  // More than the 55 KB an X3 build ran out of memory in, and the reader's room in one block.
+  EXPECT_GT(kBuildBesideRadioFreeBytes, 55u * 1024u);
+  EXPECT_FALSE(buildFitsBesideRadio({kBuildBesideRadioFreeBytes - 1, kBookAfter.largestBlock}, kS31Profile));
+  EXPECT_FALSE(buildFitsBesideRadio({kBookAfter.freeBytes, kS31Profile.minimumLargest - 1}, kS31Profile));
+  EXPECT_TRUE(buildFitsBesideRadio({kBuildBesideRadioFreeBytes, kS31Profile.minimumLargest}, kS31Profile));
+}
+
 }  // namespace
 }  // namespace bleturner

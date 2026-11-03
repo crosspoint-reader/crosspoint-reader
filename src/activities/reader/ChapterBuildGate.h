@@ -5,9 +5,9 @@
 // Whether a chapter build may run next to the page turner's radio. A radio that did not stop in
 // time, is still stopping, or is still starting holds or is taking the heap the build needs, and
 // a build that runs out of memory aborts the firmware (no exceptions). A radio refused for memory
-// holds nothing.
+// holds nothing. Where the heap holds the build next to the stack (S31), the radio may stay up.
 inline bool chapterBuildMayRun(const bleturner::Status& radio) {
-  return !radio.running && !radio.stopping && !radio.starting;
+  return radio.buildFitsBeside || (!radio.running && !radio.stopping && !radio.starting);
 }
 
 // Asks `ready` until it says yes, sleeping stepMs between asks, and gives up once waitMs has
