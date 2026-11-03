@@ -592,6 +592,9 @@ BuildRelease beforeChapterBuild() {
     return BuildRelease::NotHeld;
   settleStart();
   if (attemptInFlight.load(std::memory_order_acquire)) return BuildRelease::NotHeld;
+  // Where the build fits next to the stack (S31), the radio stays up and the remote stays linked
+  // through the chapter change.
+  if (port::running() && buildFitsBesideRadio(host->heap(), activeProfile())) return BuildRelease::NotHeld;
   heldForBuild.store(true, std::memory_order_relaxed);
   readerStartDeferred.store(false, std::memory_order_relaxed);
   const Heap heap = host->heap();
@@ -632,6 +635,8 @@ Status status() {
   st.connecting = port::connecting();
   st.idleStopped = radioIdleStopped.load(std::memory_order_relaxed);
   st.readerDeferred = readerStartDeferred.load(std::memory_order_relaxed);
+  st.buildFitsBeside = st.running && !st.stopping && !st.starting && activeProfile().buildsBesideStack &&
+                       buildFitsBesideRadio(host->heap(), activeProfile());
   return st;
 }
 

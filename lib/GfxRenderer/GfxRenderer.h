@@ -21,13 +21,13 @@ class TtfEpdFont;
 #include <array>
 #include <cstring>
 #include <map>
-#include <string>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "Bitmap.h"
-#include "ScaledFont.h"
 #include "FontVariantProvider.h"
+#include "ScaledFont.h"
 
 namespace glyphBitmap {
 struct Frame;

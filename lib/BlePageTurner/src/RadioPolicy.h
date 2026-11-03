@@ -36,6 +36,7 @@ struct Profile {
   size_t startFreeBytes;    // stackBytes plus the reader's room
   size_t minimumLargest;    // the largest block needed before and after the stack
   size_t homeStartLargest;  // 0: the radio does not start at Home; else the largest block Home must have
+  bool buildsBesideStack;   // a chapter build may run with the radio up (buildFitsBesideRadio)
 };
 inline constexpr size_t kS3StackBytes = 46508 + 4096;  // measured, plus a margin of one allocator page
 inline constexpr size_t kS3StackLargestDrop = 45056;
@@ -47,10 +48,32 @@ inline constexpr size_t kS3StackLargestDrop = 45056;
 // is six of the largest request (24,576 B), wider than the four the census alone would justify.
 inline constexpr size_t kS3InternalAllocMax = 4096;
 inline constexpr size_t kS3MinimumLargest = 6 * kS3InternalAllocMax;
-inline constexpr Profile kX3Profile{kStackBytes, kStartFreeBytes, kMinimumLargestBlockBytes, 0};
+// S31 (Metalio Plus, FREEINK_BLE_STACK_S31): ESP-IDF's prebuilt host and the controller blocks it marks
+// safe go to PSRAM (src/platform/S31NimbleMemory.cpp). Measured 02/11/2026 on the Bluetooth screen: free
+// 126,904 / largest 94,196 before the stack, 91,564 / 61,428 after, so it took 35,340 B of internal RAM
+// and 32,768 B of the largest block. Malloc and new above 4,096 B go to PSRAM as on the S3 (the same
+// CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL), so the reader keeps the S3's room.
+inline constexpr size_t kS31StackBytes = 35340 + 4096;  // measured, plus a margin of one allocator page
+inline constexpr size_t kS31StackLargestDrop = 32768;
+// A chapter build next to a running stack (S31 only): the build's internal requests fit in the reader's
+// room (minimumLargest, above), and the heap must hold 64 KiB in all, more than the 55 KB an X3 build ran
+// out of memory in with its radio up (that reader also needed a 32 KiB internal block; the S31's goes to
+// PSRAM). Measured 02/11/2026 in a book with the S31 radio up: free 90,484 / largest 55,284. The X3 and
+// the S3 still stop the radio for every build.
+inline constexpr size_t kBuildBesideRadioFreeBytes = 65536;
+inline constexpr Profile kX3Profile{kStackBytes, kStartFreeBytes, kMinimumLargestBlockBytes, 0, false};
 inline constexpr Profile kS3Profile{kS3StackBytes, kS3StackBytes + kS3MinimumLargest, kS3MinimumLargest,
-                                    kS3MinimumLargest + kS3StackLargestDrop + 2048};
-#ifdef FREEINK_BLE_STACK_IN_PSRAM
+                                    kS3MinimumLargest + kS3StackLargestDrop + 2048, false};
+inline constexpr Profile kS31Profile{kS31StackBytes, kS31StackBytes + kS3MinimumLargest, kS3MinimumLargest,
+                                     kS3MinimumLargest + kS31StackLargestDrop + 2048, true};
+
+constexpr bool buildFitsBesideRadio(const Heap& heap, const Profile& profile) {
+  return profile.buildsBesideStack && heap.largestBlock >= profile.minimumLargest &&
+         heap.freeBytes >= kBuildBesideRadioFreeBytes;
+}
+#if defined(FREEINK_BLE_STACK_S31)
+inline constexpr const Profile& activeProfile() { return kS31Profile; }
+#elif defined(FREEINK_BLE_STACK_IN_PSRAM)
 inline constexpr const Profile& activeProfile() { return kS3Profile; }
 #else
 inline constexpr const Profile& activeProfile() { return kX3Profile; }
