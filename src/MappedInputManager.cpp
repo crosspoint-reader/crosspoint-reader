@@ -481,6 +481,8 @@ bool MappedInputManager::wasPressed(const Button button) const {
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
+  // A delayed release can already have fired its long action in this dispatch.
+  if (replayButtons && (longPressFiredButtons & (1u << static_cast<uint8_t>(button))) != 0) return false;
   if (button == Button::Confirm && remoteInput.button == RemoteButton::Confirm) return true;
   if (button == Button::Back && remoteInput.button == RemoteButton::Back) return true;
   if ((button == Button::NavNext || button == Button::Right) && remoteInput.button == RemoteButton::Next) return true;
