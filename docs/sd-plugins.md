@@ -113,7 +113,7 @@ the browser context, and posts the result back.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/plugin-jobs` | enqueue `{plugin, action, args?}` → `{id}` (503 when the pool is full) |
+| `POST /api/plugin-jobs` | enqueue `{plugin, action, args?}` → `{id}` (503 when the pool is full or the device is out of memory) |
 | `GET /api/plugin-jobs/claim?plugin=` | executor claims the next pending job |
 | `POST /api/plugin-jobs/complete` | executor posts `{id, claim, ok, result?}` (`claim` from the claim response; 409 when stale) |
 | `GET /api/plugin-jobs/status?id=` | caller polls: `{id, state, result}`; states: `pending`, `running`, `done`, `error`, `unknown` (recycled) |

@@ -90,7 +90,17 @@ window.CrossPoint = window.CrossPoint || {
     // code units, so re-decode the UTF-8 header JSON.
     const raw = r.headers.get('X-Relay-Headers') || '[]';
     const list = JSON.parse(new TextDecoder().decode(Uint8Array.from(raw, (c) => c.charCodeAt(0))));
-    return { status: Number(r.headers.get('X-Relay-Status')), headers: list, body: await r.text() };
+    let text;
+    try {
+      text = await r.text();
+    } catch (e) {
+      // The device streams the body and closes early when it is cut short or
+      // over the cap: report that like the 502 it sends before streaming.
+      const err = new Error('/api/relay 502: relay failed; large bodies need /api/fetch');
+      err.status = 502;
+      throw err;
+    }
+    return { status: Number(r.headers.get('X-Relay-Status')), headers: list, body: text };
   },
   crypto(op, fields) { return this._post('/api/crypto', Object.assign({}, fields, { op })); },
   async writeFile(plugin, path, dataB64) {
