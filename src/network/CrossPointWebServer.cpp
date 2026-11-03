@@ -1692,13 +1692,15 @@ void CrossPointWebServer::handlePostSettings() {
   DictionaryRegistry::discover(dictionaries);
   const auto& settings = getSettingsList(&sdFontSystem.registry(), &dictionaries);
 
-  // Checked before any setting changes: a fixed buffer would silently cut a long value.
+  // Checked before any setting changes: the copy into a fixed buffer would silently cut a
+  // long value, or one with an embedded NUL.
   for (const auto& s : settings) {
     if (!s.key || s.webHidden || s.type != SettingType::STRING || s.stringSetter || s.stringMaxLen == 0) continue;
     if (!doc[s.key].is<const char*>()) continue;
-    if (doc[s.key].as<std::string>().size() >= s.stringMaxLen) {
+    const std::string val = doc[s.key].as<std::string>();
+    if (val.size() >= s.stringMaxLen || val.find('\0') != std::string::npos) {
       server->send(400, "text/plain",
-                   String(I18N.get(s.nameId)) + ": at most " + String(s.stringMaxLen - 1) + " bytes");
+                   String(I18N.get(s.nameId)) + ": at most " + String(s.stringMaxLen - 1) + " bytes, no NUL");
       return;
     }
   }
