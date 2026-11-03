@@ -518,15 +518,20 @@
   // shown here as on the device's OPDS server screen. Saved with the other settings.
   const OPDS_DOWNLOAD_KEYS = ['opdsDownloadFolder', 'opdsFilenameFormat'];
 
+  function opdsDownloadUnsaved() {
+    return OPDS_DOWNLOAD_KEYS.some(function(key) {
+      const s = findSetting(key);
+      return s && s.value !== originalValues[key];
+    });
+  }
+
   function renderOpdsDownloadOptions() {
     const rows = OPDS_DOWNLOAD_KEYS.map(findSetting).filter(Boolean);
     if (rows.length === 0) return '';
     // Keep unsaved edits across a redraw of the OPDS section.
-    let unsaved = false;
     rows.forEach(function(s) {
       const current = getValue(s);
       if (current !== undefined) s.value = current;
-      if (s.value !== originalValues[s.key]) unsaved = true;
     });
     let html = '<div class="item-box" oninput="enableItemSave(this)" onchange="enableItemSave(this)">';
     rows.forEach(function(s) {
@@ -536,8 +541,18 @@
         '</div>';
     });
     return html + '<div class="item-actions">' +
-      '<button class="btn-small btn-save-server" onclick="saveSettings().then((ok) => { if (ok) this.disabled = true; })"' + (unsaved ? '' : ' disabled') + '>Save</button>' +
+      '<button class="btn-small btn-save-server" onclick="saveOpdsDownloadOptions(this)"' + (opdsDownloadUnsaved() ? '' : ' disabled') + '>Save</button>' +
       '</div></div>';
+  }
+
+  // An edit made while the save is in flight keeps the button enabled.
+  async function saveOpdsDownloadOptions(btn) {
+    if (!await saveSettings()) return;
+    OPDS_DOWNLOAD_KEYS.map(findSetting).filter(Boolean).forEach(function(s) {
+      const current = getValue(s);
+      if (current !== undefined) s.value = current;
+    });
+    btn.disabled = !opdsDownloadUnsaved();
   }
 
   function renderOpdsSection(loadFailed) {

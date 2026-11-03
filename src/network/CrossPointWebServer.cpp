@@ -1691,8 +1691,19 @@ void CrossPointWebServer::handlePostSettings() {
   std::vector<DictionaryEntry> dictionaries;
   DictionaryRegistry::discover(dictionaries);
   const auto& settings = getSettingsList(&sdFontSystem.registry(), &dictionaries);
-  int applied = 0;
 
+  // Checked before any setting changes: a fixed buffer would silently cut a long value.
+  for (const auto& s : settings) {
+    if (!s.key || s.webHidden || s.type != SettingType::STRING || s.stringSetter || s.stringMaxLen == 0) continue;
+    if (!doc[s.key].is<const char*>()) continue;
+    if (strlen(doc[s.key].as<const char*>()) >= s.stringMaxLen) {
+      server->send(400, "text/plain",
+                   String(I18N.get(s.nameId)) + ": at most " + String(s.stringMaxLen - 1) + " bytes");
+      return;
+    }
+  }
+
+  int applied = 0;
   for (const auto& s : settings) {
     if (!s.key || s.webHidden) continue;
     if (!doc[s.key].is<JsonVariant>()) continue;
