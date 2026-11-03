@@ -170,10 +170,14 @@ void ActivityManager::loop() {
         // it may perform I/O or request a synchronous progress frame.
         if (!navigation) lock.unlock();
         drainingNavigation = navigation;
+        if (navigation) navigationLock = &lock;
         if (!mappedInput.consumeSuppressedRelease()) currentActivity->loop();
+        const bool continueDraining = drainingNavigation;
+        if (lock.ownsLock()) navigationLock = nullptr;
         drainingNavigation = false;
         mappedInput.endBufferedButtons();
-        if (!navigation || pendingAction != PendingAction::None || !mappedInput.nextBufferedNavigationOnly()) break;
+        if (!continueDraining || pendingAction != PendingAction::None || !mappedInput.nextBufferedNavigationOnly())
+          break;
       }
     } else {
       // Activities own locking for non-buffered input and background work.
@@ -511,8 +515,17 @@ void ActivityManager::prepareForSleep() {
   if (currentActivity) currentActivity->prepareForSleep();
 }
 
+void ActivityManager::releaseNavigationLock() {
+  if (xSemaphoreGetMutexHolder(renderingMutex) != xTaskGetCurrentTaskHandle() || !navigationLock) return;
+  auto* lock = navigationLock;
+  navigationLock = nullptr;
+  drainingNavigation = false;
+  lock->unlock();
+}
+
 void ActivityManager::requestUpdate(bool immediate) {
-  if (immediate && !drainingNavigation) {
+  if (immediate) {
+    releaseNavigationLock();
     if (renderTaskHandle) {
       xTaskNotify(renderTaskHandle, 1, eIncrement);
     }
@@ -523,6 +536,7 @@ void ActivityManager::requestUpdate(bool immediate) {
   }
 }
 void ActivityManager::requestUpdateAndWait() {
+  releaseNavigationLock();
   if (!renderTaskHandle) {
     return;
   }
