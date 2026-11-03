@@ -33,6 +33,7 @@ struct HalGPIO {
   bool wasHomeKeyTapped() const { return false; }
   bool wasHomeKeyLongPressed() const { return false; }
   bool wasHomeKeyPressed() const { return false; }
+  bool wasPinch(float&) const { return false; }
 };
 """
 harness = r"""
