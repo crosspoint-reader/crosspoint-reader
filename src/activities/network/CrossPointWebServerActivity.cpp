@@ -6,10 +6,12 @@
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <WiFi.h>
 
 #include <cstddef>
 
+#include "AirDropActivity.h"
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
 #include "SilentRestart.h"
@@ -164,6 +166,17 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   }
 #endif
 
+#if CROSSPOINT_AIRDROP
+  if (mode == NetworkMode::AIRDROP) {
+    auto activity = makeUniqueNoThrow<AirDropActivity>(renderer, mappedInput);
+    if (!activity) {
+      LOG_ERR("AIRDROP", "OOM: activity");
+      return;
+    }
+    activityManager.replaceActivity(std::move(activity));
+    return;
+  }
+#endif
   networkMode = mode;
   isApMode = (mode == NetworkMode::CREATE_HOTSPOT);
 
