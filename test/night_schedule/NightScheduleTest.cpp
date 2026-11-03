@@ -96,6 +96,14 @@ TEST_F(NightScheduleTest, FollowsTheWallClockAcrossDaylightSaving) {
   EXPECT_EQ(b.at - local(2026, 3, 7, 22), 8 * 3600);
 }
 
+// 02:30 doesn't exist on 2026-03-08. mktime would move it to 03:30, after the
+// 03:00 off-time, and leave night mode on for a day; it is skipped instead.
+TEST_F(NightScheduleTest, SkipsAnOnTimeInTheSpringForwardGap) {
+  const auto b = latestBoundary(local(2026, 3, 8, 4), slot(2, 30), slot(3));
+  EXPECT_EQ(b.at, local(2026, 3, 8, 3));
+  EXPECT_FALSE(b.nightOn);
+}
+
 TEST_F(NightScheduleTest, EqualTimesMeanNoSchedule) {
   const auto b = latestBoundary(local(2026, 10, 27, 23), slot(22), slot(22));
   EXPECT_EQ(b.at, 0);

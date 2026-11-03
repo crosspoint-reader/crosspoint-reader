@@ -6,8 +6,11 @@
 namespace nightschedule {
 namespace {
 
-// The slot's local time on the day `dayOffset` days from `today`. mktime
-// normalizes the out-of-range day and resolves DST (tm_isdst = -1).
+// The slot's local time on the day `dayOffset` days from `today`, or 0 when
+// that clock time doesn't exist that day (the hour skipped when daylight saving
+// starts). mktime normalizes the out-of-range day and resolves DST
+// (tm_isdst = -1); it moves a skipped time an hour later, which could put an
+// on-time after its off-time, so such a slot is dropped for that day.
 int64_t slotTime(const tm& today, int dayOffset, uint8_t slot) {
   tm t = today;
   t.tm_mday += dayOffset;
@@ -15,7 +18,9 @@ int64_t slotTime(const tm& today, int dayOffset, uint8_t slot) {
   t.tm_min = (slot % 2) * 30;
   t.tm_sec = 0;
   t.tm_isdst = -1;
-  return static_cast<int64_t>(mktime(&t));
+  const int64_t at = static_cast<int64_t>(mktime(&t));
+  if (t.tm_hour != slot / 2 || t.tm_min != (slot % 2) * 30) return 0;
+  return at;
 }
 
 }  // namespace
@@ -32,8 +37,8 @@ Boundary latestBoundary(int64_t now, uint8_t onSlot, uint8_t offSlot) {
   for (int dayOffset = -1; dayOffset <= 0; ++dayOffset) {
     const int64_t on = slotTime(today, dayOffset, onSlot);
     const int64_t off = slotTime(today, dayOffset, offSlot);
-    if (on <= now && on > best.at) best = {on, true};
-    if (off <= now && off > best.at) best = {off, false};
+    if (on != 0 && on <= now && on > best.at) best = {on, true};
+    if (off != 0 && off <= now && off > best.at) best = {off, false};
   }
   return best;
 }
