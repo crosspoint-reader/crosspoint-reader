@@ -100,7 +100,10 @@ void ClipSelectionActivity::onEnter() {
   if (initialSelection.valid) {
     for (size_t i = 0; i < wordCount; ++i) {
       const auto& word = words[i];
-      if (word.pageOffset == initialSelection.firstPage && word.pageWordIndex == initialSelection.firstWord)
+      // The definition viewer shows the whole range; otherwise (restoring after a lookup) only place the cursor and
+      // leave rangeStart unset so the user can freely pick a new word.
+      if (mode == Mode::DefinitionLookup && word.pageOffset == initialSelection.firstPage &&
+          word.pageWordIndex == initialSelection.firstWord)
         rangeStart = static_cast<int>(i);
       if (word.pageOffset == initialSelection.lastPage && word.pageWordIndex == initialSelection.lastWord)
         selected = static_cast<int>(i);
@@ -428,6 +431,7 @@ void ClipSelectionActivity::confirmSelection(const ClippingResult::Action action
   result.startWordIndex = words[first].pageWordIndex;
   result.endWordIndex = words[last].pageWordIndex;
   result.wordCount = static_cast<uint16_t>(last - first + 1);
+  result.cursorAtStart = selected < rangeStart;
   result.startOffset = UINT32_MAX;
   result.endOffset = 0;
   for (int i = first; i <= last; ++i) {
