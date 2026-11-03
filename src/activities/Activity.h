@@ -32,6 +32,8 @@ class Activity {
   virtual void onExit();
   // Last chance to queue activity-owned state before sleep events are drained.
   virtual void prepareForSleep() {}
+  // Buffered navigation may hold the manager's render lock. Request an
+  // immediate update before blocking work to release it and end the batch.
   virtual void loop() {}
   // Button-only UI hosts may retain input while a frame is being rendered.
   virtual bool buffersButtons() const { return false; }
