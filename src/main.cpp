@@ -259,7 +259,7 @@ void handleSlideSwitch() {
 // Returns true when night mode changed.
 bool applyNightSchedule() {
   if (!SETTINGS.nightScheduleEnabled) return false;
-  if (gpio.hasToggleSwitch() && SETTINGS.slideSwitchAction == CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE) return false;
+  if (slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE)) return false;
   const int64_t now = trustedtime::trustedNow();
   if (now == 0) return false;
   const auto boundary = nightschedule::latestBoundary(now, SETTINGS.nightScheduleOnSlot, SETTINGS.nightScheduleOffSlot);
