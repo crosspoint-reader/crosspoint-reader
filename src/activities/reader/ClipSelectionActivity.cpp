@@ -121,9 +121,8 @@ void ClipSelectionActivity::onEnter() {
 
 bool ClipSelectionActivity::extractWords() {
   wordCount = 0;
-  size_t capacity = MAX_SELECTABLE_WORDS;
+  size_t capacity = 0;
   if (mode == Mode::DefinitionLookup) {
-    capacity = 0;
     for (size_t i = 0; i < pageCount(); ++i) {
       for (const auto& element : pageAt(i).elements) {
         if (element->getTag() == TAG_PageLine) {
@@ -138,6 +137,15 @@ bool ClipSelectionActivity::extractWords() {
       LOG_ERR("DICT", "Low heap for selection (%u bytes)", static_cast<unsigned>(bytes));
       return false;
     }
+  } else if (pageCount() > 0) {
+    size_t firstPageWords = 0;
+    for (const auto& element : pageAt(0).elements) {
+      if (element->getTag() == TAG_PageLine) {
+        const auto* block = static_cast<const PageLine&>(*element).getBlock();
+        if (block && block->valid()) firstPageWords += block->wordCount();
+      }
+    }
+    capacity = std::min<size_t>(UINT16_MAX, std::max<size_t>(MAX_SELECTABLE_WORDS, firstPageWords + 10));
   }
   words = makeUniqueNoThrow<WordBox[]>(capacity);
   if (!words) {

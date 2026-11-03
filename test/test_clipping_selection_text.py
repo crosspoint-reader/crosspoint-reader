@@ -301,6 +301,34 @@ int main() {
     HalMemory::stats = {8192, 4096};
     assert(!cold.extractWords());
   }
+  {
+    ClipSelectionActivity dense;
+    auto page0 = std::make_unique<Page>();
+    auto line0 = std::make_unique<PageLine>();
+    for (int i = 0; i < 300; ++i) {
+      line0->block.packedText += "あ";
+      line0->block.packedText += '\0';
+      line0->block.styles.push_back(EpdFontFamily::REGULAR);
+    }
+    page0->elements.push_back(std::move(line0));
+    dense.pages.push_back(std::move(page0));
+
+    auto page1 = std::make_unique<Page>();
+    auto line1 = std::make_unique<PageLine>();
+    for (int i = 0; i < 20; ++i) {
+      line1->block.packedText += "い";
+      line1->block.packedText += '\0';
+      line1->block.styles.push_back(EpdFontFamily::REGULAR);
+    }
+    page1->elements.push_back(std::move(line1));
+    dense.pages.push_back(std::move(page1));
+
+    assert(dense.extractWords());
+    assert(dense.wordCount == 310);
+    assert(dense.words[299].pageOffset == 0);
+    assert(dense.words[300].pageOffset == 1);
+    assert(dense.words[309].pageOffset == 1);
+  }
   HalMemory::stats = {5908, 3444};  // Physical X3 crash workload.
   assert(selectionLowMemory(0, 0));
   HalMemory::stats = {4500, 4200};  // A large enough block still needs spare heap.
