@@ -14,7 +14,7 @@ power_actions = "enum SHORT_PWRBTN {" + settings_header.split(
 methods = []
 for signature, following in (
     ("void MappedInputManager::update(", "bool MappedInputManager::isNavDirectionSwapped("),
-    ("bool MappedInputManager::injectRemoteClick(", "bool MappedInputManager::wasLongPressed("),
+    ("bool MappedInputManager::injectRemoteClick(", "bool MappedInputManager::isPressed("),
     ("bool MappedInputManager::isPressed(", "MappedInputManager::Labels MappedInputManager::mapLabels("),
 ):
     methods.append(signature + source.split(signature, 1)[1].split(following, 1)[0])
@@ -31,15 +31,17 @@ struct HalGPIO {
   bool physicalPowerHeld = false;
   uint8_t button = 0;
   unsigned long powerHeldMs = 20;
+  uint8_t extraHeld = 0;
+  unsigned long heldMs = 900;
   void update() {}
   bool wasAnyPressed() const { return pressed; }
   bool wasAnyReleased() const { return released; }
   bool wasPressed(uint8_t b) const { return b == button && pressed; }
   bool wasReleased(uint8_t b) const { return b == button && released; }
-  bool isPressed(uint8_t b) const { return b == button && held; }
+  bool isPressed(uint8_t b) const { return (b == button && held) || (extraHeld & (1u << b)); }
+  unsigned long getHeldTime() const { return heldMs; }
   bool isPowerButtonPhysicallyPressed() const { return physicalPowerHeld; }
   bool hasTouch() const { return true; }
-  unsigned long getHeldTime() const { return 900; }
   unsigned long getPowerButtonHeldTime() const { return powerHeldMs; }
   bool wasCapacitivePagePressed() const { return false; }
   bool isCapacitivePagePressed(uint8_t) const { return false; }
@@ -82,7 +84,13 @@ struct HalHaptics {
   static void longPress(bool, int) {}
 };
 bool MappedInputManager::mapButton(Button b, bool (HalGPIO::*fn)(uint8_t) const) const {
-  return readButton(static_cast<uint8_t>(b), fn);
+  switch (b) {
+    case Button::Confirm: return readButton(SETTINGS.frontButtonConfirm, fn);
+    case Button::Back: return readButton(SETTINGS.frontButtonBack, fn);
+    case Button::Left: return readButton(SETTINGS.frontButtonLeft, fn);
+    case Button::Right: return readButton(SETTINGS.frontButtonRight, fn);
+    default: return readButton(static_cast<uint8_t>(b), fn);
+  }
 }
 bool MappedInputManager::hasTouch() const { return false; }
 bool MappedInputManager::wasBackGesture() const { return false; }
@@ -92,6 +100,7 @@ int main() {
   HalGPIO gpio;
   GfxRenderer renderer;
   MappedInputManager input(gpio, renderer);
+  checkRouting(input);
   using Button = MappedInputManager::Button;
   struct Mapping { RemoteButton remote; Button button; Button other; };
   for (const auto mapping : {
@@ -149,8 +158,49 @@ int main() {
   assert(input.wasPressed(Button::Back) && input.wasReleased(Button::Back));
   assert(input.getHeldTime() == 0);
   assert(!input.bufferedNavigationOnly());
+  input.endBufferedButtons();
+
+  // A hold entirely queued during a repaint clears a mapping without activating it.
+  for (int confirm : {1, 3}) {
+    SETTINGS.frontButtonConfirm = confirm;
+    gpio = {};
+    input.resetButtonBuffer(true);
+    gpio.button = confirm;
+    gpio.pressed = gpio.held = true;
+    gpio.heldMs = 0;
+    input.update();
+    gpio.pressed = gpio.held = false;
+    gpio.released = true;
+    gpio.heldMs = 900;
+    input.update();
+    assert(input.beginBufferedButtons());
+    assert(!input.wasLongPressed(Button::Confirm, 700));
+    input.endBufferedButtons();
+    assert(input.beginBufferedButtons());
+    assert(input.wasLongPressed(Button::Confirm, 700));
+    assert(!input.wasReleased(Button::Confirm));
+    assert(!input.wasLongPressed(Button::Confirm, 700));
+    input.endBufferedButtons();
+    // A fresh short click must still activate, without stale suppression.
+    gpio.pressed = gpio.held = true;
+    gpio.released = false;
+    gpio.heldMs = 0;
+    input.update();
+    assert(input.beginBufferedButtons());
+    input.endBufferedButtons();
+    gpio.pressed = gpio.held = false;
+    gpio.released = true;
+    gpio.heldMs = 50;
+    input.update();
+    assert(input.beginBufferedButtons());
+    assert(!input.consumeSuppressedRelease());
+    assert(!input.wasLongPressed(Button::Confirm, 700));
+    assert(input.wasReleased(Button::Confirm));
+    input.endBufferedButtons();
+  }
+  SETTINGS.frontButtonConfirm = 1;
   input.resetButtonBuffer(false);
-  gpio.held = false;
+  gpio = {};
 
   // All power-bound reader shortcuts share duration and startup qualification.
   const auto doubleAction = SETTINGS.doublePwrBtn;
@@ -245,6 +295,9 @@ int main() {
 """
 harness = harness.replace("POWER_ACTIONS", power_actions)
 manager_source = (ROOT / "src/activities/ActivityManager.cpp").read_text()
+screenshot = "  static bool screenshotButtonsReleased" + (ROOT / "src/main.cpp").read_text().split(
+    "  static bool screenshotButtonsReleased", 1
+)[1].split("\n  if (mappedInputManager.wasPowerReleaseConsumed())", 1)[0]
 remote_turn = "bool ActivityManager::remoteTurn(" + manager_source.split(
     "bool ActivityManager::remoteTurn(", 1
 )[1].split("bool ActivityManager::handleForcedRefresh()", 1)[0]
@@ -271,7 +324,59 @@ struct ActivityManager {
   void requestUpdate() {}
   bool remoteTurn(bool forward, bool chapter);
 };
+struct ScreenshotUtil {
+  static inline int count = 0;
+  static void takeScreenshot(GfxRenderer&) { ++count; }
+};
+void handleScreenshot(HalGPIO& gpio, GfxRenderer& renderer, MappedInputManager& mappedInputManager) {
+""" + screenshot + r"""
+}
 """ + remote_turn + r"""
+void checkScreenshot() {
+  HalGPIO gpio;
+  GfxRenderer renderer;
+  MappedInputManager input(gpio, renderer);
+  using Button = MappedInputManager::Button;
+  for (bool powerReleasedFirst : {false, true}) {
+    gpio = {};
+    input.resetButtonBuffer(true);
+    gpio.button = HalGPIO::BTN_DOWN;
+    gpio.pressed = gpio.held = true;
+    input.update();  // Down was captured before the global shortcut runs.
+    gpio.extraHeld = 1u << HalGPIO::BTN_POWER;
+    input.update();
+    int before = ScreenshotUtil::count;
+    handleScreenshot(gpio, renderer, input);
+    handleScreenshot(gpio, renderer, input);
+    assert(ScreenshotUtil::count == before + 1);
+    gpio.pressed = false;
+    gpio.button = powerReleasedFirst ? HalGPIO::BTN_POWER : HalGPIO::BTN_DOWN;
+    gpio.held = false;
+    gpio.released = true;
+    gpio.extraHeld = 1u << (powerReleasedFirst ? HalGPIO::BTN_DOWN : HalGPIO::BTN_POWER);
+    input.update();
+    handleScreenshot(gpio, renderer, input);
+    assert(input.beginBufferedButtons());
+    assert(!input.wasPressed(Button::Down) && !input.wasReleased(Button::Down));
+    input.endBufferedButtons();
+    gpio.button = powerReleasedFirst ? HalGPIO::BTN_DOWN : HalGPIO::BTN_POWER;
+    gpio.extraHeld = 0;
+    input.update();
+    handleScreenshot(gpio, renderer, input);
+    assert(input.beginBufferedButtons());
+    assert(!input.wasPressed(Button::Down) && !input.wasReleased(Button::Down));
+    assert(!input.wasReleased(Button::Power));
+    input.endBufferedButtons();
+    // A new Down contact still navigates after both shortcut contacts end.
+    gpio.button = HalGPIO::BTN_DOWN;
+    gpio.released = false;
+    gpio.pressed = gpio.held = true;
+    input.update();
+    assert(input.beginBufferedButtons());
+    assert(input.wasPressed(Button::Down));
+    input.endBufferedButtons();
+  }
+}
 void checkRouting(MappedInputManager& input) {
   ActivityManager manager{input};
   input.update();
@@ -297,7 +402,6 @@ void checkRouting(MappedInputManager& input) {
 }
 int main() {
 """)
-harness = harness.replace("  using Button =", "  checkRouting(input);\n  using Button =")
 # Remote dispatch must work on both the button board and X4 Pro with click classification enabled.
 harness = harness.replace("int main() {", "void checkRemoteButtons() {")
 picker = (ROOT / "src/activities/reader/EpubReaderFootnoteSelectActivity.cpp").read_text()
@@ -397,12 +501,56 @@ void checkPowerClicks() {
   checkSleepDispatch(input, gpio);
 }
 
+void checkBufferedPowerInput() {
+  SETTINGS.shortPwrBtn = SETTINGS.IGNORE;
+  SETTINGS.doublePwrBtn = SETTINGS.IGNORE;
+  HalGPIO gpio;
+  GfxRenderer renderer;
+  MappedInputManager input(gpio, renderer);
+  input.resetButtonBuffer(true);
+  input.beginPowerInput(false, false);
+
+  gpio.button = HalGPIO::BTN_LEFT;
+  gpio.pressed = gpio.held = true;
+  input.update();
+  gpio = {};
+  gpio.button = HalGPIO::BTN_POWER;
+  gpio.released = true;
+  gpio.heldMs = 20;
+  input.update();
+  assert(input.beginBufferedButtons());
+  assert(input.wasPowerSingleClick());
+  assert(!input.bufferedNavigationOnly() && input.getHeldTime() == 900);
+  input.endBufferedButtons();
+  gpio.released = false;
+  input.update();
+  assert(input.beginBufferedButtons());
+  assert(!input.wasPowerSingleClick());
+  input.endBufferedButtons();
+
+  BoardConfig::ACTIVE.inputStyle = BoardConfig::InputStyle::DigitalConfirmPowerHold;
+  input.beginPowerInput(true, true);
+  gpio.button = HalGPIO::BTN_CONFIRM;
+  gpio.pressed = gpio.released = true;
+  input.update();
+  assert(input.wasPowerReleaseConsumed());
+  gpio.pressed = gpio.released = false;
+  input.update();
+  assert(input.beginBufferedButtons());
+  assert(!input.wasPressed(MappedInputManager::Button::Confirm));
+  assert(!input.wasReleased(MappedInputManager::Button::Confirm));
+  input.endBufferedButtons();
+  BoardConfig::ACTIVE.inputStyle = BoardConfig::InputStyle::DigitalButtons;
+}
+
 int main() {
+  checkScreenshot();
   for (const bool x4Pro : {false, true}) {
     BoardConfig::x4Pro = x4Pro;
     checkRemoteButtons();
   }
   checkPowerClicks();
+  checkBufferedPowerInput();
 }
 """
 harness = harness.replace("PICKER_CONFIRM_CONDITION", picker_confirm)
