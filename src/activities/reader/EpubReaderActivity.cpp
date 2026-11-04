@@ -559,6 +559,8 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
       renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
       std::string chapter = chapterTitle;
       if (section && currentSpineIndex == spineIndex) {
+        // TOC anchors are indexed by rendered page, not by the selected word's offset.
+        // Multiple chapter anchors on one page cannot be distinguished here.
         const int selectedTocIndex = section->getTocIndexForPage(startPage);
         if (selectedTocIndex >= 0) chapter = epub->getTocItem(selectedTocIndex).title;
       }
@@ -569,7 +571,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
       vocabulary.page = startPage + 1;
       vocabulary.spine = spineIndex;
       vocabulary.startOffset = clipping.startOffset;
-      if (!vocabularyMetadata) {
+      if (SETTINGS.vocabularyHistoryEnabled && !vocabularyMetadata) {
         auto metadata = makeUniqueNoThrow<Epub::SyncMetadata>();
         if (metadata && epub->loadSyncMetadata(*metadata)) {
           vocabularyMetadata = std::move(metadata);

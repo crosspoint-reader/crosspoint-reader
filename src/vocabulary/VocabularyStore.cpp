@@ -9,6 +9,7 @@
 #include <esp_random.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -20,6 +21,7 @@ namespace {
 constexpr size_t MAX_WORD_BYTES = 160;
 constexpr size_t MAX_DEFINITION_BYTES = 2048;
 constexpr size_t MAX_HTML_INPUT_BYTES = 4096;
+constexpr size_t MAX_HTML_SCAN_BYTES = 16 * 1024;
 constexpr size_t MAX_TITLE_BYTES = 256;
 constexpr size_t MAX_METADATA_BYTES = 160;
 
@@ -113,6 +115,53 @@ class RecordWriter {
   }
 };
 
+// Scan a bounded HTML window without copying it, stopping at a complete tag
+// or entity boundary. A '>' inside a quoted attribute does not end a tag.
+// Optionally return the first non-whitespace byte outside markup.
+size_t safeHtmlPrefixBytes(const std::string& source, const size_t start, const size_t budget,
+                           size_t* firstVisible = nullptr) {
+  const size_t limit = start + utf8SafeTruncateBuffer(source.data() + start, std::min(source.size() - start, budget));
+  size_t safeEnd = start;
+  bool inTag = false;
+  char quote = 0;
+  for (size_t i = start; i < limit; ++i) {
+    const char c = source[i];
+    if (inTag) {
+      if (quote) {
+        if (c == quote) quote = 0;
+      } else if (c == '"' || c == '\'') {
+        quote = c;
+      } else if (c == '>') {
+        inTag = false;
+        safeEnd = i + 1;
+      }
+      continue;
+    }
+    if (c == '<') {
+      if (i + 1 == limit && limit < source.size()) break;
+      if (i + 1 < limit) {
+        const unsigned char next = static_cast<unsigned char>(source[i + 1]);
+        if (next == '/' || next == '!' || next == '?' || std::isalpha(next)) {
+          inTag = true;
+          continue;
+        }
+      }
+    }
+    if (firstVisible && *firstVisible == std::string::npos && !std::isspace(static_cast<unsigned char>(c)))
+      *firstVisible = i;
+    safeEnd = i + 1;
+  }
+  if (safeEnd > start && safeEnd < source.size()) {
+    const size_t entityStart = source.rfind('&', safeEnd - 1);
+    const size_t entityEnd = source.rfind(';', safeEnd - 1);
+    if (entityStart != std::string::npos && entityStart >= start &&
+        (entityEnd == std::string::npos || entityStart > entityEnd) && safeEnd - entityStart <= 18) {
+      safeEnd = entityStart;
+    }
+  }
+  return safeEnd;
+}
+
 time_t validLookupTime() {
   struct tm local = {};
   if (halClock.localTime(local) && local.tm_year >= 120) return mktime(&local);
@@ -178,15 +227,14 @@ bool recoverIncompleteRecord(HalFile& file) {
   if (last < 0) return false;
   if (last == '\n') return file.seek(size);
 
-  // Only a power interruption or failed rollback should leave a partial line.
-  // Search a bounded tail to avoid walking a large history byte by byte.
+  // Walk backward in bounded chunks even when an externally written tail is
+  // longer than a firmware record. recoverTail preserves complete objects and
+  // discards invalid partial tails after the last newline.
   constexpr size_t CHUNK_BYTES = 128;
-  constexpr size_t MAX_RECORD_BYTES = 24 * 1024;
   char chunk[CHUNK_BYTES];
   size_t cursor = size;
-  size_t scanned = 0;
-  while (cursor > 0 && scanned < MAX_RECORD_BYTES) {
-    const size_t count = std::min(std::min(cursor, CHUNK_BYTES), MAX_RECORD_BYTES - scanned);
+  while (cursor > 0) {
+    const size_t count = std::min(cursor, CHUNK_BYTES);
     cursor -= count;
     if (!file.seek(cursor) || file.read(chunk, count) != static_cast<int>(count)) return false;
     for (size_t i = count; i > 0; --i) {
@@ -195,11 +243,8 @@ bool recoverIncompleteRecord(HalFile& file) {
         return recoverTail(file, newSize, size);
       }
     }
-    scanned += count;
   }
-  if (cursor == 0) return recoverTail(file, 0, size);
-  LOG_ERR("VOCAB", "Incomplete vocabulary record exceeds recovery limit");
-  return false;
+  return recoverTail(file, 0, size);
 }
 }  // namespace
 
@@ -211,34 +256,27 @@ bool VocabularyStore::append(const VocabularyContext& context, const std::string
   const std::string* exportedDefinition = &definition;
   bool sourceTruncated = false;
   if (htmlDefinition) {
-    // Limit conversion memory even when a dictionary entry is very large.
-    size_t bytes = utf8SafeTruncateBuffer(definition.data(), std::min(definition.size(), MAX_HTML_INPUT_BYTES));
-    sourceTruncated = bytes < definition.size();
-    if (sourceTruncated && bytes > 0) {
-      // Avoid interpreting an incomplete trailing HTML tag or entity as text.
-      const size_t lastTagStart = definition.rfind('<', bytes - 1);
-      const size_t lastTagEnd = definition.rfind('>', bytes - 1);
-      if (lastTagStart != std::string::npos && (lastTagEnd == std::string::npos || lastTagStart > lastTagEnd)) {
-        bytes = lastTagStart;
-      }
-      if (bytes > 0) {
-        const size_t lastEntityStart = definition.rfind('&', bytes - 1);
-        const size_t lastEntityEnd = definition.rfind(';', bytes - 1);
-        if (lastEntityStart != std::string::npos &&
-            (lastEntityEnd == std::string::npos || lastEntityStart > lastEntityEnd) && bytes - lastEntityStart <= 18) {
-          bytes = lastEntityStart;
-        }
-      }
-    }
-    if (bytes == 0) return false;
+    // Find the first text within 16 KiB of markup, but keep the actual HTML
+    // conversion bounded to 4 KiB even on low-memory devices.
+    size_t firstVisible = std::string::npos;
+    safeHtmlPrefixBytes(definition, 0, MAX_HTML_SCAN_BYTES, &firstVisible);
+    if (firstVisible == std::string::npos) return false;
+    const size_t initialEnd = safeHtmlPrefixBytes(definition, 0, MAX_HTML_INPUT_BYTES);
+    const size_t start = firstVisible < initialEnd ? 0 : firstVisible;
+    const size_t end = start == 0 ? initialEnd : safeHtmlPrefixBytes(definition, start, MAX_HTML_INPUT_BYTES);
+    if (end <= start) return false;
+    const size_t bytes = end - start;
+    sourceTruncated = end < definition.size();
     const auto heap = HalMemory::getDefaultHeap();
     if (heap.largestBlockBytes < bytes + 1 || heap.freeBytes < bytes + 8 * 1024) {
       LOG_ERR("VOCAB", "Not enough memory to export formatted definition");
       return false;
     }
-    plain = htmlToPlainText(definition.substr(0, bytes), DICTIONARY_PLAIN_HEADWORD_MARKER);
+    plain = htmlToPlainText(definition.substr(start, bytes), DICTIONARY_PLAIN_HEADWORD_MARKER);
     std::replace(plain.begin(), plain.end(), DICTIONARY_PLAIN_HEADWORD_MARKER, ' ');
-    if (plain.empty()) return false;
+    const bool visible =
+        std::any_of(plain.begin(), plain.end(), [](const unsigned char c) { return !std::isspace(c); });
+    if (!visible) return false;
     exportedDefinition = &plain;
   }
 
@@ -297,7 +335,7 @@ bool VocabularyStore::append(const VocabularyContext& context, const std::string
   record.raw(",\"series_index\":");
   if (context.seriesIndex && std::isfinite(*context.seriesIndex)) {
     char number[32];
-    snprintf(number, sizeof(number), "%.6g", static_cast<double>(*context.seriesIndex));
+    snprintf(number, sizeof(number), "%.7g", static_cast<double>(*context.seriesIndex));
     record.raw(number);
   } else {
     record.raw("null");
