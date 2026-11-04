@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstddef>
 #include <string>
 
 // Convert an HTML fragment to plain text for the dictionary's plain-text
@@ -8,5 +7,5 @@
 // entities are decoded. A heading becomes a label line of its own: the
 // headingMarker byte is written at the start of that line, and the definition
 // view draws a line starting with it in bold.
-std::string htmlToPlainText(const std::string& html, char headingMarker,
-                            size_t maxInputBytes = static_cast<size_t>(-1));
+// Reuses the input buffer; move an owned string to avoid copying it.
+std::string htmlToPlainText(std::string html, char headingMarker);
