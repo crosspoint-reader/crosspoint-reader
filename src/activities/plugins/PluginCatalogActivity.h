@@ -248,6 +248,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   bool resolveWallpaperRelease(const Item& item, wallpaperpackages::Release& release);
   void computeInstallStatus();
   bool parseXmlList();
+  bool parseUpdateFirstBrowseResponse(size_t pageOffset);
   bool parseBrowseResponse();
   void activateItem(int itemIndex);  // XML list: navigate into a folder, else show details/download
   bool loadItemDetails(int itemIndex, ItemDetails& details);

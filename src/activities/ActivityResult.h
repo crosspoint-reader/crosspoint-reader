@@ -51,6 +51,8 @@ struct ClippingResult {
   uint16_t wordCount = 0;
   uint32_t startOffset = UINT32_MAX;
   uint32_t endOffset = UINT32_MAX;
+  // True when the cursor (not the anchor) was on the first word, i.e. the selection was extended leftwards.
+  bool cursorAtStart = false;
 };
 
 struct ProgressChangeResult {
