@@ -1213,9 +1213,19 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
   requestUpdateAndWait();
   const auto result = manifest.isBundle() && !item.files.empty() ? downloadBundle(item) : downloadBook(item);
   session.reset();
+  const std::string selectedId = std::move(item.id);
   item = {};
   // Reuse the SD response without another network request or resetting navigation.
   if (!parseBrowseResponse()) return;
+  // An updated plugin can move down the list. Keep the highlight on that plugin
+  // when it is still on this page; otherwise preserve the current selection.
+  if (result == HttpDownloader::OK && !selectedId.empty()) {
+    for (size_t i = 0; i < items.size(); ++i) {
+      if (items[i].id != selectedId) continue;
+      nav.requestSelection(static_cast<int>(i) + (!manifest.isXmlList() && page > 1 ? 1 : 0));
+      break;
+    }
+  }
   session = makeUniqueNoThrow<freeink::SecureHttpClient>();
   if (!session) LOG_ERR("PCAT", "OOM: browse client; using per-request connections");
   finishDownload(result);
