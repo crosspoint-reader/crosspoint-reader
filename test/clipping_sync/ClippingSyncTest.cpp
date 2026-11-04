@@ -5,6 +5,7 @@
 #include <KOReaderCredentialStore.h>
 #include <SecureHttpClient.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <string>
@@ -22,6 +23,7 @@ void reset() {
   fake::reset();
   fake::syncHeap = 68000;
   fake::syncBufferAllocated = false;
+  fake::headers.clear();
   fake::uploads.clear();
   fake::requests = 0;
   fake::failHttpAt = -1;
@@ -77,11 +79,40 @@ void maximumTextRoundTrip() {
   assert(stored == text);
   CLIPPINGS.unload();
 }
+bool hasHeader(const fake::Headers& headers, const std::string& name, const std::string& value) {
+  return std::find(headers.begin(), headers.end(), std::make_pair(name, value)) != headers.end();
+}
+// Servers that check only Basic auth must accept every clipping request, like progress sync.
+void everyRequestSendsAuthHeaders() {
+  reset();
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
+  fake::syncHeap = 100000;
+#endif
+  add("kept");
+  add("removed");
+  assert(clippingSync::run(book, "hash"));  // Probe, two uploads, pull.
+  released();
+  assert(CLIPPINGS.loadForBook(book, "", "", "epub"));
+  assert(CLIPPINGS.removeClippingAt(1));
+  CLIPPINGS.unload();
+  fake::uploads.clear();
+  assert(clippingSync::run(book, "hash"));  // Probe, delete, pull.
+  released();
+  assert(fake::uploads.size() == 1);
+  assert(fake::uploads.front().find("\"deleted\":1") != std::string::npos);
+  assert(fake::requests == 7 && fake::headers.size() == 7);
+  for (const auto& headers : fake::headers) {
+    assert(hasHeader(headers, "x-auth-user", "reader"));
+    assert(hasHeader(headers, "x-auth-key", "key"));
+    assert(hasHeader(headers, "Authorization", "Basic cmVhZGVyOnBhc3M="));
+  }
+}
 }  // namespace
 
 int main() {
   buildscratch::lend(framebuffer.data(), framebuffer.size());
   maximumTextRoundTrip();
+  everyRequestSendsAuthHeaders();
   for (int failure = 0; failure < 3; ++failure) {
     reset();
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3

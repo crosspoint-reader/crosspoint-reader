@@ -38,6 +38,7 @@ bool request(freeink::SecureHttpClient& http, const std::string& url, char* buff
   }
   http.addHeader("x-auth-user", KOREADER_STORE.getUsername());
   http.addHeader("x-auth-key", KOREADER_STORE.getMd5Password());
+  http.addHeader("Authorization", KOREADER_STORE.getBasicAuthorization());
   http.addHeader("Content-Type", "application/json");
   size_t received = 0;
   const int status = http.sendRequest(upload ? "PUT" : "GET", reinterpret_cast<const uint8_t*>(buffer), payloadSize,
