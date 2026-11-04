@@ -2558,10 +2558,7 @@ void EpubReaderActivity::stepFontSize(const int direction) {
   const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.sdFontFamilyName);
   if (sizes.empty()) return;
   const uint8_t cur = snapToNearestPointSize(sizes, SETTINGS.fontPointSize);
-  int idx = 0;
-  for (size_t i = 0; i < sizes.size(); ++i) {
-    if (sizes[i] == cur) idx = static_cast<int>(i);
-  }
+  const int idx = static_cast<int>(std::find(sizes.begin(), sizes.end(), cur) - sizes.begin());
   const int next = std::clamp(idx + direction, 0, static_cast<int>(sizes.size()) - 1);
   if (next == idx && sizes[next] == SETTINGS.fontPointSize) return;
   SETTINGS.fontPointSize = sizes[next];
@@ -2581,10 +2578,7 @@ void EpubReaderActivity::showTextRowPopup(const int row) {
       labels.reserve(sizes.size());
       for (const uint8_t size : sizes) labels.push_back(std::to_string(size) + " pt");
       const uint8_t cur = snapToNearestPointSize(sizes, SETTINGS.fontPointSize);
-      int curIdx = 0;
-      for (size_t i = 0; i < sizes.size(); ++i) {
-        if (sizes[i] == cur) curIdx = static_cast<int>(i);
-      }
+      const int curIdx = static_cast<int>(std::find(sizes.begin(), sizes.end(), cur) - sizes.begin());
       overlayPopup.show(
           StrId::STR_FONT_SIZE, labels, curIdx,
           [this, sizes](int idx) {

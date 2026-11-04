@@ -635,8 +635,8 @@ Status status() {
   st.connecting = port::connecting();
   st.idleStopped = radioIdleStopped.load(std::memory_order_relaxed);
   st.readerDeferred = readerStartDeferred.load(std::memory_order_relaxed);
-  st.buildFitsBeside = st.running && !st.stopping && !st.starting && activeProfile().buildsBesideStack &&
-                       buildFitsBesideRadio(host->heap(), activeProfile());
+  st.buildFitsBeside =
+      st.running && !st.stopping && !st.starting && buildFitsBesideRadio(host->heap(), activeProfile());
   return st;
 }
 
