@@ -11,6 +11,10 @@ In the reader’s Text panel, the font-size popup shows up to five sizes at a ti
 Swipe up or down to scroll, then tap a size. Navigation buttons move the selection
 and scroll it into view; Select applies it.
 
+The font releases include a `LICENSE` file with the original font notices.
+If you distribute font copies, keep the applicable notices with those copies.
+The source notices are in [licenses/fonts.txt](../licenses/fonts.txt).
+
 ## Installing Fonts
 
 There are three ways to install `.cpfont` fonts. Direct TTF/OTF/TTC loading uses

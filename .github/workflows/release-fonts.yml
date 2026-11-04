@@ -46,6 +46,7 @@ jobs:
         run: |
           mkdir -p dist
           find lib/EpdFont/scripts/output -name '*.cpfont' -exec cp {} dist/ \;
+          cp licenses/fonts.txt dist/LICENSE
 
       - name: Compute release tags
         id: tags

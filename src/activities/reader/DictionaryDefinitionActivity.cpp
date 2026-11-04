@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <utility>
 
 #include "CrossPointSettings.h"
 #include "HapticFeedback.h"
@@ -145,12 +146,7 @@ bool DictionaryDefinitionActivity::prepareDefinition(Definition& next, const boo
   if (htmlDefinition && !forcePlain && next.text.size() <= MAX_STYLED_HTML_BYTES && layoutHtmlPages(next)) return true;
   if (htmlDefinition) {
     if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
-    const auto heap = HalMemory::getDefaultHeap();
-    if (heap.largestBlockBytes < next.text.size() + 1 || heap.freeBytes < next.text.size() + HEAP_HEADROOM) {
-      LOG_ERR("DICT", "Low heap for plain definition (%u bytes)", static_cast<unsigned>(next.text.size() + 1));
-      return false;
-    }
-    next.text = htmlToPlainText(next.text, DICTIONARY_PLAIN_HEADWORD_MARKER);
+    next.text = htmlToPlainText(std::move(next.text), DICTIONARY_PLAIN_HEADWORD_MARKER);
   }
   return wrapText(next);
 }
@@ -226,6 +222,35 @@ bool DictionaryDefinitionActivity::reserveLines(Definition& next, const size_t c
   return true;
 }
 
+bool DictionaryDefinitionActivity::prepareFont(std::string& definition, const int fontId) {
+  if (!renderer.isSdCardFont(fontId)) return true;
+  const bool hasRtl =
+      std::any_of(definition.begin(), definition.end(), [](unsigned char c) { return c >= 0xD6 && c <= 0xDB; });
+  if (!hasRtl) {
+    renderer.ensureSdCardFontReady(fontId, definition.c_str(), 0x03 /* REGULAR + BOLD */);
+  } else {
+    // Font preparation builds shaped RTL text; bound it to the measured span size.
+    for (size_t start = 0; start < definition.size();) {
+      if (HalMemory::getDefaultHeap().largestBlockBytes < HEAP_HEADROOM) {
+        LOG_ERR("DICT", "Low heap for definition font preparation");
+        return false;
+      }
+      size_t end = std::min(start + MAX_LINE_BYTES, definition.size());
+      while (end > start + 1 && end < definition.size() && (definition[end] & 0xC0) == 0x80) end--;
+      const char saved = definition[end];
+      definition[end] = '\0';
+      renderer.ensureSdCardFontReady(fontId, definition.c_str() + start, 0x03 /* REGULAR + BOLD */);
+      definition[end] = saved;
+      start = end;
+    }
+  }
+  if (HalMemory::getDefaultHeap().largestBlockBytes < HEAP_HEADROOM) {
+    LOG_ERR("DICT", "Low heap after definition font preparation");
+    return false;
+  }
+  return true;
+}
+
 bool DictionaryDefinitionActivity::wrapText(Definition& next) {
   auto& definition = next.text;
   auto& lines = next.lines;
@@ -233,10 +258,7 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
   if (!reserveLines(next, definition.size() / 32 + 8)) return false;
 
   const int fontId = SETTINGS.getReaderFontId();
-  // SD-card fonts: merge every definition codepoint into the persistent
-  // advance table up front. Otherwise each unseen codepoint measured below
-  // falls back to an on-demand glyph load from SD (8-slot overflow ring).
-  renderer.ensureSdCardFontReady(fontId, definition.c_str(), 0x03 /* REGULAR + BOLD */);
+  if (!prepareFont(definition, fontId)) return false;
 
   const BodyArea body = bodyArea();
   const int maxWidth = body.width;
@@ -588,7 +610,7 @@ void DictionaryDefinitionActivity::loop() {
   int sx = 0;
   int sy = 0;
   const bool longPress = lookup && mappedInput.wasScreenLongPress(sx, sy);
-  const bool headerLongPress = longPress && HeaderBackTapTarget::contains(sx, sy);
+  const bool headerLongPress = longPress && HeaderBackTapTarget::containsUnpadded(sx, sy);
   if (headerLongPress || mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (lookup && (headerLongPress || mappedInput.getHeldTime() >= ReaderUtils::GO_BACK_OR_HOME_MS)) {
       ActivityResult result;

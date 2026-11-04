@@ -13,6 +13,7 @@
  *
  *   Arabic ranges are sourced from Unicode UCD extracted/DerivedBidiClass.txt
  *   (values verified against Unicode 17.0.0).
+ *   Unicode license and copyright notices: licenses/borrowed-code.txt.
  *
  * Entries sorted ascending by first (binary search requirement).
  */

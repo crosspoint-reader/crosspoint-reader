@@ -7,4 +7,5 @@
 // entities are decoded. A heading becomes a label line of its own: the
 // headingMarker byte is written at the start of that line, and the definition
 // view draws a line starting with it in bold.
-std::string htmlToPlainText(const std::string& html, char headingMarker);
+// Reuses the input buffer; move an owned string to avoid copying it.
+std::string htmlToPlainText(std::string html, char headingMarker);

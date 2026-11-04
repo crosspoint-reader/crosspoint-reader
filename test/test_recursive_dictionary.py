@@ -30,6 +30,7 @@ methods = "\n".join(block(viewer, signature) for signature in (
     "int DictionaryDefinitionActivity::measureSpan",
     "bool DictionaryDefinitionActivity::reserveLines",
     "bool DictionaryDefinitionActivity::wrapText",
+    "bool DictionaryDefinitionActivity::prepareFont",
     "void DictionaryDefinitionActivity::showMessage",
     "bool DictionaryDefinitionActivity::restoreCurrentDefinition",
     "void DictionaryDefinitionActivity::navigateDefinition",
@@ -57,6 +58,7 @@ back_handler = "  int sx = 0;" + back_handler
 lookup_source = (ROOT / "src/activities/reader/DictionaryWordSelectActivity.cpp").read_text()
 definition_result = block(lookup_source, "[this](const ActivityResult& result)")
 reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
+return_selection_for = block(reader_source, "ClipSelectionActivity::Selection lookupReturnSelectionFor")
 lookup_result = block(reader_source.split("startActivityForResult(std::move(lookup)", 1)[1],
                       "[this](const ActivityResult& result)")
 reader_constants = (ROOT / "src/activities/reader/ReaderUtils.h").read_text().split("namespace ReaderUtils {", 1)[1].split(
@@ -122,6 +124,9 @@ struct FontCacheManager {
 };
 struct Renderer {
   FontCacheManager cache;
+  size_t maxPreparedBytes = 0;
+  size_t prepareCalls = 0;
+  int preparedStyles = 0;
   FontCacheManager* getFontCacheManager() { return &cache; }
   int getTextAdvanceX(int, const char* text, EpdFontFamily::Style) const {
     const auto* ptr = reinterpret_cast<const unsigned char*>(text);
@@ -129,7 +134,13 @@ struct Renderer {
     while (*ptr) { utf8NextCodepoint(&ptr); ++width; }
     return width;
   }
-  void ensureSdCardFontReady(int, const char*, int) { cache.released = false; }
+  bool isSdCardFont(int) const { return true; }
+  void ensureSdCardFontReady(int, const char* text, int styles) {
+    cache.released = false;
+    maxPreparedBytes = std::max(maxPreparedBytes, std::strlen(text));
+    ++prepareCalls;
+    preparedStyles = styles;
+  }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 1; }
   int getLineHeight(int, float) const { return 10; }
 };
@@ -191,6 +202,7 @@ struct ClipSelectionActivity {
 ''' + selection + r'''
   template<typename... Args> explicit ClipSelectionActivity(Args&&...) {}
 };
+''' + return_selection_for + r'''
 bool styledAvailable = false;
 bool buildDictionaryHtmlPages(Renderer& renderer, const std::string&, uint16_t, uint16_t,
                                std::vector<std::unique_ptr<Page>>& pages) {
@@ -199,7 +211,7 @@ bool buildDictionaryHtmlPages(Renderer& renderer, const std::string&, uint16_t, 
   for (int i = 0; i < 4; ++i) pages.push_back(std::make_unique<Page>());
   return true;
 }
-std::string htmlToPlainText(const std::string& text, char) { return text; }
+std::string htmlToPlainText(std::string text, char) { return text; }
 struct DictionaryDefinitionActivity {
   struct PlainSelectionLine;
 ''' + structs + r'''
@@ -213,6 +225,8 @@ struct DictionaryDefinitionActivity {
   bool messageVisible = false;
   bool finished = false;
   bool selectionOpened = false;
+  ClipSelectionActivity::Selection pendingLookupSelection;
+  ClipSelectionActivity::Selection lookupReturnSelection;
   ActivityResult result;
   std::unique_ptr<ClipSelectionActivity> child;
   ActivityResultHandler callback;
@@ -233,6 +247,7 @@ struct DictionaryDefinitionActivity {
   bool layoutHtmlPages(Definition&);
   bool reserveLines(Definition&, size_t);
   bool wrapText(Definition&);
+  bool prepareFont(std::string&, int);
   int measureSpan(int, const char*, size_t, EpdFontFamily::Style = EpdFontFamily::REGULAR) const;
   void showMessage(StrId);
   void navigateDefinition(bool);
@@ -242,6 +257,18 @@ struct DictionaryDefinitionActivity {
 };
 ''' + methods + r'''
 int main() {
+  {
+    DictionaryDefinitionActivity rtlView;
+    std::string rtl;
+    for (size_t i = 0; i < 1000; ++i) rtl += "\xD8\xA8";
+    const std::string original = rtl;
+    assert(rtlView.prepareFont(rtl, 0));
+    assert(rtl == original && rtlView.renderer.maxPreparedBytes <= MAX_LINE_BYTES);
+    assert(rtlView.renderer.prepareCalls > 1 && rtlView.renderer.preparedStyles == 0x03);
+    HalMemory::available = 0;
+    assert(!rtlView.prepareFont(rtl, 0) && rtl == original);
+    HalMemory::available = 1024 * 1024;
+  }
   Dictionary dictionary;
   dictionary.entries = {{10, "first entry one two three four five six"}, {20, "other definition"}};
   DictionaryDefinitionActivity view;
@@ -425,11 +452,33 @@ int main() {
         exitResult.isCancelled = cancelled;
         lookupParent.onDefinitionResult(exitResult);
         bookReader.mappedInput.touch = touch;
+        ClippingResult clipped;
+        clipped.action = ClippingResult::Action::Lookup;
+        clipped.startWordIndex = 3;
+        clipped.endWordIndex = 5;
+        bookReader.lookupReturnSelection = lookupReturnSelectionFor(clipped);
         bookReader.onLookupResult(lookupParent.result);
         assert(bookReader.selectionOpened == (!touch && !cancelled));
+        // The restored range is handed to the reopened selection only when it opens.
+        assert(bookReader.pendingLookupSelection.valid == bookReader.selectionOpened);
+        if (bookReader.selectionOpened) {
+          assert(bookReader.pendingLookupSelection.firstWord == 3 && bookReader.pendingLookupSelection.lastWord == 5);
+        }
       }
     }
   }
+  // A clipping that spans pages cannot be restored; a single-page one keeps its word range.
+  ClippingResult multiPage;
+  multiPage.startPageOffset = 0;
+  multiPage.endPageOffset = 1;
+  multiPage.startWordIndex = 3;
+  multiPage.endWordIndex = 5;
+  assert(!lookupReturnSelectionFor(multiPage).valid);
+  ClippingResult singlePage = multiPage;
+  singlePage.endPageOffset = 0;
+  const auto restored = lookupReturnSelectionFor(singlePage);
+  assert(restored.valid && restored.firstPage == 0 && restored.lastPage == 0 && restored.firstWord == 3 &&
+         restored.lastWord == 5);
   // Long Back also exits at the first definition, where there are no ancestors.
   DictionaryDefinitionActivity root;
   root.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
@@ -439,22 +488,31 @@ int main() {
   assert(root.finished && root.result.isCancelled);
   // Header long-press exits independently of text-selection settings; body long-press still selects.
   HeaderBackTapTarget::set(4, 4, 32, 32);
+  const struct { int x, y; bool header, padded; } longPressTargets[] = {
+    {10, 10, true, true},
+    {0, 10, false, true},
+    {10, 0, false, true},
+    {40, 10, false, true},
+    {10, 40, false, true},
+    {50, 0, false, false},
+  };
   for (const bool controlsEnabled : {false, true}) {
     SETTINGS.touchReaderControls = controlsEnabled;
-    for (const bool onHeader : {false, true}) {
+    for (const auto& target : longPressTargets) {
       DictionaryDefinitionActivity touchView;
       touchView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
       touchView.content.text = dictionary.entries.at(10);
       assert(touchView.prepareDefinition(touchView.content));
       touchView.mappedInput.longPress = true;
-      touchView.mappedInput.touchX = onHeader ? 10 : 50;
-      touchView.mappedInput.touchY = onHeader ? 10 : 0;
+      touchView.mappedInput.touchX = target.x;
+      touchView.mappedInput.touchY = target.y;
+      assert(HeaderBackTapTarget::contains(target.x, target.y) == target.padded);
       const unsigned readsBeforeTouch = dictionary.reads;
       touchView.handleBack();
       assert(touchView.mappedInput.contactSuppressed && dictionary.reads == readsBeforeTouch);
-      assert(touchView.finished == onHeader && touchView.result.isCancelled == onHeader);
-      assert(bool(touchView.child) == (!onHeader && controlsEnabled));
-      if (onHeader) {
+      assert(touchView.finished == target.header && touchView.result.isCancelled == target.header);
+      assert(bool(touchView.child) == (!target.header && controlsEnabled));
+      if (target.header) {
         DictionaryDefinitionActivity parent, reader;
         parent.onDefinitionResult(touchView.result);
         reader.onLookupResult(parent.result);

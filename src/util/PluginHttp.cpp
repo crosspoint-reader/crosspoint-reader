@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -33,6 +34,11 @@ freeink::SecureHttpClient* openClient(freeink::SecureHttpClient* session, freein
   if (!http.connect(shouldAbort)) return nullptr;
   for (const auto& h : headers) http.addHeader(h.first, h.second);
   return &http;
+}
+
+// A chunked body's Content-Length, if any, is not its size.
+bool hasKnownLength(const freeink::SecureHttpClient& http) {
+  return http.hasContentLength() && http.getHeader("transfer-encoding").empty();
 }
 }  // namespace
 
@@ -227,8 +233,19 @@ int request(freeink::SecureHttpClient* session, const std::string& url, const st
           return false;
         }
         const size_t needed = out.length() + len;
-        // Grow geometrically instead of reallocating for every network chunk.
-        if (needed > reserved) reserved = std::min(maxResponse, std::max(needed, reserved * 2));
+        if (needed > reserved) {
+          // Reserve the whole body once when its length is known; otherwise grow
+          // geometrically instead of reallocating for every network chunk.
+          const bool knownLength = hasKnownLength(http);
+          size_t want = knownLength ? std::max(needed, http.getContentLength())
+                                    : std::min(maxResponse, std::max(needed, reserved * 2));
+          if (want > maxResponse) {
+            LOG_ERR("PHTP", "Response of %u bytes is over the %u byte cap", (unsigned)want, (unsigned)maxResponse);
+            overflow = true;
+            return false;
+          }
+          reserved = want;
+        }
         if (!out.reserve(reserved) || !out.concat(reinterpret_cast<const char*>(data), len)) {
           overflow = true;
           return false;
@@ -245,6 +262,44 @@ int request(freeink::SecureHttpClient* session, const std::string& url, const st
     return -1;
   }
   return status;
+}
+
+int requestStream(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
+                  const std::string& body, const Headers& headers, const StreamStart& onStart, const StreamData& onData,
+                  bool& complete, const std::function<bool()>& shouldAbort) {
+  complete = false;
+  WifiPowerSaveGuard psGuard;
+  freeink::SecureHttpClient tmp;
+  freeink::SecureHttpClient* httpPtr = openClient(session, tmp, url, headers, shouldAbort);
+  if (!httpPtr) return -1;
+  freeink::SecureHttpClient& http = *httpPtr;
+
+  bool started = false;
+  bool stopped = false;
+  const auto start = [&] {
+    const long length =
+        hasKnownLength(http) ? static_cast<long>(std::min<size_t>(http.getContentLength(), LONG_MAX)) : -1;
+    started = onStart(http.getStatus(), http.getHeaders(), length);
+    return started;
+  };
+  const int status = http.sendRequest(
+      method.c_str(), reinterpret_cast<const uint8_t*>(body.data()), body.size(),
+      [&](const uint8_t* data, size_t len) {
+        if ((!started && !start()) || !onData(data, len)) {
+          stopped = true;
+          return false;
+        }
+        return true;
+      },
+      shouldAbort);
+  complete = status >= 0 && !stopped && http.responseComplete();
+  // An empty body never calls onData, so start here.
+  if (complete && !started && !start()) complete = false;
+  if (!complete) {
+    LOG_ERR("PHTP", "Streamed request failed: status=%d started=%d stopped=%d %s", status, started, stopped,
+            url.c_str());
+  }
+  return started ? status : -1;
 }
 
 int requestToFile(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
