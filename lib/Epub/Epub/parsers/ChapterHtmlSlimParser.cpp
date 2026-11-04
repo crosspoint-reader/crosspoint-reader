@@ -341,9 +341,20 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
     }
   }
 
-  // Record deferred anchor after previous block is flushed (and any TOC page break)
-  anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+  // The page is fixed when the block places its first content (placeUnplacedAnchors).
+  unplacedAnchorIds.push_back(std::move(pendingAnchorId));
   pendingAnchorId.clear();
+}
+
+void ChapterHtmlSlimParser::placeUnplacedAnchors() {
+  if (unplacedAnchorIds.empty()) return;
+  anchorParagraphBegin = anchorData.size();
+  for (auto& id : unplacedAnchorIds) {
+    anchorData.push_back({std::move(id), static_cast<uint16_t>(completedPageCount)});
+  }
+  anchorParagraphEnd = anchorData.size();
+  anchorParagraph = layoutParagraph;
+  unplacedAnchorIds.clear();
 }
 
 void ChapterHtmlSlimParser::emitCurrentPage() {
@@ -360,6 +371,7 @@ void ChapterHtmlSlimParser::emitCurrentPage() {
 }
 
 void ChapterHtmlSlimParser::noteContent(const int top, const int bottom) {
+  placeUnplacedAnchors();
   for (BoxScope& box : boxScopes) {
     if (box.top < 0) box.top = static_cast<int16_t>(top);
     box.bottom = static_cast<int16_t>(std::max<int>(box.bottom, bottom));
@@ -807,6 +819,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle, cons
     makePages(true, paragraphEnd);
     if (stopRequested) return;
   }
+  anchorParagraph = nullptr;
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
@@ -1394,7 +1407,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         idAttr = idValue;
         const bool isTocAnchor =
             std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
-        if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
+        if (isTocAnchor || (!isNonNavigableInlineElement(name) &&
+                            self->anchorData.size() + self->unplacedAnchorIds.size() < MAX_ANCHORS_PER_CHAPTER)) {
           // Flush a displaced anchor before overwriting. Consecutive non-block elements
           // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
           // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
@@ -2981,6 +2995,8 @@ bool ChapterHtmlSlimParser::finishParse() {
       LOG_ERR("EHP", "Text layout dropped content (OOM); failing section build");
       return false;
     }
+    // Anchors of a block that placed nothing land on the last page.
+    placeUnplacedAnchors();
     if (!pendingAnchorId.empty()) {
       anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
       pendingAnchorId.clear();
@@ -3083,6 +3099,12 @@ bool ChapterHtmlSlimParser::canCarry(const size_t carry) const {
 // link areas to the top of the next page with their spacing intact.
 void ChapterHtmlSlimParser::breakPageCarryingLines(const size_t carry, const size_t paragraphLines,
                                                    const uint32_t visibleOffset) {
+  // Every line of the anchored paragraph on this page moves, and the paragraph starts here:
+  // its anchors follow its first line to the next page.
+  const bool carriesAnchorParagraphStart =
+      anchorParagraph && anchorParagraph == layoutParagraph && anchorParagraphEnd > anchorParagraphBegin &&
+      anchorParagraphEnd <= anchorData.size() && paragraphLines > 0 && paragraphLines == paragraphLinesOnPage &&
+      anchorData[anchorParagraphBegin].second == completedPageCount;
   auto nextPage = makeUniqueNoThrow<Page>();
   if (!nextPage) {
     LOG_ERR("EHP", "OOM: Page (%zu bytes)", sizeof(Page));
@@ -3129,6 +3151,11 @@ void ChapterHtmlSlimParser::breakPageCarryingLines(const size_t carry, const siz
   setCurrentPageVisibleOffset(visibleOffset);
   emitCurrentPage();
   completedPageCount++;
+  if (carriesAnchorParagraphStart) {
+    for (size_t i = anchorParagraphBegin; i < anchorParagraphEnd; ++i) {
+      anchorData[i].second = static_cast<uint16_t>(completedPageCount);
+    }
+  }
   if (stopRequested) return;
   currentPage = std::move(nextPage);
   currentPageNextY = 0;

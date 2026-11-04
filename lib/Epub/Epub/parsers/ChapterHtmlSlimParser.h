@@ -201,7 +201,16 @@ class ChapterHtmlSlimParser {
   // anchors needs ~28 KB contiguous, and a failed allocation aborts).
   int completedPageCount = 0;
   std::deque<std::pair<std::string, uint16_t>> anchorData;
-  std::string pendingAnchorId;          // deferred until after previous text block is flushed
+  std::string pendingAnchorId;  // deferred until after previous text block is flushed
+  // Anchors whose block has started but placed nothing yet. Their page is the page of the block's
+  // first content, which can differ from the page open at block start: the first line may not fit,
+  // or the orphan rule may move it to the next page.
+  std::vector<std::string> unplacedAnchorIds;
+  // anchorData range of the paragraph whose first line the anchors point at; a page break that
+  // carries every line of that paragraph moves them along.
+  const ParsedText* anchorParagraph = nullptr;
+  size_t anchorParagraphBegin = 0;
+  size_t anchorParagraphEnd = 0;
   std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
@@ -244,6 +253,7 @@ class ChapterHtmlSlimParser {
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle, bool paragraphEnd = true);
   void flushPendingAnchor();
+  void placeUnplacedAnchors();
   void completeCurrentPage();
   void emitCurrentPage();
   void noteContent(int top, int bottom);

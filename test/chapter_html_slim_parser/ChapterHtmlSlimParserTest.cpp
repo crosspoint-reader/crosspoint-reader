@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -2299,4 +2300,71 @@ TEST(TextDecorationPosition, UnderlineStaysBelowBaseline) {
     line->render(renderer, 0, 0, 20);
     EXPECT_EQ(renderer.lastLineY, 34);
   });
+}
+
+// A link target is the page of its block's first line. The page open when the block starts is wrong
+// when that line does not fit or the orphan rule carries it on: the jump lands a page early.
+class ChapterAnchorPageTest : public ChapterWidowOrphanTest {
+ protected:
+  void anchoredParagraph(const char* id, int wordCount) {
+    const XML_Char* attributes[] = {"id", id, nullptr};
+    ChapterHtmlSlimParser::startElement(&parser, "p", attributes);
+    text(words(wordCount));
+    close("p");
+  }
+  std::optional<uint16_t> anchorPage(const char* id) {
+    for (const auto& [key, page] : parser.getAnchors()) {
+      if (key == id) return page;
+    }
+    return std::nullopt;
+  }
+};
+
+TEST_F(ChapterAnchorPageTest, AnchorStaysWhenParagraphStartsOnThePage) {
+  paragraph(13 * 2);
+  anchoredParagraph("n12", 13 * 2);
+  paragraph(1);
+  EXPECT_EQ(anchorPage("n12"), std::optional<uint16_t>(0));
+}
+
+TEST_F(ChapterAnchorPageTest, AnchorFollowsFirstLineThatDoesNotFit) {
+  paragraph(13 * 5);  // the page is full
+  anchoredParagraph("n12", 13 * 2);
+  paragraph(1);
+  EXPECT_EQ(anchorPage("n12"), std::optional<uint16_t>(1));
+}
+
+TEST_F(ChapterAnchorPageTest, AnchorFollowsLoneFirstLineCarriedByOrphanRule) {
+  paragraph(13 * 4);
+  anchoredParagraph("n12", 13 * 3);  // its first line would sit alone at the bottom
+  paragraph(1);
+  ASSERT_GE(pages.size(), 1u);
+  EXPECT_EQ(linesOnPage(0), 4u);
+  EXPECT_EQ(anchorPage("n12"), std::optional<uint16_t>(1));
+}
+
+TEST_F(ChapterAnchorPageTest, AnchorFollowsTwoLineParagraphMovedWhole) {
+  paragraph(13 * 4);
+  anchoredParagraph("n14", 13 * 2);
+  paragraph(1);
+  EXPECT_EQ(anchorPage("n14"), std::optional<uint16_t>(1));
+}
+
+TEST_F(ChapterAnchorPageTest, AnchorStaysWhenOnlyTheParagraphTailMoves) {
+  paragraph(13 * 2);
+  anchoredParagraph("n12", 13 * 8);  // starts on page 0; later breaks carry only its continuation
+  paragraph(1);
+  EXPECT_EQ(anchorPage("n12"), std::optional<uint16_t>(0));
+}
+
+TEST_F(ChapterAnchorPageTest, ConsecutiveAnchoredNotesEachLandOnTheirFirstLine) {
+  anchoredParagraph("n1", 13 * 2);
+  anchoredParagraph("n2", 13 * 2);
+  anchoredParagraph("n3", 13 * 2);  // one line left on page 0: both lines move
+  anchoredParagraph("n4", 13 * 2);
+  paragraph(1);
+  EXPECT_EQ(anchorPage("n1"), std::optional<uint16_t>(0));
+  EXPECT_EQ(anchorPage("n2"), std::optional<uint16_t>(0));
+  EXPECT_EQ(anchorPage("n3"), std::optional<uint16_t>(1));
+  EXPECT_EQ(anchorPage("n4"), std::optional<uint16_t>(1));
 }
