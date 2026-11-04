@@ -257,6 +257,7 @@ class GfxRenderer {
   // Screen ops
   int getScreenWidth() const;
   int getScreenHeight() const;
+  // Always returns logical UI units, independent of the render task's PhysicalScope.
   void tapToLogical(float nx, float ny, int& outX, int& outY) const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   // One-shot: the next displayBuffer(), displayBufferAsync(), or
@@ -362,7 +363,7 @@ class GfxRenderer {
   void physicalRect(int& x, int& y, int& width, int& height) const {
     if (uiScaleActive_) spRect(x, y, width, height);
   }
-  // While alive, every call takes and returns physical pixels. Scaled public
+  // While alive, drawing calls take and return physical pixels. Scaled public
   // calls use it so their implementation is not scaled again; callers use it
   // for content that already is panel pixels: book images, XTC pages, sleep
   // and BMP images.

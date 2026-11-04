@@ -2168,13 +2168,6 @@ int GfxRenderer::getScreenHeight() const {
 }
 
 void GfxRenderer::tapToLogical(float nx, float ny, int& outX, int& outY) const {
-  if (uiScaleActive_) {
-    const PhysicalScope off(*this);
-    tapToLogical(nx, ny, outX, outY);
-    outX = lp(outX);
-    outY = lp(outY);
-    return;
-  }
   int phyX = static_cast<int>(nx * panelWidth);
   int phyY = static_cast<int>(ny * panelHeight);
   if (phyX < 0) phyX = 0;
@@ -2201,6 +2194,9 @@ void GfxRenderer::tapToLogical(float nx, float ny, int& outX, int& outY) const {
       outY = phyY;
       break;
   }
+  // Input runs beside rendering; PhysicalScope must not change its logical coordinate space.
+  outX = lp(outX);
+  outY = lp(outY);
 }
 
 // Translate a logical rect through rotateCoordinates and take the bounding
