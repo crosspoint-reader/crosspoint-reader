@@ -1217,14 +1217,19 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
   item = {};
   // Reuse the SD response without another network request or resetting navigation.
   if (!parseBrowseResponse()) return;
-  // An updated plugin can move down the list. Keep the highlight on that plugin
-  // when it is still on this page; otherwise preserve the current selection.
+  // An updated plugin can move down the list. Reselect only when its ID
+  // identifies exactly one row on this page; otherwise retain the highlight.
   if (result == HttpDownloader::OK && !selectedId.empty()) {
+    size_t matchCount = 0;
+    size_t matchIndex = 0;
     for (size_t i = 0; i < items.size(); ++i) {
       if (items[i].id != selectedId) continue;
-      nav.requestSelection(static_cast<int>(i) + (!manifest.isXmlList() && page > 1 ? 1 : 0));
-      break;
+      ++matchCount;
+      matchIndex = i;
+      if (matchCount > 1) break;
     }
+    if (matchCount == 1)
+      nav.requestSelection(static_cast<int>(matchIndex) + (!manifest.isXmlList() && page > 1 ? 1 : 0));
   }
   session = makeUniqueNoThrow<freeink::SecureHttpClient>();
   if (!session) LOG_ERR("PCAT", "OOM: browse client; using per-request connections");
