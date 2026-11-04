@@ -2,7 +2,6 @@
 
 #include <GfxRenderer.h>
 
-#include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 
@@ -30,15 +29,8 @@ const char* NightTimePickerActivity::headerTitle() const { return I18N.get(title
 
 void NightTimePickerActivity::activateIndex(const int index) {
   if (index < 0 || index >= listCount()) return;
-  if (SETTINGS.*field_ != index) {
-    SETTINGS.*field_ = static_cast<uint8_t>(index);
-    SETTINGS.saveToFile();
-    // The stored boundary records only when the schedule last acted, not
-    // which way. A new time can make that same moment the other boundary,
-    // so forget it and let the next check apply the new schedule.
-    APP_STATE.nightScheduleBoundary = 0;
-    APP_STATE.saveToFile();
-  }
+  SETTINGS.*field_ = static_cast<uint8_t>(index);
+  SETTINGS.saveToFile();
   finish();
 }
 

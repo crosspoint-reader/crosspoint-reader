@@ -263,7 +263,10 @@ bool applyNightSchedule() {
   const int64_t now = trustedtime::trustedNow();
   if (now == 0) return false;
   const auto boundary = nightschedule::latestBoundary(now, SETTINGS.nightScheduleOnSlot, SETTINGS.nightScheduleOffSlot);
-  if (boundary.at == 0 || boundary.at == APP_STATE.nightScheduleBoundary) return false;
+  if (boundary.at == 0) return false;
+  if (boundary.at == APP_STATE.nightScheduleBoundary && boundary.nightOn == APP_STATE.nightScheduleBoundaryOn) {
+    return false;
+  }
 
   // Night mode is saved before the boundary, so a power loss between the two
   // saves reapplies the boundary on the next boot instead of skipping it.
@@ -273,6 +276,7 @@ bool applyNightSchedule() {
     SETTINGS.saveToFile();
   }
   APP_STATE.nightScheduleBoundary = boundary.at;
+  APP_STATE.nightScheduleBoundaryOn = boundary.nightOn;
   APP_STATE.saveToFile();
   LOG_INF("NIGHT", "Schedule boundary: night mode %s", boundary.nightOn ? "on" : "off");
   return changed;

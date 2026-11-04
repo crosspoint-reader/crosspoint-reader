@@ -21,8 +21,11 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   bool showBootScreen = true;
-  // Epoch of the last night-schedule boundary applied; 0 = none yet.
+  // The last night-schedule boundary applied: its epoch (0 = none yet) and
+  // whether it turned night mode on. Both are compared, since a changed time
+  // can make the same moment the other boundary.
   int64_t nightScheduleBoundary = 0;
+  bool nightScheduleBoundaryOn = false;
 
   static const char* getFilePath() { return "/.crosspoint/state.json"; }
   void toJson(JsonDocument& doc) const;
