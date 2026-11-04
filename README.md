@@ -88,27 +88,19 @@ USB port or browser before assuming the device is locked. Only reach for the unl
 ### Web installer (recommended)
 
 1. Connect your device to your computer via USB-C and wake/unlock the device
-2. Go to https://crosspointreader.com/#flash-tools, select your device (X3, X4, Xteink X4Pro, Seeed reTerminal Sticky, or M5PaperMono), and choose an official CrossPoint release.
+2. Go to https://crosspointreader.com/install, select your device, and choose an official CrossPoint release.
 
 ### Web installer (specific version)
 
 1. Connect your device to your computer via USB-C and wake/unlock the device
 2. Download the firmware file for your device from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases), or compile yourself.
-3. Go to https://crosspointreader.com/#flash-tools, select your device, click "Custom .bin" and upload the firmware file.
+3. Go to https://crosspointreader.com/install, select your device, click "Custom .bin" and upload the firmware file.
 
 ### BOOX Picco USB updates
 
-Use the Picco-specific `firmware.bin` from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases). Picco uses its stock partition layout, with the application at `0xE0000`.
+Connect your Picco to your computer with a USB data cable. Open the [web installer](https://crosspointreader.com/install), select BOOX Picco, and follow its instructions.
 
-1. Install `esptool` with `pip install esptool`.
-2. Connect the Picco with a USB data cable and select its serial port.
-3. Write only the Picco application image, replacing the port and file path below:
-
-```bash
-esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash 0xE0000 /path/to/picco/firmware.bin
-```
-
-Do not erase the flash or overwrite the bootloader, partition table, or `safeboot` recovery partition. When building from source, `pio run -e picco -t upload` also uploads only the application.
+Developers building from source can compile and flash with `pio run -e picco -t upload`. See [Development quick start](#development-quick-start) for setup.
 
 ### Revert to Official Firmware
 

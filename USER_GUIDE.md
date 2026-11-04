@@ -409,7 +409,7 @@ See [network troubleshooting](docs/troubleshooting.md) for connection drops, fai
 
 ### Update CrossPoint
 
-Open Settings → System → Check for updates to update over Wi-Fi. You can also place `firmware.bin` on the SD card and use the SD firmware update action. The BOOX Picco uses [Picco-specific USB update instructions](README.md#boox-picco-usb-updates) instead. For other devices, see [Install firmware](README.md#install-firmware).
+Open Settings → System → Check for updates to update over Wi-Fi. You can also place `firmware.bin` on the SD card and use the SD firmware update action. For BOOX Picco, connect it to your computer over USB and use the [web installer](https://crosspointreader.com/install). For other devices, see [Install firmware](README.md#install-firmware).
 
 ### Report a problem
 
