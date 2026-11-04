@@ -35,7 +35,7 @@ Transparent overlay files are intentionally separate from normal sleep images. R
 > - X3: Use a resolution of 528x792 pixels to match the device's screen resolution.
 
 > [!TIP]
-> You can set an image as the sleep screen cover directly from the BMP image viewer in the **Browse Files** screen. On touch devices, long-press the image.
+> You can set an image as the sleep screen cover directly from the BMP or JPG/JPEG image viewer in the **Browse Files** screen. On touch devices, long-press the image. PNG images can be selected this way in Transparent or Cover + Transparent mode.
 
 ## Missing images
 

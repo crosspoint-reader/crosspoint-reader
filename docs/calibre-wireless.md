@@ -19,7 +19,7 @@ If you don't already have the plugin installed:
 2. In the Preferences dialog select Plugins.
 3. In Plugins search for "crosspoint".
 4. Click on "Customize plugin".
-5. Update the value for "Host" to match the IP for your device.
+5. If automatic discovery fails, set "Host" to the IP shown in File Transfer → Calibre Wireless after the reader joins a network. See [Uploading Books](#uploading-books) for the connection step. Host and Port are fallback values.
 6. Leave the other settings as they are.
 7. [optional] Modify the "Upload path" to point to a subfolder other than the root "/" folder. Enter this as a path relative to the root folder. Example: `/mybooks`
 8. Restart Calibre.
@@ -31,14 +31,19 @@ If you don't already have the plugin installed:
 To upload a book using the CrossPoint plugin in Calibre:
 
 1. On the device: File Transfer -> Calibre Wireless, then join a network.
-2. Select one or more books.
-3. Right-click on that selection.
-4. Select "Send to Device" > "Send to main memory"
+2. Connect your computer to the same network as the device.
+3. In Calibre, select one or more books.
+4. Right-click on that selection.
+5. Select "Send to Device" > "Send to main memory"
 
-The CrossPoint plugin will connect to your device, create a folder for the book's author in the root folder (or the folder you configured for the plugin), then copy the book into that folder.
+Network client isolation can prevent the computer from reaching the reader even on the same network. If this happens, use a network that allows devices to communicate.
+
+The plugin uses Calibre's send-to-device template to choose folders and filenames. Upload path sets the base folder. The plugin configuration also offers a separate upload template and a Send to root option.
 
 <img width="783" height="310" alt="Send selected books to the device in Calibre" src="https://github.com/user-attachments/assets/741b0909-2e1d-4f16-8af0-2c43fbda5ce6" />
 
 ## Removing a Book
 
-Books cannot be removed from your device through Calibre. Use the web interface instead.
+The current plugin supports deleting books from the device through Calibre. Browse Files and the web interface also offer deletion.
+
+See the [plugin source](https://github.com/crosspoint-reader/calibre-plugins/blob/master/crosspoint_reader/driver.py) and [plugin configuration](https://github.com/crosspoint-reader/calibre-plugins/blob/master/crosspoint_reader/config.py) for the current behavior.

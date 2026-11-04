@@ -8,7 +8,7 @@ Hold a word to select it, then drag either handle to adjust the range. Releasing
 
 To extend onto the next page, hold the ending handle at the bottom edge or over the final word for one second. A selection can cover up to three pages in the same chapter, with a limit of 240 selectable words.
 
-Look Up searches the selected text in your dictionary. Bookmark toggles the bookmark on the selection's final page. With buttons, Back closes the action popup without losing the selection.
+Look Up searches the selected text in your dictionary. Bookmark toggles the bookmark on the selection's final page. With buttons, Back clears the selected range. Press Back again to leave selection.
 
 ## Open a saved passage
 
