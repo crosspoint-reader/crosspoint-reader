@@ -190,22 +190,30 @@ void UiListActivity::loop() {
 }
 
 void UiListActivity::navigateButtons() {
-  buttonNavigator.onNextPress(
-      [this] { moveSelectionTo(ButtonNavigator::nextIndex(activeNav().selected, listCount())); });
-  buttonNavigator.onPreviousPress(
-      [this] { moveSelectionTo(ButtonNavigator::previousIndex(activeNav().selected, listCount())); });
+  const int count = listCount();
+  auto& n = activeNav();
+  buttonNavigator.onNextRelease([this, count, &n] { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count)); });
+  buttonNavigator.onPreviousRelease(
+      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousIndex(n.selected, count)); });
   // Page by the rows the last build actually drew (pageRows), not the
   // fixed-height visibleRows estimate: with wrapped labels the estimate
   // overshoots and rows between pages would never be shown. The measurement
   // can be one build old while a refresh is in flight; the next layout's
   // feedback corrects the viewport.
-  buttonNavigator.onNextContinuous([this] {
-    const auto& n = activeNav();
-    moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, listCount(), n.inputPageRows()));
+  const int shortStep = 3;
+  buttonNavigator.onNextContinuous([this, count, &n] {
+    if (mappedInput.isPressed(MappedInputManager::Button::Right)) {
+      moveSelectionTo(n.selected == count - 1 ? 0 : (std::min((n.selected + shortStep), (count - 1))));
+      return;
+    }
+    moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, count, n.inputPageRows()));
   });
-  buttonNavigator.onPreviousContinuous([this] {
-    const auto& n = activeNav();
-    moveSelectionTo(ButtonNavigator::previousPageIndex(n.selected, listCount(), n.inputPageRows()));
+  buttonNavigator.onPreviousContinuous([this, count, &n] {
+    if (mappedInput.isPressed(MappedInputManager::Button::Left)) {
+      moveSelectionTo(n.selected == 0 ? count - 1 : (std::max((n.selected - shortStep), 0)));
+      return;
+    }
+    moveSelectionTo(ButtonNavigator::previousPageIndex(n.selected, count, n.inputPageRows()));
   });
 }
 
