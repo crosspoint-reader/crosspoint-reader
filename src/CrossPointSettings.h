@@ -30,6 +30,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
+  // Images from /.sleep and /sleep: a shuffled pick, or one after another in path order.
+  enum SLEEP_IMAGE_ORDER { SLEEP_ORDER_RANDOM = 0, SLEEP_ORDER_SEQUENTIAL = 1, SLEEP_IMAGE_ORDER_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
     NO_FILTER = 0,
     BLACK_AND_WHITE = 1,
@@ -257,6 +259,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t screenInverted = 0;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
+  uint8_t sleepImageOrder = SLEEP_ORDER_RANDOM;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
   // Status bar settings
