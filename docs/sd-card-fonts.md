@@ -7,6 +7,10 @@ If CrossPoint enables external RAM on your device, you can load `.ttf`, `.otf`,
 and `.ttc` files directly. Otherwise, convert them to `.cpfont` files first.
 All devices can use `.cpfont` files.
 
+In the reader’s Text panel, the font-size popup shows up to five sizes at a time.
+Swipe up or down to scroll, then tap a size. Navigation buttons move the selection
+and scroll it into view; Select applies it.
+
 ## Installing Fonts
 
 There are three ways to install `.cpfont` fonts. Direct TTF/OTF/TTC loading uses

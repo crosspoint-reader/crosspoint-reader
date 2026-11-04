@@ -64,18 +64,30 @@ class OptionPopup {
     message = messageStr ? messageStr : "";
   }
 
-  void show(StrId titleId, const std::vector<std::string>& options, int currentIndex,
-            std::function<void(int)> onSelect) {
+  void show(StrId titleId, const std::vector<std::string>& options, int currentIndex, std::function<void(int)> onSelect,
+            uint8_t visibleOptionCount = 0) {
     title = I18N.get(titleId);
     headline.clear();
     ownedStrings = options;
     activate(currentIndex, std::move(onSelect));
+    visibleOptions = visibleOptionCount;
+    followSelection();
   }
 
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active) return false;
 
     const freeink::ui::InputSnapshot snap = touchSnapshotFrom(input);
+    const auto swipe = input.wasSwipe();
+    if (uiReady && visibleOptions > 0 &&
+        (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down)) {
+      interactions.routePublished(snap);
+      const int count = std::min<int>(ownedStrings.size(), MAX_OPTIONS);
+      const int delta = swipe == MappedInputManager::SwipeDir::Up ? visibleOptions : -visibleOptions;
+      firstOption = std::clamp(firstOption + delta, 0, std::max(0, count - visibleOptions));
+      requestUpdate();
+      return true;
+    }
     if (snap.touchPressed || snap.touchReleased || snap.touchHeld) {
       // Interactions are registered on the render task; only route once the
       // first render after show() has populated the table (uiReady handshake).
@@ -130,10 +142,12 @@ class OptionPopup {
     const int count = std::min<int>(ownedStrings.size(), MAX_OPTIONS);
     if (previous) {
       selectedIndex = (selectedIndex - 1 + count) % count;
+      followSelection();
       requestUpdate();
       return true;
     } else if (next) {
       selectedIndex = (selectedIndex + 1) % count;
+      followSelection();
       requestUpdate();
       return true;
     } else if (confirm) {
@@ -206,6 +220,8 @@ class OptionPopup {
     props.options = options;
     props.optionCount = count;
     props.verticalOptions = true;
+    props.visibleOptions = visibleOptions;
+    props.firstOption = static_cast<uint8_t>(firstOption);
     // Touch only: physical buttons stay on the legacy wrap/confirm path above,
     // so the buffer never competes with it for focus/confirm dispatch.
     props.inputMask = fui::InputTouch;
@@ -268,9 +284,7 @@ class OptionPopup {
   }
 
  private:
-  // The dialog has no scrolling, so options past MAX_OPTIONS would render off
-  // screen anyway; a fixed cap keeps the DialogOption array on the stack and
-  // the interaction table small. +1 slot for the chrome guard rect.
+  // Bound stack storage and the interaction table; +1 slot for the chrome guard.
   static constexpr int MAX_OPTIONS = 16;
   static constexpr size_t INTERACTION_CAPACITY = MAX_OPTIONS + 1;
   static constexpr freeink::ui::ActionId ACTION_OPTION = 1;
@@ -278,11 +292,19 @@ class OptionPopup {
 
   void activate(int currentIndex, std::function<void(int)> onSelect) {
     const int count = std::min<int>(ownedStrings.size(), MAX_OPTIONS);
+    visibleOptions = 0;
+    firstOption = 0;
     selectedIndex = currentIndex >= 0 && currentIndex < count ? currentIndex : 0;
     onSelectCallback = std::move(onSelect);
     message.clear();
     uiReady = false;
     active = count > 0;
+  }
+
+  void followSelection() {
+    if (visibleOptions == 0) return;
+    firstOption = freeink::ui::listTopIndexFor(selectedIndex, firstOption, visibleOptions,
+                                               std::min<int>(ownedStrings.size(), MAX_OPTIONS));
   }
 
   bool active = false;
@@ -291,6 +313,8 @@ class OptionPopup {
   std::string message;
   std::vector<std::string> ownedStrings;
   int selectedIndex = 0;
+  int firstOption = 0;
+  uint8_t visibleOptions = 0;
   std::function<void(int)> onSelectCallback;
   // Written by the render task (frame registration), routed by the loop task;
   // uiReady closes the rebuild window exactly like UiListActivity::uiReady.

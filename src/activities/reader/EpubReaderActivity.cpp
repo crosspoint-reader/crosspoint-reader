@@ -2568,11 +2568,14 @@ void EpubReaderActivity::showTextRowPopup(const int row) {
       for (size_t i = 0; i < sizes.size(); ++i) {
         if (sizes[i] == cur) curIdx = static_cast<int>(i);
       }
-      overlayPopup.show(StrId::STR_FONT_SIZE, labels, curIdx, [this, sizes](int idx) {
-        if (idx < 0 || idx >= static_cast<int>(sizes.size())) return;
-        SETTINGS.fontPointSize = sizes[idx];
-        applyTextSettingLive();
-      });
+      overlayPopup.show(
+          StrId::STR_FONT_SIZE, labels, curIdx,
+          [this, sizes](int idx) {
+            if (idx < 0 || idx >= static_cast<int>(sizes.size())) return;
+            SETTINGS.fontPointSize = sizes[idx];
+            applyTextSettingLive();
+          },
+          5);
       break;
     }
     case 2:
