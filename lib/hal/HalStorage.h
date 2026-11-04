@@ -36,6 +36,9 @@ class HalStorage {
   void endUsbDrive();
   UsbDriveState usbDriveState() const;
   bool usbDriveHostSuspended() const;
+  // Card capacity and used space (the first used-space call scans the FAT; the SDK caches it ~20 s).
+  uint64_t sdTotalBytes();
+  uint64_t sdUsedBytes();
   std::vector<String> listFiles(const char* path = "/", int maxFiles = 200);
   // Read the entire file at `path` into a String. Returns empty string on failure.
   String readFile(const char* path);
