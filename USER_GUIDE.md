@@ -16,9 +16,17 @@ This guide covers everyday use on button and touch devices. Some controls depend
 
 ### Add your first book
 
-CrossPoint reads EPUB, XTC/XTCH, and TXT books. It also opens BMP images.
+CrossPoint reads EPUB, XTC/XTCH, TXT, and Markdown (`.md`) books. Browse Files also opens BMP, PNG, and JPG/JPEG images. EPUBs can contain JPG, PNG, and GIF images. GIF files do not open as standalone images.
 
-To copy a book from your computer:
+If your reader offers USB Drive, you can copy books over a USB data cable without removing the SD card:
+
+1. Open Home → File Transfer → USB Drive.
+2. Connect the reader to your computer and wait for the SD card to appear as a drive.
+3. Copy your books, then eject the drive on your computer. The reader restarts at Home.
+
+See [USB Drive](#usb-drive) for supported models and transfer precautions.
+
+To copy a book with a separate SD card reader:
 
 1. Put the reader to sleep and remove its SD card.
 2. Insert the card into your computer and copy a book to it. You can use folders to organize your books.
@@ -57,7 +65,7 @@ To return to Browse Files from a book, hold Back. The Short Back to File Browser
 
 ### Sleep and resume
 
-Hold Power for about half a second to sleep or wake the reader. CrossPoint reopens the last book on subsequent starts.
+Hold Power for about half a second to sleep or wake the reader. CrossPoint reopens the last book when it wakes after sleeping in the reader. If you sleep from Home or another screen, it normally returns Home.
 
 The reader also sleeps after a period of inactivity. Change this in Settings → Display → Time to Sleep. To use a short Power press for sleep, change Short Power Button Click in Settings → Controls.
 
@@ -65,7 +73,7 @@ The reader also sleeps after a period of inactivity. Change this in Settings →
 
 ### Home
 
-Home gives you access to your recent reading, Browse Files, Library, File Transfer, and Settings. The Plugins entry appears when plugins are enabled.
+Home gives you access to your recent reading, Browse Files, Library, File Transfer, and Settings. The Plugins entry appears when plugins are enabled. With saved OPDS servers and plugins disabled, Home shows OPDS Browser instead.
 
 ### Library
 
@@ -93,7 +101,7 @@ Library creates its index the first time you open it. After adding books or chan
 
 Browse Files shows the folders and filenames on your SD card. The current folder path appears at the top. Hidden files and folders stay hidden unless you enable Settings → System → Show Hidden Files.
 
-Use the direction buttons and Confirm, or tap a row, to open a folder or book. Hold a direction button to move a page at a time. Opening a BMP file shows the image viewer.
+Use the direction buttons and Confirm, or tap a row, to open a folder or book. Hold a direction button to move a page at a time. Opening a BMP, PNG, or JPG/JPEG file shows the image viewer. Use the page buttons or horizontal swipes to view neighboring images.
 
 Hold Confirm on a selected item, or long-press its row, to open its action menu. Files offer Open, Delete, and Rename. Folders offer Open and Delete. Deletion asks you to confirm. To move files or manage them from a computer, use the [file transfer web interface](docs/webserver.md#file-manager).
 
@@ -120,9 +128,10 @@ In List mode, select an action directly. In Toolbar mode, use Contents for chapt
 | Reading Orientation | Rotate the page |
 | Auto Turn (Pages Per Minute) | Set automatic page turns |
 | Take screenshot | Save the screen to `screenshots/` on the SD card |
-| Show page as QR | Show a QR code for the current reading position |
+| Show page as QR | Show a QR code containing the current page's text |
 | Sync Progress | Sync this book's reading position |
 | Bluetooth Page Turner | Toggle Bluetooth for a paired remote |
+| Night Mode / Frontlight | Invert the display or open light controls, where available |
 | Go Home | Close the book and return Home |
 | Delete Book Cache | Rebuild this book's cached layout on the next open |
 
@@ -138,7 +147,7 @@ Auto Turn advances pages at the speed you choose in the reader menu. Tilt Page T
 
 ### Bookmarks
 
-Choose Toggle Bookmark in the reader menu to save or remove a bookmark on the current page. For a button shortcut, assign Bookmark in Settings → Controls → Long-Press Menu, then hold Confirm while reading. This shortcut is disabled by default.
+Choose Toggle Bookmark in the reader menu to save or remove a bookmark on the current page. On button-only devices, assign Bookmark in Settings → Controls → Long-Press Menu for a shortcut, then hold Confirm while reading. This shortcut is disabled by default.
 
 Open Bookmarks in the reader menu and select a saved bookmark to return to it. Hold Confirm on a bookmark, or long-press its row, to open its action menu. Choose Rename to name it, or Delete to request deletion.
 
@@ -155,9 +164,10 @@ You can look up words offline with a StarDict dictionary on the SD card:
 1. Copy a supported dictionary into `/dictionaries/`.
 2. Select it in Settings → Reader → Dictionary.
 3. While reading, choose Look Up from the reader menu.
-4. Use Left/Right to select a word, then press Confirm to read its definition.
+4. Use the direction buttons to select the first word, then press Confirm.
+5. Select the last word and press Confirm again to look it up. For one word, press Confirm twice without moving.
 
-On touch devices, hold a word and choose Look Up from the selection toolbar. You can also assign Dictionary to the Long-Press Menu shortcut.
+On touch devices, hold a word and choose Look Up from the selection toolbar. On button-only devices, you can also assign Dictionary to the Long-Press Menu shortcut.
 
 See the [dictionary guide](docs/dictionary.md) for supported files and installation details.
 
@@ -169,8 +179,7 @@ With buttons:
 
 1. Choose Create Clipping from the reader menu.
 2. Move to the first word and press Confirm.
-3. Move to the last word and press Confirm again.
-4. Choose Clip to save the selection.
+3. Move to the last word and press Confirm again to save the clipping.
 
 With touch:
 
@@ -178,7 +187,7 @@ With touch:
 2. Drag the selection handles to adjust the range.
 3. Tap Clip above the selection to save it.
 
-The selection tools also offer Look Up and Bookmark. To read saved excerpts, open View Clippings from the reader menu. Select an excerpt to open it or use Go to Passage where available. Hold Confirm, or long-press an excerpt, to delete it.
+The touch selection toolbar also offers Look Up when a dictionary is available, and Bookmark. To read saved excerpts, open View Clippings from the reader menu. Select an excerpt to open it or use Go to Passage where available. Hold Confirm, or long-press an excerpt, to delete it.
 
 CrossPoint also exports saved excerpts to `My Clippings.txt` in the SD card's root folder. Deleting a clipping leaves that text export unchanged. If Sync Clippings is enabled, individual clipping deletions are sent during the next manual sync.
 
@@ -201,9 +210,9 @@ Open Settings → Reader → Text Settings. While reading, you can also open Tex
 | Layout | Line, word, and character spacing, paragraph spacing and indentation, alignment, and screen margins |
 | Style | Focus Reading, hyphenation, embedded book styles, and text anti-aliasing |
 
-Built-in and direct TTF/OTF/TTC fonts offer 12, 14, 16, and 18 pt. Converted `.cpfont` families offer their installed sizes.
+Built-in fonts offer 12, 14, 16, and 18 pt. Direct TTF/OTF/TTC fonts offer each whole point size from 8 to 22 pt. Converted `.cpfont` families offer their installed sizes.
 
-Embedded Style uses formatting from the EPUB. Text anti-aliasing smooths letter edges but slightly slows page turns. Focus Reading bolds the first part of each word. Hyphenation changes where words can break across lines. For Korean text, it allows breaks between syllables without drawing a hyphen.
+Embedded Style uses formatting from the EPUB. Text anti-aliasing smooths letter edges. Focus Reading bolds the first part of each word. Hyphenation changes where words can break across lines. For Korean text, it allows breaks between syllables without drawing a hyphen.
 
 Choose Reading Orientation to rotate the page. Settings → Reader also contains image-display choices and Customise Status Bar.
 
@@ -227,7 +236,7 @@ If your device has a frontlight, drag the brightness slider or tap the sun icon 
 
 The quick controls provide night mode, screen refresh, reading orientation, and a toggle for reader touch controls. Builds with Bluetooth support also offer a Bluetooth toggle for a saved remote. Enabling Bluetooth here does not pair a new remote. Filled toggles are enabled, and outlined toggles are disabled. Refresh and orientation always have outlines.
 
-Light adjustment is in Control Center rather than Display settings. On the X4 Pro, double-clicking Power also toggles the frontlight when that shortcut is enabled. Settings → Display → Restore Light on Wake controls whether the light returns to its saved state after waking.
+You can also open the light panel through Frontlight in the reader menu, where available. Light adjustment is in this panel rather than Display settings. On the X4 Pro, double-clicking Power also toggles the frontlight when that shortcut is enabled. Settings → Display → Restore Light on Wake controls whether the light returns to its saved state after waking.
 
 ### Sleep screen
 
@@ -236,15 +245,17 @@ Choose Settings → Display → Sleep Screen to change what appears while the re
 | Mode | What appears |
 | --- | --- |
 | Dark / Light | The CrossPoint logo on a dark or white background |
-| Cover | The current book's cover, or Dark when no book is open |
+| Cover | The last opened book's cover, or Dark if no usable cover is available |
 | Custom | An image from the SD card, or Dark if no image is found |
-| Cover + Custom | The cover while reading, otherwise a custom image |
-| Quick Resume | The last page of text with a moon icon |
+| Cover + Custom | The cover when sleeping from the reader, otherwise a custom image. A missing cover falls back to Custom |
+| Quick Resume | The current screen with a moon icon |
 | Transparent | An overlay image on the current screen |
 | Cover + Transparent | An overlay on the last book's cover, with the current screen as a fallback |
 | None | A blank screen |
 
-Quick Resume on Timeout uses the last page when the reader sleeps due to inactivity. Sleep Screen Cover Mode chooses Fit or Crop for covers and custom images. Sleep Screen Cover Filter offers grayscale, contrast, or inverted output.
+Quick Resume on Timeout preserves the current screen when the reader sleeps due to inactivity. Sleep Screen Cover Mode chooses Fit or Crop for covers and custom images. Sleep Screen Cover Filter offers grayscale, contrast, or inverted output.
+
+You can set a BMP or JPG/JPEG as a sleep image from the image viewer with Confirm or a long press. PNG can be selected this way when using a transparent sleep mode.
 
 See [custom sleep images](docs/sleep-images.md) for folders, image formats, transparent overlays, and fallback behavior.
 
@@ -264,6 +275,14 @@ Confirm and Back work like device buttons in the reader. Page-turn actions move 
 
 ## Transfer and sync
 
+### USB Drive
+
+USB Drive is available on Xteink X4 Pro, X4 Classic, Paper Mono, Metalio E-Ink 4, EEGOREAD A4, and BOOX Picco. If USB Drive is absent from File Transfer, use Wi-Fi or a separate SD card reader.
+
+Open Home → File Transfer → USB Drive, then connect a USB data cable. Mounting can take up to 30 seconds. The computer has exclusive access to the SD card during the session, so reading and other file operations are unavailable.
+
+Finish copying and eject the drive on your computer before unplugging the cable. Ejecting or disconnecting ends USB Drive and restarts the reader at Home. While the drive is mounted, Back and Power do not exit the session. If the reader is still waiting for a computer, Back or Power cancels it.
+
 ### Wi-Fi file transfer
 
 Open Home → File Transfer. Choose a connection method:
@@ -282,9 +301,9 @@ See the [web interface guide](docs/webserver.md) for connection steps, the EPUB 
 
 ### Calibre
 
-Install the CrossPoint Reader plugin in Calibre, then set its Host to the IP address shown on your reader. On the reader, open File Transfer → Calibre Wireless. In Calibre, select books and choose Send to Device → Send to main memory.
+Install the CrossPoint Reader plugin in Calibre. On the reader, open File Transfer → Calibre Wireless and join the same network as your computer. The plugin discovers the reader automatically. If discovery fails, set Host in the plugin configuration to the IP address shown on the reader. In Calibre, select EPUB books and choose Send to Device → Send to main memory.
 
-See [Calibre wireless setup](docs/calibre-wireless.md) for installation steps and screenshots. To delete books, use Browse Files or the web interface.
+See [Calibre wireless setup](docs/calibre-wireless.md) for installation steps and screenshots. The current plugin can also delete books from the device. Browse Files and the web interface offer deletion too.
 
 ### OPDS catalogs
 
@@ -293,9 +312,10 @@ OPDS catalogs let you browse and download books from a library server:
 1. Open Settings → Connectivity → OPDS Servers.
 2. Select Add Server and enter the catalog URL. A Calibre Content Server URL usually ends in `/opds`.
 3. Add a display name and credentials if the server requires them.
-4. Select the saved server to browse its catalog.
+4. Return Home and open OPDS Browser. If plugins are enabled, open Plugins → OPDS Browser instead.
+5. Select a server to browse its catalog.
 
-You can save up to eight servers. Authentication supports HTTP Basic, so configure Calibre for Basic rather than Digest authentication. To remove a server, open its settings and choose Delete Server. You can also manage servers from the web interface's Settings page.
+You can save up to eight servers. Authentication supports HTTP Basic, so configure Calibre for Basic rather than Digest authentication. To remove a server, open its settings and choose Delete Server. You can also manage servers from the web interface's Settings page. OPDS settings include a download folder and filename format.
 
 ### Reading progress sync
 
@@ -303,7 +323,7 @@ CrossPoint can share reading positions with other CrossPoint readers and KOReade
 
 For the default service, open Settings → Connectivity → CrossPoint Sync. Enter a username and password, leave Sync Server URL empty, and select the CrossPoint server type. Use Sign Up on your first device and Authenticate on the others.
 
-While reading, open the reader menu and choose Sync Progress. Smart sync resolves simple cases automatically. Ask every time lets you choose Apply Remote or Upload Local. You can also assign CrossPoint Sync to the Long-Press Menu shortcut.
+While reading, open the reader menu and choose Sync Progress. Smart sync resolves simple cases automatically. Ask every time lets you choose Apply Remote or Upload Local. On button-only devices, you can also assign CrossPoint Sync to the Long-Press Menu shortcut.
 
 Send Metadata controls whether book titles, authors, and other book details accompany progress. Sync Clippings is off by default. Enable it only with a compatible CrossPoint Sync server to include excerpts in manual syncs.
 
@@ -334,7 +354,7 @@ Open Settings from Home. The categories below match the device. Some settings ap
 
 ### Display choices
 
-Refresh Frequency controls full screen refreshes while reading. More frequent refreshes clear lingering marks from previous pages, also called ghosting. Night Mode inverts the display. UI Theme offers Classic, Lyra, Lyra Extended, and RoundedRaff. Lyra Extended shows three books on Home rather than one.
+Refresh Frequency controls full screen refreshes while reading. More frequent refreshes clear lingering marks from previous pages, also called ghosting. Night Mode inverts the display. UI Theme offers Classic, Lyra, Lyra Extended, and RoundedRaff. Devices with external RAM also offer Cover Grid for a grid of book covers. Lyra Extended shows three books on Home rather than one.
 
 Hide Battery % can hide the number in the reader or everywhere. The battery icon remains visible. Sunlight Fading Fix is available on supported button devices for screen fading in direct sunlight.
 
@@ -351,11 +371,13 @@ Customise Status Bar controls the reading information and progress display. Dict
 | Remap Front Buttons | Change the bottom buttons on button-only devices |
 | Side Button Layout (reader) | Change the side buttons' page-turn actions or disable them |
 | Long-Press Button Behavior | Off, Chapter Skip, or Orientation Change |
-| Long-Press Menu | Bookmark, CrossPoint Sync, Dictionary, Create Clipping, or Disabled |
-| Short Power Button Click | Ignore, Sleep, Page Turn, Links and Footnotes, or Refresh |
+| Long-Press Menu | On button-only devices: Bookmark, CrossPoint Sync, Dictionary, Create Clipping, Links and Footnotes, or Disabled |
+| Short Power Button Click | Ignore, Sleep, Page Turn, Links and Footnotes, or Refresh, plus device-specific shortcuts described below |
 | Quick return from links | Use a short Power press to return after following a link |
 | Touch Reader Controls | Enable or disable touch reading controls |
 | Next / Previous Page Gesture | Choose taps, swipes, both, inverted taps, or Disabled |
+
+Short Power Button Click also offers Create Clipping on button-only devices, or Confirm on touch devices. Touch devices without a Home key additionally offer Bookmark, CrossPoint Sync, and Reader Menu.
 
 A short Confirm press still opens the reader menu when Long-Press Menu is assigned. Power page turns and link actions apply while reading. Device-specific settings can also control a Home button, slide switch, vibration, or tilt page turns.
 
@@ -367,7 +389,7 @@ On devices with a Reset button, press and release Reset, then quickly hold Power
 
 On devices with Reset and Back buttons, hold the configured Back button and Power after pressing Reset to bypass a book that repeatedly crashes. This starts at Home so you can avoid reopening the book.
 
-If one book causes problems, try Delete Book Cache from its reader menu. If you cannot open it, back up the SD card before removing the affected `epub_*` cache folder under `.crosspoint/`.
+If one book causes problems, try Delete Book Cache from its reader menu. If you cannot open it, back up the SD card and leave the `epub_*` folders under `.crosspoint/` in place. Their names are hashes of book paths, so identifying the affected folder is difficult. Removing the wrong folder can delete saved reading progress.
 
 Do not delete the whole `.crosspoint` folder as a first step. It also contains settings, bookmarks, and clippings. Back it up before changing or removing its contents. Removing `settings.json` resets preferences, and removing `state.json` resets saved startup state.
 
@@ -375,7 +397,7 @@ Do not delete the whole `.crosspoint` folder as a first step. It also contains s
 
 Large EPUB cover images take time to convert for the sleep screen and Home thumbnails. Try the EPUB Optimizer in the web interface for books with compatibility problems.
 
-Most JPG, PNG, and non-interlaced GIF images display in EPUBs. Animated GIFs show only their first frame. Interlaced GIFs show an outlined placeholder. If letters are missing, install a font that covers the book's language.
+EPUBs support JPG and non-interlaced PNG and GIF images. Animated GIFs show only their first frame. Interlaced GIFs show an outlined placeholder. If letters are missing, install a font that covers the book's language.
 
 If the reader reports "Damaged font file", delete the affected `.cpfont` family's folder and install it again. Broken font files can leave characters blank.
 
@@ -387,10 +409,10 @@ See [network troubleshooting](docs/troubleshooting.md) for connection drops, fai
 
 ### Update CrossPoint
 
-Open Settings → System → Check for updates to update over Wi-Fi. You can also place `firmware.bin` on the SD card and use the SD firmware update action. The BOOX Picco uses USB updates instead. See [Install firmware](README.md#install-firmware) for USB installation instructions.
+Open Settings → System → Check for updates to update over Wi-Fi. You can also place `firmware.bin` on the SD card and use the SD firmware update action. The BOOX Picco uses [Picco-specific USB update instructions](README.md#boox-picco-usb-updates) instead. For other devices, see [Install firmware](README.md#install-firmware).
 
 ### Report a problem
 
 Include your device model, CrossPoint version, and the steps that caused the problem in a [bug report](https://github.com/crosspoint-reader/crosspoint-reader/issues).
 
-After a crash, look for a crash report in the SD card's root folder and attach it. For detailed serial logs, see the [debugging guide](docs/contributing/testing-debugging.md#enhanced-serial-monitor).
+After a panic crash, CrossPoint attempts to save `crash_report.txt` in the SD card's root folder on restart. Attach that file if it is available. For detailed serial logs, see the [debugging guide](docs/contributing/testing-debugging.md#enhanced-serial-monitor).

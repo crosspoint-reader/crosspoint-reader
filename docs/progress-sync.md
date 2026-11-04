@@ -5,6 +5,13 @@
 CrossPoint can sync reading progress with KOReader-compatible sync servers.
 It also interoperates with KOReader apps/devices when they use the same server and credentials.
 
+Progress is stored under a document hash, an identifier derived from the book file. **Document Matching** selects the primary hash:
+
+- **Filename** hashes the filename, including its extension, without the folder path. Renaming the file changes this hash.
+- **Binary** hashes samples of the file's contents, independently of its filename. For reliable matching, use identical file content on every device. Conversion or optimization can change this hash.
+
+The default **Smart Sync** behavior checks both the primary and alternate hashes. If the primary has no progress, it can use progress stored under the alternate hash. This lets identical content with different filenames match when progress exists under the binary hash. When both hashes have progress, Smart Sync compares the records. **Ask every time** checks only the primary hash.
+
 **Server Type** controls which progress and metadata format CrossPoint sends:
 
 - **CrossPoint** - For the default service or a self-hosted CrossPoint-compatible sync server. Sends standard KOReader progress plus CrossPoint's richer reading position when available.
@@ -47,17 +54,18 @@ Use this if you already sync KOReader devices against the official public server
 
    - Run **Authenticate**.
 
-2. If you do not have an account yet, run **Sign Up** on the device, or register once with curl:
+2. If you do not have an account yet, run **Sign Up** on the device, or register once with curl. The curl examples require Python 3 and OpenSSL:
 
 ```bash
 USERNAME="user"
-PASSWORD="pass"
+PASSWORD="$(python3 -c 'import getpass; print(getpass.getpass("Sync password: "))')"
 PASSWORD_MD5="$(printf '%s' "$PASSWORD" | openssl md5 | awk '{print $2}')"
+REQUEST_BODY="$(python3 -c 'import json, sys; print(json.dumps({"username": sys.argv[1], "password": sys.argv[2]}))' "$USERNAME" "$PASSWORD_MD5")"
 
 curl -i "https://sync.koreader.rocks/users/create" \
   -H "Accept: application/vnd.koreader.v1+json" \
   -H "Content-Type: application/json" \
-  --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
+  --data "$REQUEST_BODY"
 ```
 
 When this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, pick a different username or use that existing account.
@@ -92,7 +100,9 @@ podman compose up -d
 ```
 
 > [!NOTE]
-> `ENABLE_USER_REGISTRATION=true` is convenient for first setup. After creating your users, set it to `false` (or remove it) to avoid unexpected registrations.
+> After creating your users, set `ENABLE_USER_REGISTRATION=false` explicitly in `compose.yaml`.
+> Then rerun `docker compose up -d` or `podman compose up -d` to recreate the container with registration disabled.
+> Do not remove the variable: the [image defaults it to `true`](https://github.com/koreader/koreader-sync-server/blob/master/Dockerfile).
 
 2. Verify the server:
 
@@ -112,13 +122,14 @@ curl -H "Accept: application/vnd.koreader.v1+json" "http://<server-ip>:17200/hea
 
 ```bash
 USERNAME="user"
-PASSWORD="pass"
+PASSWORD="$(python3 -c 'import getpass; print(getpass.getpass("Sync password: "))')"
 PASSWORD_MD5="$(printf '%s' "$PASSWORD" | openssl md5 | awk '{print $2}')"
+REQUEST_BODY="$(python3 -c 'import json, sys; print(json.dumps({"username": sys.argv[1], "password": sys.argv[2]}))' "$USERNAME" "$PASSWORD_MD5")"
 
 curl -i "http://<server-ip>:17200/users/create" \
   -H "Accept: application/vnd.koreader.v1+json" \
   -H "Content-Type: application/json" \
-  --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
+  --data "$REQUEST_BODY"
 ```
 
 If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, the account already exists.
