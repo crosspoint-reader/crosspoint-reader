@@ -12,3 +12,17 @@ target_include_directories(SdFontRegistryTest PRIVATE
 )
 target_link_libraries(SdFontRegistryTest PRIVATE crosspoint_test_common GTest::gtest_main)
 gtest_discover_tests(SdFontRegistryTest)
+
+add_executable(VectorFontRegistryTest
+  VectorFontRegistryStyleSelection.cpp
+  ${REPO_ROOT}/lib/EpdFont/SdCardFontRegistry.cpp
+)
+target_compile_definitions(VectorFontRegistryTest PRIVATE BOARD_HAS_PSRAM)
+target_include_directories(VectorFontRegistryTest PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/stubs
+  ${REPO_ROOT}/lib/EpdFont
+  ${REPO_ROOT}/lib/Memory
+  ${REPO_ROOT}/test/library_builder/stubs
+)
+target_link_libraries(VectorFontRegistryTest PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(VectorFontRegistryTest)
