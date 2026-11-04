@@ -204,7 +204,8 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
   // SD directory order — a Regular/Medium/Semibold/Bold/Black family always
   // resolves to Regular + Bold, not to whichever file happened to enumerate
   // first. An unreadable face falls back to its filename-derived role
-  // (Regular/Bold tokens → 400/700).
+  // (Regular/Bold tokens → 400/700). Filename bold and italic/oblique hints
+  // are a fallback if font metadata doesn't set weights >= 700 or italic flags.
   struct Candidate {
     size_t index;  // into files
     uint16_t weight;
@@ -221,8 +222,8 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
       FtFont::FaceInfo face;
       if (FtFont::inspectStream(&halFileRead, &f, static_cast<unsigned long>(f.size()), face) ==
           FtFont::InspectResult::Ok) {
-        c.weight = face.weight;
-        c.italic = face.italic;
+        c.weight = (files[i].style & 1) && face.weight < 600 ? 700 : face.weight;
+        c.italic = c.italic || face.italic;
       }
     }
     cands.push_back(c);
