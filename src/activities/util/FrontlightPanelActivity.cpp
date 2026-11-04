@@ -395,10 +395,10 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
     const bool enabled[kTileCount] = {SETTINGS.screenInverted != 0, false, false,
                                       SETTINGS.touchReaderControls != CrossPointSettings::TOUCH_READER_OFF,
                                       SETTINGS.ble.enabled != 0};
-    static constexpr fui::Rotation rotations[] = {fui::Rotation::None, fui::Rotation::CW90, fui::Rotation::R180,
-                                                  fui::Rotation::CCW90};
+    static constexpr fui::Rotation rotations[] = {fui::Rotation::None, fui::Rotation::CCW90, fui::Rotation::R180,
+                                                  fui::Rotation::CW90};
     // The underline rotates around the same 32px square as the toolbar's T.
-    static constexpr fui::Rect underlines[] = {{4, 29, 24, 3}, {0, 4, 3, 24}, {4, 0, 24, 3}, {29, 4, 3, 24}};
+    static constexpr fui::Rect underlines[] = {{4, 29, 24, 3}, {29, 4, 3, 24}, {4, 0, 24, 3}, {0, 4, 3, 24}};
     const fui::Rect row = screen.takeTop(kQuickControlSize);
     const fui::Paint ink = fui::Paint::solid(fui::Color::Black);
     for (int id = 0; id < tileCount; ++id) {
