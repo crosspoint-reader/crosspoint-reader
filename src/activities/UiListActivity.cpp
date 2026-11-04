@@ -202,14 +202,16 @@ void UiListActivity::navigateButtons() {
   // feedback corrects the viewport.
   const int shortStep = 3;
   buttonNavigator.onNextContinuous([this, count, &n] {
-    if (mappedInput.isPressed(MappedInputManager::Button::Right)) {
+    if (mappedInput.isPressed(MappedInputManager::Button::Right) ||
+        mappedInput.isPressed(MappedInputManager::Button::Left)) {
       moveSelectionTo(n.selected == count - 1 ? 0 : (std::min((n.selected + shortStep), (count - 1))));
       return;
     }
     moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, count, n.inputPageRows()));
   });
   buttonNavigator.onPreviousContinuous([this, count, &n] {
-    if (mappedInput.isPressed(MappedInputManager::Button::Left)) {
+    if (mappedInput.isPressed(MappedInputManager::Button::Left) ||
+        mappedInput.isPressed(MappedInputManager::Button::Right)) {
       moveSelectionTo(n.selected == 0 ? count - 1 : (std::max((n.selected - shortStep), 0)));
       return;
     }
