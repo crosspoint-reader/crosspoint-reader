@@ -336,7 +336,7 @@ STR_PLUGIN_HUB_INSTALL_DESCRIPTION: "Duyệt và cài đặt các plugin chính 
 STR_PLUGIN_HUB_INSTALLED: "Đã cài đặt Plugin Hub"
 STR_PLUGIN_HUB_INSTALLED_HINT: "Mở Plugins để bắt đầu."
 STR_NO_PLUGINS_INSTALLED: "Không có plugin chạy trên thiết bị nào được cài đặt."
-STR_PLUGIN_NOT_SIGNED_IN: "Chưa đăng nhập. Vui lòng mở cài đặt trên web và đăng nhập qua plugin"
+STR_PLUGIN_NOT_SIGNED_IN: "Chưa đăng nhập. Vui lòng mở trang Plugins trên web và đăng nhập qua plugin trước"
 STR_PLUGIN_MANIFEST_INVALID: "Tệp kê khai của plugin bị thiếu hoặc không hợp lệ"
 STR_PLUGIN_SIGN_IN: "Đăng nhập"
 STR_PLUGIN_SIGN_IN_HINT: "Chưa đăng nhập"
