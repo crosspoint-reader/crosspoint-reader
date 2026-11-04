@@ -109,6 +109,9 @@ void HalGPIO::begin() {
   _deviceType = DeviceType::X4;
 #endif
   inputMgr.begin();
+#if FREEINK_DEVICE_METALIO_EINK4 || FREEINK_DEVICE_METALIO_EINK4_PLUS
+  if (!inputMgr.beginBufferedTouch()) LOG_ERR("GPIO", "Touch sampler unavailable; using main-loop polling");
+#endif
 #if FREEINK_DEVICE_LILYGO
   // T5S3 IO48 key sits behind the PCA9535 expander. Mirrors BoardT5S3::begin(), which also
   // re-inits I2C/SPI and is unsafe to call here. inputMgr.begin() has started Wire.

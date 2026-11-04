@@ -166,6 +166,7 @@ void ActivityManager::loop() {
         continue;
       }
 
+      mappedInput.discardBufferedTouch();
       ++screenVisit;
       ActivityResult pendingResult = std::move(currentActivity->result);
 
@@ -223,6 +224,7 @@ void ActivityManager::loop() {
         HeaderBackTapTarget::clear();
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
       }
+      mappedInput.discardBufferedTouch();
       ++screenVisit;
       pendingAction = PendingAction::None;
       currentActivity = std::move(pendingActivity);
@@ -265,6 +267,7 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
     pendingAction = PendingAction::Replace;
   } else {
     // No current activity, safe to launch immediately
+    mappedInput.discardBufferedTouch();
     currentActivity = std::move(newActivity);
     currentActivity->onEnter();
   }

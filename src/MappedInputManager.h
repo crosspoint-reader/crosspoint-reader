@@ -60,6 +60,8 @@ class MappedInputManager {
   bool consumeSuppressedRelease() const;
   bool isPressed(Button button) const;
   bool hasTouch() const;
+  // Ownership changed: queued touches must not activate the incoming screen.
+  void discardBufferedTouch() const;
   bool wasScreenTapped(int& x, int& y) const;
   // Immediate press edge for drag handles, without the row-selection dwell.
   bool wasScreenTouchPressed(int& x, int& y) const;

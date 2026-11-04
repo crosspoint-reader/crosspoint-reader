@@ -106,6 +106,8 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton)
   // The frontlight driver and touch share I2C; turn the light off before touch
   // releases the bus. On Picco this also puts the TMA525C to sleep.
   Frontlight.setOn(false);
+#endif
+#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_PICCO || FREEINK_DEVICE_METALIO_EINK4 || FREEINK_DEVICE_METALIO_EINK4_PLUS
   gpio.prepareForDeepSleep();
 #endif
 #ifdef ENABLE_SERIAL_LOG

@@ -22,6 +22,9 @@ struct HalGPIO {
   bool pressed = false, released = false, held = false;
   uint8_t button = 0;
   void update() {}
+  uint32_t captureAt = 1000;
+  bool homePresent = false, homeTap = false, homePress = false;
+  uint32_t touchFrameTime() const { return captureAt; }
   bool wasAnyPressed() const { return pressed; }
   bool wasAnyReleased() const { return released; }
   bool wasPressed(uint8_t b) const { return b == button && pressed; }
@@ -29,10 +32,10 @@ struct HalGPIO {
   bool isPressed(uint8_t b) const { return b == button && held; }
   unsigned long getHeldTime() const { return 900; }
   bool wasCapacitivePagePressed() const { return false; }
-  bool hasHomeKey() const { return false; }
-  bool wasHomeKeyTapped() const { return false; }
+  bool hasHomeKey() const { return homePresent; }
+  bool wasHomeKeyTapped() const { return homeTap; }
   bool wasHomeKeyLongPressed() const { return false; }
-  bool wasHomeKeyPressed() const { return false; }
+  bool wasHomeKeyPressed() const { return homePress; }
   bool wasPinch(float&) const { return false; }
 };
 """
@@ -102,6 +105,22 @@ int main() {
   }
   gpio.held = false;
   assert(input.injectRemoteClick(RemoteButton::Back));
+  // HOME taps replay in one wall-clock instant but retain their capture spacing.
+  gpio.homePresent = true;
+  SETTINGS.homeButtonTapAction = static_cast<int>(HomeButtonAction::Home);
+  SETTINGS.homeButtonDoubleTapAction = static_cast<int>(HomeButtonAction::ToggleFrontlight);
+  const auto home = [&](uint32_t at, bool tap, bool press=false) {
+    gpio.captureAt = at; gpio.homeTap = tap; gpio.homePress = press;
+    input.update();
+    return input.homeButtonAction();
+  };
+  assert(home(100, true) == HomeButtonAction::Ignore);
+  assert(home(500, false, true) == HomeButtonAction::Home);
+  assert(home(520, true) == HomeButtonAction::Ignore);
+  assert(home(871, false) == HomeButtonAction::Home);
+  assert(home(1000, true) == HomeButtonAction::Ignore);
+  assert(home(1100, false, true) == HomeButtonAction::Ignore);
+  assert(home(1120, true) == HomeButtonAction::ToggleFrontlight);
 }
 """
 manager_source = (ROOT / "src/activities/ActivityManager.cpp").read_text()

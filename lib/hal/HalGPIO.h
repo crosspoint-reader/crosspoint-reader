@@ -116,6 +116,8 @@ class HalGPIO {
   // Ignore the remainder of the current contact (its continued hold and its
   // release edge). Self-clears once the contact ends.
   void suppressTouchContact();
+  void discardBufferedTouch() { inputMgr.discardBufferedTouch(); }
+  uint32_t touchFrameTime() const { return inputMgr.touchFrameTime(); }
   unsigned long lastTouchHeldMs() const;
   bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
   // Two-finger pinch on release: scale < 1 pinched in, > 1 spread apart.
