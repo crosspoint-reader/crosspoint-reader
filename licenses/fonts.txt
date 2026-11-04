@@ -1,0 +1,730 @@
+CrossPoint font licenses and copyright notices
+
+These notices cover the built-in fonts and the SD card font catalog.
+Each font keeps its own license, including converted copies and subsets.
+Keep the applicable notices with copies that you distribute.
+
+The names below identify the source fonts.
+Some font licenses protect Reserved Font Names.
+These notices do not grant permission to use those names for modified fonts.
+Source revisions and font URLs are in lib/EpdFont/scripts/sd-fonts.yaml.
+
+========================================================================
+Libron
+Source: https://raw.githubusercontent.com/nicoverbruggen/libron/main/LICENSE
+========================================================================
+
+Newsreader (c) 2020 The Newsreader Project Authors (http://github.com/productiontype/Newsreader)
+Readerly (c) 2026 Nico Verbruggen (https://github.com/nicoverbruggen/readerly)
+Libron (c) 2026 Nico Verbruggen (https://github.com/nicoverbruggen/libron)
+with Reserved Font Name Libron.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Literata
+Source: https://raw.githubusercontent.com/googlefonts/literata/main/OFL.txt
+========================================================================
+
+Copyright 2017 The Literata Project Authors (https://github.com/googlefonts/literata)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+SourceSerif4
+Source: https://raw.githubusercontent.com/adobe-fonts/source-serif/release/LICENSE.md
+========================================================================
+
+Copyright 2014 - 2023 Adobe (http://www.adobe.com/), with Reserved Font Name ‘Source’. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is also available with a FAQ at: http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifExtended
+Source: https://raw.githubusercontent.com/notofonts/NotoSerif/main/LICENSE
+========================================================================
+
+This Font Software is licensed under the SIL Open Font License,
+Version 1.1.
+
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifExtendedItalic
+Source: https://raw.githubusercontent.com/notofonts/NotoSerif-Italic/main/LICENSE
+========================================================================
+
+This Font Software is licensed under the SIL Open Font License,
+Version 1.1.
+
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Merriweather
+Source: https://raw.githubusercontent.com/SorkinType/Merriweather/master/OFL.txt
+========================================================================
+
+Copyright 2016 The Merriweather Project Authors (https://github.com/EbenSorkin/Merriweather), with Reserved Font Name "Merriweather".
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Lora
+Source: https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/OFL.txt
+========================================================================
+
+Copyright 2011 The Lora Project Authors (https://github.com/cyrealtype/Lora-Cyrillic), with Reserved Font Name "Lora".
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+GentiumBookPlus
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/OFL.txt
+========================================================================
+
+Copyright (c) 2003-2022 SIL International (http://www.sil.org/),
+with Reserved Font Names "Gentium" and "SIL".
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+IBMPlexSerif
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/OFL.txt
+========================================================================
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is also available with a FAQ at: http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Bitter
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/OFL.txt
+========================================================================
+
+Copyright 2011 The Bitter Project Authors (https://github.com/solmatas/BitterPro)
+with Reserved Font Name "Bitter Pro".
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://openfontlicense.org
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+LibreBaskerville
+Source: https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/OFL.txt
+========================================================================
+
+Copyright (c) 2012, Pablo Impallari (www.impallari.com|impallari@gmail.com),
+Copyright (c) 2012, Rodrigo Fuenzalida (www.rfuenzalida.com|hello¨rfuenzalida.com), with Reserved Font Name Libre Baskerville.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Vollkorn
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/OFL.txt
+========================================================================
+
+Copyright 2017 The Vollkorn Project Authors (https://github.com/FAlthausen/Vollkorn-Typeface)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Inter
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/inter/OFL.txt
+========================================================================
+
+Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+SourceSans3
+Source: https://raw.githubusercontent.com/adobe-fonts/source-sans/release/LICENSE.md
+========================================================================
+
+Copyright 2010-2024 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is also available with a FAQ at: http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+IBMPlexSans
+Source: https://raw.githubusercontent.com/IBM/plex/master/LICENSE.txt
+========================================================================
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is also available with a FAQ at: http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Alegreya
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/OFL.txt
+========================================================================
+
+Copyright 2011 The Alegreya Project Authors (https://github.com/huertatipografica/Alegreya)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+IBMPlexMono
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/OFL.txt
+========================================================================
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is also available with a FAQ at: http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+SourceCodePro
+Source: https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/LICENSE.md
+========================================================================
+
+© 2023 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is also available with a FAQ at: http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+AtkinsonHyperlegibleNext
+Source: https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/OFL.txt
+========================================================================
+
+Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://openfontlicense.org
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+LexicaUltralegible
+Source: https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/LICENSE.txt
+========================================================================
+
+Copyright 2020 Braille Institute of America, Inc.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+FrankRuhlLibre
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/frankruhllibre/OFL.txt
+========================================================================
+
+Copyright 2015 The Frank Ruhl Libre Project Authors (https://github.com/fontef/frankruhllibre)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://openfontlicense.org
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+© 2022 GitHub, Inc.
+Terms
+Privacy
+Security
+Status
+Docs
+Contact GitHub
+Pricing
+API
+Training
+Blog
+About
+
+========================================================================
+DavidLibre
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/davidlibre/OFL.txt
+========================================================================
+
+Copyright 2016 The David Libre Project Authors (https://github.com/meirsadan/david-libre), with reserved font name "Hadash", "Gentium" and 'SIL'.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://openfontlicense.org/
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Alef
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/alef/OFL.txt
+========================================================================
+
+Copyright (c) 2012, HaGilda & Mushon Zer-Aviv (<http://alef.hagilda.com|alef@hagilda.com>),
+with Reserved Font Name Alef.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Amiri
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/OFL.txt
+========================================================================
+
+Copyright 2010-2022 The Amiri Project Authors (https://github.com/aliftype/amiri).
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://openfontlicense.org/
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoNaskhArabicUI and NotoNaskhArabicUISemiBold
+Source: https://raw.githubusercontent.com/notofonts/arabic/main/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/arabic)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://openfontlicense.org
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoKufiArabic
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/arabic)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Pretendard and PretendardMedium
+Source: https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/LICENSE
+========================================================================
+
+Copyright (c) 2021, Kil Hyung-jin (https://github.com/orioncactus/pretendard),
+with Reserved Font Name Pretendard.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSans and NotoSansExtended
+Source: lib/EpdFont/builtinFonts/source/NotoSans
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://openfontlicense.org
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerif
+Source: lib/EpdFont/builtinFonts/source/NotoSerif
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://openfontlicense.org
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansHebrew
+Source: lib/EpdFont/builtinFonts/source/NotoSansHebrew
+========================================================================
+
+Copyright 2024 The Noto Project Authors (https://github.com/notofonts/hebrew)
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/hebrew)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://openfontlicense.org
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansArabic
+Source: lib/EpdFont/builtinFonts/source/NotoSansArabic
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/arabic)
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/arabic)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+https://openfontlicense.org
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+OpenDyslexic
+Source: lib/EpdFont/builtinFonts/source/OpenDyslexic
+========================================================================
+
+Copyright © 2019 by Abbie Gonzalez. All rights reserved.
+
+Copyright (c) 2019-07-29, Abbie Gonzalez (https://abbiecod.es|support@abbiecod.es),
+with Reserved Font Name OpenDyslexic.
+Copyright (c) 12/2012 - 2019
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Ubuntu and Ubuntu-Vietnamese
+Source: lib/EpdFont/builtinFonts/source/Ubuntu
+========================================================================
+
+Copyright 2011 Canonical Ltd.  Licensed under the Ubuntu Font Licence 1.0
+
+-------------------------------
+UBUNTU FONT LICENCE Version 1.0
+-------------------------------
+
+PREAMBLE
+This licence allows the licensed fonts to be used, studied, modified and
+redistributed freely. The fonts, including any derivative works, can be
+bundled, embedded, and redistributed provided the terms of this licence
+are met. The fonts and derivatives, however, cannot be released under
+any other licence. The requirement for fonts to remain under this
+licence does not require any document created using the fonts or their
+derivatives to be published under this licence, as long as the primary
+purpose of the document is not to be a vehicle for the distribution of
+the fonts.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this licence and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Original Version" refers to the collection of Font Software components
+as received under this licence.
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to
+a new environment.
+
+"Copyright Holder(s)" refers to all individuals and companies who have a
+copyright ownership of the Font Software.
+
+"Substantially Changed" refers to Modified Versions which can be easily
+identified as dissimilar to the Font Software by users of the Font
+Software comparing the Original Version with the Modified Version.
+
+To "Propagate" a work means to do anything with it that, without
+permission, would make you directly or secondarily liable for
+infringement under applicable copyright law, except executing it on a
+computer or modifying a private copy. Propagation includes copying,
+distribution (with or without modification and with or without charging
+a redistribution fee), making available to the public, and in some
+countries other activities as well.
+
+PERMISSION & CONDITIONS
+This licence does not grant any rights under trademark law and all such
+rights are reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of the Font Software, to propagate the Font Software, subject to
+the below conditions:
+
+1) Each copy of the Font Software must contain the above copyright
+notice and this licence. These can be included either as stand-alone
+text files, human-readable headers or in the appropriate machine-
+readable metadata fields within text or binary files as long as those
+fields can be easily viewed by the user.
+
+2) The font name complies with the following:
+(a) The Original Version must retain its name, unmodified.
+(b) Modified Versions which are Substantially Changed must be renamed to
+avoid use of the name of the Original Version or similar names entirely.
+(c) Modified Versions which are not Substantially Changed must be
+renamed to both (i) retain the name of the Original Version and (ii) add
+additional naming elements to distinguish the Modified Version from the
+Original Version. The name of such Modified Versions must be the name of
+the Original Version, with "derivative X" where X represents the name of
+the new work, appended to that name.
+
+3) The name(s) of the Copyright Holder(s) and any contributor to the
+Font Software shall not be used to promote, endorse or advertise any
+Modified Version, except (i) as required by this licence, (ii) to
+acknowledge the contribution(s) of the Copyright Holder(s) or (iii) with
+their explicit written permission.
+
+4) The Font Software, modified or unmodified, in part or in whole, must
+be distributed entirely under this licence, and must not be distributed
+under any other licence. The requirement for fonts to remain under this
+licence does not affect any document created using the Font Software,
+except any version of the Font Software extracted from a document
+created using the Font Software may only be distributed under this
+licence.
+
+TERMINATION
+This licence becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER
+DEALINGS IN THE FONT SOFTWARE.
+
+========================================================================
+RIDIBatang
+Source: https://ridicorp.com/ridibatang/
+========================================================================
+
+Copyright © 2019 RIDI & Sandoll. All rights reserved. Font designed by Sandoll Inc.
+
+RIDIBating is a registered trademark of RIDI CORPORATION.
+
+Sandoll Inc.
+
+RIDI: Jinwoo Kim; Seungbum Kim; Dohoon Kim; Yoonjin Cho; &Sandoll: Hyojin Ahn; Minjae Kang; Chorong Kim; Dohee Lee; Suhyun Lee;
+
+RIDI: 김진우; 김승범; 김도훈; 조윤진; & Sandoll: 안효진; 강민재; 김초롱; 이도희; 이수현;
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+MaruBuri and MaruBuriSemiBold
+Source: https://help.naver.com/service/30016/contents/18088?osType=PC&lang=ko
+========================================================================
+
+© NAVER Corp. © NAVER Cultural Foundation Corp.
+
+AG Typography Institute
+
+Noh Eunyou, Noheul Lee, Ku Moa
+
+노은유, 이노을, 구모아
+
+Copyright (c) 2010, NAVER Corporation.
+The owner terms include Reserved Font Name MaruBuri.
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Domitian
+Source: https://tug.ctan.org/fonts/domitian/doc/domitian-doc.pdf
+========================================================================
+
+Copyright 2014 by (URW)++ Design & Development.
+Copyright 2019 by Daniel Benjamin Miller.
+
+Copyright © 2014, 2015 by (URW)++ Design & Development.
+Copyright © 2019–2020 by Daniel Benjamin Miller.
+CrossPoint selects the SIL Open Font License 1.1 option.
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+Shared OFL 1.1 terms
+========================================================================
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.

@@ -9,6 +9,8 @@ source = (ROOT / "src/activities/reader/ClipSelectionActivity.cpp").read_text()
 reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
 header = (ROOT / "src/activities/reader/ClipSelectionActivity.h").read_text()
 word_box = "struct WordBox {" + header.split("struct WordBox {", 1)[1].split("  };", 1)[0] + "};"
+action_helpers = "\n".join(line for line in header.splitlines()
+                           if "int firstAction() const" in line or "int actionCount() const" in line)
 clean_word = "const char* cleanWordStart" + source.split("const char* cleanWordStart", 1)[1].split(
     "}  // namespace", 1
 )[0]
@@ -155,7 +157,7 @@ struct Renderer {
 };
 struct Theme {
   void drawSelectionHandle(const Renderer&, Rect, bool) const {}
-  void drawSelectionActions(const Renderer&, Rect, int = 3) const {}
+  void drawSelectionActions(const Renderer&, Rect, int = 3, int = 0) const {}
 } GUI;
 struct Input { bool hasTouch() const { return false; } };
 using GfxRenderer = Renderer;
@@ -191,11 +193,12 @@ bool selectionLowMemory(const int first, const int last) {
 }
 """ + clean_word + r"""
 struct ClipSelectionActivity {
-""" + word_box + r"""
+""" + word_box + action_helpers + r"""
   std::unique_ptr<WordBox[]> words = makeUniqueNoThrow<WordBox[]>(240);
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
   enum class Mode { Clip, Lookup, DefinitionLookup };
   Mode mode = Mode::Clip;
+  bool lookupAvailable = true;
   Renderer renderer;
   Input mappedInput;
   std::vector<std::unique_ptr<Page>> pages;
@@ -297,6 +300,34 @@ int main() {
     assert(cold.pages[0] && cold.pages[1] && cold.pages[2]);
     HalMemory::stats = {8192, 4096};
     assert(!cold.extractWords());
+  }
+  {
+    ClipSelectionActivity dense;
+    auto page0 = std::make_unique<Page>();
+    auto line0 = std::make_unique<PageLine>();
+    for (int i = 0; i < 300; ++i) {
+      line0->block.packedText += "あ";
+      line0->block.packedText += '\0';
+      line0->block.styles.push_back(EpdFontFamily::REGULAR);
+    }
+    page0->elements.push_back(std::move(line0));
+    dense.pages.push_back(std::move(page0));
+
+    auto page1 = std::make_unique<Page>();
+    auto line1 = std::make_unique<PageLine>();
+    for (int i = 0; i < 20; ++i) {
+      line1->block.packedText += "い";
+      line1->block.packedText += '\0';
+      line1->block.styles.push_back(EpdFontFamily::REGULAR);
+    }
+    page1->elements.push_back(std::move(line1));
+    dense.pages.push_back(std::move(page1));
+
+    assert(dense.extractWords());
+    assert(dense.wordCount == 310);
+    assert(dense.words[299].pageOffset == 0);
+    assert(dense.words[300].pageOffset == 1);
+    assert(dense.words[309].pageOffset == 1);
   }
   HalMemory::stats = {5908, 3444};  // Physical X3 crash workload.
   assert(selectionLowMemory(0, 0));

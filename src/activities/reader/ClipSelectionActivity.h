@@ -36,6 +36,9 @@ class ClipSelectionActivity final : public Activity {
                         std::span<const std::unique_ptr<Page>> borrowedPages, int marginLeft, int marginTop,
                         Selection selection, int initialX = -1, int initialY = -1);
 
+  // Restore a previous selection (page offsets relative to the first page) on enter.
+  void setInitialSelection(const Selection& selection) { initialSelection = selection; }
+
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
@@ -68,6 +71,8 @@ class ClipSelectionActivity final : public Activity {
   size_t pageCount() const { return borrowedPages.empty() ? pages.size() : borrowedPages.size(); }
   const Page& pageAt(size_t index) const { return *(borrowedPages.empty() ? pages[index] : borrowedPages[index]); }
   bool isLookup() const { return mode != Mode::Clip; }
+  int firstAction() const { return lookupAvailable ? 0 : 1; }
+  int actionCount() const { return mode == Mode::DefinitionLookup ? 1 : 3 - firstAction(); }
   int actionAt(int x, int y) const;
   int closestInRow(uint16_t row, int centerX) const;
   int wordAt(int x, int y) const;
@@ -104,6 +109,7 @@ class ClipSelectionActivity final : public Activity {
   const int initialX;
   const int initialY;
   const Mode mode;
+  bool lookupAvailable = false;
   OptionPopup actionPopup;
   // ponytail: retain 16 button frames during refresh; increase only if overflow is observed.
   std::array<uint8_t, 16> pendingButtons{};

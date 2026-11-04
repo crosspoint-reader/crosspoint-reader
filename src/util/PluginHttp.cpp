@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -17,18 +18,27 @@ namespace {
 constexpr size_t MAX_TOKEN_FILE_SIZE = 2 * 1024;
 
 // Resolves the caller's reused TLS session (or `tmp`) into a configured,
-// connected client, or nullptr if begin() failed.
+// connected client, or nullptr if begin() or the connection failed.
 freeink::SecureHttpClient* openClient(freeink::SecureHttpClient* session, freeink::SecureHttpClient& tmp,
-                                      const std::string& url, const pluginhttp::Headers& headers) {
+                                      const std::string& url, const pluginhttp::Headers& headers,
+                                      const std::function<bool()>& shouldAbort = nullptr) {
   freeink::SecureHttpClient& http = session ? *session : tmp;
   http.setUserAgent("CrossPoint");
   // Same trust posture as every other SecureNet consumer: no CA bundle ships
   // with the transport, so verification is skipped; traffic stays encrypted.
   http.setInsecure();
   http.setTimeout(30000);
-  if (!http.begin(url)) return nullptr;
+  if (!http.begin(pluginhttp::escapeUrl(url))) return nullptr;
+  // Handshake first: the client's copy of a large header (a session cookie can
+  // be several KB) would otherwise take heap the handshake needs.
+  if (!http.connect(shouldAbort)) return nullptr;
   for (const auto& h : headers) http.addHeader(h.first, h.second);
   return &http;
+}
+
+// A chunked body's Content-Length, if any, is not its size.
+bool hasKnownLength(const freeink::SecureHttpClient& http) {
+  return http.hasContentLength() && http.getHeader("transfer-encoding").empty();
 }
 }  // namespace
 
@@ -118,6 +128,24 @@ std::string urlEncodeQuery(const std::string& s) {
   return out;
 }
 
+std::string escapeUrl(const std::string& url) {
+  const auto kept = [](const unsigned char c) { return c > 0x20 && c < 0x7F; };
+  const size_t escaped =
+      std::count_if(url.begin(), url.end(), [&](const char c) { return !kept(static_cast<unsigned char>(c)); });
+  std::string out;
+  out.reserve(url.size() + 2 * escaped);
+  for (const unsigned char c : url) {
+    if (kept(c)) {
+      out += static_cast<char>(c);
+    } else {
+      char buf[4];
+      snprintf(buf, sizeof(buf), "%%%02X", c);
+      out += buf;
+    }
+  }
+  return out;
+}
+
 std::string inPluginDir(const std::string& pluginDir, const char* path) {
   if (!path || !path[0] || path[0] == '/') return path ? path : "";
   return pluginDir + "/" + path;
@@ -190,7 +218,7 @@ int request(freeink::SecureHttpClient* session, const std::string& url, const st
             Headers* responseHeaders, const std::function<bool()>& shouldAbort) {
   WifiPowerSaveGuard psGuard;
   freeink::SecureHttpClient tmp;
-  freeink::SecureHttpClient* httpPtr = openClient(session, tmp, url, headers);
+  freeink::SecureHttpClient* httpPtr = openClient(session, tmp, url, headers, shouldAbort);
   if (!httpPtr) return -1;
   freeink::SecureHttpClient& http = *httpPtr;
 
@@ -205,8 +233,19 @@ int request(freeink::SecureHttpClient* session, const std::string& url, const st
           return false;
         }
         const size_t needed = out.length() + len;
-        // Grow geometrically instead of reallocating for every network chunk.
-        if (needed > reserved) reserved = std::min(maxResponse, std::max(needed, reserved * 2));
+        if (needed > reserved) {
+          // Reserve the whole body once when its length is known; otherwise grow
+          // geometrically instead of reallocating for every network chunk.
+          const bool knownLength = hasKnownLength(http);
+          size_t want = knownLength ? std::max(needed, http.getContentLength())
+                                    : std::min(maxResponse, std::max(needed, reserved * 2));
+          if (want > maxResponse) {
+            LOG_ERR("PHTP", "Response of %u bytes is over the %u byte cap", (unsigned)want, (unsigned)maxResponse);
+            overflow = true;
+            return false;
+          }
+          reserved = want;
+        }
         if (!out.reserve(reserved) || !out.concat(reinterpret_cast<const char*>(data), len)) {
           overflow = true;
           return false;
@@ -223,6 +262,44 @@ int request(freeink::SecureHttpClient* session, const std::string& url, const st
     return -1;
   }
   return status;
+}
+
+int requestStream(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
+                  const std::string& body, const Headers& headers, const StreamStart& onStart, const StreamData& onData,
+                  bool& complete, const std::function<bool()>& shouldAbort) {
+  complete = false;
+  WifiPowerSaveGuard psGuard;
+  freeink::SecureHttpClient tmp;
+  freeink::SecureHttpClient* httpPtr = openClient(session, tmp, url, headers, shouldAbort);
+  if (!httpPtr) return -1;
+  freeink::SecureHttpClient& http = *httpPtr;
+
+  bool started = false;
+  bool stopped = false;
+  const auto start = [&] {
+    const long length =
+        hasKnownLength(http) ? static_cast<long>(std::min<size_t>(http.getContentLength(), LONG_MAX)) : -1;
+    started = onStart(http.getStatus(), http.getHeaders(), length);
+    return started;
+  };
+  const int status = http.sendRequest(
+      method.c_str(), reinterpret_cast<const uint8_t*>(body.data()), body.size(),
+      [&](const uint8_t* data, size_t len) {
+        if ((!started && !start()) || !onData(data, len)) {
+          stopped = true;
+          return false;
+        }
+        return true;
+      },
+      shouldAbort);
+  complete = status >= 0 && !stopped && http.responseComplete();
+  // An empty body never calls onData, so start here.
+  if (complete && !started && !start()) complete = false;
+  if (!complete) {
+    LOG_ERR("PHTP", "Streamed request failed: status=%d started=%d stopped=%d %s", status, started, stopped,
+            url.c_str());
+  }
+  return started ? status : -1;
 }
 
 int requestToFile(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,

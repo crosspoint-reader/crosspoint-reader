@@ -474,7 +474,10 @@ void BmpViewerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // Touch boards draw no button hints; long-press stands in for Confirm, as for file browser actions.
+  int touchX = 0;
+  int touchY = 0;
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenLongPress(touchX, touchY)) {
     if (!canSetSleepCover()) return;
 
     auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_SET_SLEEP_COVER_CONFIRM),

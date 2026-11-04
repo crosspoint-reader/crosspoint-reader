@@ -13,6 +13,7 @@
 
 #include "I18nKeys.h"
 #include "ReaderFontSizes.h"
+#include "ReaderLineSpacing.h"
 #include "SettingsList.h"
 #include "fontIds.h"
 #include "util/ParagraphIndentMigration.h"
@@ -225,6 +226,12 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     sleepTimeoutMinutes = sleepTimeoutEnumToMinutes(legacyValue);
     needsResave = true;
   }
+  // "lineSpacing" saves predate the 1.0 option: Tight/Normal/Wide/Extra Wide (0..3) become 1.1..1.45.
+  if (doc["lineHeight"].isNull() && doc["lineSpacing"].is<uint8_t>()) {
+    const int legacyValue = doc["lineSpacing"].as<uint8_t>();
+    lineSpacing = legacyValue + 1 < LINE_COMPRESSION_COUNT ? static_cast<uint8_t>(legacyValue + 1) : LINE_SPACING_120;
+    needsResave = true;
+  }
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   frontButtonBack = clamp(doc["frontButtonBack"] | (uint8_t)FRONT_HW_BACK, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_BACK);
   frontButtonConfirm =
@@ -335,42 +342,14 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.embeddedStyle = embeddedStyle != 0;
-  spec.imageRendering = imageRendering;
+  // Same layout as Display, so switching between them keeps the section cache.
+  spec.imageRendering = imageRendering == IMAGES_DISPLAY_BW ? static_cast<uint8_t>(IMAGES_DISPLAY) : imageRendering;
   spec.focusReadingEnabled = focusReadingEnabled != 0;
   return spec;
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
-  // SD card and vector fonts get a wider scale than the built-ins: their
-  // faces carry their own (often generous) natural line height, so the old
-  // Bookerly-tuned 1.1/1.2 steps were visually near-indistinguishable. At
-  // 12pt in portrait (~760px viewport) this scale spans ~26/24/19/15 lines
-  // per page — each step reads as a clearly different density.
-  if (sdFontFamilyName[0] != '\0') {
-    switch (lineSpacing) {
-      case TIGHT:
-        return 0.95f;
-      case NORMAL:
-      default:
-        return 1.0f;
-      case WIDE:
-        return 1.3f;
-      case EXTRA_WIDE:
-        return 1.6f;
-    }
-  }
-
-  switch (lineSpacing) {
-    case TIGHT:
-      return 0.90f;
-    case NORMAL:
-    default:
-      return 0.95f;
-    case WIDE:
-      return 1.0f;
-    case EXTRA_WIDE:
-      return 1.05f;
-  }
+  return LINE_SPACING_MULTIPLIERS[lineSpacing < LINE_COMPRESSION_COUNT ? lineSpacing : LINE_SPACING_120];
 }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {

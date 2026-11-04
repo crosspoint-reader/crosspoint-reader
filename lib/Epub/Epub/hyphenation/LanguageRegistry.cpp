@@ -1,5 +1,7 @@
 #include "LanguageRegistry.h"
 
+// Pattern licenses and copyright notices: licenses/hyphenation.txt.
+
 #include <algorithm>
 #include <array>
 

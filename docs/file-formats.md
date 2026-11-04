@@ -90,6 +90,69 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 73
+
+Version 73 keeps the binary layout and rebuilds completed and partial sections.
+TrueType vector fonts now render and advance the .notdef glyph for missing
+characters instead of omitting them. Cached line breaks and word positions change
+for text containing glyph fallbacks. Book metadata and saved progress are kept.
+
+### Version 72
+
+Version 72 makes ruby layout closer to how Chromium browser render text with
+ruby characters by default (`ruby-align: space-around; ruby-overhang: auto;`)
+Ruby annotation can overhang neighboring base text by at most the smaller of
+half the ruby edge-character width and 1/4 of the neighboring word width. When
+the ruby annotation is wider than its base text, spacing is inserted between
+every character in the base text as well as at the start and the end of the
+base text so that it becomes the same length as the ruby annotation.
+
+### Version 71
+
+Version 71 keeps the binary layout and rebuilds completed and partial sections.
+Focus split offsets now locate the bold prefix in RTL words and the regular
+suffix in LTR words. Book metadata and saved progress are kept.
+
+### Version 70
+
+Version 70 preserves the binary layout but rebuilds completed and partial
+sections because SD-font layout now rounds each scaled glyph advance to pixels,
+matching unkerned drawing. Cached line breaks and word positions change.
+Book metadata and saved progress are kept.
+
+### Version 69
+
+Version 69 preserves the binary layout but rebuilds completed and partial
+sections because line spacing now multiplies font size instead of the font's
+newline distance (`advanceY`). Clipping layout signatures also distinguish the
+new calculation so old page-local word ranges are not reused for a new layout.
+Book metadata and saved progress are kept.
+
+### Version 68
+
+Version 68 preserves the binary layout but rebuilds completed and partial
+sections to remove mid-line hyphens left by drop-cap layout. The lines beside
+the drop cap use bounded greedy wrapping; the rest keep their usual wrapping.
+Book metadata and saved progress are kept.
+
+### Version 67
+
+Version 67 preserves the binary layout but rebuilds completed and partial
+sections for corrected justification of visually reordered text with attached
+spaces. Book metadata and saved progress are kept.
+
+### Version 66
+
+Version 66 preserves the binary layout but rebuilds completed and partial
+sections to remove leading non-breaking spaces carried across soft line wraps.
+Explicit paragraph-leading spaces, book metadata, and saved progress are kept.
+
+### Version 65
+
+Version 65 preserves the binary layout but rebuilds completed and partial
+sections for corrected justification of non-breaking spaces after hyphens and
+ellipses. Book metadata and reading progress are unchanged.
+
 ### Version 64
 
 Version 64 preserves the binary layout but rebuilds completed and partial
