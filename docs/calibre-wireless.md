@@ -19,7 +19,7 @@ If you don't already have the plugin installed:
 2. In the Preferences dialog select Plugins.
 3. In Plugins search for "crosspoint".
 4. Click on "Customize plugin".
-5. If automatic discovery fails, set "Host" to the IP shown in File Transfer → Calibre Wireless after the reader joins a network. See [Uploading Books](#uploading-books) for the connection step. Host and Port are fallback values.
+5. If broadcast discovery fails, set "Host" to the IP shown in File Transfer → Calibre Wireless after the reader joins a network. This adds a UDP probe target. The reader must still reply to UDP discovery. Host and Port do not enable a direct connection without that reply. See [Uploading Books](#uploading-books) for the connection step.
 6. Leave the other settings as they are.
 7. [optional] Modify the "Upload path" to point to a subfolder other than the root "/" folder. Enter this as a path relative to the root folder. Example: `/mybooks`
 8. Restart Calibre.
@@ -38,7 +38,9 @@ To upload a book using the CrossPoint plugin in Calibre:
 
 Network client isolation can prevent the computer from reaching the reader even on the same network. If this happens, use a network that allows devices to communicate.
 
-The plugin uses Calibre's send-to-device template to choose folders and filenames. Upload path sets the base folder. The plugin configuration also offers a separate upload template and a Send to root option.
+Upload path sets the base folder. When Send to root is off, the plugin uses its Upload template if one is configured, otherwise Calibre's send-to-device template. The template chooses folders and filenames within the base folder.
+
+Send to root skips template formatting, including template-derived folders. It keeps the configured Upload path: with `/mybooks` as the base folder, books go directly into `/mybooks`, not the filesystem root.
 
 <img width="783" height="310" alt="Send selected books to the device in Calibre" src="https://github.com/user-attachments/assets/741b0909-2e1d-4f16-8af0-2c43fbda5ce6" />
 

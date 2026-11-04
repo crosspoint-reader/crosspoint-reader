@@ -33,7 +33,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **Bluetooth page turners**: pair a remote under Settings → Connectivity → Bluetooth Page Turner. Map short and long presses to page turns, chapter navigation, the reader menu, or clipping selection.
 
-- **USB Drive mode (X4Pro)**: access the SD card as USB mass storage.
+- **USB Drive mode (Xteink X4 Pro, X4 Classic, Paper Mono, Metalio E-Ink 4, EEGOREAD A4, and BOOX Picco)**: access the SD card as USB mass storage.
 
 - **Library workflow**: indexed title/author search, recently-added and alphabetical views, multilingual grouping, folder browser, recent books, and SD-cache management.
 
