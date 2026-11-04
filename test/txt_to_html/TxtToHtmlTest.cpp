@@ -51,7 +51,7 @@ TEST(TxtToHtmlTest, PreservesCacheVersionTagsForBothFormats) {
   StringPrint out;
   ASSERT_TRUE(TxtToHtml::stream("test.MD", "text", out));
   EXPECT_EQ(out.str,
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- MD_CACHE_VERSION: 2 -->\n"
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- MD_CACHE_VERSION: 3 -->\n"
             "<!DOCTYPE html>\n<html>\n<head><title>test</title></head>\n<body>\ntext" +
                 kFooter);
   EXPECT_NE(out.str.find(TxtToHtml::cacheVersionTag("test.MD")), std::string::npos);
@@ -108,9 +108,25 @@ TEST(TxtToHtmlTest, MarkdownFlatListsAndQuotes) {
       "<ul><li><b>one</b></li><li>two</li><li>three</li></ul>"
       "<ol><li>first</li><li>second</li></ol><blockquote style=\"margin-left: 1em\"><i>quote</i></blockquote>plain");
   EXPECT_EQ(markdownBody("1. first\n\n1. restarted\n"), "<ol><li>first</li></ol><br /><ol><li>restarted</li></ol>");
-  EXPECT_EQ(markdownBody("-one\n1.no\n  - nested\n>no\n>"), "-one<br />1.no<br />  - nested<br />&gt;no<br />&gt;");
+  EXPECT_EQ(markdownBody("-one\n1.no\n  - nested\n>no\n>"),
+            "-one<br />1.no<br />&#160;&#160;- nested<br />&gt;no<br />&gt;");
   EXPECT_EQ(markdownBody("- short\n- " + std::string(4096, 'x') + "\n- last"),
             "<ul><li>short</li></ul>- " + std::string(4096, 'x') + "<br /><ul><li>last</li></ul>");
+}
+
+TEST(TxtToHtmlTest, MarkdownReviewRegressions) {
+  EXPECT_EQ(markdownBody("\xEF\xBB\xBF# café", 1), "<h1>café</h1>");
+  EXPECT_EQ(markdownBody("\xEF\xBB\xBF# café", 2), "<h1>café</h1>");
+  EXPECT_EQ(markdownBody("# A\r# B\r\n- one\r- two\n", 1), "<h1>A</h1><h1>B</h1><ul><li>one</li><li>two</li></ul>");
+  EXPECT_EQ(markdownBody("__bold__ _italic_ file_name_part", 1), "<b>bold</b> <i>italic</i> file_name_part");
+  EXPECT_EQ(markdownBody(R"(\*literal\* \_word\_ C:\books \# Heading)"), "*literal* _word_ C:\\books # Heading");
+  EXPECT_EQ(markdownBody(R"(word\!_italic_ \? \:)"), "word!<i>italic</i> ? :");
+  EXPECT_EQ(markdownBody("* * *\n- - -\n- item"), "* * *<br />- - -<br /><ul><li>item</li></ul>");
+  EXPECT_EQ(markdownBody("`s = a  b`"), "<code>s = a &#160;b</code>");
+  const std::string longLine = "  " + std::string(4092, 'x') + "   <&";
+  EXPECT_EQ(markdownBody(longLine, 1), "&#160;&#160;" + std::string(4092, 'x') + " &#160;&#160;&lt;&amp;");
+  EXPECT_EQ(markdownBody("x\r\ny\rz\n", 1), "x<br />y<br />z<br />");
+  EXPECT_EQ(markdownBody("\xEF\xBB", 1), "\xEF\xBB");
 }
 
 TEST(TxtToHtmlTest, MarkdownPropagatesIoFailures) {

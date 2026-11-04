@@ -119,8 +119,6 @@ See [Reading Mode](#4-reading-mode) below for more information.
 
 The Browse Files screen acts as a file and folder browser. The full path to the current directory is shown at the top of the screen. File extensions are displayed alongside each filename, and directories are shown with brackets (e.g. `[folder-name]`). Hidden directories (those beginning with `.`) are also visible.
 
-Markdown (`.md`) files support headings (`# ` through `###### `), `**bold**`, `*italic*`, and single-backtick inline code. Formatting spans must open and close on the same line and cannot nest. Each source line stays on a separate line. Flat lists (`- `, `* `, `+ `, or digits followed by `. `) and blockquotes (`> `) are supported at the start of a line. Quotes are indented when Embedded Style is on. Ordered lists count from 1; a blank line or a change of block type ends the list. Nesting, tables, links, images, and raw HTML are not converted. Lines longer than 4,096 bytes display as plain text. Plain text (`.txt`) files keep their original formatting.
-
 * **Navigate List:** Use **Left** (or **Side Up**), or **Right** (or **Side Down**) to move the selection cursor up and down through folders and books. You can also long-press these buttons to scroll a full page up or down.
 * **Open Selection:** Press **Confirm** to open a folder or start reading a selected book. Selecting a `.bmp` file will open the image viewer.
 * **Delete Files or Folders:** Hold and release **Confirm** to delete the selected file or folder. You will be given an option to either confirm or cancel. Multiple files can be selected for deletion in a single operation.
@@ -635,6 +633,10 @@ See [docs/sd-card-fonts.md](./docs/sd-card-fonts.md) for full installation detai
 ## 4. Reading Mode
 
 Once you have opened a book, the button layout changes to facilitate reading.
+
+### Text and Markdown files
+
+Markdown (`.md`) files support headings (`# ` through `###### `), `**bold**`, `*italic*` (also `_italic_` and `__bold__`), and single-backtick inline code in the normal reader font. A backslash escapes punctuation outside formatting spans. Formatting spans must open and close on the same line and cannot nest. Each source line stays on a separate line. Flat lists (`- `, `* `, `+ `, or digits followed by `. `) and blockquotes (`> `) are supported at the start of a line. Quotes are indented when Embedded Style is on. Ordered lists count from 1; a blank line or a change of block type ends the list. Nesting, tables, links, images, and raw HTML are not converted. Lines longer than 4,096 bytes display as plain text. After upgrading from literal Markdown rendering, saved reading positions, bookmarks, and highlights may point to different text. Plain text (`.txt`) files keep their original formatting.
 
 ### Page Turning
 
