@@ -21,7 +21,7 @@ the manual SD card copy method below.
 1. Connect your CrossPoint reader to Wi-Fi
 2. Go to **Settings > Reader > Manage Fonts**
 3. Browse available font families and tap to download
-4. Downloaded fonts appear immediately in **Settings > Reader > Font Family**
+4. Downloaded fonts appear immediately in **Settings > Reader > Text Settings > Font**
 
 ### Option 2: Upload via web browser
 
@@ -66,7 +66,7 @@ the manual SD card copy method below.
 If CrossPoint enables external RAM on your device, copy a `.ttf`, `.otf`, or
 `.ttc` file directly into `/fonts/` or `/.fonts/`. The filename without its
 extension becomes the family name. For example, `/fonts/Bookerly.ttf` appears as
-`Bookerly` in **Settings > Reader > Font Family**.
+`Bookerly` in **Settings > Reader > Text Settings > Font**.
 
 For a family with separate styles, put its files in one subfolder. The folder
 name becomes the family name. For example:
@@ -82,10 +82,16 @@ file in the same family folder takes priority over TTF/OTF/TTC files, so keep
 the two formats in separate folders. If both font roots contain the same family
 name, the copy in `/.fonts/` takes priority.
 
-Direct fonts use the standard reader sizes: 12, 14, 16, and 18 pt. The **Fonts**
-tab in File Transfer accepts `.cpfont` files only. Copy direct fonts to the SD
-card instead. To remove a loose font file, delete that file from the SD card.
+Direct fonts use the standard reader sizes: 12, 14, 16, and 18 pt. On devices with external RAM, the **Fonts**
+tab in File Transfer also accepts `.ttf` and `.otf` files. Select a folder that contains the family files.
+Copy `.ttc` files to the SD card instead. To remove a loose font file, delete that file from the SD card.
 The Fonts page can delete families stored in subfolders.
+
+## Upgrading from built-in Noto Serif
+
+Noto Serif and OpenDyslexic are optional SD card fonts. Install `NotoSerif` to use the former built-in serif family.
+On upgrade, a previous Noto Serif selection uses `NotoSerif` if installed. Otherwise, the reader switches to Noto Sans.
+After installing the family, select it in **Settings > Reader > Text Settings > Font**.
 
 ## Non-Latin Scripts Fallback in the User Interface
 
@@ -134,7 +140,7 @@ When converting your own font, include the UI sizes:
 
 What this means in practice:
 
-- Select a non-Latin-capable SD font under **Settings > Reader > Font Family**
+- Select a non-Latin-capable SD font under **Settings > Reader > Text Settings > Font**
   (see [Installing Fonts](#installing-fonts) and the interval presets for
   `.cpfont` under [Converting Custom Fonts](#converting-custom-fonts)). That
   single selection drives both book content *and* size-matched fallback in
