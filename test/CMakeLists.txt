@@ -39,6 +39,7 @@ enable_testing()
 include(GoogleTest)
 
 add_subdirectory(streaming_json_parser)
+add_subdirectory(button_navigation)
 add_subdirectory(release_json_parser)
 add_subdirectory(differential_rounding)
 add_subdirectory(hyphenation_eval)
