@@ -46,6 +46,7 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["lastSleepFromReader"] = lastSleepFromReader;
   doc["showBootScreen"] = showBootScreen;
   doc["nightScheduleBoundary"] = nightScheduleBoundary;
+  doc["nightScheduleBoundaryOn"] = nightScheduleBoundaryOn;
 }
 
 bool CrossPointState::fromJson(JsonVariantConst doc) {
@@ -61,5 +62,6 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   lastSleepFromReader = doc["lastSleepFromReader"] | false;
   showBootScreen = doc["showBootScreen"] | true;
   nightScheduleBoundary = doc["nightScheduleBoundary"] | static_cast<int64_t>(0);
+  nightScheduleBoundaryOn = doc["nightScheduleBoundaryOn"] | false;
   return true;
 }
