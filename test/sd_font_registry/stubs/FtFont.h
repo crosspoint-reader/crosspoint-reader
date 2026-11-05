@@ -15,9 +15,8 @@ class FtFont {
   // Test files encode only weight (big-endian) and the metadata italic flag.
   static InspectResult inspectStream(ReadFn read, void* ctx, unsigned long size, FaceInfo& info) {
     unsigned char bytes[3];
-    if (size != sizeof(bytes) || read(ctx, 0, bytes, sizeof(bytes)) != sizeof(bytes)) {
-      return InspectResult::Unavailable;
-    }
+    if (size == 0 || read(ctx, 0, bytes, sizeof(bytes)) != sizeof(bytes)) return InspectResult::Unavailable;
+    if (size != sizeof(bytes)) return InspectResult::Unsupported;
     info.weight = (static_cast<uint16_t>(bytes[0]) << 8) | bytes[1];
     info.italic = bytes[2] != 0;
     return InspectResult::Ok;

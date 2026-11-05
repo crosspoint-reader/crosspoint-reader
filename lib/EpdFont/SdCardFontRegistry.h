@@ -19,7 +19,7 @@ struct SdCardFontFileInfo {
                           // Vector family in a folder: the style ROLE of this file —
                           // 0=regular, 1=bold, 2=italic, 3=bold-italic (parsed from
                           // the filename). A loose vector file is always role 0.
-  uint16_t weight = 400;  // Vector metadata weight; default when inspection is unavailable.
+  uint16_t weight = 400;  // Vector metadata weight (unused for .cpfont).
 };
 
 struct SdCardFontFamilyInfo {
@@ -99,7 +99,7 @@ class SdCardFontRegistry {
   static bool parseVectorFontName(const char* filename, size_t& baseLen);
   // Bits 0-1: filename bold/italic hints. Bits 2-5: explicit suffix role.
   static uint8_t guessVectorStyle(const char* baseName, size_t baseLen);
-  // Explicit suffixes win; remaining roles use filename hints OR metadata.
+  // Reject inspection failures, then prefer suffixes over filename hints OR metadata.
   // Prefer lowest weight for non-bold roles, pure bold for bold roles. No file reuse.
   static void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
 #endif

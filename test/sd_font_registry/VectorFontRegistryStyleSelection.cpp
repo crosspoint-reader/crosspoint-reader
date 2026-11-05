@@ -42,16 +42,13 @@ TEST_F(VectorFontRegistryTest, FilenameStylesSurviveMissingItalicMetadata) {
   expectFace(3, "Family-BoldItalic.ttf");
 }
 
-TEST_F(VectorFontRegistryTest, FilenameStylesWorkWhenInspectionIsUnavailable) {
+TEST_F(VectorFontRegistryTest, ExplicitStylesAreRejectedWhenInspectionIsUnavailable) {
   for (const char* style : {"Regular", "Bold", "Italic", "BoldItalic"}) {
     fake::add(std::string("/fonts/Family/Family-") + style + ".ttf", "");
   }
 
-  ASSERT_TRUE(registry.discover());
-  expectFace(0, "Family-Regular.ttf");
-  expectFace(1, "Family-Bold.ttf");
-  expectFace(2, "Family-Italic.ttf");
-  expectFace(3, "Family-BoldItalic.ttf");
+  EXPECT_FALSE(registry.discover());
+  EXPECT_EQ(registry.findFamily("Family"), nullptr);
 }
 
 TEST_F(VectorFontRegistryTest, FilenameStylesSurviveRegularWeightAndItalicMetadata) {
@@ -174,7 +171,7 @@ TEST_F(VectorFontRegistryTest, AllSuffixAliasesOverrideConflictingMetadata) {
     ASSERT_TRUE(registry.discover());
     expectFace(test.role, filename.c_str());
     EXPECT_EQ(registry.findFamily("Family")->files.size(), test.role == 0 ? 1u : 2u);
-    EXPECT_EQ(fake::reads, 0u);
+    EXPECT_EQ(fake::reads, test.role == 0 ? 1u : 2u);
   }
 }
 
@@ -221,7 +218,7 @@ TEST_F(VectorFontRegistryTest, CombinedSuffixesPrecedeItalicTails) {
   }
 }
 
-TEST_F(VectorFontRegistryTest, ExplicitRolesWinBeforeFallbackAndSkipInspectionWhenComplete) {
+TEST_F(VectorFontRegistryTest, ExplicitRolesWinButEveryCandidateIsInspected) {
   addFace("Z-Regular.ttf", 900, true);
   addFace("Z-Bold.ttf", 400, true);
   addFace("Z-Italic.ttf", 900, false);
@@ -236,7 +233,7 @@ TEST_F(VectorFontRegistryTest, ExplicitRolesWinBeforeFallbackAndSkipInspectionWh
   expectFace(1, "Z-Bold.ttf");
   expectFace(2, "Z-Italic.ttf");
   expectFace(3, "Z-BoldItalic.ttf");
-  EXPECT_EQ(fake::reads, 0u);
+  EXPECT_EQ(fake::reads, 8u);
 }
 
 TEST_F(VectorFontRegistryTest, DuplicateExplicitFilesAreNotReusedForOtherRoles) {
@@ -248,7 +245,7 @@ TEST_F(VectorFontRegistryTest, DuplicateExplicitFilesAreNotReusedForOtherRoles) 
   expectFace(0, "A-Regular.ttf");
   expectFace(1, "Fallback.ttf");
   EXPECT_EQ(registry.findFamily("Family")->files.size(), 2u);
-  EXPECT_EQ(fake::reads, 1u);
+  EXPECT_EQ(fake::reads, 3u);
 }
 
 TEST_F(VectorFontRegistryTest, FallbackUsesLexicalOrderRatherThanNearestWeight) {
@@ -290,16 +287,52 @@ TEST_F(VectorFontRegistryTest, FallbackCombinesFilenameBoldWithMetadataItalic) {
   EXPECT_EQ(registry.findFamily("Family")->files.size(), 2u);
 }
 
-TEST_F(VectorFontRegistryTest, UnavailableMetadataRetainsOnlyLegacyFilenameHints) {
+TEST_F(VectorFontRegistryTest, UnavailableMetadataRejectsUnsuffixedCandidates) {
   for (const char* filename : {"plain.ttf", "semiboldish.ttf", "italicized.ttf", "bolditalicized.ttf"}) {
     fake::add(std::string("/fonts/Family/") + filename, "");
   }
 
+  EXPECT_FALSE(registry.discover());
+  EXPECT_EQ(registry.findFamily("Family"), nullptr);
+}
+
+TEST_F(VectorFontRegistryTest, InvalidLexicalFirstSuffixDoesNotHideValidDuplicate) {
+  fake::add("/fonts/Family/A-Regular.ttf", "invalid");
+  fake::add("/fonts/Family/A-Bold.ttf", "");
+  addFace("Z-Regular.ttf", 400, false);
+  addFace("Z-Bold.ttf", 700, false);
+
   ASSERT_TRUE(registry.discover());
-  expectFace(0, "plain.ttf");
-  expectFace(1, "semiboldish.ttf");
-  expectFace(2, "italicized.ttf");
-  expectFace(3, "bolditalicized.ttf");
+  expectFace(0, "Z-Regular.ttf");
+  expectFace(1, "Z-Bold.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, InvalidUnsuffixedCandidateDoesNotHideValidCandidate) {
+  fake::add("/fonts/Family/A.ttf", "invalid");
+  addFace("Z.ttf", 400, false);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "Z.ttf");
+  EXPECT_EQ(registry.findFamily("Family")->files.size(), 1u);
+}
+
+TEST_F(VectorFontRegistryTest, FailedCandidateCanReturnOnLaterDiscovery) {
+  fake::add("/fonts/Family/A-Regular.ttf", "");
+  addFace("Z-Regular.ttf", 400, false);
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "Z-Regular.ttf");
+  addFace("A-Regular.ttf", 400, false);
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "A-Regular.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, ReadFailureDoesNotReserveAnExplicitRole) {
+  addFace("A-Regular.ttf", 400, false);
+  addFace("Z-Regular.ttf", 400, false);
+  fake::failRead = 0;
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "Z-Regular.ttf");
 }
 
 TEST_F(VectorFontRegistryTest, AliasesAreNotAddedToLegacyHints) {

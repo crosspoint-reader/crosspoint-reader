@@ -5,6 +5,7 @@
 #include <string>
 
 namespace {
+void addFont(const std::string& path) { fake::add(path, std::string("\x01\x90\0", 3)); }
 
 class VectorFontRegistryFileNamesTest : public ::testing::Test {
  protected:
@@ -19,7 +20,7 @@ TEST_F(VectorFontRegistryFileNamesTest, SupportedExtensionsAreCaseInsensitive) {
     SCOPED_TRACE(extension);
     fake::reset();
     for (const char* style : styles) {
-      fake::add(std::string("/fonts/Family/Family-") + style + extension);
+      addFont(std::string("/fonts/Family/Family-") + style + extension);
     }
 
     ASSERT_TRUE(registry.discover());
@@ -38,7 +39,7 @@ TEST_F(VectorFontRegistryFileNamesTest, SupportedExtensionsAreCaseInsensitive) {
 TEST_F(VectorFontRegistryFileNamesTest, OneFamilyCanMixSupportedExtensions) {
   static constexpr const char* filenames[] = {"Family-Regular.otf", "Family-Bold.ttc", "Family-Italic.TTF",
                                               "Family-BoldItalic.OTF"};
-  for (const char* filename : filenames) fake::add(std::string("/fonts/Family/") + filename);
+  for (const char* filename : filenames) addFont(std::string("/fonts/Family/") + filename);
 
   ASSERT_TRUE(registry.discover());
   const auto* family = registry.findFamily("Family");
@@ -51,13 +52,25 @@ TEST_F(VectorFontRegistryFileNamesTest, OneFamilyCanMixSupportedExtensions) {
   }
 }
 
+TEST_F(VectorFontRegistryFileNamesTest, LooseFilesAlsoRequireSuccessfulInspection) {
+  fake::add("/fonts/Broken.ttf", "invalid");
+  fake::add("/fonts/Unavailable.otf", "");
+  addFont("/fonts/Valid.ttc");
+
+  ASSERT_TRUE(registry.discover());
+  EXPECT_EQ(registry.getFamilyCount(), 1);
+  EXPECT_NE(registry.findFamily("Valid"), nullptr);
+  EXPECT_EQ(registry.findFamily("Broken"), nullptr);
+  EXPECT_EQ(registry.findFamily("Unavailable"), nullptr);
+}
+
 TEST_F(VectorFontRegistryFileNamesTest, UnsupportedExtensionsAndBackupSuffixesAreNotDiscovered) {
-  for (const char* filename : {"Family-Regular.tf", "Family-Regular.ot", "Family-Regular.tc", "Family-Regular.ttff",
-                               "Family-Regular.ttf.bak", "Family-Regular.otf.bak", "Family-Regular.ttc.bak",
-                               "Family-Regular.ttf.tmp", "Family-Regular"}) {
+  for (const char* filename :
+       {"Family-Regular.tf", "Family-Regular.ot", "Family-Regular.tc", "Family-Regular.ttff", "Family-Regular.ttf.bak",
+        "Family-Regular.otf.bak", "Family-Regular.ttc.bak", "Family-Regular.ttf.tmp", "Family-Regular"}) {
     SCOPED_TRACE(filename);
     fake::reset();
-    fake::add(std::string("/fonts/Family/") + filename);
+    addFont(std::string("/fonts/Family/") + filename);
 
     EXPECT_FALSE(registry.discover());
     EXPECT_EQ(registry.findFamily("Family"), nullptr);
@@ -72,8 +85,8 @@ TEST_F(VectorFontRegistryFileNamesTest, DotAndUnderscorePrefixedFilesInsideFamil
         fake::reset();
         const std::string directory = std::string(root) + "/Family/";
         const std::string visible = std::string("Visible-Regular") + extension;
-        fake::add(directory + visible);
-        fake::add(directory + prefix + "Hidden-Bold" + extension);
+        addFont(directory + visible);
+        addFont(directory + prefix + "Hidden-Bold" + extension);
 
         ASSERT_TRUE(registry.discover());
         const auto* family = registry.findFamily("Family");
@@ -94,8 +107,8 @@ TEST_F(VectorFontRegistryFileNamesTest, DotAndUnderscorePrefixedLooseFilesAreIgn
       for (const char* prefix : {".", "_", "._"}) {
         SCOPED_TRACE(std::string(root) + "/" + prefix + "Hidden" + extension);
         fake::reset();
-        fake::add(std::string(root) + "/Visible.ttf");
-        fake::add(std::string(root) + "/" + prefix + "Hidden" + extension);
+        addFont(std::string(root) + "/Visible.ttf");
+        addFont(std::string(root) + "/" + prefix + "Hidden" + extension);
 
         ASSERT_TRUE(registry.discover());
         EXPECT_EQ(registry.getFamilyCount(), 1);
@@ -111,8 +124,8 @@ TEST_F(VectorFontRegistryFileNamesTest, DotAndUnderscorePrefixedFamilyDirectorie
     for (const char* prefix : {".", "_", "._"}) {
       SCOPED_TRACE(std::string(root) + "/" + prefix + "Hidden");
       fake::reset();
-      fake::add(std::string(root) + "/Visible/Visible-Regular.ttf");
-      fake::add(std::string(root) + "/" + prefix + "Hidden/Hidden-Regular.ttf");
+      addFont(std::string(root) + "/Visible/Visible-Regular.ttf");
+      addFont(std::string(root) + "/" + prefix + "Hidden/Hidden-Regular.ttf");
 
       ASSERT_TRUE(registry.discover());
       EXPECT_EQ(registry.getFamilyCount(), 1);
