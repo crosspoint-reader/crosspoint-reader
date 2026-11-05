@@ -7,7 +7,7 @@
 
 // Top-level groups on the Settings screen, in display order. End doubles as
 // "no section" where one is optional.
-enum class SettingsSection : uint8_t { General, Display, Reader, Controls, Library, Network, End };
+enum class SettingsSection : uint8_t { General, Display, Reader, Controls, Library, Network, End, ScreenClean };
 
 inline constexpr size_t SETTINGS_SECTION_COUNT = static_cast<size_t>(SettingsSection::End);
 
