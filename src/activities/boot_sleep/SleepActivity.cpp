@@ -736,13 +736,6 @@ void SleepActivity::onEnter() {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
   }
 
-  // Every mode below replaces the whole screen. One clean straight to the new
-  // image leaves the old screen visible, so clean to white first (BLANK is that clean).
-  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
-    renderer.clearScreen();
-    renderer.displayBuffer(kSleepClean);
-  }
-
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
       return renderBlankSleepScreen();
