@@ -16,9 +16,8 @@ struct SdCardFontFileInfo {
   std::unique_ptr<char[]> name;
   uint8_t pointSize;      // parsed from filename: 14 (0 for size-free vector fonts)
   uint8_t style;          // .cpfont: always 0 (all 4 styles bundled in one file).
-                          // Vector family in a folder: the style ROLE of this file —
-                          // 0=regular, 1=bold, 2=italic, 3=bold-italic (parsed from
-                          // the filename). A loose vector file is always role 0.
+                          // Vector family: resolved role (0=regular, 1=bold,
+                          // 2=italic, 3=bold-italic). A loose file is always role 0.
   uint16_t weight = 400;  // Vector metadata weight (unused for .cpfont).
 };
 
