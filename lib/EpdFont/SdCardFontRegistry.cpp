@@ -13,7 +13,7 @@
 #include <cstring>
 
 // One file entry per installed size is resident from boot; keep it to the
-// name pointer plus two bytes.
+// existing two-pointer footprint, including scalar metadata in its padding.
 static_assert(sizeof(SdCardFontFileInfo) == 2 * sizeof(void*), "SdCardFontFileInfo grew");
 
 // --- SdCardFontFamilyInfo helpers ---
@@ -157,18 +157,18 @@ bool SdCardFontRegistry::isCanonicalCpfontName(const char* filename, const std::
 
 namespace {
 enum VectorStyleBits : uint8_t {
-  HINT_SEMIBOLD = 1 << 0,
-  HINT_BOLD = 1 << 1,
-  HINT_ITALIC = 1 << 2,
-  ROLE_REGULAR = 1 << 3,
-  ROLE_BOLD = 1 << 4,
-  ROLE_ITALIC = 1 << 5,
-  ROLE_BOLD_ITALIC = 1 << 6,
+  HINT_BOLD = 1 << 0,
+  HINT_ITALIC = 1 << 1,
+  ROLE_REGULAR = 1 << 2,
+  ROLE_BOLD = 1 << 3,
+  ROLE_ITALIC = 1 << 4,
+  ROLE_BOLD_ITALIC = 1 << 5,
   ROLE_MASK = ROLE_REGULAR | ROLE_BOLD | ROLE_ITALIC | ROLE_BOLD_ITALIC,
 };
 enum class VectorRole : uint8_t { Regular, Bold, Italic, BoldItalic, Count };
 constexpr size_t VECTOR_STYLE_COUNT = static_cast<size_t>(VectorRole::Count);
 constexpr uint8_t VECTOR_ROLE_HINTS[] = {0, HINT_BOLD, HINT_ITALIC, HINT_BOLD | HINT_ITALIC};
+bool isIntermediateWeight(const uint16_t weight) { return weight > 400 && weight < 700; }
 }  // namespace
 
 bool SdCardFontRegistry::parseVectorFontName(const char* filename, size_t& baseLen) {
@@ -236,9 +236,10 @@ unsigned long SdCardFontRegistry::halFileRead(void* ctx, const unsigned long off
 
 void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
   // - Reserve explicit suffix roles; lexical-first duplicates win, regardless of metadata.
-  // - OR filename hints with metadata: 401-699 adds semibold, >=700 adds bold.
+  // - Record metadata weight; OR its bold (>=700) and italic flags with filename hints.
   // - Fill missing roles in regular/bold/italic/bold-italic order, matching italics.
-  //   Prefer normal/pure-bold matches over semibold; break ties lexically. Never reuse a file.
+  //   Prefer lowest weight for non-bold roles, pure bold for bold roles; ties are lexical.
+  //   Intermediate weights (401-699) can fill either weight role. Never reuse a file.
   // - If regular is missing, move italic, bold, or bold-italic to it (in that order),
   //   then refill the vacated role from unused files using the same preferences.
   using freeink::font::FtFont;
@@ -259,7 +260,6 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
   const auto pickUnused = [&](const size_t role) {
     size_t explicitPick = missing;
     size_t fallbackPick = missing;
-    bool fallbackSemibold = false;
     const bool wantBold = VECTOR_ROLE_HINTS[role] & HINT_BOLD;
     const bool wantItalic = VECTOR_ROLE_HINTS[role] & HINT_ITALIC;
     for (size_t i = 0; i < files.size(); ++i) {
@@ -268,16 +268,19 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
         if ((files[i].style & (ROLE_REGULAR << role)) && earlier(i, explicitPick)) explicitPick = i;
         continue;
       }
-      const bool semibold = files[i].style & HINT_SEMIBOLD;
+      const bool intermediate = isIntermediateWeight(files[i].weight);
       const bool bold = files[i].style & HINT_BOLD;
       const bool italic = files[i].style & HINT_ITALIC;
-      if (italic != wantItalic || (!semibold && bold != wantBold)) continue;
-      // Semibold can fill either weight role, after a normal or pure-bold match.
-      if (fallbackPick == missing || (fallbackSemibold && !semibold) ||
-          (fallbackSemibold == semibold && earlier(i, fallbackPick))) {
+      if (italic != wantItalic || (!intermediate && bold != wantBold)) continue;
+      if (fallbackPick == missing) {
         fallbackPick = i;
-        fallbackSemibold = semibold;
+        continue;
       }
+      const auto& best = files[fallbackPick];
+      const bool better =
+          wantBold ? (!intermediate && isIntermediateWeight(best.weight)) : files[i].weight < best.weight;
+      const bool tied = wantBold ? intermediate == isIntermediateWeight(best.weight) : files[i].weight == best.weight;
+      if (better || (tied && earlier(i, fallbackPick))) fallbackPick = i;
     }
     return explicitPick != missing ? explicitPick : fallbackPick;
   };
@@ -293,8 +296,8 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
       FtFont::FaceInfo face;
       if (FtFont::inspectStream(&halFileRead, &f, static_cast<unsigned long>(f.size()), face) ==
           FtFont::InspectResult::Ok) {
+        file.weight = face.weight;
         if (face.weight >= 700) file.style |= HINT_BOLD;
-        if (face.weight > 400 && face.weight < 700) file.style |= HINT_SEMIBOLD;
         if (face.italic) file.style |= HINT_ITALIC;
       }
     }

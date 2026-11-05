@@ -14,11 +14,12 @@ struct SdCardFontFileInfo {
   // for the canonical name, so downloaded families keep no per-file heap strings
   // and the entry is two pointers wide (8 bytes on the ESP32-C3).
   std::unique_ptr<char[]> name;
-  uint8_t pointSize;  // parsed from filename: 14 (0 for size-free vector fonts)
-  uint8_t style;      // .cpfont: always 0 (all 4 styles bundled in one file).
-                      // Vector family in a folder: the style ROLE of this file —
-                      // 0=regular, 1=bold, 2=italic, 3=bold-italic (parsed from
-                      // the filename). A loose vector file is always role 0.
+  uint8_t pointSize;      // parsed from filename: 14 (0 for size-free vector fonts)
+  uint8_t style;          // .cpfont: always 0 (all 4 styles bundled in one file).
+                          // Vector family in a folder: the style ROLE of this file —
+                          // 0=regular, 1=bold, 2=italic, 3=bold-italic (parsed from
+                          // the filename). A loose vector file is always role 0.
+  uint16_t weight = 400;  // Vector metadata weight; default when inspection is unavailable.
 };
 
 struct SdCardFontFamilyInfo {
@@ -96,11 +97,10 @@ class SdCardFontRegistry {
   // Match a loose vector font filename (.ttf/.otf/.ttc, case-insensitive) and
   // return the length of the base name (extension stripped) in `baseLen`.
   static bool parseVectorFontName(const char* filename, size_t& baseLen);
-  // Bits 1-2: filename bold/italic hints. Bits 3-6: explicit suffix role.
-  // Bit 0 is reserved for metadata-only semibold classification.
+  // Bits 0-1: filename bold/italic hints. Bits 2-5: explicit suffix role.
   static uint8_t guessVectorStyle(const char* baseName, size_t baseLen);
   // Explicit suffixes win; remaining roles use filename hints OR metadata.
-  // Prefer normal/pure-bold matches over semibold, then lexical order. No file reuse.
+  // Prefer lowest weight for non-bold roles, pure bold for bold roles. No file reuse.
   static void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
 #endif
   static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
