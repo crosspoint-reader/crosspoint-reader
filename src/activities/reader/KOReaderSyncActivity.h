@@ -1,6 +1,7 @@
 #pragma once
 #include <Epub.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -19,12 +20,23 @@
  * 3. Fetch remote progress
  * 4. Show comparison and options (Apply/Upload)
  * 5. Apply or upload progress
+ *
+ * Mode::CheckOnOpen follows the same flow but never uploads (see Mode).
  */
 class KOReaderSyncActivity final : public Activity, private UiAppHost {
  public:
+  enum class Mode : uint8_t {
+    Manual,
+    // Joins WiFi only to flush plugged-outbox events; needs no sync server.
+    PluginEventsOnly,
+    // Book-open check: never uploads, offers only a remote position ahead of
+    // local, and returns to the reader silently on every other outcome.
+    CheckOnOpen,
+  };
+
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
                                 CrossPointPosition localPosition, SavedProgressPosition localKoPos,
-                                std::string localChapterName, const bool pluginEventsOnly = false);
+                                std::string localChapterName, Mode mode = Mode::Manual);
 
   void onEnter() override;
   void onExit() override;
@@ -76,13 +88,12 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
   // which makes WiFi.getMode() return WIFI_MODE_NULL.
   bool wifiActivated = false;
 
-  // Reuses the KOReader WiFi connect/drain/return flow without a server: flush
-  // plugged-outbox events instead of syncing progress.
-  bool pluginEventsOnly = false;
+  const Mode mode;
 
   void onWifiSelectionComplete(bool success);
   void performSync();
   void performUpload();
+  void failSync(const char* message);
   bool smartSyncEnabled() const;
   void markAutoReturn();
   void completeAlreadySynced();

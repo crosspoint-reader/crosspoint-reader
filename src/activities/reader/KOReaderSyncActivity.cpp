@@ -55,7 +55,7 @@ const char* matchMethodName(const DocumentMatchMethod method) {
 KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                            const std::string& epubPath, CrossPointPosition localPosition,
                                            SavedProgressPosition localKoPos, std::string localChapterName,
-                                           const bool pluginEventsOnly)
+                                           const Mode mode)
     : Activity("KOReaderSync", renderer, mappedInput),
       UiAppHost(renderer),
       epubPath(epubPath),
@@ -64,7 +64,7 @@ KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputMan
       remoteProgress{},
       remotePosition{},
       localProgress(std::move(localKoPos)),
-      pluginEventsOnly(pluginEventsOnly) {}
+      mode(mode) {}
 
 void KOReaderSyncActivity::ensureEpubLoaded() {
   if (!epub) {
@@ -133,7 +133,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   WiFi.setSleep(false);
   LOG_DBG("KOSync", "WiFi sleep disabled for sync");
 
-  if (pluginEventsOnly) {
+  if (mode == Mode::PluginEventsOnly) {
     {
       RenderLock lock(*this);
       state = SYNCING;
@@ -155,6 +155,11 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
 
   // KOSync requests from CrossPoint do not include a client timestamp.
   performSync();
+
+  // The open check needs no network after the fetch; drop the radio while the prompt waits.
+  if (mode == Mode::CheckOnOpen && state == SHOWING_RESULT) {
+    esp_wifi_stop();
+  }
 }
 
 void KOReaderSyncActivity::performSync() {
@@ -162,19 +167,14 @@ void KOReaderSyncActivity::performSync() {
   const DocumentMatchMethod primaryMethod = KOREADER_STORE.getMatchMethod();
   documentHash = calculateDocumentHashForMethod(epubPath, primaryMethod);
   if (documentHash.empty()) {
-    {
-      RenderLock lock(*this);
-      state = SYNC_FAILED;
-      statusMessage = tr(STR_HASH_FAILED);
-    }
-    requestUpdate(true);
+    failSync(tr(STR_HASH_FAILED));
     return;
   }
   const std::string primaryHash = documentHash;
 
   LOG_DBG("KOSync", "Document hash (%s): %s", matchMethodName(primaryMethod), documentHash.c_str());
 
-  if (KOREADER_STORE.getSyncClippings()) {
+  if (mode != Mode::CheckOnOpen && KOREADER_STORE.getSyncClippings()) {
     {
       RenderLock lock(*this);
       statusMessage = tr(STR_SYNCING_CLIPPINGS);
@@ -189,12 +189,7 @@ void KOReaderSyncActivity::performSync() {
       clippingsSynced = clippingSync::run(epubPath, documentHash);
     }
     if (!clippingsSynced) {
-      {
-        RenderLock lock(*this);
-        state = SYNC_FAILED;
-        statusMessage = tr(STR_CLIPPING_SYNC_FAILED);
-      }
-      requestUpdate(true);
+      failSync(tr(STR_CLIPPING_SYNC_FAILED));
       return;
     }
   }
@@ -238,6 +233,12 @@ void KOReaderSyncActivity::performSync() {
   }
 
   if (result == KOReaderSyncClient::NOT_FOUND) {
+    if (mode == Mode::CheckOnOpen) {
+      LOG_DBG("KOSync", "Open check: no remote progress");
+      returnToReader();
+      return;
+    }
+
     if (smartSyncEnabled()) {
       LOG_DBG("KOSync", "Smart sync: no remote progress found for known document hashes; uploading local %.6f",
               localProgress.percentage);
@@ -256,12 +257,7 @@ void KOReaderSyncActivity::performSync() {
   }
 
   if (result != KOReaderSyncClient::OK) {
-    {
-      RenderLock lock(*this);
-      state = SYNC_FAILED;
-      statusMessage = KOReaderSyncClient::errorString(result);
-    }
-    requestUpdate(true);
+    failSync(KOReaderSyncClient::errorString(result));
     return;
   }
 
@@ -269,12 +265,7 @@ void KOReaderSyncActivity::performSync() {
   hasRemoteProgress = true;
   ensureEpubLoaded();
   if (!epub) {
-    {
-      RenderLock lock(*this);
-      state = SYNC_FAILED;
-      statusMessage = "";
-    }
-    requestUpdate(true);
+    failSync("");
     return;
   }
 
@@ -315,7 +306,14 @@ void KOReaderSyncActivity::performSync() {
 
   const ProgressComparison comparison =
       compareProgress(localPosition, localProgress.percentage, remotePosition, remoteProgress.percentage);
-  if (smartSyncEnabled()) {
+  if (mode == Mode::CheckOnOpen) {
+    if (comparison != ProgressComparison::RemoteAhead) {
+      LOG_DBG("KOSync", "Open check: remote not ahead (result=%d local=%.6f remote=%.6f)", static_cast<int>(comparison),
+              localProgress.percentage, remoteProgress.percentage);
+      returnToReader();
+      return;
+    }
+  } else if (smartSyncEnabled()) {
     LOG_DBG("KOSync", "Smart decision: doc=%s result=%d local=%.6f remote=%.6f remoteXpath=%s mapped=%d/%d",
             primaryHash.c_str(), static_cast<int>(comparison), localProgress.percentage, remoteProgress.percentage,
             remoteProgress.progress.c_str(), remotePosition.spineIndex, remotePosition.pageNumber);
@@ -341,6 +339,20 @@ void KOReaderSyncActivity::performSync() {
     state = SHOWING_RESULT;
 
     selectedOption = comparison == ProgressComparison::LocalAhead ? 1 : 0;
+  }
+  requestUpdate(true);
+}
+
+void KOReaderSyncActivity::failSync(const char* message) {
+  if (mode == Mode::CheckOnOpen) {
+    LOG_ERR("KOSync", "Open check failed: %s", message);
+    returnToReader();
+    return;
+  }
+  {
+    RenderLock lock(*this);
+    state = SYNC_FAILED;
+    statusMessage = message;
   }
   requestUpdate(true);
 }
@@ -453,7 +465,7 @@ void KOReaderSyncActivity::onEnter() {
   app.setScreen(&KOReaderSyncActivity::resultScreen, this);
 
   // Check for credentials first (plugin-events-only mode needs none).
-  if (!pluginEventsOnly && !KOREADER_STORE.hasCredentials()) {
+  if (mode != Mode::PluginEventsOnly && !KOREADER_STORE.hasCredentials()) {
     state = NO_CREDENTIALS;
     requestUpdate();
     return;
@@ -471,7 +483,10 @@ void KOReaderSyncActivity::onEnter() {
 
   // Launch WiFi selection subactivity
   LOG_DBG("KOSync", "Launching WifiSelectionActivity...");
-  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+  // The open check must not block the book on the network picker.
+  const auto wifiMode = mode == Mode::CheckOnOpen ? WifiSelectionActivity::ConnectMode::SavedOnly
+                                                  : WifiSelectionActivity::ConnectMode::SavedThenList;
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, wifiMode),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
@@ -488,6 +503,8 @@ void KOReaderSyncActivity::onExit() {
 void KOReaderSyncActivity::chooseResultOption() {
   if (selectedOption == 0) {
     saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
+  } else if (mode == Mode::CheckOnOpen) {
+    returnToReader();
   } else {
     performUpload();
   }
@@ -592,16 +609,21 @@ void KOReaderSyncActivity::buildResultScreen(UiScreen& screen) {
     // Two themed action rows flowing directly below the labels (not anchored to
     // the bottom). Rendered through the list component so they inherit the
     // active theme's row radius, insets, and selection style, matching every
-    // other selectable list in the UI. Apply Remote pulls (download), Upload
-    // Local pushes (upload); the selected row highlights for physical-button
-    // users and tap works either way.
+    // other selectable list in the UI. Apply Remote pulls (download); the second
+    // row uploads local progress, or keeps it in the open check. The selected
+    // row highlights for physical-button users and tap works either way.
     screen.spacer(screen.theme().spaceMd);
     fui::ListItem actions[2];
     actions[0].label = tr(STR_APPLY_REMOTE);
     actions[0].icon = fui::bitmapFromIcon(icon_download_24);
     actions[0].actionValue = 0;
-    actions[1].label = tr(STR_UPLOAD_LOCAL);
-    actions[1].icon = fui::bitmapFromIcon(icon_upload_24);
+    if (mode == Mode::CheckOnOpen) {
+      actions[1].label = tr(STR_KEEP_LOCAL);
+      actions[1].icon = fui::bitmapFromIcon(icon_book_open_24);
+    } else {
+      actions[1].label = tr(STR_UPLOAD_LOCAL);
+      actions[1].icon = fui::bitmapFromIcon(icon_upload_24);
+    }
     actions[1].actionValue = 1;
     fui::ListProps actionProps;
     actionProps.items = actions;
