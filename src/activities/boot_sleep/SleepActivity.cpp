@@ -14,6 +14,9 @@
 #include <Memory.h>
 #include <PNGdec.h>
 #include <Xtc.h>
+#ifndef SIMULATOR
+#include <esp_attr.h>
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -25,6 +28,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "SleepImageCursor.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -509,6 +513,12 @@ bool findNextValidSleepImage(HalFile& dir, const SleepRecentKind recentKind, cha
 // both sleep directories, wrapping to the first. The folders are rescanned on every sleep, so added and removed
 // images take effect at once. One pass, no name list in RAM; the last shown path is kept on the card.
 constexpr char SLEEP_LAST_SHOWN_PATH[] = "/.crosspoint/sleep_last.txt";
+#ifdef SIMULATOR
+SleepImageCursor unsavedSleepCursor{};
+#else
+RTC_DATA_ATTR SleepImageCursor unsavedSleepCursor{};
+#endif
+static_assert(MAX_SLEEP_FILE_NAME_LEN + 32 <= SleepImageCursor::PATH_CAPACITY);
 
 bool selectNextSleepFileInOrder(const char* firstDirPath, const char* secondDirPath, std::string& selectedPath) {
   auto name = makeUniqueNoThrow<char[]>(MAX_SLEEP_FILE_NAME_LEN);
@@ -521,6 +531,7 @@ bool selectNextSleepFileInOrder(const char* firstDirPath, const char* secondDirP
     Storage.readFileToString("SLP", SLEEP_LAST_SHOWN_PATH, MAX_SLEEP_FILE_NAME_LEN + 32, lastShown);
   }
 
+  const char* cursor = unsavedSleepCursor.lastShown(lastShown.c_str());
   std::string first;
   std::string next;
   std::string path;
@@ -532,15 +543,17 @@ bool selectNextSleepFileInOrder(const char* firstDirPath, const char* secondDirP
       path += '/';
       path += name.get();
       if (first.empty() || path < first) first = path;
-      if (path > lastShown && (next.empty() || path < next)) next = path;
+      if (path > cursor && (next.empty() || path < next)) next = path;
     }
   }
   if (first.empty()) return false;
 
   selectedPath = next.empty() ? first : next;
   Storage.mkdir("/.crosspoint");
-  if (!Storage.writeFile(SLEEP_LAST_SHOWN_PATH, String(selectedPath.c_str()))) {
-    LOG_ERR("SLP", "Failed to save last sleep image");
+  const bool saved = Storage.writeFile(SLEEP_LAST_SHOWN_PATH, String(selectedPath.c_str()));
+  if (!saved) LOG_ERR("SLP", "Failed to save last sleep image");
+  if (!unsavedSleepCursor.record(selectedPath, saved)) {
+    LOG_ERR("SLP", "Sleep image path exceeds retained cursor capacity");
   }
   return true;
 }

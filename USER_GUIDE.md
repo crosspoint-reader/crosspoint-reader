@@ -581,7 +581,7 @@ When using **Custom**, **Cover**, **Cover + Custom** or **Cover + Transparent**,
 
 To use custom sleep images, set the sleep screen mode to **Custom** or **Cover + Custom**, then place images on the SD card:
 
-- **Multiple Images (recommended):** Create a `.sleep` directory in the root of the SD card and place any number of `.bmp` images inside. One will be randomly selected each time the device sleeps. (A directory named `sleep` is also accepted as a fallback.)
+- **Multiple Images (recommended):** Place `.bmp` images in `.sleep` or `sleep` at the root of the SD card. Both directories are scanned. **Sleep Image Order** selects **Random** (the default) or **In Order** (sorted by full path, returning to the first image after the last). The sequential position is saved on the card. If saving fails, the position is retained through deep sleep; after a cold restart it may return to the last saved position.
 - **Single Image:** Place a file named `sleep.bmp` in the root directory. This takes priority over the `.sleep`/`sleep` directories.
 
 Like book covers, custom images are scaled to the screen using **Sleep Screen Cover Mode**. The first sleep with a new image takes longer while it is converted.
