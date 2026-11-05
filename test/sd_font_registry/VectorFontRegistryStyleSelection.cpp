@@ -100,7 +100,7 @@ TEST_F(VectorFontRegistryTest, FilenameBoldHintsCoverNonBoldMetadataWeights) {
   }
 }
 
-TEST_F(VectorFontRegistryTest, BoldMetadataWeightsStillDistinguishSemiboldAndBold) {
+TEST_F(VectorFontRegistryTest, ExplicitDuplicateRolesUseFilenameOrderNotWeight) {
   addFace("Family-Regular.ttf", 400, false);
   addFace("Family-ABold.ttf", 600, false);
   addFace("Family-ZBold.ttf", 700, false);
@@ -110,9 +110,9 @@ TEST_F(VectorFontRegistryTest, BoldMetadataWeightsStillDistinguishSemiboldAndBol
 
   ASSERT_TRUE(registry.discover());
   expectFace(0, "Family-Regular.ttf");
-  expectFace(1, "Family-ZBold.ttf");
+  expectFace(1, "Family-ABold.ttf");
   expectFace(2, "Family-Italic.ttf");
-  expectFace(3, "Family-ZBoldItalic.ttf");
+  expectFace(3, "Family-ABoldItalic.ttf");
 }
 
 TEST_F(VectorFontRegistryTest, SemiboldRegularCanPairWithHeavierBold) {
@@ -131,7 +131,7 @@ TEST_F(VectorFontRegistryTest, SemiboldRegularCanPairWithHeavierBold) {
   }
 }
 
-TEST_F(VectorFontRegistryTest, MetadataStillSelectsStylesAndNearestWeights) {
+TEST_F(VectorFontRegistryTest, MetadataSelectsExactStyleFlags) {
   addFace("A.ttf", 400, false);
   addFace("B.ttf", 500, false);
   addFace("C.ttf", 700, false);
@@ -155,6 +155,396 @@ TEST_F(VectorFontRegistryTest, CaseInsensitiveObliqueNamesKeepItalicStyles) {
   expectFace(2, "Family-oBlIqUe.TTF");
   expectFace(3, "Family-bOlDoBlIqUe.ttf");
   EXPECT_EQ(registry.findFamily("Family")->findFile(0, 1), nullptr);
+}
+
+TEST_F(VectorFontRegistryTest, AllSuffixAliasesOverrideConflictingMetadata) {
+  static constexpr struct {
+    const char* suffix;
+    uint8_t role;
+  } cases[] = {{"Regular", 0},     {"Book", 0},    {"Roman", 0},      {"Bold", 1},        {"Black", 1},
+               {"Italic", 2},      {"Oblique", 2}, {"BoldItalic", 3}, {"BoldOblique", 3}, {"BlackOblique", 3},
+               {"BlackItalic", 3}, {"rEgUlAr", 0}, {"bLaCkItAlIc", 3}};
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.suffix);
+    fake::reset();
+    const std::string filename = std::string("Family-") + test.suffix + ".ttf";
+    addFace(filename, (test.role & 1) ? 400 : 900, (test.role & 2) == 0);
+    if (test.role != 0) addFace("Control-Regular.ttf", 400, false);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(test.role, filename.c_str());
+    EXPECT_EQ(registry.findFamily("Family")->files.size(), test.role == 0 ? 1u : 2u);
+    EXPECT_EQ(fake::reads, 0u);
+  }
+}
+
+TEST_F(VectorFontRegistryTest, SuffixesRespectStartAndEndBoundaries) {
+  static constexpr struct {
+    const char* filename;
+    bool explicitRegular;
+  } cases[] = {{"Family-Regular.ttf", true},
+               {"Family-regular.ttf", true},
+               {"Family Regular.ttf", true},
+               {"Family_Regular.ttf", true},
+               {"FamilyRegular.ttf", true},
+               {"FamilyREGULAR.TTF", true},
+               {"Regular.otf", true},
+               {"Family-Roman.ttc", true},
+               {"Familyregular.ttf", false},
+               {"regular.ttf", false},
+               {"Family-RegularExtra.ttf", false},
+               {"Family-Regular.more.ttf", false},
+               {"Family-regularized.ttf", false}};
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.filename);
+    fake::reset();
+    addFace(test.filename, 700, true);
+    if (!test.explicitRegular) addFace("Control-Regular.ttf", 400, false);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(test.explicitRegular ? 0 : 3, test.filename);
+    EXPECT_EQ(registry.findFamily("Family")->files.size(), test.explicitRegular ? 1u : 2u);
+  }
+}
+
+TEST_F(VectorFontRegistryTest, CombinedSuffixesPrecedeItalicTails) {
+  for (const char* suffix : {"BoldItalic", "BoldOblique", "BlackItalic", "BlackOblique"}) {
+    SCOPED_TRACE(suffix);
+    fake::reset();
+    const std::string filename = std::string("Family") + suffix + ".ttf";
+    addFace(filename, 400, false);
+    addFace("Control-Regular.ttf", 400, false);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(3, filename.c_str());
+    EXPECT_EQ(registry.findFamily("Family")->findFile(0, 2), nullptr);
+  }
+}
+
+TEST_F(VectorFontRegistryTest, ExplicitRolesWinBeforeFallbackAndSkipInspectionWhenComplete) {
+  addFace("Z-Regular.ttf", 900, true);
+  addFace("Z-Bold.ttf", 400, true);
+  addFace("Z-Italic.ttf", 900, false);
+  addFace("Z-BoldItalic.ttf", 400, false);
+  addFace("A.ttf", 400, false);
+  addFace("B.ttf", 700, false);
+  addFace("C.ttf", 400, true);
+  addFace("D.ttf", 700, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "Z-Regular.ttf");
+  expectFace(1, "Z-Bold.ttf");
+  expectFace(2, "Z-Italic.ttf");
+  expectFace(3, "Z-BoldItalic.ttf");
+  EXPECT_EQ(fake::reads, 0u);
+}
+
+TEST_F(VectorFontRegistryTest, DuplicateExplicitFilesAreNotReusedForOtherRoles) {
+  addFace("A-Regular.ttf", 700, true);
+  addFace("Z-Regular.ttf", 700, false);
+  addFace("Fallback.ttf", 700, false);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "A-Regular.ttf");
+  expectFace(1, "Fallback.ttf");
+  EXPECT_EQ(registry.findFamily("Family")->files.size(), 2u);
+  EXPECT_EQ(fake::reads, 1u);
+}
+
+TEST_F(VectorFontRegistryTest, FallbackUsesLexicalOrderRatherThanNearestWeight) {
+  addFace("A.ttf", 300, false);
+  addFace("Z.ttf", 400, false);
+  addFace("B.ttf", 900, false);
+  addFace("Y.ttf", 700, false);
+  addFace("C.ttf", 300, true);
+  addFace("X.ttf", 400, true);
+  addFace("D.ttf", 900, true);
+  addFace("W.ttf", 700, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "A.ttf");
+  expectFace(1, "B.ttf");
+  expectFace(2, "C.ttf");
+  expectFace(3, "D.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, FallbackOrsEachFilenameHintWithMetadata) {
+  addFace("RegularCandidate.ttf", 400, false);
+  addFace("semiboldish.ttf", 400, false);
+  addFace("obliquish.ttf", 400, true);
+  addFace("italicized.ttf", 700, false);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "RegularCandidate.ttf");
+  expectFace(1, "semiboldish.ttf");
+  expectFace(2, "obliquish.ttf");
+  expectFace(3, "italicized.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, FallbackCombinesFilenameBoldWithMetadataItalic) {
+  addFace("semiboldish.ttf", 400, true);
+  addFace("Control-Regular.ttf", 400, false);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(3, "semiboldish.ttf");
+  EXPECT_EQ(registry.findFamily("Family")->files.size(), 2u);
+}
+
+TEST_F(VectorFontRegistryTest, UnavailableMetadataRetainsOnlyLegacyFilenameHints) {
+  for (const char* filename : {"plain.ttf", "semiboldish.ttf", "italicized.ttf", "bolditalicized.ttf"}) {
+    fake::add(std::string("/fonts/Family/") + filename, "");
+  }
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "plain.ttf");
+  expectFace(1, "semiboldish.ttf");
+  expectFace(2, "italicized.ttf");
+  expectFace(3, "bolditalicized.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, AliasesAreNotAddedToLegacyHints) {
+  addFace("blackish.ttf", 400, false);
+  addFace("Z.ttf", 700, false);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "blackish.ttf");
+  expectFace(1, "Z.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, OneItalicFileIsPromotedWithoutBeingAssignedTwice) {
+  addFace("Only.ttf", 400, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "Only.ttf");
+  EXPECT_EQ(registry.findFamily("Family")->files.size(), 1u);
+  EXPECT_EQ(registry.findFamily("Family")->findFile(0, 2), nullptr);
+}
+
+TEST_F(VectorFontRegistryTest, ARegularRoleIsAlwaysPickedForEachSingleFileStyle) {
+  for (const char* suffix : {"Regular", "Bold", "Italic", "BoldItalic"}) {
+    SCOPED_TRACE(suffix);
+    fake::reset();
+    const std::string filename = std::string("Only-") + suffix + ".ttf";
+    addFace(filename, 400, false);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(0, filename.c_str());
+    EXPECT_EQ(registry.findFamily("Family")->files.size(), 1u);
+  }
+}
+
+TEST_F(VectorFontRegistryTest, PromotionPrefersItalicThenBoldThenBoldItalic) {
+  addFace("Only-Italic.ttf", 400, true);
+  addFace("Only-Bold.ttf", 700, false);
+  addFace("Only-BoldItalic.ttf", 700, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "Only-Italic.ttf");
+  expectFace(1, "Only-Bold.ttf");
+  expectFace(3, "Only-BoldItalic.ttf");
+  EXPECT_EQ(registry.findFamily("Family")->findFile(0, 2), nullptr);
+
+  fake::reset();
+  addFace("Only-Bold.ttf", 700, false);
+  addFace("Only-BoldItalic.ttf", 700, true);
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "Only-Bold.ttf");
+  expectFace(3, "Only-BoldItalic.ttf");
+  EXPECT_EQ(registry.findFamily("Family")->findFile(0, 1), nullptr);
+}
+
+TEST_F(VectorFontRegistryTest, PromotedRoleIsRefilledFromUnusedExplicitFilesFirst) {
+  addFace("A-Italic.ttf", 700, false);
+  addFace("Z-Italic.ttf", 700, false);
+  addFace("A.ttf", 400, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "A-Italic.ttf");
+  expectFace(2, "Z-Italic.ttf");
+  EXPECT_EQ(registry.findFamily("Family")->files.size(), 2u);
+}
+
+TEST_F(VectorFontRegistryTest, EachPromotedStyleCanBeRefilledFromItsDuplicateSuffix) {
+  static constexpr struct {
+    const char* suffix;
+    uint8_t role;
+  } cases[] = {{"Italic", 2}, {"Bold", 1}, {"BoldItalic", 3}};
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.suffix);
+    fake::reset();
+    const std::string first = std::string("A-") + test.suffix + ".ttf";
+    const std::string second = std::string("Z-") + test.suffix + ".ttf";
+    addFace(first, 400, false);
+    addFace(second, 400, false);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(0, first.c_str());
+    expectFace(test.role, second.c_str());
+    EXPECT_EQ(registry.findFamily("Family")->files.size(), 2u);
+  }
+}
+
+TEST_F(VectorFontRegistryTest, PromotedRoleIsRefilledFromUnusedFallbackFilesInLexicalOrder) {
+  addFace("Only-Italic.ttf", 700, false);
+  addFace("A.ttf", 400, true);
+  addFace("Z.ttf", 400, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "Only-Italic.ttf");
+  expectFace(2, "A.ttf");
+  EXPECT_EQ(registry.findFamily("Family")->files.size(), 2u);
+}
+
+TEST_F(VectorFontRegistryTest, FallbackOnlyPromotionAlsoRefillsTheVacatedRole) {
+  addFace("A.ttf", 400, true);
+  addFace("B.ttf", 400, true);
+  addFace("C.ttf", 700, false);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "A.ttf");
+  expectFace(1, "C.ttf");
+  expectFace(2, "B.ttf");
+  EXPECT_EQ(registry.findFamily("Family")->files.size(), 3u);
+}
+
+TEST_F(VectorFontRegistryTest, AnExistingRegularRoleIsNotReplacedByPromotion) {
+  addFace("Only-Regular.ttf", 700, true);
+  addFace("Only-Italic.ttf", 400, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "Only-Regular.ttf");
+  expectFace(2, "Only-Italic.ttf");
+  EXPECT_EQ(registry.findFamily("Family")->files.size(), 2u);
+}
+
+TEST_F(VectorFontRegistryTest, NormalWeightIsPreferredOverSemiboldForNonBoldRoles) {
+  for (const uint16_t weight : {401, 500, 600, 699}) {
+    SCOPED_TRACE(weight);
+    fake::reset();
+    addFace("A.ttf", weight, false);
+    addFace("B.ttf", weight, true);
+    addFace("Y.ttf", 400, false);
+    addFace("Z.ttf", 400, true);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(0, "Y.ttf");
+    expectFace(1, "A.ttf");
+    expectFace(2, "Z.ttf");
+    expectFace(3, "B.ttf");
+  }
+}
+
+TEST_F(VectorFontRegistryTest, SemiboldSuppliesNonBoldRolesBeforeRegularPromotion) {
+  for (const uint16_t weight : {401, 500, 600, 699}) {
+    SCOPED_TRACE(weight);
+    fake::reset();
+    addFace("A.ttf", 700, false);
+    addFace("B.ttf", 700, true);
+    addFace("Y.ttf", weight, false);
+    addFace("Z.ttf", weight, true);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(0, "Y.ttf");
+    expectFace(1, "A.ttf");
+    expectFace(2, "Z.ttf");
+    expectFace(3, "B.ttf");
+  }
+}
+
+TEST_F(VectorFontRegistryTest, PureBoldIsPreferredOverSemiboldForBoldRoles) {
+  for (const uint16_t weight : {401, 500, 600, 699}) {
+    SCOPED_TRACE(weight);
+    fake::reset();
+    addFace("Control-Regular.ttf", 400, false);
+    addFace("Control-Italic.ttf", 400, true);
+    addFace("A.ttf", weight, false);
+    addFace("B.ttf", weight, true);
+    addFace("Y.ttf", 700, false);
+    addFace("Z.ttf", 700, true);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(1, "Y.ttf");
+    expectFace(3, "Z.ttf");
+  }
+}
+
+TEST_F(VectorFontRegistryTest, SemiboldMetadataDisambiguatesCombinedFilenameBoldHints) {
+  addFace("A.ttf", 700, false);
+  addFace("B.ttf", 700, true);
+  addFace("semiboldish.ttf", 600, false);
+  addFace("semibolditalicized.ttf", 600, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "semiboldish.ttf");
+  expectFace(1, "A.ttf");
+  expectFace(2, "semibolditalicized.ttf");
+  expectFace(3, "B.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, PureBoldWinsEvenWhenCombinedSemiboldFilenameSortsFirst) {
+  addFace("Control-Regular.ttf", 400, false);
+  addFace("Control-Italic.ttf", 400, true);
+  addFace("A-boldish.ttf", 600, false);
+  addFace("B-bolditalicized.ttf", 600, true);
+  addFace("Y.ttf", 700, false);
+  addFace("Z.ttf", 700, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(1, "Y.ttf");
+  expectFace(3, "Z.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, SemiboldHintIsNeverDerivedFromFilenameAlone) {
+  addFace("Control-Regular.ttf", 400, false);
+  addFace("A-demiboldish.ttf", 400, false);
+  addFace("Z.ttf", 700, false);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "Control-Regular.ttf");
+  expectFace(1, "A-demiboldish.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, MetadataWeight400DoesNotSupplyBoldBut401Does) {
+  for (const uint16_t weight : {400, 401}) {
+    SCOPED_TRACE(weight);
+    fake::reset();
+    addFace("Control-Regular.ttf", 400, false);
+    addFace("Only.ttf", weight, false);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(0, "Control-Regular.ttf");
+    if (weight == 400) {
+      EXPECT_EQ(registry.findFamily("Family")->findFile(0, 1), nullptr);
+    } else {
+      expectFace(1, "Only.ttf");
+    }
+  }
+}
+
+TEST_F(VectorFontRegistryTest, LexicalOrderStillBreaksTiesWithinSemiboldClass) {
+  addFace("A.ttf", 600, false);
+  addFace("B.ttf", 500, false);
+  addFace("C.ttf", 600, true);
+  addFace("D.ttf", 500, true);
+  addFace("Y.ttf", 700, false);
+  addFace("Z.ttf", 700, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "A.ttf");
+  expectFace(1, "Y.ttf");
+  expectFace(2, "C.ttf");
+  expectFace(3, "Z.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, PromotionRefillUsesSemiboldPreferenceForVacatedNonBoldRole) {
+  addFace("A-Italic.ttf", 400, true);
+  addFace("A-bolditalicized.ttf", 600, true);
+  addFace("Z.ttf", 700, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "A-Italic.ttf");
+  expectFace(2, "A-bolditalicized.ttf");
+  expectFace(3, "Z.ttf");
 }
 
 }  // namespace

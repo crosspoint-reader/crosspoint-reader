@@ -14,6 +14,7 @@ target_link_libraries(SdFontRegistryTest PRIVATE crosspoint_test_common GTest::g
 gtest_discover_tests(SdFontRegistryTest)
 
 add_executable(VectorFontRegistryTest
+  VectorFontRegistryFileNames.cpp
   VectorFontRegistryStyleSelection.cpp
   ${REPO_ROOT}/lib/EpdFont/SdCardFontRegistry.cpp
 )
