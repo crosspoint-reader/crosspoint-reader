@@ -29,7 +29,7 @@ class ClipSelectionActivity final : public Activity {
 
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         std::vector<std::unique_ptr<Page>> pages, int marginLeft, int marginTop, int initialX = -1,
-                        int initialY = -1, Mode mode = Mode::Clip);
+                        int initialY = -1, Mode mode = Mode::Clip, uint8_t initialPageOffset = 0);
 
   // The definition viewer retains these pages until this child exits.
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -65,6 +65,17 @@ class ClipSelectionActivity final : public Activity {
     bool discretionaryHyphen = false;
   };
 
+  struct SelectionBounds {
+    int first;
+    int last;
+    int originalFirst;
+    int originalLast;
+    TextBlock::SourceRange anchorWord;
+    TextBlock::SourceRange cursorWord;
+
+    bool contains(int index, const WordBox& word) const;
+  };
+
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
 
   bool extractWords();
@@ -77,11 +88,14 @@ class ClipSelectionActivity final : public Activity {
   int closestInRow(uint16_t row, int centerX) const;
   int wordAt(int x, int y) const;
   int dragWordAt(int x, int y) const;
+  TextBlock::SourceRange wholeWordRange(int index) const;
+  SelectionBounds selectionBounds(int anchor, int cursor) const;
   bool selectionContains(int x, int y) const;
   int nextPageStartIndexForTouchDrag() const;
   bool isWithinCurrentPageEndDwellSlop(int x, int y) const;
   void moveVertical(int direction);
   void selectIndex(int index);
+  void selectTouchIndex(int index);
   void moveToPage(int pageOffset);
   void confirmSelection(ClippingResult::Action action = ClippingResult::Action::Clip);
   void loopButtons();
@@ -95,7 +109,7 @@ class ClipSelectionActivity final : public Activity {
   bool buildSelectedText(int first, int last, std::string& text) const;
   void drawSelection() const;
   bool renderIncremental();
-  void drawWordHighlight(int index, int firstSelected, int lastSelected, int offsetX, int offset) const;
+  void drawWordHighlight(int index, const SelectionBounds& bounds, int offsetX, int offset) const;
   void drawWordClean(int index, int offsetX, int offset) const;
   void ditherGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
   void clearGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
@@ -124,6 +138,8 @@ class ClipSelectionActivity final : public Activity {
   uint8_t currentPageOffset = 0;
   uint16_t rowCount = 0;
   bool touchDragSelecting = false;
+  enum class DragHandle : uint8_t { None, Start, End };
+  DragHandle pendingDragHandle = DragHandle::None;
   bool ignoreInitialTouch = false;
   int dragOffsetX = 0;
   int dragOffsetY = 0;

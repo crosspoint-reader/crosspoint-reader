@@ -47,6 +47,8 @@ Two ways to start a lookup while reading:
 
 - Tap or drag the selection handles across words to highlight a word or phrase, then tap **Look Up**.
 
+Selecting either part of a word split by an inserted line-end hyphen selects both parts. Lookup removes the inserted hyphen; hyphens present in the book are preserved.
+
 On the very first lookup with a dictionary (and again whenever the `.idx` or `.syn` source file changes), the reader shows *"Indexing dictionary…"* while it builds small sidecar files next to them — a `.qidx` for the word index, and a `.sidx` when a `.syn` synonym file is present. Each sidecar is rebuilt independently, only when its own source changes. This takes a few seconds for large dictionaries and makes all subsequent lookups fast. The sidecars can be deleted safely at any time — they will simply be rebuilt.
 
 ### How Lookup Works

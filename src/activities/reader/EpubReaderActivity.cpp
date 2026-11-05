@@ -212,6 +212,38 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
 // key only; on other boards a press stops the build once the loop has debounced it.
 bool buttonContactClosed() { return gpio.rawInputActive(); }
 
+bool pagesShareHyphenatedWord(const Page& previous, const Page& current) {
+  uint32_t endOffset = 0;
+  uint32_t startOffset = UINT32_MAX;
+  bool discretionaryHyphen = false;
+  bool paragraphStart = false;
+  for (const auto& element : previous.elements) {
+    if (element->getTag() != TAG_PageLine) continue;
+    const auto* block = static_cast<const PageLine&>(*element).getBlock();
+    if (!block || !block->valid()) continue;
+    for (uint16_t i = 0; i < block->wordCount(); ++i) {
+      const auto range = block->wordSourceRange(i);
+      if (range.end == UINT32_MAX || range.end <= endOffset || !clippingText::hasVisibleText(block->wordText(i)))
+        continue;
+      endOffset = range.end;
+      discretionaryHyphen = block->wordHasDiscretionaryHyphen(i);
+    }
+  }
+  if (!discretionaryHyphen) return false;
+  for (const auto& element : current.elements) {
+    if (element->getTag() != TAG_PageLine) continue;
+    const auto* block = static_cast<const PageLine&>(*element).getBlock();
+    if (!block || !block->valid()) continue;
+    for (uint16_t i = 0; i < block->wordCount(); ++i) {
+      const auto range = block->wordSourceRange(i);
+      if (range.start >= startOffset || !clippingText::hasVisibleText(block->wordText(i))) continue;
+      startOffset = range.start;
+      paragraphStart = block->wordStartsParagraph(i);
+    }
+  }
+  return clippingText::continuesWord(discretionaryHyphen, endOffset, startOffset, paragraphStart);
+}
+
 // Only single-page selections can be restored: the reader moves to the end page
 // after a clipping, so a multi-page range can no longer be mapped back.
 ClipSelectionActivity::Selection lookupReturnSelectionFor(const ClippingResult& clipping) {
@@ -465,18 +497,20 @@ void EpubReaderActivity::openDictionaryWordSelect() {
 
 void EpubReaderActivity::startClipSelection(const int initialX, const int initialY,
                                             const ClipSelectionActivity::Mode mode) {
-  const auto restoreSelection = pendingLookupSelection;
+  auto restoreSelection = pendingLookupSelection;
   pendingLookupSelection = {};
   if (!section || !epub || section->currentPage < 0 || section->currentPage >= section->pageCount) return;
 
-  const int pageNumber = section->currentPage;
+  const int readerPageNumber = section->currentPage;
+  int pageNumber = readerPageNumber;
+  uint8_t initialPageOffset = 0;
   const uint16_t pageCount = section->pageCount;
   const uint16_t spineIndex = static_cast<uint16_t>(currentSpineIndex);
   std::vector<std::unique_ptr<Page>> pages;
   pages.reserve(CLIP_SELECTION_PAGE_WINDOW);
-  for (int pageOffset = 0; pageOffset < CLIP_SELECTION_PAGE_WINDOW && pageNumber + pageOffset < pageCount;
+  for (int pageOffset = 0; pages.size() < CLIP_SELECTION_PAGE_WINDOW && readerPageNumber + pageOffset < pageCount;
        ++pageOffset) {
-    auto page = section->loadPage(pageNumber + pageOffset);
+    auto page = section->loadPage(readerPageNumber + pageOffset);
     if (!page) break;
     if (pageOffset == 0 && initialX >= 0 && CLIPPINGS.hasClippings()) {
       RenderLock lock;
@@ -489,6 +523,23 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         clippingMessageTime = millis();
         requestUpdate();
         return;
+      }
+    }
+    if (pageOffset == 0 && readerPageNumber > 0) {
+      auto previous = section->loadPage(readerPageNumber - 1);
+      if (!previous) {
+        LOG_ERR("CLIP", "Failed to load previous page for word selection");
+        requestUpdate();
+        return;
+      }
+      if (pagesShareHyphenatedWord(*previous, *page)) {
+        pages.push_back(std::move(previous));
+        --pageNumber;
+        initialPageOffset = 1;
+        if (restoreSelection.valid) {
+          ++restoreSelection.firstPage;
+          ++restoreSelection.lastPage;
+        }
       }
     }
     pages.push_back(std::move(page));
@@ -519,7 +570,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
   std::string author = epub->getAuthor();
 
   auto activity = makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, std::move(pages), marginLeft,
-                                                           marginTop, initialX, initialY, mode);
+                                                           marginTop, initialX, initialY, mode, initialPageOffset);
   if (activity && restoreSelection.valid) activity->setInitialSelection(restoreSelection);
   if (!activity) {
     LOG_ERR("CLIP", "Failed to allocate clipping selection activity");

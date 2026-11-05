@@ -48,14 +48,15 @@ const char* cleanWordStart(const char* text) {
 ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              std::vector<std::unique_ptr<Page>> pages, const int marginLeft,
                                              const int marginTop, const int initialX, const int initialY,
-                                             const Mode mode)
+                                             const Mode mode, const uint8_t initialPageOffset)
     : Activity("ClipSelection", renderer, mappedInput),
       pages(std::move(pages)),
       marginLeft(marginLeft),
       marginTop(marginTop),
       initialX(initialX),
       initialY(initialY),
-      mode(mode) {}
+      mode(mode),
+      currentPageOffset(initialPageOffset) {}
 
 ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              std::span<const std::unique_ptr<Page>> borrowedPages, const int marginLeft,
@@ -89,13 +90,16 @@ void ClipSelectionActivity::onEnter() {
     cancel();
     return;
   }
-  uint16_t firstPageRows = 0;
+  uint16_t firstRow = UINT16_MAX;
+  uint16_t lastRow = 0;
   for (size_t i = 0; i < wordCount; ++i) {
     const WordBox& word = words[i];
-    if (word.pageOffset != 0) break;
-    firstPageRows = std::max<uint16_t>(firstPageRows, static_cast<uint16_t>(word.row + 1));
+    if (word.pageOffset < currentPageOffset) continue;
+    if (word.pageOffset > currentPageOffset) break;
+    firstRow = std::min(firstRow, word.row);
+    lastRow = std::max(lastRow, word.row);
   }
-  const int middle = closestInRow(firstPageRows / 2, renderer.getScreenWidth() / 2);
+  const int middle = closestInRow((firstRow + lastRow + 1) / 2, renderer.getScreenWidth() / 2);
   if (middle >= 0) selected = middle;
   if (initialSelection.valid) {
     for (size_t i = 0; i < wordCount; ++i) {
@@ -142,10 +146,12 @@ bool ClipSelectionActivity::extractWords() {
     }
   } else if (pageCount() > 0) {
     size_t firstPageWords = 0;
-    for (const auto& element : pageAt(0).elements) {
-      if (element->getTag() == TAG_PageLine) {
-        const auto* block = static_cast<const PageLine&>(*element).getBlock();
-        if (block && block->valid()) firstPageWords += block->wordCount();
+    for (size_t pageOffset = 0; pageOffset <= currentPageOffset && pageOffset < pageCount(); ++pageOffset) {
+      for (const auto& element : pageAt(pageOffset).elements) {
+        if (element->getTag() == TAG_PageLine) {
+          const auto* block = static_cast<const PageLine&>(*element).getBlock();
+          if (block && block->valid()) firstPageWords += block->wordCount();
+        }
       }
     }
     capacity = std::min<size_t>(UINT16_MAX, std::max<size_t>(MAX_SELECTABLE_WORDS, firstPageWords + 10));
@@ -299,12 +305,13 @@ int ClipSelectionActivity::dragWordAt(const int x, int y) const {
 bool ClipSelectionActivity::selectionContains(const int x, const int y) const {
   const int offset = textOffset();
   const WordBox* previous = nullptr;
-  for (int i = std::min(rangeStart, selected); i <= std::max(rangeStart, selected); ++i) {
+  const auto bounds = selectionBounds(rangeStart, selected);
+  for (int i = bounds.first; i <= bounds.last; ++i) {
     const WordBox& word = words[i];
-    if (word.pageOffset != currentPageOffset) continue;
+    if (!bounds.contains(i, word) || word.pageOffset != currentPageOffset) continue;
     int left = word.x;
     int right = word.x + word.width;
-    if (previous && previous->row == word.row) {
+    if (previous && previous == &words[i - 1] && previous->row == word.row) {
       left = std::min(left, static_cast<int>(previous->x));
       right = std::max(right, previous->x + previous->width);
     }
@@ -314,10 +321,61 @@ bool ClipSelectionActivity::selectionContains(const int x, const int y) const {
   return false;
 }
 
+// Mixed-direction lines can place other visual tokens between a word's fragments.
+TextBlock::SourceRange ClipSelectionActivity::wholeWordRange(const int index) const {
+  TextBlock::SourceRange range{words[index].startOffset, words[index].endOffset};
+  if (range.start == UINT32_MAX || range.end == UINT32_MAX) return {};
+  bool paragraphStart = words[index].paragraphStart;
+  bool discretionaryHyphen = words[index].discretionaryHyphen;
+  bool changed;
+  do {
+    changed = false;
+    for (size_t i = 0; i < wordCount; ++i) {
+      const auto& word = words[i];
+      if (word.startOffset == UINT32_MAX || word.endOffset == UINT32_MAX) continue;
+      if (word.startOffset < range.start &&
+          clippingText::continuesWord(word.discretionaryHyphen, word.endOffset, range.start, paragraphStart)) {
+        range.start = word.startOffset;
+        paragraphStart = word.paragraphStart;
+        changed = true;
+      }
+      if (word.endOffset > range.end &&
+          clippingText::continuesWord(discretionaryHyphen, range.end, word.startOffset, word.paragraphStart)) {
+        range.end = word.endOffset;
+        discretionaryHyphen = word.discretionaryHyphen;
+        changed = true;
+      }
+    }
+  } while (changed);
+  return range;
+}
+
+bool ClipSelectionActivity::SelectionBounds::contains(const int index, const WordBox& word) const {
+  if (index >= originalFirst && index <= originalLast) return true;
+  if (word.startOffset == UINT32_MAX || word.endOffset == UINT32_MAX) return false;
+  return (anchorWord.start != UINT32_MAX && word.startOffset >= anchorWord.start && word.endOffset <= anchorWord.end) ||
+         (cursorWord.start != UINT32_MAX && word.startOffset >= cursorWord.start && word.endOffset <= cursorWord.end);
+}
+
+ClipSelectionActivity::SelectionBounds ClipSelectionActivity::selectionBounds(int anchor, const int cursor) const {
+  if (anchor < 0) anchor = cursor;
+  const int first = std::min(anchor, cursor);
+  const int last = std::max(anchor, cursor);
+  const auto anchorWord = wholeWordRange(anchor);
+  SelectionBounds bounds{first, last, first, last, anchorWord, anchor == cursor ? anchorWord : wholeWordRange(cursor)};
+  for (int i = 0; i < static_cast<int>(wordCount); ++i) {
+    if (bounds.contains(i, words[i])) {
+      bounds.first = std::min(bounds.first, i);
+      bounds.last = std::max(bounds.last, i);
+    }
+  }
+  return bounds;
+}
+
 int ClipSelectionActivity::nextPageStartIndexForTouchDrag() const {
   if (!touchDragHasMoved || rangeStart < 0 || selected < rangeStart) return -1;
 
-  const uint8_t currentPage = words[selected].pageOffset;
+  const uint8_t currentPage = currentPageOffset;
   for (int i = selected + 1; i < static_cast<int>(wordCount); ++i) {
     if (words[i].pageOffset > currentPage) return i;
   }
@@ -352,6 +410,19 @@ void ClipSelectionActivity::selectIndex(const int index) {
   requestUpdate();
 }
 
+void ClipSelectionActivity::selectTouchIndex(const int index) {
+  const auto cursorWord = wholeWordRange(selected);
+  const auto hitWord = wholeWordRange(index);
+  if (cursorWord.start != UINT32_MAX && cursorWord.start == hitWord.start && cursorWord.end == hitWord.end) {
+    if (currentPageOffset != words[index].pageOffset) {
+      currentPageOffset = words[index].pageOffset;
+      requestUpdate();
+    }
+    return;
+  }
+  selectIndex(index);
+}
+
 void ClipSelectionActivity::moveToPage(const int pageOffset) {
   if (pageOffset < 0 || pageOffset >= static_cast<int>(pageCount()) || pageOffset == currentPageOffset) return;
   for (int i = 0; i < static_cast<int>(wordCount); ++i) {
@@ -365,16 +436,18 @@ void ClipSelectionActivity::moveToPage(const int pageOffset) {
 bool ClipSelectionActivity::buildSelectedText(const int first, const int last, std::string& text) const {
   text.clear();
   text.reserve(CLIPPING_TEXT_MAX);
-  const size_t count = last - first + 1;
-  auto order = makeUniqueNoThrow<uint16_t[]>(count);
+  const auto bounds = selectionBounds(first, last);
+  auto order = makeUniqueNoThrow<uint16_t[]>(bounds.last - bounds.first + 1);
   if (!order) {
     LOG_ERR("CLIP", "OOM: selection export order");
     return false;
   }
   bool allSourcesKnown = true;
-  for (size_t i = 0; i < count; ++i) {
-    order[i] = static_cast<uint16_t>(first + i);
-    allSourcesKnown &= words[order[i]].startOffset != UINT32_MAX && words[order[i]].endOffset != UINT32_MAX;
+  size_t count = 0;
+  for (int i = bounds.first; i <= bounds.last; ++i) {
+    if (!bounds.contains(i, words[i])) continue;
+    order[count++] = static_cast<uint16_t>(i);
+    allSourcesKnown &= words[i].startOffset != UINT32_MAX && words[i].endOffset != UINT32_MAX;
   }
   // Keep navigation in visual order and export in logical source order.
   if (allSourcesKnown) {
@@ -412,35 +485,41 @@ void ClipSelectionActivity::confirmSelection(const ClippingResult::Action action
     return;
   }
 
-  const int first = std::min(rangeStart, selected);
-  const int last = std::max(rangeStart, selected);
+  const auto bounds = selectionBounds(rangeStart, selected);
+  const int first = bounds.first;
+  const int last = bounds.last;
   ClippingResult result;
   result.action = action;
   const auto heap = HalMemory::getDefaultHeap();
   // reserve() aborts on OOM; leave room for the sort order and error popup too.
   const size_t requiredHeap = CLIPPING_TEXT_MAX + 1 + (last - first + 1) * sizeof(uint16_t) + 1024;
   const bool lowMemory = heap.largestBlockBytes < CLIPPING_TEXT_MAX + 1 || heap.freeBytes < requiredHeap;
-  if (lowMemory || !buildSelectedText(first, last, result.text)) {
+  if (lowMemory || !buildSelectedText(std::min(rangeStart, selected), std::max(rangeStart, selected), result.text)) {
     static constexpr StrId OPTIONS[] = {StrId::STR_BACK};
     actionPopup.show(lowMemory ? StrId::STR_MEMORY_ERROR : StrId::STR_CLIPPING_TOO_LONG, OPTIONS, 1, 0, [](int) {});
     requestUpdate();
     return;
   }
-  result.startPageOffset = words[first].pageOffset;
-  result.endPageOffset = words[last].pageOffset;
-  result.startWordIndex = words[first].pageWordIndex;
-  result.endWordIndex = words[last].pageWordIndex;
-  result.wordCount = static_cast<uint16_t>(last - first + 1);
+  // Restore lookup cursors, not the visual envelope, which can include unrelated bidi tokens.
+  const int resultFirst = action == ClippingResult::Action::Lookup ? bounds.originalFirst : first;
+  const int resultLast = action == ClippingResult::Action::Lookup ? bounds.originalLast : last;
+  result.startPageOffset = words[resultFirst].pageOffset;
+  result.endPageOffset = words[resultLast].pageOffset;
+  result.startWordIndex = words[resultFirst].pageWordIndex;
+  result.endWordIndex = words[resultLast].pageWordIndex;
+  result.wordCount = 0;
   result.cursorAtStart = selected < rangeStart;
   result.startOffset = UINT32_MAX;
   result.endOffset = 0;
   for (int i = first; i <= last; ++i) {
+    if (!bounds.contains(i, words[i])) continue;
+    ++result.wordCount;
     if (words[i].startOffset == UINT32_MAX || words[i].endOffset == UINT32_MAX) {
       result.startOffset = result.endOffset = UINT32_MAX;
-      break;
+    } else if (result.endOffset != UINT32_MAX) {
+      result.startOffset = std::min(result.startOffset, words[i].startOffset);
+      result.endOffset = std::max(result.endOffset, words[i].endOffset);
     }
-    result.startOffset = std::min(result.startOffset, words[i].startOffset);
-    result.endOffset = std::max(result.endOffset, words[i].endOffset);
   }
   setResult(std::move(result));
   finish();
@@ -504,8 +583,9 @@ void ClipSelectionActivity::loop() {
         confirmSelection(SELECTION_ACTIONS[firstAction() + action]);
         return;
       }
-      const int first = std::min(rangeStart, selected);
-      const int last = std::max(rangeStart, selected);
+      const auto bounds = selectionBounds(rangeStart, selected);
+      const int first = bounds.first;
+      const int last = bounds.last;
       const bool onStart = words[first].pageOffset == currentPageOffset &&
                            selectionGeometry::contains(handleRect(first, true), touchX, touchY);
       const bool onEnd = words[last].pageOffset == currentPageOffset &&
@@ -528,10 +608,27 @@ void ClipSelectionActivity::loop() {
       const int deltaY = touchY - touchDragStartY;
       touchDragHasMoved = touchDragHasMoved || deltaX >= TOUCH_DRAG_MOVEMENT_PX || deltaX <= -TOUCH_DRAG_MOVEMENT_PX ||
                           deltaY >= TOUCH_DRAG_MOVEMENT_PX || deltaY <= -TOUCH_DRAG_MOVEMENT_PX;
+      if (!touchDragHasMoved) return;
+
+      const int originalFirst = std::min(rangeStart, selected);
+      const int originalLast = std::max(rangeStart, selected);
+      switch (pendingDragHandle) {
+        case DragHandle::None:
+          break;
+        case DragHandle::Start:
+          rangeStart = originalLast;
+          selected = originalFirst;
+          break;
+        case DragHandle::End:
+          rangeStart = originalFirst;
+          selected = originalLast;
+          break;
+      }
+      pendingDragHandle = DragHandle::None;
 
       const int hit = dragWordAt(touchX + dragOffsetX, touchY + dragOffsetY);
       if (hit >= 0) {
-        selectIndex(hit);
+        selectTouchIndex(hit);
       }
 
       // Hold at the bottom edge or on the final word to extend onto the next page.
@@ -544,7 +641,7 @@ void ClipSelectionActivity::loop() {
           touchDragPageEndHeldSince = now;
         } else if (now - touchDragPageEndHeldSince >= TOUCH_PAGE_ADVANCE_HOLD_MS) {
           touchDragPageEndIndex = -1;
-          selectIndex(nextPageStart);
+          selectTouchIndex(nextPageStart);
           dragOffsetX = dragOffsetY = 0;
         }
       } else {
@@ -553,6 +650,7 @@ void ClipSelectionActivity::loop() {
       return;
     }
     touchDragSelecting = false;
+    pendingDragHandle = DragHandle::None;
     touchDragHasMoved = false;
     touchDragPageEndIndex = -1;
     requestUpdate();
@@ -560,8 +658,9 @@ void ClipSelectionActivity::loop() {
   } else if (mappedInput.wasScreenTouchPressed(touchX, touchY)) {
     if (rangeStart >= 0) {
       if (actionAt(touchX, touchY) >= 0) return;
-      const int first = std::min(rangeStart, selected);
-      const int last = std::max(rangeStart, selected);
+      const auto bounds = selectionBounds(rangeStart, selected);
+      const int first = bounds.first;
+      const int last = bounds.last;
       for (int endpoint = 0; endpoint < 2; ++endpoint) {
         const int index = endpoint == 0 ? first : last;
         if (words[index].pageOffset != currentPageOffset) continue;
@@ -569,8 +668,7 @@ void ClipSelectionActivity::loop() {
         if (touchX < handle.x || touchX >= handle.x + handle.width || touchY < handle.y ||
             touchY >= handle.y + handle.height)
           continue;
-        selected = index;
-        rangeStart = endpoint == 0 ? last : first;
+        pendingDragHandle = endpoint == 0 ? DragHandle::Start : DragHandle::End;
         dragOffsetX = words[index].x + words[index].width / 2 - touchX;
         dragOffsetY = words[index].y + textOffset() + words[index].height / 2 - touchY;
         touchDragSelecting = true;
@@ -585,6 +683,7 @@ void ClipSelectionActivity::loop() {
     const int hit = wordAt(touchX, touchY);
     if (hit >= 0) {
       selected = rangeStart = hit;
+      pendingDragHandle = DragHandle::None;
       dragOffsetX = 0;
       dragOffsetY = 0;
       touchDragSelecting = true;
@@ -661,11 +760,11 @@ Rect ClipSelectionActivity::handleRect(const int index, const bool start) const 
 }
 
 int ClipSelectionActivity::selectionTop() const {
-  const int first = std::min(rangeStart, selected);
-  const int last = std::max(rangeStart, selected);
+  const auto bounds = selectionBounds(rangeStart, selected);
   int top = renderer.getScreenHeight();
-  for (int i = first; i <= last; ++i) {
-    if (words[i].pageOffset == currentPageOffset) top = std::min(top, static_cast<int>(words[i].y));
+  for (int i = bounds.first; i <= bounds.last; ++i) {
+    if (bounds.contains(i, words[i]) && words[i].pageOffset == currentPageOffset)
+      top = std::min(top, static_cast<int>(words[i].y));
   }
   return top;
 }
@@ -695,8 +794,9 @@ Rect ClipSelectionActivity::actionRect() const {
   const int width = std::min(safe.width, count * (labelWidth + padding * 2) + padding * (count + 1));
   const int lines = labelWidth > (width - padding * (count + 1)) / count ? 2 : 1;
   const int height = std::max(36, renderer.getLineHeight(font) * lines + padding * 2);
-  int first = std::min(rangeStart, selected);
-  const int last = std::max(rangeStart, selected);
+  const auto bounds = selectionBounds(rangeStart, selected);
+  int first = bounds.first;
+  const int last = bounds.last;
   while (first < last && words[first].pageOffset < currentPageOffset) ++first;
   return selectionGeometry::actions(safe, selectionTop(), height + padding * 2, metrics.verticalSpacing, width,
                                     words[first].x - padding);
@@ -766,18 +866,18 @@ void ClipSelectionActivity::drawWordClean(const int index, const int offsetX, co
                     BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
 }
 
-void ClipSelectionActivity::drawWordHighlight(const int index, const int firstSelected, const int lastSelected,
-                                              const int offsetX, const int offset) const {
+void ClipSelectionActivity::drawWordHighlight(const int index, const SelectionBounds& bounds, const int offsetX,
+                                              const int offset) const {
   if (index < 0 || index >= static_cast<int>(wordCount)) return;
   const WordBox& word = words[index];
   if (word.pageOffset != currentPageOffset) return;
 
   prewarmWord(index);
 
-  if (index > firstSelected) {
+  if (index > bounds.first && bounds.contains(index - 1, words[index - 1])) {
     ditherGapBetween(words[index - 1], word, offsetX, offset);
   }
-  if (index < lastSelected) {
+  if (index < bounds.last && bounds.contains(index + 1, words[index + 1])) {
     ditherGapBetween(word, words[index + 1], offsetX, offset);
   }
 
@@ -799,8 +899,14 @@ bool ClipSelectionActivity::renderIncremental() {
   if (rangeStart < 0 && lastRenderedRangeStart < 0) {
     if (selected == lastRenderedSelected) return true;
 
-    drawWordClean(lastRenderedSelected, offsetX, offset);
-    drawWordHighlight(selected, selected, selected, offsetX, offset);
+    const auto oldBounds = selectionBounds(-1, lastRenderedSelected);
+    const auto newBounds = selectionBounds(-1, selected);
+    for (int i = oldBounds.first; i <= oldBounds.last; ++i) {
+      if (oldBounds.contains(i, words[i])) drawWordClean(i, offsetX, offset);
+    }
+    for (int i = newBounds.first; i <= newBounds.last; ++i) {
+      if (newBounds.contains(i, words[i])) drawWordHighlight(i, newBounds, offsetX, offset);
+    }
     const WordBox& cursor = words[selected];
     renderer.drawRect(cursor.x + offsetX, cursor.y + offset, cursor.width, cursor.height, true);
 
@@ -827,10 +933,12 @@ bool ClipSelectionActivity::renderIncremental() {
   if (rangeStart >= 0 && lastRenderedRangeStart == rangeStart) {
     if (selected == lastRenderedSelected) return true;
 
-    const int firstOld = std::min(rangeStart, lastRenderedSelected);
-    const int lastOld = std::max(rangeStart, lastRenderedSelected);
-    const int firstNew = std::min(rangeStart, selected);
-    const int lastNew = std::max(rangeStart, selected);
+    const auto oldBounds = selectionBounds(rangeStart, lastRenderedSelected);
+    const auto newBounds = selectionBounds(rangeStart, selected);
+    const int firstOld = oldBounds.first;
+    const int lastOld = oldBounds.last;
+    const int firstNew = newBounds.first;
+    const int lastNew = newBounds.last;
 
     if (words[firstOld].pageOffset != currentPageOffset || words[lastOld].pageOffset != currentPageOffset ||
         words[firstNew].pageOffset != currentPageOffset || words[lastNew].pageOffset != currentPageOffset) {
@@ -838,19 +946,19 @@ bool ClipSelectionActivity::renderIncremental() {
     }
 
     for (int i = firstOld; i <= lastOld; ++i) {
-      if (i < firstNew || i > lastNew) {
+      if (oldBounds.contains(i, words[i]) && !newBounds.contains(i, words[i])) {
         drawWordClean(i, offsetX, offset);
       }
     }
 
     for (int i = firstNew; i <= lastNew; ++i) {
-      if (i < firstOld || i > lastOld) {
-        drawWordHighlight(i, firstNew, lastNew, offsetX, offset);
+      if (newBounds.contains(i, words[i]) && !oldBounds.contains(i, words[i])) {
+        drawWordHighlight(i, newBounds, offsetX, offset);
       }
     }
 
-    if (lastRenderedSelected >= firstNew && lastRenderedSelected <= lastNew) {
-      drawWordHighlight(lastRenderedSelected, firstNew, lastNew, offsetX, offset);
+    if (newBounds.contains(lastRenderedSelected, words[lastRenderedSelected])) {
+      drawWordHighlight(lastRenderedSelected, newBounds, offsetX, offset);
     }
 
     const WordBox& cursor = words[selected];
@@ -871,13 +979,14 @@ bool ClipSelectionActivity::renderIncremental() {
 void ClipSelectionActivity::drawSelection() const {
   const int offset = textOffset();
   const int offsetX = textXOffset();
-  const int first = rangeStart < 0 ? selected : std::min(rangeStart, selected);
-  const int last = rangeStart < 0 ? selected : std::max(rangeStart, selected);
+  const auto bounds = selectionBounds(rangeStart, selected);
+  const int first = bounds.first;
+  const int last = bounds.last;
   const WordBox* previous = nullptr;
   for (int i = first; i <= last; ++i) {
     const WordBox& word = words[i];
-    if (word.pageOffset != currentPageOffset) continue;
-    if (previous) ditherGapBetween(*previous, word, offsetX, offset);
+    if (!bounds.contains(i, word) || word.pageOffset != currentPageOffset) continue;
+    if (previous && previous == &words[i - 1]) ditherGapBetween(*previous, word, offsetX, offset);
     renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray);
     renderer.drawText(word.fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
                       BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);

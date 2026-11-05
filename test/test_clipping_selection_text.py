@@ -9,14 +9,24 @@ source = (ROOT / "src/activities/reader/ClipSelectionActivity.cpp").read_text()
 reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
 header = (ROOT / "src/activities/reader/ClipSelectionActivity.h").read_text()
 word_box = "struct WordBox {" + header.split("struct WordBox {", 1)[1].split("  };", 1)[0] + "};"
+selection_bounds_type = "struct SelectionBounds {" + header.split("struct SelectionBounds {", 1)[1].split("  };", 1)[0] + "};"
+touch_members = "  bool touchDragSelecting" + header.split("  bool touchDragSelecting", 1)[1].split(
+    "  int lastRenderedSelected", 1
+)[0]
+touch_processing = "void ClipSelectionActivity::processTouch() {\n  int touchX = 0, touchY = 0;\n  if (touchDragSelecting) {" + source.split(
+    "  if (touchDragSelecting) {", 1
+)[1].split("  const uint8_t buttons = Input::buttonEdges", 1)[0] + "}\n"
 action_helpers = "\n".join(line for line in header.splitlines()
-                           if "int firstAction() const" in line or "int actionCount() const" in line)
+                           if "int firstAction() const" in line or "int actionCount() const" in line or "bool isLookup() const" in line)
 clean_word = "const char* cleanWordStart" + source.split("const char* cleanWordStart", 1)[1].split(
     "}  // namespace", 1
 )[0]
 build_text = "bool ClipSelectionActivity::buildSelectedText" + source.split(
     "bool ClipSelectionActivity::buildSelectedText", 1
 )[1].split("void ClipSelectionActivity::confirmSelection", 1)[0]
+confirm_selection = "void ClipSelectionActivity::confirmSelection" + source.split(
+    "void ClipSelectionActivity::confirmSelection", 1
+)[1].split("void ClipSelectionActivity::cancel()", 1)[0]
 confirm_source = source.split("void ClipSelectionActivity::confirmSelection", 1)[1]
 memory_guard = "  const auto heap = HalMemory::getDefaultHeap();" + confirm_source.split(
     "  const auto heap = HalMemory::getDefaultHeap();", 1
@@ -31,6 +41,11 @@ extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSele
 clean_draw = method("void ClipSelectionActivity::drawWordClean", "void ClipSelectionActivity::drawWordHighlight")
 highlight_draw = method("void ClipSelectionActivity::drawWordHighlight", "bool ClipSelectionActivity::renderIncremental")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
+incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void ClipSelectionActivity::drawSelection")
+selection_bounds = method("TextBlock::SourceRange ClipSelectionActivity::wholeWordRange",
+                          "int ClipSelectionActivity::nextPageStartIndexForTouchDrag")
+page_continuation = method("bool pagesShareHyphenatedWord", "// Only single-page selections", reader_source)
+select_touch = method("void ClipSelectionActivity::selectTouchIndex", "void ClipSelectionActivity::moveToPage")
 word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
 word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
 saved_hit = method("int EpubReaderActivity::clippingAtPoint", "void EpubReaderActivity::drawClippingHighlights", reader_source)
@@ -55,6 +70,7 @@ harness = r"""
 #define LOG_DBG(module, ...) (void)std::snprintf(nullptr, 0, __VA_ARGS__)
 #include "clippings/ClippingText.h"
 #include "ClippingStore.h"
+#include "activities/ActivityResult.h"
 #include <Epub/ReaderRenderSpec.h>
 namespace BidiUtils { enum class BidiBaseDir : int8_t { AUTO = -1, LTR = 0, RTL = 1 }; }
 struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4 }; };
@@ -64,12 +80,13 @@ enum class Color { LightGray };
 struct Renderer;
 struct Block {
   struct Style { bool isRtl = false; int8_t characterSpacing = 0; } style;
-  struct Range { uint32_t start = 0, end = 3; } range;
+  struct Range { uint32_t start = UINT32_MAX, end = UINT32_MAX; } range;
   using SourceRange = Range;
   const char* text = "one";
   std::string packedText;
   std::vector<EpdFontFamily::Style> styles;
   bool paragraphStart = true;
+  bool discretionaryHyphen = false;
   bool prefixSpace = false;
   bool valid() const { return true; }
   const Style& getBlockStyle() const { return style; }
@@ -94,7 +111,7 @@ struct Block {
     return prefixSpace && i == 0 ? Range{range.start, range.start + 1} : range;
   }
   bool wordStartsParagraph(uint16_t i) const { return paragraphStart && i == 0; }
-  bool wordHasDiscretionaryHyphen(uint16_t) const { return false; }
+  bool wordHasDiscretionaryHyphen(uint16_t) const { return discretionaryHyphen; }
 };
 struct PageLine {
   int xPos = 0, yPos = 0;
@@ -154,12 +171,23 @@ struct Renderer {
   void fillRectDither(int x, int, int width, int, Color) const { fills.push_back({x, width, 0}); }
   void drawRect(int, int, int, int, bool) const {}
   void drawPixel(int, int, bool) const {}
+  void displayBuffer(int) const {}
 };
+struct HalDisplay { static constexpr int FAST_REFRESH = 0; };
 struct Theme {
   void drawSelectionHandle(const Renderer&, Rect, bool) const {}
   void drawSelectionActions(const Renderer&, Rect, int = 3, int = 0) const {}
+  void drawButtonHints(const Renderer&, const char*, const char*, const char*, const char*) const {}
 } GUI;
-struct Input { bool hasTouch() const { return false; } };
+struct Input {
+  bool held = false, pressed = false;
+  int x = 0, y = 0;
+  bool hasTouch() const { return false; }
+  bool isScreenTouchHeld(int& outX, int& outY) const { outX = x; outY = y; return held; }
+  bool wasScreenTouchPressed(int& outX, int& outY) const { outX = x; outY = y; return pressed; }
+  struct Labels { const char *btn1, *btn2, *btn3, *btn4; };
+  Labels mapLabels(const char* a, const char* b, const char* c, const char* d) const { return {a, b, c, d}; }
+};
 using GfxRenderer = Renderer;
 using TextBlock = Block;
 struct BoardConfig { static bool isEegoA4() { return false; } };
@@ -192,8 +220,13 @@ bool selectionLowMemory(const int first, const int last) {
   return lowMemory;
 }
 """ + clean_word + r"""
+enum class StrId { STR_BACK, STR_MEMORY_ERROR, STR_CLIPPING_TOO_LONG };
+enum Hint { STR_BACK, STR_SELECT, STR_DIR_LEFT, STR_DIR_RIGHT, STR_LOOKUP, STR_DONE };
+const char* tr(Hint) { return ""; }
+constexpr int TOUCH_DRAG_MOVEMENT_PX = 4;
+constexpr unsigned long TOUCH_PAGE_ADVANCE_HOLD_MS = 1000;
 struct ClipSelectionActivity {
-""" + word_box + action_helpers + r"""
+""" + word_box + selection_bounds_type + action_helpers + r"""
   std::unique_ptr<WordBox[]> words = makeUniqueNoThrow<WordBox[]>(240);
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
   enum class Mode { Clip, Lookup, DefinitionLookup };
@@ -208,22 +241,48 @@ struct ClipSelectionActivity {
   size_t wordCount = 0;
   uint16_t rowCount = 0;
   int fontId = 0, lineHeight = 16, marginLeft = 0, marginTop = 0;
-  int selected = 0, rangeStart = -1, currentPageOffset = 0;
-  bool touchDragSelecting = false;
+  int selected = 0, rangeStart = -1;
+  uint8_t currentPageOffset = 0;
+""" + touch_members + r"""
+  ClippingResult confirmed;
+  bool finished = false;
+  struct Popup {
+    bool active = false;
+    bool isActive() const { return active; }
+    void show(StrId, const StrId*, int, int, void (*)(int)) { active = true; }
+  } actionPopup;
+  void setResult(ClippingResult result) { confirmed = std::move(result); }
+  void finish() { finished = true; }
+  void requestUpdate() {}
+  void confirmSelection(ClippingResult::Action);
+  void processTouch();
+  bool renderIncremental();
+  int lastRenderedSelected = -1, lastRenderedRangeStart = -1, lastRenderedPageOffset = -1;
+  int lastRenderedTextOffset = 0, lastRenderedTextXOffset = 0;
+  int dragHit = -1;
+  int dragWordAt(int, int) const { return dragHit; }
+  int wordAt(int, int) const { return dragHit; }
+  int actionAt(int, int) const { return -1; }
+  int nextPageStartIndexForTouchDrag() const { return -1; }
+  bool isWithinCurrentPageEndDwellSlop(int, int) const { return false; }
+  void selectIndex(int index) { selected = index; currentPageOffset = words[index].pageOffset; }
+  void selectTouchIndex(int);
   bool buildSelectedText(int first, int last, std::string& text) const;
+  TextBlock::SourceRange wholeWordRange(int index) const;
+  SelectionBounds selectionBounds(int anchor, int cursor) const;
   bool extractWords();
   void drawWordClean(int, int, int) const;
-  void drawWordHighlight(int, int, int, int, int) const;
+  void drawWordHighlight(int, const SelectionBounds&, int, int) const;
   void drawSelection() const;
   void prewarmWord(int) const {}
   void clearGapBetween(const WordBox&, const WordBox&, int, int) const {}
   void ditherGapBetween(const WordBox&, const WordBox&, int, int) const {}
   int textOffset() const { return 0; }
   int textXOffset() const { return 0; }
-  Rect handleRect(int, bool) const { return {}; }
+  Rect handleRect(int, bool start) const { return {start ? 0 : 100, 0, 20, 20}; }
   Rect actionRect() const { return {}; }
 };
-""" + build_text + extract_words + clean_draw + highlight_draw + selection_draw + r"""
+""" + build_text + confirm_selection + extract_words + clean_draw + highlight_draw + incremental_draw + selection_draw + selection_bounds + page_continuation + select_touch + touch_processing + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -269,7 +328,167 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
   if (text != expected) std::fprintf(stderr, "Expected: %s\nActual:   %s\n", expected, text.c_str());
   assert(text == expected);
 }
+void expectBounds(const ClipSelectionActivity& activity, int anchor, int cursor, int first, int last) {
+  const auto bounds = activity.selectionBounds(anchor, cursor);
+  assert(bounds.first == first && bounds.last == last);
+}
 int main() {
+  {
+    ClipSelectionActivity split;
+    const char* fragments[] = {"before", "extra-", "ordi-", "nary", "after"};
+    for (int i = 0; i < 5; ++i) {
+      auto page = std::make_unique<Page>();
+      auto line = std::make_unique<PageLine>();
+      line->block.text = fragments[i];
+      line->block.range = {uint32_t(i == 0 ? 0 : 7 + (i - 1) * 5), uint32_t(i == 0 ? 6 : 12 + (i - 1) * 5)};
+      line->block.paragraphStart = i == 0;
+      line->block.discretionaryHyphen = i == 1 || i == 2;
+      page->elements.push_back(std::move(line));
+      split.pages.push_back(std::move(page));
+    }
+    assert(!pagesShareHyphenatedWord(*split.pages[0], *split.pages[1]));
+    assert(pagesShareHyphenatedWord(*split.pages[1], *split.pages[2]));
+    assert(pagesShareHyphenatedWord(*split.pages[2], *split.pages[3]));
+    assert(!pagesShareHyphenatedWord(*split.pages[3], *split.pages[4]));
+    split.pages[2]->elements[0]->block.paragraphStart = true;
+    assert(!pagesShareHyphenatedWord(*split.pages[1], *split.pages[2]));
+    split.pages[2]->elements[0]->block.paragraphStart = false;
+    assert(split.extractWords());
+    for (int fragment = 1; fragment <= 3; ++fragment) {
+      for (int anchor : {-1, fragment}) {
+        const auto bounds = split.selectionBounds(anchor, fragment);
+        assert(bounds.first == 1 && bounds.last == 3);
+        expect(split, fragment, fragment, "extraordinary");
+        split.rangeStart = anchor;
+        split.selected = fragment;
+        for (int page = 1; page <= 3; ++page) {
+          split.currentPageOffset = page;
+          split.renderer.draws.clear();
+          split.drawSelection();
+          assert(split.renderer.draws.size() == 1);
+        }
+      }
+    }
+    expectBounds(split, 0, 2, 0, 3);
+    expectBounds(split, 4, 2, 1, 4);
+    expectBounds(split, -1, 0, 0, 0);
+    expectBounds(split, -1, 4, 4, 4);
+    split.words[2].paragraphStart = true;
+    expectBounds(split, -1, 1, 1, 1);
+    split.words[2].paragraphStart = false;
+    split.words[1].endOffset = UINT32_MAX;
+    expectBounds(split, -1, 1, 1, 1);
+    split.words[1].endOffset = split.words[2].startOffset - 1;
+    expectBounds(split, -1, 1, 1, 1);
+    split.words[1].endOffset = split.words[2].startOffset;
+    split.words[1].discretionaryHyphen = false;
+    expectBounds(split, -1, 1, 1, 1);  // A literal hyphen is not a layout split.
+    expect(split, 1, 3, "extra-ordinary");
+  }
+  {
+    // Per-line RTL reversal separates the fragments visually with another English token.
+    ClipSelectionActivity mixed;
+    mixed.wordCount = 4;
+    const char* text[] = {"extra-", "one", "ordinary", "next"};
+    const uint32_t starts[] = {4, 0, 9, 18};
+    const uint32_t ends[] = {9, 3, 17, 22};
+    for (int i = 0; i < 4; ++i) {
+      auto& word = mixed.words[i];
+      word.text = text[i];
+      word.startOffset = starts[i];
+      word.endOffset = ends[i];
+      word.row = i / 2;
+      word.x = i * 100;
+      word.pageWordIndex = i;
+      word.isRtl = true;
+      word.discretionaryHyphen = i == 0;
+    }
+    for (int cursor : {0, 2}) {
+      for (int anchor : {-1, cursor}) {
+        mixed.selected = cursor;
+        mixed.rangeStart = anchor;
+        const auto bounds = mixed.selectionBounds(anchor, cursor);
+        assert(bounds.contains(0, mixed.words[0]));
+        assert(!bounds.contains(1, mixed.words[1]));
+        assert(bounds.contains(2, mixed.words[2]));
+        assert(!bounds.contains(3, mixed.words[3]));
+        expect(mixed, cursor, cursor, "extraordinary");
+        mixed.renderer.draws.clear();
+        mixed.drawSelection();
+        assert(mixed.renderer.draws.size() == 2);
+      }
+      HalMemory::stats = {1024 * 1024, 1024 * 1024};
+      mixed.rangeStart = mixed.selected = cursor;
+      mixed.confirmSelection(ClippingResult::Action::Lookup);
+      assert(mixed.finished && mixed.confirmed.text == "extraordinary");
+      assert(mixed.confirmed.wordCount == 2);
+      assert(mixed.confirmed.startWordIndex == cursor && mixed.confirmed.endWordIndex == cursor);
+      expect(mixed, mixed.confirmed.startWordIndex, mixed.confirmed.endWordIndex, "extraordinary");
+      mixed.confirmSelection(ClippingResult::Action::Clip);
+      assert(mixed.confirmed.text == "extraordinary" && mixed.confirmed.wordCount == 2);
+      assert(mixed.confirmed.startWordIndex == 0 && mixed.confirmed.endWordIndex == 2);
+      assert(mixed.confirmed.startOffset == 4 && mixed.confirmed.endOffset == 17);
+      for (bool startHandle : {false, true}) {
+        for (bool move : {false, true}) {
+          mixed.rangeStart = mixed.selected = cursor;
+          mixed.mappedInput = {false, true, startHandle ? 5 : 105, 5};
+          mixed.processTouch();
+          assert(mixed.touchDragSelecting);
+          assert(mixed.rangeStart == cursor && mixed.selected == cursor);
+          mixed.mappedInput.pressed = false;
+          mixed.mappedInput.held = true;
+          if (move) mixed.mappedInput.x += 10;
+          mixed.dragHit = cursor == 0 ? 2 : 0;
+          mixed.processTouch();
+          assert(mixed.rangeStart == cursor && mixed.selected == cursor);
+          mixed.mappedInput.held = false;
+          mixed.processTouch();
+          assert(!mixed.touchDragSelecting);
+          expect(mixed, mixed.rangeStart, mixed.selected, "extraordinary");
+        }
+        mixed.rangeStart = mixed.selected = cursor;
+        mixed.mappedInput = {false, true, startHandle ? 5 : 105, 5};
+        mixed.processTouch();
+        mixed.mappedInput.pressed = false;
+        mixed.mappedInput.held = true;
+        mixed.mappedInput.x += 10;
+        mixed.dragHit = 1;
+        mixed.processTouch();
+        expect(mixed, std::min(mixed.rangeStart, mixed.selected),
+               std::max(mixed.rangeStart, mixed.selected), "one extraordinary");
+        mixed.mappedInput.held = false;
+        mixed.processTouch();
+      }
+    }
+    mixed.rangeStart = mixed.lastRenderedRangeStart = -1;
+    mixed.lastRenderedPageOffset = 0;
+    mixed.lastRenderedSelected = 3;
+    mixed.selected = 0;
+    mixed.renderer.draws.clear();
+    assert(mixed.renderIncremental());
+    assert(mixed.renderer.draws.size() == 3);
+    for (const auto& draw : mixed.renderer.draws) assert(draw.x != 100);
+    mixed.selected = 3;
+    mixed.renderer.draws.clear();
+    assert(mixed.renderIncremental());
+    assert(mixed.renderer.draws.size() == 3);
+    for (const auto& draw : mixed.renderer.draws) assert(draw.x != 100);
+    mixed.rangeStart = mixed.lastRenderedRangeStart = 0;
+    mixed.lastRenderedSelected = 3;
+    mixed.selected = 0;
+    mixed.renderer.draws.clear();
+    assert(mixed.renderIncremental());
+    assert(mixed.renderer.draws.size() == 2);
+    expect(mixed, 1, 2, "one extraordinary");
+    mixed.rangeStart = mixed.selected = 0;
+    mixed.words[2].pageOffset = 1;
+    mixed.selectTouchIndex(2);
+    assert(mixed.currentPageOffset == 1 && mixed.selected == 0);
+    expect(mixed, mixed.rangeStart, mixed.selected, "extraordinary");
+    mixed.selectTouchIndex(1);
+    assert(mixed.selected == 1 && mixed.currentPageOffset == 0);
+    expect(mixed, mixed.rangeStart, mixed.selected, "one extraordinary");
+  }
   // Returning from a definition releases the SD font caches before selection is rebuilt.
   for (const bool rtl : {false, true}) {
     ClipSelectionActivity cold;
@@ -328,6 +547,9 @@ int main() {
     assert(dense.words[299].pageOffset == 0);
     assert(dense.words[300].pageOffset == 1);
     assert(dense.words[309].pageOffset == 1);
+    dense.currentPageOffset = 1;  // A preceding page was retained for a split word.
+    assert(dense.extractWords());
+    assert(dense.wordCount == 320 && dense.words[319].pageOffset == 1);
   }
   HalMemory::stats = {5908, 3444};  // Physical X3 crash workload.
   assert(selectionLowMemory(0, 0));
@@ -365,7 +587,7 @@ int main() {
     activity.selected = 1;
     activity.drawSelection();
     activity.drawWordClean(0, 0, 0);  // Cursor leaves the old word.
-    activity.drawWordHighlight(1, 1, 1, 0, 0);
+    activity.drawWordHighlight(1, activity.selectionBounds(1, 1), 0, 0);
     assert(activity.renderer.draws.size() == 4);
     assert(activity.renderer.fills.size() == 4);
     for (size_t i = 0; i < 4; ++i) {

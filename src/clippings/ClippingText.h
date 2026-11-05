@@ -18,6 +18,11 @@ inline bool hasEmSpacePrefix(const char* text) {
          static_cast<uint8_t>(text[2]) == 0x83;
 }
 
+inline bool continuesWord(const bool discretionaryHyphen, const uint32_t endOffset, const uint32_t nextStartOffset,
+                          const bool nextParagraphStart) {
+  return discretionaryHyphen && !nextParagraphStart && endOffset != UINT32_MAX && endOffset == nextStartOffset;
+}
+
 // Rendered discretionary hyphens have no source codepoint; literal hyphens do.
 inline bool append(std::string& text, std::string_view word, const char separator, const size_t limit,
                    const bool discretionaryHyphen = false) {
