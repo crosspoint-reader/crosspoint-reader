@@ -1,19 +1,17 @@
 #include "VectorFontSupport.h"
 
 #if CROSSPOINT_VECTOR_FONTS
-#include "VectorFontIdentity.h"
-
 #include <HalStorage.h>
 
 #include <algorithm>
+
+#include "VectorFontIdentity.h"
 
 namespace {
 uint32_t be32(const uint8_t* p) {
   return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3];
 }
-void addByte(uint32_t& hash, const uint8_t byte) {
-  hash = (hash ^ byte) * 16777619u;
-}
+void addByte(uint32_t& hash, const uint8_t byte) { hash = (hash ^ byte) * 16777619u; }
 bool readAt(HalFile& file, const uint32_t offset, void* out, const size_t count) {
   return uint64_t(offset) + count <= file.size() && file.seek(offset) &&
          file.read(out, count) == static_cast<int>(count);
