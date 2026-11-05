@@ -304,7 +304,7 @@ TEST_F(VectorFontRegistryTest, DuplicateExplicitFilesAreNotReusedForOtherRoles) 
   EXPECT_EQ(fake::reads, 3u);
 }
 
-TEST_F(VectorFontRegistryTest, FallbackUsesLexicalOrderRatherThanNearestWeight) {
+TEST_F(VectorFontRegistryTest, FallbackUsesLowestWeightForNonBoldAndLexicalOrderForBold) {
   addFace("A.ttf", 300, false);
   addFace("Z.ttf", 400, false);
   addFace("B.ttf", 900, false);
@@ -583,7 +583,7 @@ TEST_F(VectorFontRegistryTest, PureBoldWinsEvenWhenCombinedSemiboldFilenameSorts
   expectFace(3, "Z.ttf");
 }
 
-TEST_F(VectorFontRegistryTest, SemiboldHintIsNeverDerivedFromFilenameAlone) {
+TEST_F(VectorFontRegistryTest, FilenameBoldHintDoesNotImplyIntermediateMetadataWeight) {
   addFace("Control-Regular.ttf", 400, false);
   addFace("A-demiboldish.ttf", 400, false);
   addFace("Z.ttf", 700, false);
