@@ -159,10 +159,14 @@ void AboutActivity::onEnter() {
     rowValues_[ITEM_SD_SIZE] = "No card";
     rowValues_[ITEM_SD_USED] = rowValues_[ITEM_SD_FREE] = "-";
   } else {
-    const uint64_t sdUsed = Storage.sdUsedBytes();
     rowValues_[ITEM_SD_SIZE] = formatBytes(sdTotal);
-    rowValues_[ITEM_SD_USED] = formatBytes(sdUsed);
-    rowValues_[ITEM_SD_FREE] = formatBytes(sdUsed <= sdTotal ? sdTotal - sdUsed : 0);
+    uint64_t sdUsed = 0;
+    if (Storage.sdUsedBytes(sdUsed)) {
+      rowValues_[ITEM_SD_USED] = formatBytes(sdUsed);
+      rowValues_[ITEM_SD_FREE] = formatBytes(sdUsed <= sdTotal ? sdTotal - sdUsed : 0);
+    } else {
+      rowValues_[ITEM_SD_USED] = rowValues_[ITEM_SD_FREE] = "Error.";
+    }
   }
 }
 
