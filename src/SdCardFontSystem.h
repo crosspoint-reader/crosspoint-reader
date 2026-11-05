@@ -89,6 +89,7 @@ class SdCardFontSystem {
   void addTtfSources(TtfEpdFont& font);
   // Close/free all style sources.
   void freeTtfSources();
+  int ttfIdentity(uint8_t pointSize, bool uiFallback = false) const;
   // ReadFn for streamed sources: serves the PSRAM prefix cache first, SD after.
   static unsigned long prefixRead(void* ctx, unsigned long offset, unsigned char* buffer, unsigned long count);
 #endif  // CROSSPOINT_VECTOR_FONTS
@@ -128,6 +129,7 @@ class SdCardFontSystem {
     bool streamed = false;
     unsigned long size = 0;
     bool present = false;
+    uint32_t identity = 0;
   };
 
   // Active TTF font (at most one reader-size vector family loaded at a time).
