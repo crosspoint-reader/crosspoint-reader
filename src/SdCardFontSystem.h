@@ -119,6 +119,7 @@ class SdCardFontSystem {
   bool loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer& renderer);
   // Unbind and free the vector UI font, if one is loaded.
   void unloadUiTtf(GfxRenderer& renderer);
+  int ttfIdentity(uint8_t pointSize, bool uiFallback = false) const;
   // ReadFn for streamed sources: serves the PSRAM prefix cache first, SD after.
   static unsigned long prefixRead(void* ctx, unsigned long offset, unsigned char* buffer, unsigned long count);
 #endif  // CROSSPOINT_VECTOR_FONTS
@@ -165,6 +166,7 @@ class SdCardFontSystem {
     unsigned long size = 0;
     bool present = false;
     std::atomic<bool>* uiReadFailed = nullptr;
+    uint32_t identity = 0;
   };
 
   // Sources outlive the FreeType faces that borrow them. The reader and UI
