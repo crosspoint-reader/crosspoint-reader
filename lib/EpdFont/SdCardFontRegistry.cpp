@@ -169,6 +169,7 @@ enum class VectorRole : uint8_t { Regular, Bold, Italic, BoldItalic, Count };
 constexpr size_t VECTOR_STYLE_COUNT = static_cast<size_t>(VectorRole::Count);
 constexpr uint8_t VECTOR_ROLE_HINTS[] = {0, HINT_BOLD, HINT_ITALIC, HINT_BOLD | HINT_ITALIC};
 bool isIntermediateWeight(const uint16_t weight) { return weight > 400 && weight < 700; }
+bool isStyleSeparator(const char c) { return c == ' ' || c == '-' || c == '_'; }
 }  // namespace
 
 bool SdCardFontRegistry::parseVectorFontName(const char* filename, size_t& baseLen) {
@@ -197,26 +198,32 @@ uint8_t SdCardFontRegistry::guessVectorStyle(const char* baseName, const size_t 
   static constexpr struct {
     const char* name;
     uint8_t role;
-  } suffixes[] = {{"BoldItalic", ROLE_BOLD_ITALIC},
-                  {"BoldOblique", ROLE_BOLD_ITALIC},
-                  {"BlackOblique", ROLE_BOLD_ITALIC},
-                  {"BlackItalic", ROLE_BOLD_ITALIC},
-                  {"Regular", ROLE_REGULAR},
-                  {"Book", ROLE_REGULAR},
-                  {"Roman", ROLE_REGULAR},
-                  {"Bold", ROLE_BOLD},
-                  {"Black", ROLE_BOLD},
-                  {"Italic", ROLE_ITALIC},
-                  {"Oblique", ROLE_ITALIC}};
+    uint8_t joinAt;  // Optional separator within a combined suffix.
+  } suffixes[] = {{"BoldItalic", ROLE_BOLD_ITALIC, 4},
+                  {"BoldOblique", ROLE_BOLD_ITALIC, 4},
+                  {"BlackOblique", ROLE_BOLD_ITALIC, 5},
+                  {"BlackItalic", ROLE_BOLD_ITALIC, 5},
+                  {"Regular", ROLE_REGULAR, 0},
+                  {"Book", ROLE_REGULAR, 0},
+                  {"Roman", ROLE_REGULAR, 0},
+                  {"Bold", ROLE_BOLD, 0},
+                  {"Black", ROLE_BOLD, 0},
+                  {"Italic", ROLE_ITALIC, 0},
+                  {"Oblique", ROLE_ITALIC, 0}};
   // Combined styles precede their italic-only tails. baseLen excludes the extension.
   for (const auto& suffix : suffixes) {
     const size_t len = strlen(suffix.name);
-    if (len > baseLen) continue;
-    const size_t start = baseLen - len;
-    const bool separated =
-        start > 0 && (baseName[start - 1] == '-' || baseName[start - 1] == '_' || baseName[start - 1] == ' ');
-    const bool capitalized = baseName[start] >= 'A' && baseName[start] <= 'Z';
-    if ((separated || capitalized) && strncasecmp(baseName + start, suffix.name, len) == 0) {
+    if (len < baseLen && isStyleSeparator(baseName[baseLen - len - 1]) &&
+        strncasecmp(baseName + baseLen - len, suffix.name, len) == 0) {
+      return guess | suffix.role;
+    }
+    if (!suffix.joinAt || len + 1 >= baseLen) continue;
+    const size_t start = baseLen - len - 1;
+    // check if there's another separator before our keyword and see if collapsing that
+    // separator yields a sensible extended keyword, e.x. xxx-Bold-Italic -> xxx-BoldItalic.ttf
+    if (isStyleSeparator(baseName[start - 1]) && isStyleSeparator(baseName[start + suffix.joinAt]) &&
+        strncasecmp(baseName + start, suffix.name, suffix.joinAt) == 0 &&
+        strncasecmp(baseName + start + suffix.joinAt + 1, suffix.name + suffix.joinAt, len - suffix.joinAt) == 0) {
       return guess | suffix.role;
     }
   }
