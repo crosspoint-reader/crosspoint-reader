@@ -72,7 +72,9 @@ SettingsSection sectionFor(const SettingInfo& setting) {
       setting.valuePtr == &CrossPointSettings::moveFinishedToReadFolder) {
     return SettingsSection::Library;
   }
-  if (setting.valuePtr == &CrossPointSettings::refreshFrequency || setting.valuePtr == &CrossPointSettings::fadingFix) {
+  if (setting.valuePtr == &CrossPointSettings::refreshFrequency || setting.valuePtr == &CrossPointSettings::fadingFix ||
+      setting.valuePtr == &CrossPointSettings::sleepSettledRedraw ||
+      setting.valuePtr == &CrossPointSettings::imageSettledRedraw) {
     return SettingsSection::ScreenClean;
   }
   if (setting.valuePtr == &CrossPointSettings::sleepTimeoutMinutes) return SettingsSection::Display;

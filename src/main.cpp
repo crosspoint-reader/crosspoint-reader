@@ -43,6 +43,11 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
+#if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+#include <esp_sleep.h>
+
+#include "activities/boot_sleep/SleepActivity.h"
+#endif
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
@@ -464,6 +469,13 @@ static bool holdSleepWhileUsbPowered() {
 }
 #endif
 
+#if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+RTC_DATA_ATTR char sleepRedrawPath[192];
+static bool bootWasPanic = false;
+static volatile bool settledRedrawPress = false;
+static void IRAM_ATTR onSettledRedrawPress() { settledRedrawPress = true; }
+#endif
+
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
@@ -514,6 +526,20 @@ void enterDeepSleep(bool fromTimeout = false) {
   const bool wakeOnHeldButton = false;
 #endif
 
+#if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+  // One bounded RTC path survives this sleep; an ordinary wake discards it.
+  sleepRedrawPath[0] = '\0';
+  const auto& imagePath = SleepActivity::lastCustomImagePath();
+  const uint32_t minutes = CrossPointSettings::redrawDelayMinutes(SETTINGS.sleepSettledRedraw);
+  if (minutes > 0 && !isQuickResumeSleep && !bootWasPanic && powerManager.getBatteryPercentage() >= 15 &&
+      !imagePath.empty() && imagePath.size() < sizeof(sleepRedrawPath)) {
+    memcpy(sleepRedrawPath, imagePath.c_str(), imagePath.size() + 1);
+    if (esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(minutes) * 60000000ULL) != ESP_OK) {
+      sleepRedrawPath[0] = '\0';
+      LOG_ERR("MAIN", "Could not arm the sleep-image redraw");
+    }
+  }
+#endif
   halTiltSensor.deepSleep();
   display.deepSleep();
   Storage.prepareForDeepSleep();
@@ -523,6 +549,9 @@ void enterDeepSleep(bool fromTimeout = false) {
 }
 
 void setupDisplayAndFonts(bool seamless = false) {
+  static bool initialized = false;
+  if (initialized) return;
+  initialized = true;
 #if !FREEINK_MCU_C3
   // C3 resolves its controller in HalGPIO::begin() before SPI claims the
   // display pins. X4 Pro skips that C3-only path, so probe here before
@@ -582,6 +611,9 @@ void setup() {
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
+#if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+  bootWasPanic = rebootedFromPanic;
+#endif
 
   // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
   // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
@@ -607,7 +639,7 @@ void setup() {
     WiFi.onEvent(applyTxCap, ARDUINO_EVENT_WIFI_AP_START);
   }
 
-  const auto wakeupReason = gpio.getWakeupReason();
+  auto wakeupReason = gpio.getWakeupReason();
   // Sample the wake hold now — a click wake is released within milliseconds of
   // boot — but defer the sleep-or-boot decision until SETTINGS is loaded below:
   // click-to-wake is a setting, and an X4 battery power-off cuts all power, so
@@ -645,8 +677,8 @@ void setup() {
   HalSystem::checkPanic();
 
   APP_STATE.loadFromFile();
-  const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
-  const bool isPersistedSleepWake = isSleepWake && !APP_STATE.showBootScreen;
+  bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
+  bool isPersistedSleepWake = isSleepWake && !APP_STATE.showBootScreen;
 
   if (recoveryFirmwareMode) {
     LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)",
@@ -661,6 +693,35 @@ void setup() {
     SETTINGS.readerMenuStyle = CrossPointSettings::READER_MENU_TOOLBAR;
   }
   SETTINGS.loadFromFile();
+  // A maintenance wake never starts the frontlight, Bluetooth or normal UI.
+#if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+  const bool timerRedraw = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER && sleepRedrawPath[0] != '\0';
+  if (timerRedraw && !rebootedFromPanic && !isSilentReboot) {
+    const std::string path = sleepRedrawPath;
+    sleepRedrawPath[0] = '\0';
+    settledRedrawPress = false;
+    const int8_t pin = BoardConfig::ACTIVE.input.power;
+    if (pin >= 0)
+      attachInterrupt(pin, onSettledRedrawPress, BoardConfig::ACTIVE.input.powerActiveHigh ? RISING : FALLING);
+    I18N.setLanguage(static_cast<Language>(SETTINGS.language));
+    UITheme::getInstance().reload();
+    setupDisplayAndFonts(/*seamless=*/true);
+    SleepActivity::redrawCustomImage(renderer, mappedInputManager, path);
+    if (pin >= 0) detachInterrupt(pin);
+    const bool clickWakes = settledRedrawPress && SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP;
+    if (!clickWakes && !gpio.verifyPowerButtonWakeup()) {
+      halTiltSensor.deepSleep();
+      display.deepSleep();
+      Storage.prepareForDeepSleep();
+      powerManager.startDeepSleep(gpio);
+    }
+    wakeupReason = HalGPIO::WakeupReason::PowerButton;
+    isSleepWake = true;
+    isPersistedSleepWake = !APP_STATE.showBootScreen;
+  }
+  sleepRedrawPath[0] = '\0';
+#endif
+
   // Push the saved timezone's POSIX rule into the clock (migrating the legacy
   // UTC-offset setting on first boot after the update).
   timezones::applyToClock();

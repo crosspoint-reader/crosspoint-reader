@@ -267,6 +267,9 @@ Open **Settings → Display → Screen Cleaning** for settings that reduce trace
   - "OFF" (default) - Disable the fix
   - "ON" - Enable the fix
 
+- **Refresh Images** (Screen Cleaning): optionally repaint a viewer image once after 1, 2 or 5 minutes. Each newly opened image starts its own delay; Off preserves the normal refresh behavior.
+- **Refresh Sleep Screen** (Screen Cleaning, X4 Pro): optionally wake once after 1, 2 or 5 minutes to repaint the same custom sleep image with the frontlight off, then sleep again. Both settings default to Off. Quick Resume, non-custom sleep screens, low battery below 15%, panic recovery and paths too long for the bounded RTC record do not arm the wake. The normal power-button wake remains available. A missing image uses the default sleep screen.
+
 #### 3.6.2 Reader
 
 - **Reader Font Family**: Choose the font used for reading:

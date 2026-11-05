@@ -295,6 +295,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t CHARACTER_SPACING_OFFSET = 2;  // stored 0..4 maps to -2..+2 px
   uint8_t characterSpacing = CHARACTER_SPACING_OFFSET;
   int8_t getCharacterSpacing() const { return static_cast<int8_t>(characterSpacing - CHARACTER_SPACING_OFFSET); }
+  enum REDRAW_DELAY { REDRAW_OFF = 0, REDRAW_1_MIN, REDRAW_2_MIN, REDRAW_5_MIN, REDRAW_DELAY_COUNT };
+  static uint32_t redrawDelayMinutes(const uint8_t value) {
+    static constexpr uint32_t minutes[] = {0, 1, 2, 5};
+    return minutes[value < REDRAW_DELAY_COUNT ? value : 0];
+  }
+  uint8_t sleepSettledRedraw = REDRAW_OFF;
+  uint8_t imageSettledRedraw = REDRAW_OFF;
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;

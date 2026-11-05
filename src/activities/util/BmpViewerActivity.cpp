@@ -166,10 +166,24 @@ void BmpViewerActivity::onEnter() {
     loadSiblingImages();
   }
 
+  settledRedrawDone = false;
+  imagePainted = false;
+  requestUpdate();
+}
+
+void BmpViewerActivity::render(RenderLock&&) {
+  const ScopedCleanup recordPaint{[this]() {
+    paintedAtMs.store(millis(), std::memory_order_relaxed);
+    imagePainted.store(true, std::memory_order_release);
+  }};
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-  GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
+  const bool firstPaint = !imagePainted.load(std::memory_order_acquire);
+  Rect popupRect{};
+  if (firstPaint) {
+    popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+    GUI.fillPopupProgress(renderer, popupRect, 20);
+  }
   if (FsHelpers::hasPngExtension(filePath) || FsHelpers::hasJpgExtension(filePath)) {
     renderer.clearScreen();
     if (!renderImage()) {
@@ -220,7 +234,7 @@ void BmpViewerActivity::onEnter() {
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
                                                 (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
 
-      GUI.fillPopupProgress(renderer, popupRect, 50);
+      if (firstPaint) GUI.fillPopupProgress(renderer, popupRect, 50);
 
       renderer.clearScreen();
       if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
@@ -388,6 +402,7 @@ bool BmpViewerActivity::saveJpegSleepCover() {
 }
 
 void BmpViewerActivity::doSetSleepCover() {
+  RenderLock lock;
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
 
   const bool jpeg = FsHelpers::hasJpgExtension(filePath);
@@ -442,8 +457,16 @@ void BmpViewerActivity::doSetSleepCover() {
 void BmpViewerActivity::loop() {
   // Keep CPU awake/polling so 1st click works
   Activity::loop();
+  const uint32_t settleMs = CrossPointSettings::redrawDelayMinutes(SETTINGS.imageSettledRedraw) * 60000UL;
+  if (settleMs > 0 && imagePainted.load(std::memory_order_acquire) && !settledRedrawDone &&
+      millis() - paintedAtMs.load(std::memory_order_relaxed) >= settleMs) {
+    settledRedrawDone = true;
+    LOG_DBG("BMP", "Settled image redraw");
+    requestUpdate();
+  }
 
   auto openSibling = [this](const int delta) {
+    RenderLock lock;
     if (currentImageIndex < 0) {
       return false;
     }

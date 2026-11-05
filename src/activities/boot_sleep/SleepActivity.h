@@ -11,6 +11,8 @@ class SleepActivity final : public Activity {
   explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool fromTimeout = false)
       : Activity("Sleep", renderer, mappedInput), fromTimeout(fromTimeout) {}
   void onEnter() override;
+  static const std::string& lastCustomImagePath();
+  static bool redrawCustomImage(GfxRenderer& renderer, MappedInputManager& input, const std::string& path);
 
  private:
   void renderDefaultSleepScreen() const;

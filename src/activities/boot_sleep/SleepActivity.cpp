@@ -32,6 +32,8 @@
 #include "images/MoonIcon.h"
 
 namespace {
+std::string lastCustomSleepPath;
+
 // Metalio: B/W sleep images use the full 0xF7 waveform instead of HALF (two
 // 0xFC partials), matching the clean pass before absolute gray below.
 #if FREEINK_DEVICE_METALIO_EINK4
@@ -683,8 +685,19 @@ void releaseSdFontCachesForDecode(const GfxRenderer& renderer) {
 
 }  // namespace
 
+const std::string& SleepActivity::lastCustomImagePath() { return lastCustomSleepPath; }
+
+bool SleepActivity::redrawCustomImage(GfxRenderer& renderer, MappedInputManager& input, const std::string& path) {
+  const SleepActivity painter(renderer, input);
+  display.setInverted(false);
+  if (painter.renderCustomSleepBmp(path)) return true;
+  painter.renderDefaultSleepScreen();
+  return false;
+}
+
 void SleepActivity::onEnter() {
   Activity::onEnter();
+  lastCustomSleepPath.clear();
 
   const bool renderQuickResume =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
@@ -787,6 +800,7 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
       Bitmap bitmap(cached);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
         renderBitmapSleepScreen(bitmap);
+        lastCustomSleepPath = path;
         return true;
       }
       cached.close();
@@ -798,6 +812,7 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
   Bitmap bitmap(file, true, thresholds);
   if (bitmap.parseHeaders() != BmpReaderError::Ok) return false;
   renderBitmapSleepScreen(bitmap);
+  lastCustomSleepPath = path;
   return true;
 }
 
