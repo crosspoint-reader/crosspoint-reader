@@ -327,7 +327,10 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
 
   std::vector<SdCardFontFileInfo> selected;
   selected.reserve(std::min(VECTOR_STYLE_COUNT, files.size()));
+  [[maybe_unused]] static constexpr const char* roleNames[] = {"Regular", "Bold", "Italic", "BoldItalic"};
   for (size_t role = 0; role < VECTOR_STYLE_COUNT; ++role) {
+    LOG_DBG("SDREG", "%s: %s -> %s", dirPath, roleNames[role],
+            picks[role] == missing ? "(not supplied)" : files[picks[role]].name.get());
     if (picks[role] == missing) continue;
     files[picks[role]].style = static_cast<uint8_t>(role);
     selected.push_back(std::move(files[picks[role]]));
