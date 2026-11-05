@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -19,6 +20,8 @@ class BmpViewerActivity final : public Activity {
   void doSetSleepCover();
   bool canSetSleepCover() const;
   bool renderImage();
+  std::string calibratedBmp();
+  uint8_t toneCurve[256]{};
   bool saveJpegSleepCover();
 
   std::string filePath;

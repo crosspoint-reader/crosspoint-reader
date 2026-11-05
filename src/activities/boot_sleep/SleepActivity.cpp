@@ -30,6 +30,7 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "util/PanelCurve.h"
 
 namespace {
 // Metalio: B/W sleep images use the full 0xF7 waveform instead of HALF (two
@@ -762,22 +763,29 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
   LOG_DBG("SLP", "Loading: %s", path.c_str());
 
   const bool thresholds = useOriginalCoverThresholds(renderer);
+  uint8_t curve[256];
+  uint32_t curveHash = 0;
+  const uint8_t* toneCurve = nullptr;
+  if (SETTINGS.panelCalPictures) {
+    panelcurve::load(curve, curveHash);
+    toneCurve = curve;
+  }
   const bool screenReady = source.getWidth() == renderer.getScreenWidth() &&
                            source.getHeight() == renderer.getScreenHeight() && source.getBpp() <= 2;
   if (!screenReady) {
     // Like book covers: scale and dither once into a cached screen-sized BMP, then draw it without dithering.
     const bool crop = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
     // Same-sized BMPs share a byte count, so the key also needs the modification time.
-    const std::string key = path + '|' + std::to_string(file.size()) + '|' + std::to_string(file.modificationTime()) +
-                            '|' + std::to_string(renderer.getScreenWidth()) + 'x' +
-                            std::to_string(renderer.getScreenHeight()) + (crop ? "|c" : "|f") +
-                            (thresholds ? "|t" : "");
+    std::string key = path + '|' + std::to_string(file.size()) + '|' + std::to_string(file.modificationTime()) + '|' +
+                      std::to_string(renderer.getScreenWidth()) + 'x' + std::to_string(renderer.getScreenHeight()) +
+                      (crop ? "|c" : "|f") + (thresholds ? "|t" : "");
+    if (toneCurve) key += "|k" + std::to_string(curveHash);
     const std::string cachePath = "/.crosspoint/sleep_" + std::to_string(std::hash<std::string>{}(key)) + ".bmp";
     if (!Storage.exists(cachePath.c_str())) {
       const std::string tmpPath = cachePath + ".tmp";
       HalFile out;
       bool ok = Storage.openFileForWrite("SLP", tmpPath, out) &&
-                BmpToBmpConverter::bmpFileToBmpStream(file, out, crop, thresholds);
+                BmpToBmpConverter::bmpFileToBmpStream(file, out, crop, thresholds, toneCurve);
       if (out.isOpen()) ok = out.close() && ok;
       ok = ok && Storage.rename(tmpPath.c_str(), cachePath.c_str());
       if (!ok) Storage.remove(tmpPath.c_str());

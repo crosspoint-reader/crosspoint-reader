@@ -95,7 +95,7 @@ void renderCanvasRow(const uint8_t* grayRow, int srcY, GifContext& ctx) {
     for (int dstX = 0; dstX < ctx.dstWidth; ++dstX) {
       const int outX = outXBase + dstX;
       if (outX < ctx.screenWidth) {
-        const uint8_t gray = grayRow[srcX];
+        const uint8_t gray = ctx.config->toneCurve ? ctx.config->toneCurve[grayRow[srcX]] : grayRow[srcX];
         uint8_t ditheredGray;
         if (useDithering) {
           ditheredGray = applyBayerDither4Level(gray, outX, outY);

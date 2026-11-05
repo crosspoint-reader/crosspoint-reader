@@ -59,6 +59,7 @@
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
+#include "util/CalibrationCard.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -732,7 +733,7 @@ void EpubReaderActivity::loop() {
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
   clearEndOfBookOptionsIfNeeded();
 
-  if (SETTINGS.removeReadBooksFromRecents) {
+  if (SETTINGS.removeReadBooksFromRecents && !calibcard::isCalibrationPath(epub->getPath())) {
     if (atEndOfBook && !recentsEntryRemoved) {
       recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath());
     } else if (!atEndOfBook && recentsEntryRemoved) {
@@ -742,7 +743,8 @@ void EpubReaderActivity::loop() {
   }
 
   if (atEndOfBook) {
-    pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
+    pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath()) &&
+                            !calibcard::isCalibrationPath(epub->getPath());
   } else {
     pendingReadFolderMove = false;
   }

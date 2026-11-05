@@ -263,6 +263,20 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "OFF" (default) - Disable the fix
   - "ON" - Enable the fix
 
+##### Screen Calibration
+
+Open **Settings → Display → Screen Calibration**. The pictures card uses the image viewer; the books card uses the EPUB renderer. Neither card becomes a recent book or replaces the book remembered for resume.
+
+1. Turn off the corresponding Pictures Calibration or Books Calibration checkbox.
+2. Open its calibration screen and photograph it in daylight, with the frontlight off and no reflections.
+3. Open [KEINKT Calibrator](https://mikalaikryvusha.github.io/KEINKT/calibrator/) and drop in the photo. It computes a separate correction for each rendering path.
+4. Save `panel_curve.txt` for pictures and custom sleep images, or `panel_curve_book.txt` for images in books, to `/.crosspoint/` on the SD card. On a Mac, **⌘⇧.** shows hidden files. For Wi-Fi transfer, enable **Show Hidden Files** in the reader settings.
+5. Enable the corresponding checkbox. To reload a replaced curve, turn it off and on again; no restart is needed. Reopen the card to check the result.
+
+Both checkboxes are off by default. Missing or invalid curves leave tones unchanged; no curve measured on a different panel is built in. Legacy files at the SD root remain readable, but a file in `/.crosspoint/` takes priority. The reader does not move or delete curve files.
+
+Back from either card opens Screen Calibration directly. Further Back actions return to Display, Settings and Home. Images already quantized to a screen-ready 1-bit or 2-bit BMP are not corrected again. Each curve file contains exactly 256 integers from 0 to 255, separated by spaces, commas or line breaks.
+
 #### 3.6.2 Reader
 
 - **Reader Font Family**: Choose the font used for reading:

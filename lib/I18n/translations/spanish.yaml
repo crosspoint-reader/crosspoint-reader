@@ -660,3 +660,4 @@ STR_KOREADER_CUSTOM_HEADER_1_NAME: "Nombre de la cabecera personalizada 1 de KOR
 STR_KOREADER_CUSTOM_HEADER_1_VALUE: "Valor de la cabecera personalizada 1 de KOReader"
 STR_KOREADER_CUSTOM_HEADER_2_NAME: "Nombre de la cabecera personalizada 2 de KOReader"
 STR_KOREADER_CUSTOM_HEADER_2_VALUE: "Valor de la cabecera personalizada 2 de KOReader"
+STR_PANEL_CAL_NOTE: "Fotografía las pantallas de calibración con las casillas de abajo desmarcadas y calcula la corrección en KEINKT Calibrator (GitHub). Con la casilla desmarcada, el lector muestra los colores tal cual; marcada, según la curva de calibración de tu pantalla."

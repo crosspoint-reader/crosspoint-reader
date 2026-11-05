@@ -68,14 +68,15 @@ class BmpToBmpTest : public ::testing::Test {
     file.close();
     std::filesystem::remove(path);
   }
-  Output convert(const std::vector<uint8_t>& bmp, bool crop) {
+  Output convert(const std::vector<uint8_t>& bmp, bool crop, const uint8_t* curve = nullptr, int width = 0,
+                 int height = 0) {
     {
       std::ofstream out(path, std::ios::binary);
       out.write(reinterpret_cast<const char*>(bmp.data()), bmp.size());
     }
     EXPECT_TRUE(file.open(path.c_str(), "rb"));
     Output out;
-    EXPECT_TRUE(BmpToBmpConverter::bmpFileToBmpStream(file, out, crop, false));
+    EXPECT_TRUE(BmpToBmpConverter::bmpFileToBmpStream(file, out, crop, false, curve, width, height));
     file.close();
     return out;
   }
@@ -130,3 +131,27 @@ TEST_F(BmpToBmpTest, OneBitSourceStaysOneBit) {
 }
 
 }  // namespace
+
+TEST_F(BmpToBmpTest, AppliesCurveBeforeQuantizingGrayscale) {
+  uint8_t inverse[256];
+  for (int i = 0; i < 256; ++i) inverse[i] = 255 - i;
+  const auto out = convert(splitBmp(10, 16, true, false), true, inverse);
+  EXPECT_EQ(level(out, 20, 2), 3);
+  EXPECT_EQ(level(out, 20, 61), 0);
+}
+
+TEST_F(BmpToBmpTest, LeavesOneBitSourceUnchangedWithCurve) {
+  uint8_t black[256]{};
+  const auto out = convert(splitBmp(10, 16, true, true), true, black);
+  EXPECT_EQ(out.bytes[28], 1);
+  EXPECT_EQ(level(out, 20, 2), 0);
+  EXPECT_EQ(level(out, 20, 61), 1);
+}
+
+TEST_F(BmpToBmpTest, UsesExplicitLandscapeViewport) {
+  const auto out = convert(splitBmp(16, 10, true, false), true, nullptr, 64, 40);
+  EXPECT_EQ(le32(out.bytes, 18), 64u);
+  EXPECT_EQ(static_cast<int32_t>(le32(out.bytes, 22)), -40);
+  EXPECT_EQ(level(out, 20, 2), 0);
+  EXPECT_EQ(level(out, 20, 37), 3);
+}

@@ -6,6 +6,7 @@
 #include <Memory.h>
 #include <Serialization.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -31,13 +32,18 @@ void ImageBlock::setExtractor(void* ctx, ExtractFn fn) {
 
 namespace {
 
+const uint8_t* bookToneCurve = nullptr;
+uint32_t bookToneHash = 0;
+
 std::string getCachePath(const std::string& imagePath) {
-  // Replace extension with .pxc (pixel cache)
+  // Replace extension with .pxc (pixel cache); with a tone curve, «_k<hash>» before it.
+  char suffix[16] = "";
+  if (bookToneCurve) snprintf(suffix, sizeof(suffix), "_k%08x", static_cast<unsigned>(bookToneHash));
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
-    return imagePath.substr(0, dotPos) + ".pxc";
+    return imagePath.substr(0, dotPos) + suffix + ".pxc";
   }
-  return imagePath + ".pxc";
+  return imagePath + suffix + ".pxc";
 }
 
 bool readValidCacheHeader(HalFile& cacheFile, const int expectedWidth, const int expectedHeight, uint16_t& cachedWidth,
@@ -392,6 +398,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   config.performanceMode = false;
   config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
   config.cachePath = cachePath;      // Enable caching during decode
+  config.toneCurve = bookToneCurve;  // Display → Screen calibration → «Калибровка книг»; nullptr — stock
 
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {
@@ -432,4 +439,9 @@ std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file) {
   serialization::readPod(file, w);
   serialization::readPod(file, h);
   return std::unique_ptr<ImageBlock>(new (std::nothrow) ImageBlock(path, src, w, h));
+}
+
+void ImageBlock::setToneCurve(const uint8_t* curve, const uint32_t hash) {
+  bookToneCurve = curve;
+  bookToneHash = curve ? hash : 0;
 }
