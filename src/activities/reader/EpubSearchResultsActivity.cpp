@@ -18,9 +18,7 @@ constexpr int SUBHEADER_HEIGHT = 26;
 
 EpubSearchResultsActivity::EpubSearchResultsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                      std::string query, std::vector<EpubSearchResult> results)
-    : UiListActivity("EpubSearchResults", renderer, mappedInput),
-      query(std::move(query)),
-      results(std::move(results)) {
+    : UiListActivity("EpubSearchResults", renderer, mappedInput), query(std::move(query)), results(std::move(results)) {
   buildRowItems();
 }
 

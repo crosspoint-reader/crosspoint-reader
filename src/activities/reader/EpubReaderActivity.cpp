@@ -1732,10 +1732,9 @@ void EpubReaderActivity::renderBook() {
         const bool anchorJump = !pendingAnchor.empty();
 
         if (section->isPartial() &&
-            (anchorJump ? section->getPageForAnchor(pendingAnchor).has_value()
-             : offsetJump.has_value()
-                 ? section->getPageForVisibleTextOffset(*offsetJump).has_value()
-                 : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
+            (anchorJump               ? section->getPageForAnchor(pendingAnchor).has_value()
+             : offsetJump.has_value() ? section->getPageForVisibleTextOffset(*offsetJump).has_value()
+                                      : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
           LOG_DBG("ERS", "Partial covers target %d of %d; deferring extension build", target, section->pageCount);
         } else {
           const size_t spineBytes =
