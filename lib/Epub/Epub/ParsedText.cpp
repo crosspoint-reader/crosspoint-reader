@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <TextScan.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -33,14 +34,6 @@ constexpr size_t RTL_PARAGRAPH_PROBE_WORDS = 3;
 // before giving up. 64 is a hedge for pathological cases like long numeric tokens.
 constexpr int RTL_PER_WORD_PROBE_DEPTH = 64;
 constexpr size_t MIN_JUSTIFY_GAPS = 1;
-
-// Byte-level pre-check: Hebrew UTF-8 lead bytes 0xD6-0xD7, Arabic/Syriac 0xD8-0xDB.
-bool mayContainRtlBytes(const char* str) {
-  for (const auto* p = reinterpret_cast<const unsigned char*>(str); *p; ++p) {
-    if (*p >= 0xD6 && *p <= 0xDB) return true;
-  }
-  return false;
-}
 
 // Returns the first rendered codepoint of a word (skipping leading soft hyphens).
 uint32_t firstCodepoint(const std::string_view word) {
@@ -467,8 +460,10 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   if (underline) {
     baseStyle = static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::UNDERLINE);
   }
-  const bool wordStartsRtl = !hasRtlWord && mayContainRtlBytes(word.c_str()) &&
-                             BidiUtils::startsWithRtl(word.c_str(), RTL_PER_WORD_PROBE_DEPTH);
+  const Utf8TextScan scan = utf8ScanText(word.c_str());
+  hasComplexWord = hasComplexWord || scan.complexScript;
+  const bool wordStartsRtl =
+      !hasRtlWord && scan.rtl && BidiUtils::startsWithRtl(word.c_str(), RTL_PER_WORD_PROBE_DEPTH);
 
   // All token pushes funnel through here: the arena append is the only
   // fallible step, and a failed append drops the token without touching the
@@ -578,8 +573,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 
   // Already-bold text should stay fully bold; focus splitting would make its suffix regular later.
   // Complex-script words never take a focus split: each half would shape on its own.
-  if (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0 ||
-      ComplexShaper::containsComplexScript(word.c_str())) {
+  if (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0 || scan.complexScript) {
     if (auto breakOffsets = explicitHyphenBreakByteOffsets(word, effectiveAttachToPrevious); !breakOffsets.empty()) {
       ensureTokenCapacity(breakOffsets.size() + 1);
       bool firstToken = true;
@@ -778,7 +772,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
   // Measuring words and flattening lines both shape complex-script runs; the
   // memo makes the second pass reuse the first.
-  const GfxRenderer::ShapingMemoScope shapingMemo;
+  const GfxRenderer::ShapingMemoScope shapingMemo(hasComplexWord);
   // Stamped here rather than at construction: the parser replaces blockStyle as CSS resolves.
   blockStyle.characterSpacing = characterSpacing;
   this->wordSpacingPercent = wordSpacingPercent;
@@ -1839,7 +1833,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // memo was full and memory ran short; or ruby widened the slot) is dropped,
   // and the word resolves when drawn.
   std::vector<std::string> lineDisplay;
-  for (size_t i = 0; i < lineWordCount; i++) {
+  for (size_t i = 0; hasComplexWord && i < lineWordCount; i++) {
     if (!ComplexShaper::containsComplexScript(lineWords[i].c_str())) continue;
     if (lineDisplay.empty()) lineDisplay.resize(lineWordCount);
     std::string& form = lineDisplay[i];

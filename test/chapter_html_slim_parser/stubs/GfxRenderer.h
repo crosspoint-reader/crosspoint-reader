@@ -159,8 +159,11 @@ class GfxRenderer {
   }
 
   bool resolveForDisplay(int, const char*, EpdFontFamily::Style, std::string&) const { return false; }
+  inline static unsigned shapingMemoStarts = 0;
   struct ShapingMemoScope {
-    ShapingMemoScope() {}
+    explicit ShapingMemoScope(bool enabled = true) {
+      if (enabled) ++shapingMemoStarts;
+    }
     ~ShapingMemoScope() {}
   };
 

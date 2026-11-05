@@ -397,8 +397,10 @@ class GfxRenderer {
   // While one of these is alive, repeated runs shape once (see
   // ComplexShaper::beginMemo). Scope it to a paragraph's layout.
   class ShapingMemoScope {
+    const bool enabled;
+
    public:
-    ShapingMemoScope();
+    explicit ShapingMemoScope(bool enabled = true);
     ~ShapingMemoScope();
     ShapingMemoScope(const ShapingMemoScope&) = delete;
     ShapingMemoScope& operator=(const ShapingMemoScope&) = delete;

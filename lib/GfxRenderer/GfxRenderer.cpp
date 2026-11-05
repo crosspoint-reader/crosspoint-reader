@@ -12,6 +12,7 @@
 #include <MemoryManager.h>
 #include <SdCardFont.h>
 #include <ShapingTokens.h>
+#include <TextScan.h>
 #include <TtfEpdFont.h>
 #include <Utf8.h>
 
@@ -66,14 +67,6 @@ struct VisualText {
   const char* text;
   bool shaped;
 };
-
-// What one byte scan of a string finds, so ordinary text skips each
-// rewrite below without scanning again.
-struct TextScan {
-  bool tokenPlanes = false;    // U+F0000-U+10FFFF: F3 B0..BF or F4
-  bool complexScript = false;  // ComplexShaper::containsComplexScript
-};
-TextScan scanText(const char* text);
 
 VisualText resolveVisualText(const char* text, std::string& visualBuffer, BidiUtils::BidiBaseDir baseDir,
                              const EpdFontData* shapingFont);
@@ -886,42 +879,15 @@ void GfxRenderer::drawVisualText(const int fontId, const int resolvedFontId, con
 
 namespace {
 const char* resolveBidiText(const char* text, std::string& visualBuffer, const BidiUtils::BidiBaseDir baseDir) {
-  if (baseDir != BidiUtils::BidiBaseDir::RTL) {
-    // Byte-level scan: skip BiDi when no RTL script lead bytes are present.
-    // Hebrew UTF-8 lead bytes: 0xD6-0xD7; Arabic/Syriac: 0xD8-0xDB.
-    // This covers all RTL content without false negatives and avoids triggering
-    // the full UAX#9 algorithm for Latin-extended, em-dashes, accented text, etc.
-    bool hasRtlBytes = false;
-    for (const unsigned char* q = reinterpret_cast<const unsigned char*>(text); *q; ++q) {
-      if (*q >= 0xD6 && *q <= 0xDB) {
-        hasRtlBytes = true;
-        break;
-      }
-    }
-    if (!hasRtlBytes) return text;
-  }
-
   if (BidiUtils::applyBidiVisual(text, visualBuffer, static_cast<int>(baseDir)) && !visualBuffer.empty()) {
     return visualBuffer.c_str();
   }
   return text;
 }
 
-TextScan scanText(const char* text) {
-  TextScan scan;
-  for (const auto* p = reinterpret_cast<const unsigned char*>(text); *p; ++p) {
-    if (*p == 0xE0) {
-      scan.complexScript = scan.complexScript || ComplexShaper::startsComplexScript(p);
-    } else if (*p == 0xF4 || (*p == 0xF3 && p[1] >= 0xB0)) {
-      scan.tokenPlanes = true;
-    }
-  }
-  return scan;
-}
-
 // Replaces codepoints in the shaping-token planes (ShapingTokens.h) with
 // U+FFFD, the glyph fonts draw for a codepoint they lack, so the draw loops
-// never read text as tokens. Only called for text scanText() found them in.
+// never read text as tokens. Only called for text utf8ScanText() found them in.
 const char* replaceTokenPlanes(const char* text, std::string& visualBuffer) {
   std::string replaced;
   replaced.reserve(strlen(text));
@@ -943,7 +909,7 @@ const char* replaceTokenPlanes(const char* text, std::string& visualBuffer) {
 // same shaped glyph tokens. `shapingFont` is the resolved font the stream will
 // be drawn with: glyph tokens are only meaningful to the font that made them.
 // Fonts that cannot shape fall back to reordering Indic vowel signs. `text`
-// contains a complex script (scanText).
+// contains a complex script (utf8ScanText).
 VisualText resolveComplexText(const char* text, std::string& visualBuffer, const EpdFontData* shapingFont) {
   std::string rewritten;
   const bool shaped = shapingFont != nullptr && shapingFont->shapeHandler != nullptr &&
@@ -957,8 +923,9 @@ VisualText resolveVisualText(const char* text, std::string& visualBuffer, const 
                              const EpdFontData* shapingFont) {
   if (!text || *text == '\0') return {text, false};
   // Bidi reorders and mirrors codepoints but adds none from these ranges.
-  const TextScan scan = scanText(text);
-  const char* plain = resolveBidiText(text, visualBuffer, baseDir);
+  const Utf8TextScan scan = utf8ScanText(text);
+  const char* plain =
+      scan.rtl || baseDir == BidiUtils::BidiBaseDir::RTL ? resolveBidiText(text, visualBuffer, baseDir) : text;
   if (scan.tokenPlanes) plain = replaceTokenPlanes(plain, visualBuffer);
   if (!scan.complexScript) return {plain, false};
   return resolveComplexText(plain, visualBuffer, shapingFont);
@@ -2411,8 +2378,12 @@ bool GfxRenderer::resolveForDisplay(const int fontId, const char* text, const Ep
   return true;
 }
 
-GfxRenderer::ShapingMemoScope::ShapingMemoScope() { ComplexShaper::beginMemo(); }
-GfxRenderer::ShapingMemoScope::~ShapingMemoScope() { ComplexShaper::endMemo(); }
+GfxRenderer::ShapingMemoScope::ShapingMemoScope(const bool enabled) : enabled(enabled) {
+  if (enabled) ComplexShaper::beginMemo();
+}
+GfxRenderer::ShapingMemoScope::~ShapingMemoScope() {
+  if (enabled) ComplexShaper::endMemo();
+}
 
 bool GfxRenderer::getCodepointMetrics(const int fontId, const uint32_t cp, const EpdFontFamily::Style style,
                                       int32_t& advanceFP, int& top) const {
@@ -2533,7 +2504,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   }
   const auto& font = fontIt->second;
   std::string visual;
-  const TextScan scan = scanText(text);
+  const Utf8TextScan scan = utf8ScanText(text);
   if (scan.tokenPlanes) text = replaceTokenPlanes(text, visual);
   const VisualText visualText =
       scan.complexScript ? resolveComplexText(text, visual, font.getData(style)) : VisualText{text, false};

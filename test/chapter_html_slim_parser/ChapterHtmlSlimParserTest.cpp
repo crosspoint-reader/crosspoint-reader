@@ -2348,3 +2348,20 @@ TEST(TextDecorationPosition, UnderlineStaysBelowBaseline) {
     EXPECT_EQ(renderer.lastLineY, 34);
   });
 }
+
+TEST(TextSpacingLayout, UsesShapingMemoOnlyForParagraphsWithIndicText) {
+  GfxRenderer renderer;
+  for (const char* word : {"office", "שָׁלוֹם", "कि", "漢कि"}) {
+    ParsedText text;
+    text.addWord(word, EpdFontFamily::REGULAR);
+    const unsigned before = GfxRenderer::shapingMemoStarts;
+    unsigned lines = 0;
+    text.layoutAndExtractLines(renderer, 0, 200, [&](std::unique_ptr<TextBlock> block, auto) {
+      EXPECT_TRUE(block->valid());
+      ++lines;
+    });
+    EXPECT_GT(lines, 0u);
+    const bool indic = std::strstr(word, "कि") != nullptr;
+    EXPECT_EQ(GfxRenderer::shapingMemoStarts - before, indic ? 1u : 0u) << word;
+  }
+}

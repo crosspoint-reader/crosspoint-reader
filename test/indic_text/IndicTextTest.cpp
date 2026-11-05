@@ -6,6 +6,7 @@
 
 #include "IndicReorder.h"
 #include "IndicScripts.h"
+#include "TextScan.h"
 #include "Utf8.h"
 
 namespace {
@@ -235,4 +236,28 @@ TEST(IndicLineBreaks, NeverSplitASyllableInAnyScript) {
   EXPECT_FALSE(indic::syllableBreakAllowed(indic::MALAYALAM_DOT_REPH, 0x0D24));  // dot reph, then its base
   EXPECT_TRUE(indic::syllableBreakAllowed(DEVA_I, DEVA_KA));
   EXPECT_TRUE(indic::syllableBreakAllowed(0x0C3F, 0x0C15));  // Telugu: after a vowel sign
+}
+
+TEST(TextScan, ClassifiesOrdinaryAndMixedText) {
+  for (const char* text : {static_cast<const char*>(nullptr), "", "office AV", "café", "Ḥ"}) {
+    const auto scan = utf8ScanText(text);
+    EXPECT_FALSE(scan.rtl);
+    EXPECT_FALSE(scan.complexScript);
+    EXPECT_FALSE(scan.tokenPlanes);
+  }
+  const auto hebrew = utf8ScanText("שָׁלוֹם 123 English");
+  EXPECT_TRUE(hebrew.rtl);
+  EXPECT_FALSE(hebrew.complexScript);
+  EXPECT_FALSE(hebrew.tokenPlanes);
+
+  for (const char* text : {"שָׁלוֹם कि", "कि שָׁלוֹם"}) {
+    const auto mixed = utf8ScanText(text);
+    EXPECT_TRUE(mixed.rtl);
+    EXPECT_TRUE(mixed.complexScript);
+    EXPECT_FALSE(mixed.tokenPlanes);
+  }
+  for (const uint32_t cp : {0xF0000u, 0xFFFFDu, 0x100000u, 0x10FFFDu}) {
+    EXPECT_TRUE(utf8ScanText(cps({cp}).c_str()).tokenPlanes);
+  }
+  EXPECT_FALSE(utf8ScanText(cps({0x1F600, 0xEFFFF}).c_str()).tokenPlanes);
 }
