@@ -522,9 +522,9 @@ TEST_F(VectorFontRegistryTest, MetadataWeight400DoesNotSupplyBoldBut401Does) {
 }
 
 TEST_F(VectorFontRegistryTest, LexicalOrderStillBreaksTiesWithinSemiboldClass) {
-  addFace("A.ttf", 600, false);
+  addFace("A.ttf", 500, false);
   addFace("B.ttf", 500, false);
-  addFace("C.ttf", 600, true);
+  addFace("C.ttf", 500, true);
   addFace("D.ttf", 500, true);
   addFace("Y.ttf", 700, false);
   addFace("Z.ttf", 700, true);
@@ -534,6 +534,36 @@ TEST_F(VectorFontRegistryTest, LexicalOrderStillBreaksTiesWithinSemiboldClass) {
   expectFace(1, "Y.ttf");
   expectFace(2, "C.ttf");
   expectFace(3, "Z.ttf");
+}
+
+TEST_F(VectorFontRegistryTest, LowestMetadataWeightWinsNonBoldRoles) {
+  for (const uint16_t lowWeight : {100, 300, 400, 401, 500, 599}) {
+    SCOPED_TRACE(lowWeight);
+    fake::reset();
+    addFace("A.ttf", 600, false);
+    addFace("B.ttf", lowWeight, false);
+    addFace("C.ttf", 600, true);
+    addFace("D.ttf", lowWeight, true);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(0, "B.ttf");
+    expectFace(1, "A.ttf");
+    expectFace(2, "D.ttf");
+    expectFace(3, "C.ttf");
+  }
+}
+
+TEST_F(VectorFontRegistryTest, LowestWeightStillWinsWithFilenameBoldHints) {
+  addFace("A-boldish.ttf", 600, false);
+  addFace("B-boldish.ttf", 500, false);
+  addFace("C-bolditalicized.ttf", 600, true);
+  addFace("D-bolditalicized.ttf", 500, true);
+
+  ASSERT_TRUE(registry.discover());
+  expectFace(0, "B-boldish.ttf");
+  expectFace(1, "A-boldish.ttf");
+  expectFace(2, "D-bolditalicized.ttf");
+  expectFace(3, "C-bolditalicized.ttf");
 }
 
 TEST_F(VectorFontRegistryTest, PromotionRefillUsesSemiboldPreferenceForVacatedNonBoldRole) {
