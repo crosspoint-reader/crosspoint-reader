@@ -155,6 +155,22 @@ bool SdCardFontRegistry::isCanonicalCpfontName(const char* filename, const std::
 
 #if CROSSPOINT_VECTOR_FONTS
 
+namespace {
+enum VectorStyleBits : uint8_t {
+  HINT_SEMIBOLD = 1 << 0,
+  HINT_BOLD = 1 << 1,
+  HINT_ITALIC = 1 << 2,
+  ROLE_REGULAR = 1 << 3,
+  ROLE_BOLD = 1 << 4,
+  ROLE_ITALIC = 1 << 5,
+  ROLE_BOLD_ITALIC = 1 << 6,
+  ROLE_MASK = ROLE_REGULAR | ROLE_BOLD | ROLE_ITALIC | ROLE_BOLD_ITALIC,
+};
+enum class VectorRole : uint8_t { Regular, Bold, Italic, BoldItalic, Count };
+constexpr size_t VECTOR_STYLE_COUNT = static_cast<size_t>(VectorRole::Count);
+constexpr uint8_t VECTOR_ROLE_HINTS[] = {0, HINT_BOLD, HINT_ITALIC, HINT_BOLD | HINT_ITALIC};
+}  // namespace
+
 bool SdCardFontRegistry::parseVectorFontName(const char* filename, size_t& baseLen) {
   static constexpr const char* kExts[] = {".ttf", ".otf", ".ttc"};
   const size_t nameLen = strlen(filename);
@@ -170,18 +186,41 @@ bool SdCardFontRegistry::parseVectorFontName(const char* filename, size_t& baseL
   return false;
 }
 
-uint8_t SdCardFontRegistry::parseVectorStyle(const char* baseName, size_t baseLen) {
-  // Case-insensitive token scan. "bold" (incl. semibold/demibold) → bold bit;
-  // "italic"/"oblique" → italic bit. Anything else is regular.
-  bool bold = false;
-  bool ital = false;
-  const size_t n = baseLen;
-  for (size_t i = 0; i < n; ++i) {
-    if ((n - i) >= 4 && strncasecmp(baseName + i, "bold", 4) == 0) bold = true;
-    if ((n - i) >= 6 && strncasecmp(baseName + i, "italic", 6) == 0) ital = true;
-    if ((n - i) >= 7 && strncasecmp(baseName + i, "oblique", 7) == 0) ital = true;
+uint8_t SdCardFontRegistry::guessVectorStyle(const char* baseName, const size_t baseLen) {
+  uint8_t guess = 0;
+  for (size_t i = 0; i < baseLen; ++i) {
+    if (baseLen - i >= 4 && strncasecmp(baseName + i, "bold", 4) == 0) guess |= HINT_BOLD;
+    if (baseLen - i >= 6 && strncasecmp(baseName + i, "italic", 6) == 0) guess |= HINT_ITALIC;
+    if (baseLen - i >= 7 && strncasecmp(baseName + i, "oblique", 7) == 0) guess |= HINT_ITALIC;
   }
-  return static_cast<uint8_t>((bold ? 1 : 0) | (ital ? 2 : 0));
+
+  static constexpr struct {
+    const char* name;
+    uint8_t role;
+  } suffixes[] = {{"BoldItalic", ROLE_BOLD_ITALIC},
+                  {"BoldOblique", ROLE_BOLD_ITALIC},
+                  {"BlackOblique", ROLE_BOLD_ITALIC},
+                  {"BlackItalic", ROLE_BOLD_ITALIC},
+                  {"Regular", ROLE_REGULAR},
+                  {"Book", ROLE_REGULAR},
+                  {"Roman", ROLE_REGULAR},
+                  {"Bold", ROLE_BOLD},
+                  {"Black", ROLE_BOLD},
+                  {"Italic", ROLE_ITALIC},
+                  {"Oblique", ROLE_ITALIC}};
+  // Combined styles precede their italic-only tails. baseLen excludes the extension.
+  for (const auto& suffix : suffixes) {
+    const size_t len = strlen(suffix.name);
+    if (len > baseLen) continue;
+    const size_t start = baseLen - len;
+    const bool separated =
+        start > 0 && (baseName[start - 1] == '-' || baseName[start - 1] == '_' || baseName[start - 1] == ' ');
+    const bool capitalized = baseName[start] >= 'A' && baseName[start] <= 'Z';
+    if ((separated || capitalized) && strncasecmp(baseName + start, suffix.name, len) == 0) {
+      return guess | suffix.role;
+    }
+  }
+  return guess;
 }
 
 // FtFont::ReadFn over a HalFile (absolute-offset reads; count 0 is a seek probe).
@@ -196,97 +235,95 @@ unsigned long SdCardFontRegistry::halFileRead(void* ctx, const unsigned long off
 }
 
 void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
+  // - Reserve explicit suffix roles; lexical-first duplicates win, regardless of metadata.
+  // - OR filename hints with metadata: 401-699 adds semibold, >=700 adds bold.
+  // - Fill missing roles in regular/bold/italic/bold-italic order, matching italics.
+  //   Prefer normal/pure-bold matches over semibold; break ties lexically. Never reuse a file.
+  // - If regular is missing, move italic, bold, or bold-italic to it (in that order),
+  //   then refill the vacated role from unused files using the same preferences.
   using freeink::font::FtFont;
-  // Read each face's real weight + italic flag (inspectStream reads only the
-  // sfnt header tables, no face is retained), then pick the four roles
-  // DETERMINISTICALLY by design weight: the upright face nearest 400 is
-  // regular, nearest 700 is bold; same for the italics. This is independent of
-  // SD directory order — a Regular/Medium/Semibold/Bold/Black family always
-  // resolves to Regular + Bold, not to whichever file happened to enumerate
-  // first. An unreadable face falls back to its filename-derived role
-  // (Regular/Bold tokens → 400/700). Filename bold hints apply only when the
-  // metadata weight is below 600. Metadata weights of 600 and above are used
-  // as reported. Filename italic/oblique hints are combined with metadata
-  // italic flags.
-  struct Candidate {
-    size_t index;  // into files
-    uint16_t weight;
-    bool italic;
+  const size_t missing = files.size();
+  size_t picks[VECTOR_STYLE_COUNT] = {missing, missing, missing, missing};
+  const auto earlier = [&](const size_t candidate, const size_t current) {
+    return current == missing || strcmp(files[candidate].name.get(), files[current].name.get()) < 0;
   };
-  std::vector<Candidate> cands;
-  cands.reserve(files.size());
-  char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
-  for (size_t i = 0; i < files.size(); ++i) {
-    Candidate c{i, static_cast<uint16_t>((files[i].style & 1) ? 700 : 400), (files[i].style & 2) != 0};
-    snprintf(path, sizeof(path), "%s/%s", dirPath, files[i].name.get());
-    HalFile f = Storage.open(path);
-    if (f && !f.isDirectory()) {
+
+  size_t explicitRoles = 0;
+  for (size_t role = 0; role < VECTOR_STYLE_COUNT; ++role) {
+    for (size_t i = 0; i < files.size(); ++i) {
+      if ((files[i].style & (ROLE_REGULAR << role)) && earlier(i, picks[role])) picks[role] = i;
+    }
+    if (picks[role] != missing) ++explicitRoles;
+  }
+
+  const auto pickUnused = [&](const size_t role) {
+    size_t explicitPick = missing;
+    size_t fallbackPick = missing;
+    bool fallbackSemibold = false;
+    const bool wantBold = VECTOR_ROLE_HINTS[role] & HINT_BOLD;
+    const bool wantItalic = VECTOR_ROLE_HINTS[role] & HINT_ITALIC;
+    for (size_t i = 0; i < files.size(); ++i) {
+      if (std::find(picks, picks + VECTOR_STYLE_COUNT, i) != picks + VECTOR_STYLE_COUNT) continue;
+      if (files[i].style & ROLE_MASK) {
+        if ((files[i].style & (ROLE_REGULAR << role)) && earlier(i, explicitPick)) explicitPick = i;
+        continue;
+      }
+      const bool semibold = files[i].style & HINT_SEMIBOLD;
+      const bool bold = files[i].style & HINT_BOLD;
+      const bool italic = files[i].style & HINT_ITALIC;
+      if (italic != wantItalic || (!semibold && bold != wantBold)) continue;
+      // Semibold can fill either weight role, after a normal or pure-bold match.
+      if (fallbackPick == missing || (fallbackSemibold && !semibold) ||
+          (fallbackSemibold == semibold && earlier(i, fallbackPick))) {
+        fallbackPick = i;
+        fallbackSemibold = semibold;
+      }
+    }
+    return explicitPick != missing ? explicitPick : fallbackPick;
+  };
+
+  if (explicitRoles < VECTOR_STYLE_COUNT) {
+    char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
+    for (auto& file : files) {
+      // Explicit suffixes reserve their files, including duplicate-role losers.
+      if (file.style & ROLE_MASK) continue;
+      snprintf(path, sizeof(path), "%s/%s", dirPath, file.name.get());
+      HalFile f = Storage.open(path);
+      if (!f || f.isDirectory()) continue;
       FtFont::FaceInfo face;
       if (FtFont::inspectStream(&halFileRead, &f, static_cast<unsigned long>(f.size()), face) ==
           FtFont::InspectResult::Ok) {
-        c.weight = (files[i].style & 1) && face.weight < 600 ? 700 : face.weight;
-        c.italic = c.italic || face.italic;
+        if (face.weight >= 700) file.style |= HINT_BOLD;
+        if (face.weight > 400 && face.weight < 700) file.style |= HINT_SEMIBOLD;
+        if (face.italic) file.style |= HINT_ITALIC;
       }
     }
-    cands.push_back(c);
-  }
-
-  // Nearest target weight within the upright/italic bucket; ties break to the
-  // lower weight, then the lexicographically smaller filename — never enumeration
-  // order. `exclude` keeps bold from re-picking the regular file.
-  const auto pick = [&](const bool italic, const int target, const Candidate* exclude) -> const Candidate* {
-    const Candidate* best = nullptr;
-    for (const auto& c : cands) {
-      if (c.italic != italic || &c == exclude) continue;
-      if (!best) {
-        best = &c;
-        continue;
-      }
-      const int dc = std::abs(static_cast<int>(c.weight) - target);
-      const int db = std::abs(static_cast<int>(best->weight) - target);
-      if (dc < db || (dc == db && (c.weight < best->weight ||
-                                   (c.weight == best->weight &&
-                                    strcmp(files[c.index].name.get(), files[best->index].name.get()) < 0)))) {
-        best = &c;
-      }
+    for (size_t role = 0; role < VECTOR_STYLE_COUNT; ++role) {
+      if (picks[role] == missing) picks[role] = pickUnused(role);
     }
-    return best;
-  };
-
-  const Candidate* regular = pick(false, 400, nullptr);
-  if (!regular) {
-    // All faces italic: the italic nearest 400 anchors the family as regular
-    // (TtfEpdFont needs a regular source; it derives the rest).
-    regular = pick(true, 400, nullptr);
-    if (regular) LOG_DBG("SDREG", "No upright face in %s — promoting %s", dirPath, files[regular->index].name.get());
-    if (!regular) return;  // no usable files at all
   }
-  // Bold must be a genuinely heavier face than the regular pick; otherwise the
-  // synthesizer derives it (a same-or-lighter file would render identically).
-  const Candidate* bold = pick(false, 700, regular);
-  if (bold && bold->weight <= regular->weight) bold = nullptr;
-  const Candidate* italic = regular->italic ? nullptr : pick(true, 400, nullptr);
-  const Candidate* boldItalic = pick(true, 700, italic ? italic : regular);
-  if (boldItalic && italic && boldItalic->weight <= italic->weight) boldItalic = nullptr;
-  if (boldItalic && !boldItalic->italic) boldItalic = nullptr;
+
+  if (picks[0] == missing) {
+    static constexpr VectorRole promotionOrder[] = {VectorRole::Italic, VectorRole::Bold, VectorRole::BoldItalic};
+    for (const auto promotedRole : promotionOrder) {
+      const size_t role = static_cast<size_t>(promotedRole);
+      if (picks[role] == missing) continue;
+      picks[0] = picks[role];
+      picks[role] = missing;
+      picks[role] = pickUnused(role);
+      break;
+    }
+  }
 
   std::vector<SdCardFontFileInfo> selected;
-  selected.reserve(4);
-  // Each candidate is picked for at most one role (the exclusions above), so
-  // its entry can be moved out of `files`. A second pick of the same index
-  // would leave a null name that filePath() reads as a canonical .cpfont.
-  const auto add = [&](const Candidate* c, const uint8_t role) {
-    if (!c) return;
-    SdCardFontFileInfo info = std::move(files[c->index]);
-    info.style = role;
-    selected.push_back(std::move(info));
-  };
-  add(regular, 0);
-  add(bold, 1);
-  add(italic, 2);
-  add(boldItalic, 3);
+  selected.reserve(VECTOR_STYLE_COUNT);
+  for (size_t role = 0; role < VECTOR_STYLE_COUNT; ++role) {
+    if (picks[role] == missing) continue;
+    files[picks[role]].style = static_cast<uint8_t>(role);
+    selected.push_back(std::move(files[picks[role]]));
+  }
   if (selected.size() < files.size()) {
-    LOG_DBG("SDREG", "%s: %u of %u faces selected by weight", dirPath, static_cast<unsigned>(selected.size()),
+    LOG_DBG("SDREG", "%s: %u of %u faces selected by style", dirPath, static_cast<unsigned>(selected.size()),
             static_cast<unsigned>(files.size()));
   }
   files = std::move(selected);
@@ -353,14 +390,13 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
 #if CROSSPOINT_VECTOR_FONTS
     size_t baseLen = 0;
     if (parseVectorFontName(nameBuffer, baseLen)) {
-      // Vector file in a family folder: seed the style role from the filename
-      // (e.g. Merriweather/Merriweather-Italic.ttf → italic); refineVectorStyles
-      // upgrades it from the face's own metadata and dedups by role afterwards.
+      // Keep filename hints and explicit suffix roles until refineVectorStyles
+      // resolves them to one file per role.
       SdCardFontFileInfo info;
       info.name = copyFileName(nameBuffer);
       if (!info.name) continue;
       info.pointSize = 0;  // size-free
-      info.style = parseVectorStyle(nameBuffer, baseLen);
+      info.style = guessVectorStyle(nameBuffer, baseLen);
       if (!pathFits(family, info)) {
         LOG_ERR("SDREG", "Path too long for %s in %s — skipping", nameBuffer, dirPath);
         continue;
