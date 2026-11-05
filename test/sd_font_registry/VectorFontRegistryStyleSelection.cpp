@@ -99,17 +99,17 @@ TEST_F(VectorFontRegistryTest, FilenameBoldHintsCoverNonBoldMetadataWeights) {
 
 TEST_F(VectorFontRegistryTest, ExplicitDuplicateRolesUseFilenameOrderNotWeight) {
   addFace("Family-Regular.ttf", 400, false);
-  addFace("Family-ABold.ttf", 600, false);
-  addFace("Family-ZBold.ttf", 700, false);
+  addFace("A-Bold.ttf", 600, false);
+  addFace("Z-Bold.ttf", 700, false);
   addFace("Family-Italic.ttf", 400, true);
-  addFace("Family-ABoldItalic.ttf", 600, true);
-  addFace("Family-ZBoldItalic.ttf", 700, true);
+  addFace("A-BoldItalic.ttf", 600, true);
+  addFace("Z-BoldItalic.ttf", 700, true);
 
   ASSERT_TRUE(registry.discover());
   expectFace(0, "Family-Regular.ttf");
-  expectFace(1, "Family-ABold.ttf");
+  expectFace(1, "A-Bold.ttf");
   expectFace(2, "Family-Italic.ttf");
-  expectFace(3, "Family-ABoldItalic.ttf");
+  expectFace(3, "A-BoldItalic.ttf");
 }
 
 TEST_F(VectorFontRegistryTest, SemiboldRegularCanPairWithHeavierBold) {
@@ -179,18 +179,10 @@ TEST_F(VectorFontRegistryTest, SuffixesRespectStartAndEndBoundaries) {
   static constexpr struct {
     const char* filename;
     bool explicitRegular;
-  } cases[] = {{"Family-Regular.ttf", true},
-               {"Family-regular.ttf", true},
-               {"Family Regular.ttf", true},
-               {"Family_Regular.ttf", true},
-               {"FamilyRegular.ttf", true},
-               {"FamilyREGULAR.TTF", true},
-               {"Regular.otf", true},
-               {"Family-Roman.ttc", true},
-               {"Familyregular.ttf", false},
-               {"regular.ttf", false},
-               {"Family-RegularExtra.ttf", false},
-               {"Family-Regular.more.ttf", false},
+  } cases[] = {{"Family-Regular.ttf", true},     {"Family-regular.ttf", true},       {"Family Regular.ttf", true},
+               {"Family_Regular.ttf", true},     {"FamilyRegular.ttf", false},       {"FamilyREGULAR.TTF", false},
+               {"Regular.otf", false},           {"Family-Roman.ttc", true},         {"Familyregular.ttf", false},
+               {"regular.ttf", false},           {"Family-RegularExtra.ttf", false}, {"Family-Regular.more.ttf", false},
                {"Family-regularized.ttf", false}};
   for (const auto& test : cases) {
     SCOPED_TRACE(test.filename);
@@ -208,13 +200,77 @@ TEST_F(VectorFontRegistryTest, CombinedSuffixesPrecedeItalicTails) {
   for (const char* suffix : {"BoldItalic", "BoldOblique", "BlackItalic", "BlackOblique"}) {
     SCOPED_TRACE(suffix);
     fake::reset();
-    const std::string filename = std::string("Family") + suffix + ".ttf";
+    const std::string filename = std::string("Family-") + suffix + ".ttf";
     addFace(filename, 400, false);
     addFace("Control-Regular.ttf", 400, false);
 
     ASSERT_TRUE(registry.discover());
     expectFace(3, filename.c_str());
     EXPECT_EQ(registry.findFamily("Family")->findFile(0, 2), nullptr);
+  }
+}
+
+TEST_F(VectorFontRegistryTest, SeparatedCombinedSuffixesAcceptMixedSeparators) {
+  static constexpr struct {
+    const char* left;
+    const char* right;
+  } cases[] = {
+      {"Bold", "Italic"}, {"Bold", "Oblique"}, {"Black", "Italic"}, {"Black", "Oblique"}, {"bLaCk", "oBlIqUe"}};
+  for (const auto& test : cases) {
+    for (const char outer : {' ', '-', '_'}) {
+      for (const char inner : {' ', '-', '_'}) {
+        const std::string filename = std::string("Family") + outer + test.left + inner + test.right + ".ttf";
+        SCOPED_TRACE(filename);
+        fake::reset();
+        addFace("Control-Regular.ttf", 400, false);
+        addFace(filename, 400, false);
+
+        ASSERT_TRUE(registry.discover());
+        expectFace(3, filename.c_str());
+        EXPECT_EQ(registry.findFamily("Family")->findFile(0, 2), nullptr);
+      }
+    }
+  }
+}
+
+TEST_F(VectorFontRegistryTest, InvalidCollapsedSuffixKeepsOrdinaryTrailingSuffix) {
+  for (const char* filename : {"Family-Something-Italic.ttf", "Family Something-Oblique.ttf", "FamilyBold-Italic.ttf",
+                               "Bold-Italic.ttf", "Family-Bold--Italic.ttf"}) {
+    SCOPED_TRACE(filename);
+    fake::reset();
+    addFace("Control-Regular.ttf", 400, false);
+    addFace(filename, 700, true);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(2, filename);
+    EXPECT_EQ(registry.findFamily("Family")->findFile(0, 3), nullptr);
+  }
+}
+
+TEST_F(VectorFontRegistryTest, ConcatenatedBoldIsOnlyAHintNotAnExplicitRole) {
+  for (const char* filename : {"FamilyBold.ttf", "Familybold.ttf", "FamilyBOLD.ttf"}) {
+    SCOPED_TRACE(filename);
+    fake::reset();
+    addFace("Control-Regular.ttf", 400, false);
+    addFace(filename, 400, true);
+    addFace("Z.ttf", 700, false);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(1, "Z.ttf");
+    expectFace(3, filename);
+  }
+}
+
+TEST_F(VectorFontRegistryTest, SemiboldCapitalizationDoesNotReserveBoldRole) {
+  for (const char* filename : {"FamilySemiBold.ttf", "FamilySemibold.ttf", "FamilySEMIBOLD.ttf"}) {
+    SCOPED_TRACE(filename);
+    fake::reset();
+    addFace(filename, 500, false);
+    addFace("Other.ttf", 700, false);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(0, filename);
+    expectFace(1, "Other.ttf");
   }
 }
 
