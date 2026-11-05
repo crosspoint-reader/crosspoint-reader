@@ -1,9 +1,9 @@
 #pragma once
 
-#include <Print.h>
-
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 class Epub;
@@ -19,6 +19,8 @@ struct EpubSearchResult {
 
 class EpubSearch {
  public:
+  static bool searchHtml(std::string_view html, std::string_view query, int spineIndex, std::string_view chapterTitle,
+                         std::vector<EpubSearchResult>& results, size_t maxResults = 30);
   static bool search(const Epub& epub, const std::string& query, std::vector<EpubSearchResult>& results,
                      size_t maxResults = 30);
 };

@@ -62,7 +62,8 @@ int SdCardFontManager::loadFile(const SdCardFontFamilyInfo& family, const SdCard
 
   LOG_DBG("SDMGR", "Loaded %s size=%u id=%d styles=%u", path, file.pointSize, fontId, font->styleCount());
 
-  EpdFontFamily fontFamily(font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2), font->getEpdFont(3));
+  EpdFontFamily fontFamily(file.pointSize, font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2),
+                           font->getEpdFont(3));
   renderer.insertFont(fontId, fontFamily);
   return fontId;
 }

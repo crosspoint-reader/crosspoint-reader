@@ -1,8 +1,12 @@
 // From
 // https://github.com/vroland/epdiy/blob/c61e9e923ce2418150d54f88cea5d196cdc40c54/src/epd_internals.h
+// The EPDiy font layouts use LGPLv3. See licenses/borrowed-code.txt.
 
 #pragma once
 #include <cstdint>
+
+// fontconvert.py, fontconvert_sdcard.py and the vector loader rasterize point sizes at this DPI.
+constexpr uint16_t FONT_RASTER_DPI = 150;
 
 /// Font metrics use "fixed-point 4" (4 fractional bits, i.e. 1/16-pixel
 /// resolution).  Both the 12.4 glyph advances (uint16_t) and the 4.4 kern

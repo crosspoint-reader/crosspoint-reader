@@ -1,7 +1,10 @@
 #include "EpubSearchResultsActivity.h"
 
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+
+#include <algorithm>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -14,23 +17,32 @@ constexpr int SUBHEADER_HEIGHT = 26;
 }  // namespace
 
 EpubSearchResultsActivity::EpubSearchResultsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                     std::string query, const std::vector<EpubSearchResult>& results)
-    : UiListActivity("EpubSearchResults", renderer, mappedInput), query(std::move(query)), results(results) {
+                                                     std::string query, std::vector<EpubSearchResult> results)
+    : UiListActivity("EpubSearchResults", renderer, mappedInput),
+      query(std::move(query)),
+      results(std::move(results)) {
   buildRowItems();
+}
+
+void EpubSearchResultsActivity::onEnter() {
+  RenderLock lock;
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->clearCache();
+  }
+  UiListActivity::onEnter();
 }
 
 void EpubSearchResultsActivity::buildRowItems() {
   rowItems.clear();
   rowItems.reserve(results.size());
-  rowTitles.clear();
-  rowTitles.reserve(results.size());
   formattedSnippets.clear();
   formattedSnippets.reserve(results.size());
 
   for (size_t i = 0; i < results.size(); ++i) {
-    const auto& res = results[i];
-    std::string title = res.chapterTitle.empty() ? (std::to_string(i + 1) + ".") : res.chapterTitle;
-    rowTitles.push_back(std::move(title));
+    auto& res = results[i];
+    if (res.chapterTitle.empty()) {
+      res.chapterTitle = std::to_string(i + 1) + ".";
+    }
 
     std::string snippet;
     snippet.reserve(res.preContext.size() + res.match.size() + res.postContext.size() + 8);
@@ -44,9 +56,12 @@ void EpubSearchResultsActivity::buildRowItems() {
       snippet += tr(STR_ELLIPSIS);
     }
     formattedSnippets.push_back(std::move(snippet));
+    std::string().swap(res.preContext);
+    std::string().swap(res.match);
+    std::string().swap(res.postContext);
 
     fui::ListItem item;
-    item.label = rowTitles.back().c_str();
+    item.label = res.chapterTitle.c_str();
     item.subtitle = formattedSnippets.back().c_str();
     item.actionValue = static_cast<int16_t>(i);
     rowItems.push_back(item);
@@ -65,22 +80,11 @@ void EpubSearchResultsActivity::activateIndex(const int index) {
   finish();
 }
 
-bool EpubSearchResultsActivity::handleButtons() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    ActivityResult res;
-    res.isCancelled = true;
-    setResult(std::move(res));
-    finish();
-    return true;
-  }
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
-    activateIndex(nav.selected);
-    return true;
-  }
-
-  return false;
+void EpubSearchResultsActivity::onBackButton() {
+  ActivityResult res;
+  res.isCancelled = true;
+  setResult(std::move(res));
+  finish();
 }
 
 void EpubSearchResultsActivity::buildScreen(UiScreen& screen) {
@@ -115,11 +119,6 @@ void EpubSearchResultsActivity::drawChrome() {
 
   const int subheaderY = headerY + metrics.headerHeight;
 
-  // Left: Query: "<query>"
-  char queryBuf[64];
-  snprintf(queryBuf, sizeof(queryBuf), "%s \"%s\"", tr(STR_QUERY), query.c_str());
-  renderer.drawText(SMALL_FONT_ID, safe.x + 8, subheaderY + 6, queryBuf, true);
-
   // Right: "<N> matches"
   char matchesBuf[32];
   const char* matchUnit = (results.size() == 1) ? tr(STR_MATCH) : tr(STR_MATCHES);
@@ -127,13 +126,23 @@ void EpubSearchResultsActivity::drawChrome() {
   const int matchesWidth = renderer.getTextWidth(SMALL_FONT_ID, matchesBuf);
   renderer.drawText(SMALL_FONT_ID, safe.x + safe.width - matchesWidth - 8, subheaderY + 6, matchesBuf, true);
 
+  // Left: Query: "<query>" (clamped so it never overlaps the match count)
+  char queryBuf[96];
+  snprintf(queryBuf, sizeof(queryBuf), "%s \"%s\"", tr(STR_QUERY), query.c_str());
+  const int maxQueryWidth = std::max(0, safe.width - matchesWidth - 24);
+  const std::string truncatedQuery = renderer.truncatedText(SMALL_FONT_ID, queryBuf, maxQueryWidth);
+  renderer.drawText(SMALL_FONT_ID, safe.x + 8, subheaderY + 6, truncatedQuery.c_str(), true);
+
   // Subtle separator line below the subheader
   renderer.drawLine(safe.x, subheaderY + SUBHEADER_HEIGHT - 1, safe.x + safe.width - 1,
                     subheaderY + SUBHEADER_HEIGHT - 1);
 }
 
 void EpubSearchResultsActivity::drawFooter() {
-  const auto labels = results.empty() ? mappedInput.mapLabels(tr(STR_BACK), "", "", "")
-                                      : mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (results.empty()) {
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    return;
+  }
+  UiListActivity::drawFooter();
 }
