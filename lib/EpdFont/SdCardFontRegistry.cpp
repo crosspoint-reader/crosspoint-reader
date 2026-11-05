@@ -235,6 +235,7 @@ unsigned long SdCardFontRegistry::halFileRead(void* ctx, const unsigned long off
 }
 
 void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
+  // - Validate every candidate with the existing face inspector; discard any failure.
   // - Reserve explicit suffix roles; lexical-first duplicates win, regardless of metadata.
   // - Record metadata weight; OR its bold (>=700) and italic flags with filename hints.
   // - Fill missing roles in regular/bold/italic/bold-italic order, matching italics.
@@ -243,18 +244,34 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
   // - If regular is missing, move italic, bold, or bold-italic to it (in that order),
   //   then refill the vacated role from unused files using the same preferences.
   using freeink::font::FtFont;
+  const auto invalid = [&](SdCardFontFileInfo& file) {
+    char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
+    snprintf(path, sizeof(path), "%s/%s", dirPath, file.name.get());
+    HalFile f = Storage.open(path);
+    FtFont::FaceInfo face;
+    if (!f || f.isDirectory() ||
+        FtFont::inspectStream(&halFileRead, &f, static_cast<unsigned long>(f.size()), face) !=
+            FtFont::InspectResult::Ok) {
+      LOG_ERR("SDREG", "Skipping unavailable or unsupported font: %s", path);
+      return true;
+    }
+    file.weight = face.weight;
+    if (face.weight >= 700) file.style |= HINT_BOLD;
+    if (face.italic) file.style |= HINT_ITALIC;
+    return false;
+  };
+  files.erase(std::remove_if(files.begin(), files.end(), invalid), files.end());
+  if (files.empty()) return;
   const size_t missing = files.size();
   size_t picks[VECTOR_STYLE_COUNT] = {missing, missing, missing, missing};
   const auto earlier = [&](const size_t candidate, const size_t current) {
     return current == missing || strcmp(files[candidate].name.get(), files[current].name.get()) < 0;
   };
 
-  size_t explicitRoles = 0;
   for (size_t role = 0; role < VECTOR_STYLE_COUNT; ++role) {
     for (size_t i = 0; i < files.size(); ++i) {
       if ((files[i].style & (ROLE_REGULAR << role)) && earlier(i, picks[role])) picks[role] = i;
     }
-    if (picks[role] != missing) ++explicitRoles;
   }
 
   const auto pickUnused = [&](const size_t role) {
@@ -285,25 +302,8 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
     return explicitPick != missing ? explicitPick : fallbackPick;
   };
 
-  if (explicitRoles < VECTOR_STYLE_COUNT) {
-    char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
-    for (auto& file : files) {
-      // Explicit suffixes reserve their files, including duplicate-role losers.
-      if (file.style & ROLE_MASK) continue;
-      snprintf(path, sizeof(path), "%s/%s", dirPath, file.name.get());
-      HalFile f = Storage.open(path);
-      if (!f || f.isDirectory()) continue;
-      FtFont::FaceInfo face;
-      if (FtFont::inspectStream(&halFileRead, &f, static_cast<unsigned long>(f.size()), face) ==
-          FtFont::InspectResult::Ok) {
-        file.weight = face.weight;
-        if (face.weight >= 700) file.style |= HINT_BOLD;
-        if (face.italic) file.style |= HINT_ITALIC;
-      }
-    }
-    for (size_t role = 0; role < VECTOR_STYLE_COUNT; ++role) {
-      if (picks[role] == missing) picks[role] = pickUnused(role);
-    }
+  for (size_t role = 0; role < VECTOR_STYLE_COUNT; ++role) {
+    if (picks[role] == missing) picks[role] = pickUnused(role);
   }
 
   if (picks[0] == missing) {
@@ -319,7 +319,7 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
   }
 
   std::vector<SdCardFontFileInfo> selected;
-  selected.reserve(VECTOR_STYLE_COUNT);
+  selected.reserve(std::min(VECTOR_STYLE_COUNT, files.size()));
   for (size_t role = 0; role < VECTOR_STYLE_COUNT; ++role) {
     if (picks[role] == missing) continue;
     files[picks[role]].style = static_cast<uint8_t>(role);
@@ -503,6 +503,8 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
         continue;
       }
       family.files.push_back(std::move(info));
+      refineVectorStyles(rootPath, family.files);
+      if (family.files.empty()) continue;
       out.push_back(std::move(family));
       LOG_DBG("SDREG", "Found vector font: %s in %s", famName.c_str(), rootPath);
 #endif  // CROSSPOINT_VECTOR_FONTS — loose .ttf/.otf files are ignored without the engine
