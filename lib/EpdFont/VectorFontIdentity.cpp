@@ -2,6 +2,7 @@
 
 #if CROSSPOINT_VECTOR_FONTS
 #include <HalStorage.h>
+#include <Logging.h>
 
 #include <algorithm>
 
@@ -56,8 +57,12 @@ uint32_t vectorFontSourceHash(HalFile& file, const char* filename) {
   uint32_t hash = 2166136261u;
   addByte(hash, 1);  // Separate table hashes from filename fallbacks.
   const bool found = nameTableHash(file, hash);
-  file.seek(position);
+  if (!file.seek(position)) {
+    LOG_ERR("TTF", "Failed to restore file position %llu for %s", static_cast<unsigned long long>(position),
+            filename ? filename : "(unnamed)");
+  }
   if (found) return hash;
+  LOG_ERR("TTF", "Name table unavailable for %s; using filename identity", filename ? filename : "(unnamed)");
   hash = 2166136261u;
   addByte(hash, 0);
   for (const char* p = filename; p && *p; ++p) addByte(hash, static_cast<uint8_t>(*p));
@@ -67,8 +72,7 @@ uint32_t vectorFontSourceHash(HalFile& file, const char* filename) {
 int vectorFontIdentity(const uint32_t sourceHashes[4], const uint8_t presentMask, const uint8_t pointSize,
                        const bool uiFallback) {
   uint32_t hash = 2166136261u;
-  // "TTF-name-v1" prefix, so we can "invalidate" existing hashes after a release if
-  // font handling changes fundamentally (again).
+  // Versioned prefix for cache invalidation when font identity rules change.
   for (const char c : "TTF-name-v1") addByte(hash, c);
   addByte(hash, pointSize);
   addByte(hash, uiFallback);

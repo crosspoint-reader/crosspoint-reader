@@ -219,8 +219,7 @@ uint8_t SdCardFontRegistry::guessVectorStyle(const char* baseName, const size_t 
     }
     if (!suffix.joinAt || len + 1 >= baseLen) continue;
     const size_t start = baseLen - len - 1;
-    // check if there's another separator before our keyword and see if collapsing that
-    // separator yields a sensible extended keyword, e.x. xxx-Bold-Italic -> xxx-BoldItalic.ttf
+    // Match one separator inside a combined suffix, e.g. Family-Bold-Italic.ttf.
     if (isStyleSeparator(baseName[start - 1]) && isStyleSeparator(baseName[start + suffix.joinAt]) &&
         strncasecmp(baseName + start, suffix.name, suffix.joinAt) == 0 &&
         strncasecmp(baseName + start + suffix.joinAt + 1, suffix.name + suffix.joinAt, len - suffix.joinAt) == 0) {

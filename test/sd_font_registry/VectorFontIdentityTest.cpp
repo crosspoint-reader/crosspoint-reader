@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <utility>
 
 namespace {
 void put32(std::string& bytes, size_t at, uint32_t value) {
@@ -87,5 +88,12 @@ TEST(VectorFontIdentityTest, NonNameChangesDoNotAffectIdentity) {
   const auto before = source(bytes, "File.ttf");
   bytes[16] = 42;  // Directory checksum, outside the name table.
   EXPECT_EQ(source(bytes, "File.ttf"), before);
+}
+
+TEST(VectorFontIdentityTest, ClosedFileFallsBackWhenPositionCannotBeRestored) {
+  fake::reset();
+  const auto fallback = source("invalid", "File.ttf");
+  HalFile closed;
+  EXPECT_EQ(vectorFontSourceHash(closed, "File.ttf"), fallback);
 }
 }  // namespace
