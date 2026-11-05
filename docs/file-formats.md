@@ -90,6 +90,14 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 74
+
+Version 74 keeps the binary layout and rebuilds completed and partial sections.
+Inline anchors follow their target lines, including lines carried with headings
+or paragraphs. Image fallback text ends its own block before following source
+text, so later anchors cannot attach to a placeholder sharing their canonical
+offset. Book metadata and saved progress are kept.
+
 ### Version 73
 
 Version 73 keeps the binary layout and rebuilds completed and partial sections.
