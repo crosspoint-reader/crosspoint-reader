@@ -31,6 +31,7 @@ struct HalGPIO {
   bool wasPressed(uint8_t b) const { return pressed == b; }
   bool wasReleased(uint8_t b) const { return pressed == b; }
   bool isPressed(uint8_t b) const { return pressed == b; }
+  bool wasPinch(float&) const { return false; }
 };
 """
 harness = r"""
