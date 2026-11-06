@@ -1,4 +1,5 @@
 # SD Card Font Families for CrossPoint Reader
+# Font licenses and copyright notices: licenses/fonts.txt.
 #
 # This file is the single source of truth for which fonts are generated,
 # how they're sourced, and how they're presented in the download manifest.
@@ -80,6 +81,17 @@ families:
       bold:       {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-Bold.ttf"}
       italic:     {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-It.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-BoldIt.ttf"}
+
+  - name: NotoSerif
+    description: "Former built-in serif (Latin, Cyrillic)"
+    scripts: [latin, cyrillic]
+    intervals: builtin,(0x018F-0x018F),(0x0259-0x0259)
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular:    {path: "builtinFonts/source/NotoSerif/NotoSerif-Regular.ttf"}
+      bold:       {path: "builtinFonts/source/NotoSerif/NotoSerif-Bold.ttf"}
+      italic:     {path: "builtinFonts/source/NotoSerif/NotoSerif-Italic.ttf"}
+      bolditalic: {path: "builtinFonts/source/NotoSerif/NotoSerif-BoldItalic.ttf"}
 
   - name: NotoSerifExtended
     description: "Serif (Latin, Greek, Cyrillic)"

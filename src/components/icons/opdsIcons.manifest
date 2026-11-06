@@ -1,0 +1,12 @@
+# Manifest for src/components/icons/opdsIcons.h — regenerate with:
+#   python3 <freeink-sdk>/libs/assets/Icons/tools/gen_icons.py \
+#     --manifest src/components/icons/opdsIcons.manifest \
+#     --svgdir <freeink-sdk>/libs/assets/Icons/lucide/icons \
+#     --sizes 24,32 --out src/components/icons/opdsIcons.h
+# then clang-format -i the output.
+#
+# OPDS pagination tab-bar arrows. Stock Lucide icons only.
+page-first = chevrons-left
+page-prev = chevron-left
+page-next = chevron-right
+page-last = chevrons-right

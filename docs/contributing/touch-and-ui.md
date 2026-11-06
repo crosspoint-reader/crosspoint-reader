@@ -4,7 +4,7 @@ CrossPoint runs on touch devices (Seeed Sticky, M5Paper, M5Stack PaperMono, Lily
 
 **There is one supported way to build a new screen: FreeInkUI, hosted through the firmware base classes below.** Touch hit-testing, tap highlighting, long-press, swipe scrolling, and button focus navigation all come from the shared stack; you never hand-roll coordinate math.
 
-The old bridge helpers (`rowTouch`, `colTouch`, `wasTapInRect`, manual rect `contains()` checks) are legacy. They survive only for the two remaining hand-rolled surfaces (the theme-driven home screen and the reader page) and must not appear in new code. PRs that add new uses will be asked to convert.
+The old bridge helpers (`rowTouch`, `colTouch`, manual rect `contains()` checks) are legacy. They survive only for the two remaining hand-rolled surfaces (the theme-driven home screen and the reader page) and must not appear in new code. PRs that add new uses will be asked to convert.
 
 ---
 
@@ -130,7 +130,6 @@ Because the back gesture arrives as `Button::Back`, most button-era activities g
 | Helper | Status |
 |---|---|
 | `wasScreenTapped` / `wasScreenTouchDown` / `isScreenTouchHeld` | Consumed by the FUI snapshot builder. Direct use only in the two legacy surfaces |
-| `wasTapInRect(x, y, w, h)` | Legacy one-off hit test |
 | `rowTouch` / `colTouch` | Legacy row/column band math. Sole remaining user: `HomeActivity` (theme-driven layout) |
 | `wasSwipe()` | Raw swipe direction, for behavior beyond the global gestures (reader page turns) |
 | `hasTouch()` | Still fine anywhere: gate touch-only chrome (on-screen Cancel/OK pairs) on it |
@@ -154,6 +153,7 @@ profile. CrossPoint's CI and release workflows currently cover:
 | Xteink X4 Classic | `x4c` | ESP32-S3 |
 | M5Stack Paper Mono | `papermono` | ESP32-S3 |
 | Metalio E-Ink 4 | `metalio_eink4` | ESP32-S3 |
+| Onyx BOOX Picco | `picco` | ESP32-S3 |
 
 Build with `pio run -e <environment>`. X3 and X4 share a binary with runtime
 board selection; different MCU families require separate binaries. Check the

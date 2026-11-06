@@ -70,7 +70,7 @@ struct Wifi {
 } WiFi;
 void delay(int) {}
 void silentRestartToReader() { ++readerRestarts; }
-void silentRestartToSettings() { ++settingsRestarts; }
+void silentRestartToReaderSettings() { ++settingsRestarts; }
 struct Esp {
   size_t getFreeHeap() { return freeHeap; }
   size_t getMaxAllocHeap() { return maxBlock; }

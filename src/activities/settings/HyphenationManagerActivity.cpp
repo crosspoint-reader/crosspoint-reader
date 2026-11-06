@@ -166,7 +166,7 @@ void HyphenationManagerActivity::onExit() {
     if (wantedCode_[0]) {
       WiFi.mode(WIFI_OFF);
     } else {
-      silentRestartToSettings();
+      silentRestartToReaderSettings();
     }
   }
 }
@@ -355,7 +355,7 @@ void HyphenationManagerActivity::chooseUpdateOrRemoval(Pack& pack) {
   const char code0 = pack.code[0];
   const char code1 = pack.code[1];
   auto choice = makeUniqueNoThrow<ConfirmationActivity>(
-      renderer, mappedInput, pack.name, tr(STR_HYPHENATION_UPDATE_PROMPT), StrId::STR_UPDATE, StrId::STR_DELETE);
+      renderer, mappedInput, pack.name, tr(STR_HYPHENATION_UPDATE_PROMPT), tr(STR_UPDATE), tr(STR_DELETE));
   if (!choice) {
     LOG_ERR("HYPH", "OOM: pack action choice");
     return;

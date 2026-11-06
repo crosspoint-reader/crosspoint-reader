@@ -6,8 +6,8 @@
 #include "components/UITheme.h"
 
 ConfirmationActivity::ConfirmationActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                           const std::string& heading, const std::string& body, StrId cancelLabel,
-                                           StrId confirmLabel)
+                                           const std::string& heading, const std::string& body,
+                                           const std::string& cancelLabel, const std::string& confirmLabel)
     : Activity("Confirmation", renderer, mappedInput),
       heading(heading),
       body(body),
@@ -20,7 +20,10 @@ void ConfirmationActivity::onEnter() {
   // Both texts live inside the dialog: the heading as its caption and the
   // subject (a book title) as the wrapping headline beneath it. No
   // pre-truncation — the dialog wraps both to its own width.
-  const char* options[] = {I18N.get(cancelLabel), I18N.get(confirmLabel)};
+  const char* options[] = {
+      cancelLabel.empty() ? I18N.get(StrId::STR_CANCEL) : cancelLabel.c_str(),
+      confirmLabel.empty() ? I18N.get(StrId::STR_CONFIRM) : confirmLabel.c_str(),
+  };
   confirmPopup.show(heading.c_str(), body.c_str(), options, 2, 0, [this](int idx) {
     ActivityResult res;
     res.isCancelled = (idx != 1);

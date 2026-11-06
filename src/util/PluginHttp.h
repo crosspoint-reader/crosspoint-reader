@@ -53,6 +53,11 @@ void readRequest(JsonVariantConst node, const char* defaultMethod, RequestSpec& 
 // Percent-encodes a query value ('/' included).
 std::string urlEncodeQuery(const std::string& s);
 
+// Percent-encodes the bytes an HTTP request line cannot carry (controls,
+// space, non-ASCII) and keeps the rest, including existing %XX escapes, so a
+// template filled with raw text (e.g. "{title}") still forms a valid URL.
+std::string escapeUrl(const std::string& url);
+
 // --- token / config files ---
 
 // A manifest file path: relative paths live in the plugin's own folder
@@ -83,6 +88,17 @@ void loadConfigFile(const std::string& file, Headers& out);
 int request(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
             const std::string& body, const Headers& headers, String& out, size_t maxResponse,
             Headers* responseHeaders = nullptr, const std::function<bool()>& shouldAbort = nullptr);
+
+// Same request, nothing buffered: onStart gets the status, the headers and the
+// body length (-1 if unknown) once, before the first body bytes; onData gets
+// each piece as it arrives. Either returning false stops the request. Returns
+// the status, or -1 if the request failed or onStart refused it. `complete` is
+// false if the body was cut short or a callback stopped it.
+using StreamStart = std::function<bool(int status, const Headers& headers, long contentLength)>;
+using StreamData = std::function<bool(const uint8_t* data, size_t len)>;
+int requestStream(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
+                  const std::string& body, const Headers& headers, const StreamStart& onStart, const StreamData& onData,
+                  bool& complete, const std::function<bool()>& shouldAbort = nullptr);
 
 // Same request, body streamed to a file on SD instead of DRAM.
 int requestToFile(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,

@@ -37,8 +37,8 @@ inline Rect actions(const Rect safe, const int textTop, const int height, const 
               height};
 }
 
-inline Rect button(const Rect actions, const int index, const int padding) {
-  const int width = (actions.width - padding * 4) / 3;
+inline Rect button(const Rect actions, const int index, const int padding, const int count = 3) {
+  const int width = (actions.width - padding * (count + 1)) / count;
   return Rect{actions.x + padding + index * (width + padding), actions.y + padding, width,
               actions.height - padding * 2};
 }
@@ -47,9 +47,9 @@ inline bool contains(const Rect rect, const int x, const int y) {
   return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
 }
 
-inline int actionAt(const Rect actions, const int padding, const int x, const int y) {
-  for (int i = 0; i < 3; ++i) {
-    if (contains(button(actions, i, padding), x, y)) return i;
+inline int actionAt(const Rect actions, const int padding, const int x, const int y, const int count = 3) {
+  for (int i = 0; i < count; ++i) {
+    if (contains(button(actions, i, padding, count), x, y)) return i;
   }
   return -1;
 }

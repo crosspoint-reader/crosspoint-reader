@@ -24,7 +24,7 @@
 //   SourceRange sourceRanges[wordCount]  chapter codepoint offsets, [start, end)
 //   uint16_t textOff[wordCount]        byte offset of word i's text in text[]
 //   int16_t  xpos[wordCount]
-//   uint16_t focusSuffixX[wordCount]   present only when focusPresent
+//   uint16_t focusSplitX[wordCount]   present only when focusPresent
 //   uint8_t  styles[wordCount]
 //   uint8_t  focusBoundary[wordCount]  present only when focusPresent
 //   char     text[textBytes]           all words back to back, NUL-terminated
@@ -35,14 +35,15 @@
 // Focus split semantics (unchanged from the vector layout): boundary N > 0
 // means the first N bytes of word i render bold, the remainder in the base
 // style. N is bounded to 9 codepoints (<= 36 UTF-8 bytes) by the clamp in
-// ParsedText::addWord. focusSuffixX is the pre-computed pixel offset from the
-// word start to the regular suffix. Both arrays are omitted from the arena
-// entirely when no word on the line has a split (zero per-word RAM cost when
-// focus reading is disabled).
+// ParsedText::addWord. focusSplitX is the pre-computed pixel offset from the
+// word start to the second visual run (bold prefix in RTL, regular suffix in LTR).
+// Both arrays are omitted when no word on the line has a split.
 class TextBlock final : public Block {
  public:
   // The unused high bit of the cached style byte carries clipping metadata.
   static constexpr uint8_t DISCRETIONARY_HYPHEN_FLAG = 0x80;
+  // Word font slot bit for CSS small caps; the style byte's high bit is the hyphen flag.
+  static constexpr uint8_t SMALL_CAPS_SLOT_FLAG = 0x80;
   struct SourceRange {
     uint32_t start = UINT32_MAX;
     uint32_t end = UINT32_MAX;
@@ -70,11 +71,15 @@ class TextBlock final : public Block {
   const SourceRange* sourceRanges = nullptr;
   const uint16_t* textOffArr = nullptr;
   const int16_t* xposArr = nullptr;
-  const uint16_t* focusSuffixXArr = nullptr;  // null when !focusPresent
+  const uint16_t* focusSplitXArr = nullptr;  // null when !focusPresent
   const uint8_t* stylesArr = nullptr;
   const uint8_t* focusBoundaryArr = nullptr;  // null when !focusPresent
   const char* textArr = nullptr;
   std::vector<std::string> rubyTexts;
+  // Words sized apart from the line (CSS font-size spans): MAX_WORD_FONTS int32 font ids,
+  // then one slot per word (0 = block font, n = font n-1). Null when every word uses the
+  // block font, so ordinary lines pay only this pointer.
+  std::unique_ptr<uint8_t[]> wordFontData;
   // Layout-only metadata. ChapterHtmlSlimParser moves it into Page::links
   // immediately; cached TextBlocks therefore keep the same compact format.
   std::vector<LinkSpan> linkSpans;
@@ -89,7 +94,7 @@ class TextBlock final : public Block {
   // is false -- callers must check and fail the line instead of using it.
   explicit TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
-                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle(),
+                     const std::vector<uint16_t>& focusSplitX, const BlockStyle& blockStyle = BlockStyle(),
                      std::vector<std::string> rubyTexts = {}, std::vector<LinkSpan> linkSpans = {},
                      const std::vector<SourceRange>& ranges = {}, uint16_t paragraphStartWord = UINT16_MAX);
   ~TextBlock() override = default;
@@ -98,6 +103,25 @@ class TextBlock final : public Block {
 
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
+  // The font this line was laid out in: a CSS font-size override, else the section font.
+  int blockFontId(const int sectionFontId) const { return blockStyle.fontId ? blockStyle.fontId : sectionFontId; }
+
+  static constexpr uint8_t MAX_WORD_FONTS = 3;
+  // slots[i] picks word i's font: 0 = the block font, n = fonts[n-1]; SMALL_CAPS_SLOT_FLAG
+  // marks small caps. Returns false on OOM.
+  bool setWordFonts(const uint8_t* slots, const int32_t (&fonts)[MAX_WORD_FONTS]);
+  int wordFontId(uint16_t i, int sectionFontId) const;
+  bool wordHasSmallCaps(uint16_t i) const {
+    return wordFontData && (wordFontData[sizeof(int32_t) * MAX_WORD_FONTS + i] & SMALL_CAPS_SLOT_FLAG);
+  }
+  // fontId when it is (or can be) registered with the renderer, else the section font.
+  static int renderFontId(const GfxRenderer& renderer, int fontId, int sectionFontId);
+  // Ascent of the line's shared baseline: the tallest font among its words.
+  int lineAscent(const GfxRenderer& renderer, int sectionFontId) const;
+  // Offset from the line top at which to draw word i so every word shares the baseline.
+  int wordYOffset(const GfxRenderer& renderer, int sectionFontId, uint16_t i) const;
+  // Extra height the line needs beyond its block font for taller words.
+  int extraAscent(const GfxRenderer& renderer, int sectionFontId) const;
   bool isEmpty() override { return numWords == 0; }
   bool valid() const { return isValid; }
   uint16_t wordCount() const { return numWords; }
@@ -111,11 +135,12 @@ class TextBlock final : public Block {
   bool wordStartsParagraph(const uint16_t i) const { return i == paragraphStartWord; }
   int16_t wordXpos(const uint16_t i) const { return xposArr[i]; }
   EpdFontFamily::Style wordStyle(const uint16_t i) const {
-    return static_cast<EpdFontFamily::Style>(stylesArr[i] & ~DISCRETIONARY_HYPHEN_FLAG);
+    return static_cast<EpdFontFamily::Style>((stylesArr[i] & ~DISCRETIONARY_HYPHEN_FLAG) |
+                                             (wordHasSmallCaps(i) ? EpdFontFamily::SMALL_CAPS : 0));
   }
   bool wordHasDiscretionaryHyphen(const uint16_t i) const { return (stylesArr[i] & DISCRETIONARY_HYPHEN_FLAG) != 0; }
   uint8_t focusBoundary(const uint16_t i) const { return focusPresent ? focusBoundaryArr[i] : 0; }
-  uint16_t focusSuffixX(const uint16_t i) const { return focusPresent ? focusSuffixXArr[i] : 0; }
+  uint16_t focusSplitX(const uint16_t i) const { return focusPresent ? focusSplitXArr[i] : 0; }
   bool hasRuby() const;
   int getRubyShift(int ascender) const { return hasRuby() ? (ascender / 2) : 0; }
   const std::vector<std::string>& getRubyTexts() const { return rubyTexts; }

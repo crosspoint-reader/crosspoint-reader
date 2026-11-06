@@ -1,0 +1,10 @@
+# Onyx Picco / BOOX Tiles stock layout (read from a retail unit). CrossPoint
+# installs into the stock `app` (ota_0) slot and leaves the vendor bootloader,
+# otadata, NVS and the `safeboot` recovery partition untouched.
+# Name,   Type, SubType,  Offset,   Size,     Flags
+nvs,      data, nvs,      0x9000,   0xC000,
+otadata,  data, ota,      0x15000,  0x2000,
+safeboot, app,  factory,  0x20000,  0xC0000,
+app,      app,  ota_0,    0xE0000,  0xE70000,
+spiffs,   data, spiffs,   0xF50000, 0x80000,
+coredump, data, coredump, 0xFD0000, 0x10000,

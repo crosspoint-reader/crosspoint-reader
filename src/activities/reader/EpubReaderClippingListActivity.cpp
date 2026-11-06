@@ -158,16 +158,16 @@ bool EpubReaderClippingListActivity::handleCustomInput() {
 }
 
 bool EpubReaderClippingListActivity::handleButtons() {
+  if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, ENTER_DELETE_MODE_MS)) {
+    showDeleteConfirmation();
+    return true;
+  }
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
     return true;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS) {
-      showDeleteConfirmation();
-    } else {
-      openSelected();
-    }
+    openSelected();
     return true;
   }
   return false;
@@ -176,10 +176,10 @@ bool EpubReaderClippingListActivity::handleButtons() {
 void EpubReaderClippingListActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
-                                      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
-                                      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)),
-                                      static_cast<int16_t>(safe.x)});
+  screen.setContentMarginFromScreen(fui::Insets{
+      static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
+      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
+      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)), static_cast<int16_t>(safe.x)});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
   if (listCount() == 0) {
     screen.centeredText(tr(STR_NO_CLIPPINGS), screen.theme().bodyText);
@@ -206,11 +206,11 @@ void EpubReaderClippingListActivity::buildScreen(UiScreen& screen) {
 }
 
 void EpubReaderClippingListActivity::render(RenderLock&& lock) {
+  if (confirmPopup.processRender(renderer, mappedInput)) return;
   if (initialListRender && listCount() > 0) {
     renderer.clearScreen();
     GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   }
   initialListRender = false;
   UiListActivity::render(std::move(lock));
-  if (confirmPopup.processRender(renderer, mappedInput)) return;
 }
