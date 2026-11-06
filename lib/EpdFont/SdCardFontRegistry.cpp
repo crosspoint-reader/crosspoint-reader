@@ -241,14 +241,18 @@ unsigned long SdCardFontRegistry::halFileRead(void* ctx, const unsigned long off
 }
 
 void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
+  static constexpr int WGHT_REGULAR = 400;
+  static constexpr int WGHT_DIST_BOLD = 300;
+
   // - Validate every candidate with the existing face inspector; discard any failure.
-  // - Reserve explicit suffix roles; lexical-first duplicates win, regardless of metadata.
+  // - Prefer explicit suffix roles over filename hints OR metadata.
   // - Record metadata weight; OR its bold (>=700) and italic flags with filename hints.
-  // - Fill missing roles in regular/bold/italic/bold-italic order, matching italics.
-  //   Prefer lowest weight for non-bold roles, pure bold for bold roles; ties are lexical.
-  //   Intermediate weights (401-699) can fill either weight role. Never reuse a file.
-  // - If regular is missing, move italic, bold, or bold-italic to it (in that order),
-  //   then refill the vacated role from unused files using the same preferences.
+  // - Rank weights nearest 400 for non-bold roles, regular weight + 300 for bold roles.
+  //   Unsuffixed italic candidates instead target the selected regular weight.
+  //   Equal distances prefer the heavier weight, then lexical filename order.
+  //   Intermediate weights (401-699) can fill either weight role.
+  // - Pick regular first, promoting italic, bold, or bold-italic if needed (in that order).
+  //   Fill other roles from unused files, matching italics; never reuse a file.
   using freeink::font::FtFont;
   const auto invalid = [&](SdCardFontFileInfo& file) {
     char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
@@ -270,58 +274,50 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
   if (files.empty()) return;
   const size_t missing = files.size();
   size_t picks[VECTOR_STYLE_COUNT] = {missing, missing, missing, missing};
-  const auto earlier = [&](const size_t candidate, const size_t current) {
-    return current == missing || strcmp(files[candidate].name.get(), files[current].name.get()) < 0;
-  };
-
-  for (size_t role = 0; role < VECTOR_STYLE_COUNT; ++role) {
-    for (size_t i = 0; i < files.size(); ++i) {
-      if ((files[i].style & (ROLE_REGULAR << role)) && earlier(i, picks[role])) picks[role] = i;
-    }
-  }
-
   const auto pickUnused = [&](const size_t role) {
     size_t explicitPick = missing;
     size_t fallbackPick = missing;
     const bool wantBold = VECTOR_ROLE_HINTS[role] & HINT_BOLD;
     const bool wantItalic = VECTOR_ROLE_HINTS[role] & HINT_ITALIC;
+    const int regularWeight = picks[0] == missing ? WGHT_REGULAR : static_cast<int>(files[picks[0]].weight);
+    const int target = wantBold ? regularWeight + WGHT_DIST_BOLD : WGHT_REGULAR;
+    const int fallbackTarget = wantItalic && !wantBold ? regularWeight : target;
+    const auto better = [&](const size_t candidate, const size_t current, const int preferredWeight) {
+      if (current == missing) return true;
+      const int distance = std::abs(static_cast<int>(files[candidate].weight) - preferredWeight);
+      const int bestDistance = std::abs(static_cast<int>(files[current].weight) - preferredWeight);
+      if (distance != bestDistance) return distance < bestDistance;
+      if (files[candidate].weight != files[current].weight) return files[candidate].weight > files[current].weight;
+      return strcmp(files[candidate].name.get(), files[current].name.get()) < 0;
+    };
     for (size_t i = 0; i < files.size(); ++i) {
       if (std::find(picks, picks + VECTOR_STYLE_COUNT, i) != picks + VECTOR_STYLE_COUNT) continue;
       if (files[i].style & ROLE_MASK) {
-        if ((files[i].style & (ROLE_REGULAR << role)) && earlier(i, explicitPick)) explicitPick = i;
+        if ((files[i].style & (ROLE_REGULAR << role)) && better(i, explicitPick, target)) explicitPick = i;
         continue;
       }
       const bool intermediate = isIntermediateWeight(files[i].weight);
       const bool bold = files[i].style & HINT_BOLD;
       const bool italic = files[i].style & HINT_ITALIC;
       if (italic != wantItalic || (!intermediate && bold != wantBold)) continue;
-      if (fallbackPick == missing) {
-        fallbackPick = i;
-        continue;
-      }
-      const auto& best = files[fallbackPick];
-      const bool better =
-          wantBold ? (!intermediate && isIntermediateWeight(best.weight)) : files[i].weight < best.weight;
-      const bool tied = wantBold ? intermediate == isIntermediateWeight(best.weight) : files[i].weight == best.weight;
-      if (better || (tied && earlier(i, fallbackPick))) fallbackPick = i;
+      if (better(i, fallbackPick, fallbackTarget)) fallbackPick = i;
     }
     return explicitPick != missing ? explicitPick : fallbackPick;
   };
 
-  for (size_t role = 0; role < VECTOR_STYLE_COUNT; ++role) {
-    if (picks[role] == missing) picks[role] = pickUnused(role);
-  }
-
+  picks[0] = pickUnused(static_cast<size_t>(VectorRole::Regular));
   if (picks[0] == missing) {
     static constexpr VectorRole promotionOrder[] = {VectorRole::Italic, VectorRole::Bold, VectorRole::BoldItalic};
     for (const auto promotedRole : promotionOrder) {
       const size_t role = static_cast<size_t>(promotedRole);
-      if (picks[role] == missing) continue;
-      picks[0] = picks[role];
-      picks[role] = missing;
-      picks[role] = pickUnused(role);
+      picks[0] = pickUnused(role);
+      if (picks[0] == missing) continue;
       break;
     }
+  }
+
+  for (size_t role = 1; role < VECTOR_STYLE_COUNT; ++role) {
+    picks[role] = pickUnused(role);
   }
 
   std::vector<SdCardFontFileInfo> selected;
