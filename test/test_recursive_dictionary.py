@@ -30,6 +30,7 @@ methods = "\n".join(block(viewer, signature) for signature in (
     "int DictionaryDefinitionActivity::measureSpan",
     "bool DictionaryDefinitionActivity::reserveLines",
     "bool DictionaryDefinitionActivity::wrapText",
+    "bool DictionaryDefinitionActivity::prepareFont",
     "void DictionaryDefinitionActivity::showMessage",
     "bool DictionaryDefinitionActivity::restoreCurrentDefinition",
     "void DictionaryDefinitionActivity::navigateDefinition",
@@ -123,6 +124,9 @@ struct FontCacheManager {
 };
 struct Renderer {
   FontCacheManager cache;
+  size_t maxPreparedBytes = 0;
+  size_t prepareCalls = 0;
+  int preparedStyles = 0;
   FontCacheManager* getFontCacheManager() { return &cache; }
   int getTextAdvanceX(int, const char* text, EpdFontFamily::Style) const {
     const auto* ptr = reinterpret_cast<const unsigned char*>(text);
@@ -130,7 +134,13 @@ struct Renderer {
     while (*ptr) { utf8NextCodepoint(&ptr); ++width; }
     return width;
   }
-  void ensureSdCardFontReady(int, const char*, int) { cache.released = false; }
+  bool isSdCardFont(int) const { return true; }
+  void ensureSdCardFontReady(int, const char* text, int styles) {
+    cache.released = false;
+    maxPreparedBytes = std::max(maxPreparedBytes, std::strlen(text));
+    ++prepareCalls;
+    preparedStyles = styles;
+  }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 1; }
   int getLineHeight(int, float) const { return 10; }
 };
@@ -201,7 +211,7 @@ bool buildDictionaryHtmlPages(Renderer& renderer, const std::string&, uint16_t, 
   for (int i = 0; i < 4; ++i) pages.push_back(std::make_unique<Page>());
   return true;
 }
-std::string htmlToPlainText(const std::string& text, char) { return text; }
+std::string htmlToPlainText(std::string text, char) { return text; }
 struct DictionaryDefinitionActivity {
   struct PlainSelectionLine;
 ''' + structs + r'''
@@ -237,6 +247,7 @@ struct DictionaryDefinitionActivity {
   bool layoutHtmlPages(Definition&);
   bool reserveLines(Definition&, size_t);
   bool wrapText(Definition&);
+  bool prepareFont(std::string&, int);
   int measureSpan(int, const char*, size_t, EpdFontFamily::Style = EpdFontFamily::REGULAR) const;
   void showMessage(StrId);
   void navigateDefinition(bool);
@@ -246,6 +257,18 @@ struct DictionaryDefinitionActivity {
 };
 ''' + methods + r'''
 int main() {
+  {
+    DictionaryDefinitionActivity rtlView;
+    std::string rtl;
+    for (size_t i = 0; i < 1000; ++i) rtl += "\xD8\xA8";
+    const std::string original = rtl;
+    assert(rtlView.prepareFont(rtl, 0));
+    assert(rtl == original && rtlView.renderer.maxPreparedBytes <= MAX_LINE_BYTES);
+    assert(rtlView.renderer.prepareCalls > 1 && rtlView.renderer.preparedStyles == 0x03);
+    HalMemory::available = 0;
+    assert(!rtlView.prepareFont(rtl, 0) && rtl == original);
+    HalMemory::available = 1024 * 1024;
+  }
   Dictionary dictionary;
   dictionary.entries = {{10, "first entry one two three four five six"}, {20, "other definition"}};
   DictionaryDefinitionActivity view;
