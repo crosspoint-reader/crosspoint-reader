@@ -1,0 +1,511 @@
+diff --git a/libs/display/FreeInkDisplay/src/driver/Uc8253MurphyDriver.cpp b/libs/display/FreeInkDisplay/src/driver/Uc8253MurphyDriver.cpp
+index b2ea833..a400b14 100644
+--- a/libs/display/FreeInkDisplay/src/driver/Uc8253MurphyDriver.cpp
++++ b/libs/display/FreeInkDisplay/src/driver/Uc8253MurphyDriver.cpp
+@@ -38,10 +38,12 @@ constexpr uint16_t CTRL_WB = CTRL_W / 8;  // 30
+ 
+ const Uc8253MurphyConfig& uc8253MurphyDefaultConfig() {
+   static const Uc8253MurphyConfig cfg = {
+-      {MURPHY_LUT_20_DEFAULT, MURPHY_LUT_21_DEFAULT, MURPHY_LUT_22_DEFAULT, MURPHY_LUT_23_DEFAULT, MURPHY_LUT_24_DEFAULT},
++      {MURPHY_LUT_20_DEFAULT, MURPHY_LUT_21_DEFAULT, MURPHY_LUT_22_DEFAULT, MURPHY_LUT_23_DEFAULT,
++       MURPHY_LUT_24_DEFAULT},
+       {MURPHY_LUT_20_FAST, MURPHY_LUT_21_FAST, MURPHY_LUT_22_FAST, MURPHY_LUT_23_FAST, MURPHY_LUT_24_FAST},
+-      {MURPHY_LUT_LEN_VCOM, MURPHY_LUT_LEN_WW, MURPHY_LUT_LEN_BW, MURPHY_LUT_LEN_WB, MURPHY_LUT_LEN_BB},  // 56/42/56/42/42
+-      8,  // promote FAST -> full every 8 refreshes
++      {MURPHY_LUT_LEN_VCOM, MURPHY_LUT_LEN_WW, MURPHY_LUT_LEN_BW, MURPHY_LUT_LEN_WB,
++       MURPHY_LUT_LEN_BB},  // Five 42-byte OEM payloads.
++      4,                    // Four fast paints, then a cleaning refresh.
+   };
+   return cfg;
+ }
+@@ -56,9 +58,7 @@ uint32_t Uc8253MurphyDriver::spiHz() const {
+   return BoardConfig::ACTIVE.displaySpiHz != 0 ? BoardConfig::ACTIVE.displaySpiHz : 4000000;
+ }
+ 
+-PanelGeometry Uc8253MurphyDriver::geometry() const {
+-  return {_fbW, _fbH, _fbWb, static_cast<uint32_t>(_fbWb) * _fbH};
+-}
++PanelGeometry Uc8253MurphyDriver::geometry() const { return {_fbW, _fbH, _fbWb, static_cast<uint32_t>(_fbWb) * _fbH}; }
+ 
+ void Uc8253MurphyDriver::loadLut(EpdBus& bus, const Uc8253MurphyLutBank& bank) {
+   bus.cmdData(CMD_LUT_VCOM, bank.vcom, _cfg.lens.vcom);
+@@ -127,13 +127,13 @@ void Uc8253MurphyDriver::initController(EpdBus& bus) {
+   bus.data(0x0F);
+   bus.cmd(CMD_VCOM_DATA_INTERVAL);
+   bus.data(0x97);
+-
+ }
+ 
+ void Uc8253MurphyDriver::begin(EpdBus& bus) {
+   bus.reset(200);  // Murphy panel wants a long post-reset settle
+   _isScreenOn = false;
+   _fastRefreshCount = 0;
++  _hasDisplayedFrame = false;
+   initController(bus);
+ }
+ 
+@@ -148,7 +148,7 @@ void Uc8253MurphyDriver::display(EpdBus& bus, const uint8_t* fb, const uint8_t*
+ 
+   // FAST (DU) ghosts over time, so promote to a full (GC) refresh every
+   // ghostClearInterval refreshes.
+-  bool useFast = (mode == RefreshMode::Fast);
++  bool useFast = (mode == RefreshMode::Fast) && _hasDisplayedFrame;
+   if (useFast) {
+     if (_cfg.ghostClearInterval != 0 && _fastRefreshCount >= _cfg.ghostClearInterval) {
+       useFast = false;
+@@ -162,23 +162,17 @@ void Uc8253MurphyDriver::display(EpdBus& bus, const uint8_t* fb, const uint8_t*
+ 
+   loadLut(bus, useFast ? _cfg.fast : _cfg.def);
+ 
+-  // Full (GC) refresh writes the new frame to BOTH planes, so only WW/BB fire and
+-  // every pixel is fully driven to its target — clean, no half-flipped pixels.
+-  // FAST (DU) refresh is differential: old frame -> DTM1, new -> DTM2, so unchanged
+-  // pixels take WW/BB and changed pixels take the quick BW/WB transition kicks.
+-  // Without a previous frame (single-buffer builds) fall back to both-planes-new.
+-  if (useFast && prev != nullptr) {
+-    writePlane(bus, CMD_DTM1, prev);
+-    writePlane(bus, CMD_DTM2, fb);
+-  } else {
+-    writePlane(bus, CMD_DTM1, fb);
+-    writePlane(bus, CMD_DTM2, fb);
+-  }
++  // Both banks drive the destination directly; no previous host frame is needed.
++  (void)prev;
++  writePlane(bus, CMD_DTM1, fb);
++  writePlane(bus, CMD_DTM2, fb);
+ 
+   triggerRefresh(bus, turnOff);
++  _hasDisplayedFrame = true;
+ }
+ 
+ void Uc8253MurphyDriver::deepSleep(EpdBus& bus) {
++  _hasDisplayedFrame = false;
+   if (_isScreenOn) {
+     bus.cmd(CMD_POWER_OFF);
+     bus.waitBusy(" M3 power-down");
+diff --git a/libs/display/FreeInkDisplay/src/driver/Uc8253MurphyDriver.h b/libs/display/FreeInkDisplay/src/driver/Uc8253MurphyDriver.h
+index 4c3f15b..c5a6416 100644
+--- a/libs/display/FreeInkDisplay/src/driver/Uc8253MurphyDriver.h
++++ b/libs/display/FreeInkDisplay/src/driver/Uc8253MurphyDriver.h
+@@ -8,15 +8,9 @@
+ // owns a 416x240 framebuffer (BoardProfile.displayWidth/Height) and this driver
+ // rotates each plane when writing to the UC8253. OEM LUTs are loaded per refresh.
+ //
+-// Refresh: the controller is hardware-reset and re-initialised before every
+-// refresh (manufacturer guidance) so stale LUT/RAM state can't leave pixels
+-// half-latched. A full (GC) refresh then writes the new frame to BOTH planes so
+-// only WW/BB fire and every pixel is fully driven to target — clean. A FAST (DU)
+-// refresh is differential: previous frame -> DTM1 (old), new frame -> DTM2 (new),
+-// so unchanged pixels take WW/BB and changed pixels take the quick BW/WB transition
+-// kicks; the driver promotes a fast refresh to a full one every ghostClearInterval
+-// refreshes since DU ghosts over time. Without a previous frame (single-buffer
+-// builds) the fast path falls back to both-planes-new (WW/BB only).
++// Each paint resets the controller and loads a destination-drive waveform.
++// The same frame goes to both planes; fast paints periodically promote to GC.
++// No second host framebuffer is required.
+ //
+ // Selection: linked only when -DFREEINK_DRIVER_UC8253_MURPHY (Murphy board env).
+ 
+@@ -62,6 +56,8 @@ class Uc8253MurphyDriver : public PanelDriver {
+   BusyPolarity busyPolarity() const override { return BusyPolarity::ActiveLow; }  // UC8253 BUSY low
+   PanelGeometry geometry() const override;
+ 
++  GrayscaleCapabilities grayscaleCapabilities(GrayscaleMode = GrayscaleMode::Overlay) const override { return {}; }
++  void displayGray(EpdBus&, const uint8_t*, bool, const unsigned char*, bool) override {}
+   void begin(EpdBus& bus) override;
+   void deepSleep(EpdBus& bus) override;
+   void display(EpdBus& bus, const uint8_t* fb, const uint8_t* prev, RefreshMode mode, bool turnOff) override;
+@@ -79,6 +75,7 @@ class Uc8253MurphyDriver : public PanelDriver {
+   uint16_t _fbWb;  // framebuffer width bytes (52)
+ 
+   bool _isScreenOn = false;
++  bool _hasDisplayedFrame = false;
+   uint8_t _fastRefreshCount = 0;
+ };
+ 
+diff --git a/libs/display/FreeInkDisplay/src/lut/Uc8253MurphyLuts.h b/libs/display/FreeInkDisplay/src/lut/Uc8253MurphyLuts.h
+index b3cd86c..210ebf4 100644
+--- a/libs/display/FreeInkDisplay/src/lut/Uc8253MurphyLuts.h
++++ b/libs/display/FreeInkDisplay/src/lut/Uc8253MurphyLuts.h
+@@ -2,75 +2,71 @@
+ 
+ #include <cstdint>
+ 
+-// UC8253 waveform LUTs for the Murphy M3 (CrowPanel 3.7", 240x416), transcribed
+-// verbatim from the manufacturer's reference ("M3 LUT.txt"). Five registers per
+-// bank: 0x20 VCOM, 0x21 WW, 0x22 BW, 0x23 WB, 0x24 BB.
++// UC8253 waveform LUTs for the Murphy M3 (CrowPanel 3.7", 240x416). Five
++// registers per bank: 0x20 VCOM, 0x21 WW, 0x22 BW, 0x23 WB, 0x24 BB — each 42
++// bytes (the OEM firmware writes ten 42-byte payloads; confirmed byte-identical
++// in the touch v525 dump at 0x3c23b7e0).
+ //
+-// Per-register lengths follow the manufacturer header: VCOM (0x20) and BW (0x22)
+-// are 56 bytes (8 groups of 7); WW/WB/BB are 42 bytes (6 groups). Each group is
+-// 7 bytes: a level-select byte, four sub-phase frame counts, then repeat bytes.
++// DEFAULT is the OEM full-refresh set: three 7-byte phase groups per register —
++// kick to the opposite polarity (the visible ghost-clearing inversion flash),
++// a brief settle, then the destination drive. DC-balanced; this is what clears
++// ghosting.
++//
++// FAST is the community-sdk destination-drive derivation (commit 684effb),
++// with the two repeated drive groups used by MR_TBOT's Murphy port. Its
++// reported ghosting improvement has not been verified on this 2.0 port.
++// The driver's ghostClearInterval bounds consecutive fast paints.
+ //
+-// DEFAULT is the manufacturer "HALF_REFRESH" (GC) set: a multi-level, ghost-
+-// clearing drive. FAST is the "FAST_REFRESH" (DU) set: a quick single-direction
+-// drive. Both sets carry real BW/WB transition waveforms, so the driver runs a
+-// differential refresh (old->DTM1, new->DTM2): unchanged pixels take WW/BB,
+-// changed pixels take BW/WB. The driver still promotes a fast refresh to a full
+-// one every MURPHY_GHOST_CLEAR_INTERVAL refreshes to flush residual ghosting.
+-
+ namespace freeink {
+ 
+-// Per-register LUT lengths (manufacturer header: 56/42/56/42/42 bytes).
+-constexpr uint8_t MURPHY_LUT_LEN_VCOM = 56;
++// All five registers take 42-byte payloads on this panel.
++constexpr uint8_t MURPHY_LUT_LEN_VCOM = 42;
+ constexpr uint8_t MURPHY_LUT_LEN_WW = 42;
+-constexpr uint8_t MURPHY_LUT_LEN_BW = 56;
++constexpr uint8_t MURPHY_LUT_LEN_BW = 42;
+ constexpr uint8_t MURPHY_LUT_LEN_WB = 42;
+ constexpr uint8_t MURPHY_LUT_LEN_BB = 42;
+ 
+-// --- DEFAULT / "HALF_REFRESH" (GC) -------------------------------------------
++// --- DEFAULT / full refresh (OEM set: kick -> settle -> drive) ---------------
+ constexpr uint8_t MURPHY_LUT_20_DEFAULT[MURPHY_LUT_LEN_VCOM] = {  // R20 VCOM
+-    0x01, 0x0f, 0x0f, 0x0f, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++    0x01, 0x08, 0x08, 0x08, 0x08, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x01, 0x01,
++    0x01, 0x08, 0x08, 0x08, 0x08, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+-constexpr uint8_t MURPHY_LUT_21_DEFAULT[MURPHY_LUT_LEN_WW] = {  // R21 WW (white->white)
+-    0x01, 0x4f, 0x8f, 0x0f, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++constexpr uint8_t MURPHY_LUT_21_DEFAULT[MURPHY_LUT_LEN_WW] = {  // R21 WW (-> white)
++    0x01, 0x48, 0x48, 0x48, 0x48, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x01, 0x01,
++    0x01, 0x88, 0x88, 0x88, 0x88, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+-constexpr uint8_t MURPHY_LUT_22_DEFAULT[MURPHY_LUT_LEN_BW] = {  // R22 BW/LUTR (black->white)
+-    0x01, 0x0f, 0x8f, 0x0f, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++constexpr uint8_t MURPHY_LUT_22_DEFAULT[MURPHY_LUT_LEN_BW] = {  // R22 BW (-> white)
++    0x01, 0x48, 0x48, 0x48, 0x48, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x01, 0x01,
++    0x01, 0x88, 0x88, 0x88, 0x88, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+-constexpr uint8_t MURPHY_LUT_23_DEFAULT[MURPHY_LUT_LEN_WB] = {  // R23 WB/LUTW (white->black)
+-    0x01, 0x4f, 0x8f, 0x4f, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++constexpr uint8_t MURPHY_LUT_23_DEFAULT[MURPHY_LUT_LEN_WB] = {  // R23 WB (-> black)
++    0x01, 0x88, 0x88, 0x88, 0x88, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x01, 0x01,
++    0x01, 0x48, 0x48, 0x48, 0x48, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+-constexpr uint8_t MURPHY_LUT_24_DEFAULT[MURPHY_LUT_LEN_BB] = {  // R24 BB/LUTB (black->black)
+-    0x01, 0x0f, 0x8f, 0x4f, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++constexpr uint8_t MURPHY_LUT_24_DEFAULT[MURPHY_LUT_LEN_BB] = {  // R24 BB (-> black)
++    0x01, 0x88, 0x88, 0x88, 0x88, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x01, 0x01,
++    0x01, 0x48, 0x48, 0x48, 0x48, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+ 
+-// --- FAST / "FAST_REFRESH" (DU) ----------------------------------------------
++// --- FAST / non-flashing (destination-drive phase only) ----------------------
+ constexpr uint8_t MURPHY_LUT_20_FAST[MURPHY_LUT_LEN_VCOM] = {  // R20 VCOM
+-    0x01, 0x0f, 0x01, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++    0x01, 0x08, 0x08, 0x08, 0x08, 0x01, 0x01, 0x01, 0x08, 0x08, 0x08, 0x08, 0x01, 0x01,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+-constexpr uint8_t MURPHY_LUT_21_FAST[MURPHY_LUT_LEN_WW] = {  // R21 W2W
+-    0x01, 0x0f, 0x01, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++constexpr uint8_t MURPHY_LUT_21_FAST[MURPHY_LUT_LEN_WW] = {  // R21 WW -> W
++    0x01, 0x88, 0x88, 0x88, 0x88, 0x01, 0x01, 0x01, 0x88, 0x88, 0x88, 0x88, 0x01, 0x01,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+-constexpr uint8_t MURPHY_LUT_22_FAST[MURPHY_LUT_LEN_BW] = {  // R22 BW/LUTR
+-    0x01, 0x8f, 0x01, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++constexpr uint8_t MURPHY_LUT_22_FAST[MURPHY_LUT_LEN_BW] = {  // R22 BW -> W
++    0x01, 0x88, 0x88, 0x88, 0x88, 0x01, 0x01, 0x01, 0x88, 0x88, 0x88, 0x88, 0x01, 0x01,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+-constexpr uint8_t MURPHY_LUT_23_FAST[MURPHY_LUT_LEN_WB] = {  // R23 WB/LUTW
+-    0x01, 0x4f, 0x01, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++constexpr uint8_t MURPHY_LUT_23_FAST[MURPHY_LUT_LEN_WB] = {  // R23 WB -> B
++    0x01, 0x48, 0x48, 0x48, 0x48, 0x01, 0x01, 0x01, 0x48, 0x48, 0x48, 0x48, 0x01, 0x01,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+-constexpr uint8_t MURPHY_LUT_24_FAST[MURPHY_LUT_LEN_BB] = {  // R24 BB/LUTB
+-    0x01, 0x0f, 0x41, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++constexpr uint8_t MURPHY_LUT_24_FAST[MURPHY_LUT_LEN_BB] = {  // R24 BB -> B
++    0x01, 0x48, 0x48, 0x48, 0x48, 0x01, 0x01, 0x01, 0x48, 0x48, 0x48, 0x48, 0x01, 0x01,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+ 
+diff --git a/libs/hardware/BoardConfig/include/BoardConfig.h b/libs/hardware/BoardConfig/include/BoardConfig.h
+index d2b8416..0972e8d 100644
+--- a/libs/hardware/BoardConfig/include/BoardConfig.h
++++ b/libs/hardware/BoardConfig/include/BoardConfig.h
+@@ -405,9 +405,10 @@
+ // must define USE_BLOCK_DEVICE_INTERFACE=1 for the SdFat FsVolume these mount on.
+ // Override with -DFREEINK_SD_SDMMC=0/1.
+ #ifndef FREEINK_SD_SDMMC
+-#define FREEINK_SD_SDMMC                                                                            \
+-  (FREEINK_DEVICE_DELINK || FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || \
+-   FREEINK_DEVICE_MURPHY_M4 || FREEINK_DEVICE_WS397 || FREEINK_DEVICE_METALIO_EINK4 || FREEINK_DEVICE_PICCO)
++#define FREEINK_SD_SDMMC                                                                                           \
++  (FREEINK_DEVICE_MURPHY || FREEINK_DEVICE_DELINK || FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC ||           \
++   FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_MURPHY_M4 || FREEINK_DEVICE_WS397 || FREEINK_DEVICE_METALIO_EINK4 || \
++   FREEINK_DEVICE_PICCO)
+ #endif
+ 
+ // Serial log transport hint for consumer firmware. Boards can share the same MCU
+@@ -1218,28 +1219,49 @@ constexpr BoardProfile MURPHY_M3 = {
+     "murphy_m3",
+     InputStyle::DigitalFiveKey,
+     DisplayController::UC8253,
+-    // Framebuffer is landscape 416x240: the panel is a 240x416 controller held
+-    // rotated 90°, and the Murphy driver rotates each plane into controller RAM.
+     416,
+     240,
+     {4, 3, 5, 6, 7, 8, PIN_UNASSIGNED},
+-    0,  // displaySpiHz: 0 -> Murphy UC8253 driver default (4 MHz)
+-    {39, 13, 40, 10, PIN_UNASSIGNED, true, 0},
++    0,
++    // AO3401 SD rail is active-low; the bus uses the SDMMC pins below.
++    {PIN_UNASSIGNED, PIN_UNASSIGNED, PIN_UNASSIGNED, PIN_UNASSIGNED, 10, false, 0, false},
+     {PIN_UNASSIGNED, 0, PIN_UNASSIGNED, PIN_UNASSIGNED, 1, 2, 0, false},
+-    9,               // batteryAdc: stock firmware samples analogRead(9) for battery voltage
+-    PIN_UNASSIGNED,  // batteryChargeStatus: not identified
+-    3.030303f,       // stock firmware scales ADC by 0.0016 / 0.33, implying a 1:0.33 divider
++    9,
+     PIN_UNASSIGNED,
+-    {TouchController::Chsc6x, 13, 12, 44, 45, 0x2e, 24, 224, 24, 398, false, 0, true, false},
++    2.0f,
++    PIN_UNASSIGNED,
++    // GPIO45 gates touch power. The digitizer axes are rotated relative to the framebuffer.
++    {TouchController::Chsc6x,
++     13,
++     12,
++     44,
++     PIN_UNASSIGNED,
++     0x2e,
++     24,
++     398,
++     24,
++     224,
++     false,
++     0,
++     true,
++     false,
++     45,
++     true,
++     false,
++     true,
++     false,
++     false},
+     {48, 25000, 10, true},
+-    // NOTE: the SPI SD pin guess above (39/13/40) predates the OEM firmware
+-    // audio recovery and conflicts with the proven I2S pins (39/40/41/42) and
+-    // shared I2C (13). Audio is the verified owner of those pins.
+     MURPHY_AUDIO,
+     NO_LEDS,
+     NO_FLIP,
+-    NO_SDMMC,
+-    NO_GAUGE};
++    {16, 17, 15, 14, 21, 18, 4},
++    NO_GAUGE,
++    NO_MIC,
++    NO_SENSORS,
++    0.6f,
++    // GPIO43 powers the shared I2C rail before touch initialization.
++    {43, PIN_UNASSIGNED}};
+ 
+ // --- Murphy M4 — ESP32-S3R8, SSD1677 (480x800 portrait), FT6336U touch, dual frontlight ---
+ // Touch wiring below follows the CrossPoint-derived Murphy Reader v1.2.16
+diff --git a/libs/hardware/InputManager/src/InputManager.cpp b/libs/hardware/InputManager/src/InputManager.cpp
+index 91b3965..5112b55 100644
+--- a/libs/hardware/InputManager/src/InputManager.cpp
++++ b/libs/hardware/InputManager/src/InputManager.cpp
+@@ -1397,9 +1397,15 @@ void InputManager::beginTouch() {
+     // CHSC6x: I2C bus only. The IRQ is left unconfigured — it's a brief pulse on
+     // this controller, so detection polls I2C and gates on the frame's touch bit
+     // instead (see decodeChsc6xFrame / updateTouchFromIrq).
++    if (t.powerEnable >= 0) {
++      gpio_hold_dis(static_cast<gpio_num_t>(t.powerEnable));
++      pinMode(t.powerEnable, OUTPUT);
++      digitalWrite(t.powerEnable, t.powerEnableActiveHigh ? HIGH : LOW);
++      delay(50);
++    }
+     if (t.sda >= 0 && t.scl >= 0 && t.i2cAddress != 0) {
+       Wire.begin(t.sda, t.scl, 100000);
+-      Wire.setTimeOut(4);
++      Wire.setTimeOut(10);
+       touchDataEnabled = true;
+     }
+     return;
+@@ -1541,10 +1547,11 @@ void InputManager::updateTouchFromIrq(const unsigned long now, const int irqRaw)
+ }
+ 
+ bool InputManager::readChsc6xPoint(TouchPoint& point) {
++  const freeink::I2cBusLock busLock;
+   const uint8_t addr = BoardConfig::ACTIVE.touch.i2cAddress;
+   Wire.beginTransmission(addr);
+   Wire.write(TOUCH_READ_COMMAND);
+-  if (Wire.endTransmission(false) != 0) {
++  if (Wire.endTransmission(true) != 0) {
+     return false;
+   }
+ 
+@@ -1580,11 +1587,12 @@ bool InputManager::decodeChsc6xFrame(const uint8_t* data, const size_t len, Touc
+   }
+   const auto& t = BoardConfig::ACTIVE.touch;
+   point.valid = true;
+-  // Panel-native coordinates (the calibrated raw range, in the touch panel's
+-  // own orientation); the app maps to its display/logical frame. See the touch
+-  // note in the README.
+-  point.x = mapTouchAxis(rawX, t.rawMinX, t.rawMaxX, t.rawMaxX - t.rawMinX);
+-  point.y = mapTouchAxis(rawY, t.rawMinY, t.rawMaxY, t.rawMaxY - t.rawMinY);
++  const uint16_t sx = t.swapXY ? rawY : rawX;
++  const uint16_t sy = t.swapXY ? rawX : rawY;
++  point.x = mapTouchAxis(sx, t.rawMinX, t.rawMaxX, t.rawMaxX - t.rawMinX);
++  point.y = mapTouchAxis(sy, t.rawMinY, t.rawMaxY, t.rawMaxY - t.rawMinY);
++  if (t.flipX) point.x = (t.rawMaxX - t.rawMinX) - point.x;
++  if (t.flipY) point.y = (t.rawMaxY - t.rawMinY) - point.y;
+   point.timestamp = millis();
+   return true;
+ }
+diff --git a/libs/hardware/InputManager/test/host/murphy_stubs/Arduino.h b/libs/hardware/InputManager/test/host/murphy_stubs/Arduino.h
+new file mode 100644
+index 0000000..94800c6
+--- /dev/null
++++ b/libs/hardware/InputManager/test/host/murphy_stubs/Arduino.h
+@@ -0,0 +1,28 @@
++#pragma once
++#include <cstdint>
++#include <cstddef>
++#include <initializer_list>
++#include <climits>
++#include <cstring>
++#include <cstdlib>
++#include <cassert>
++#define IRAM_ATTR
++constexpr int HIGH=1, LOW=0, INPUT=1, OUTPUT=3, INPUT_PULLUP=5, INPUT_PULLDOWN=6, FALLING=2, ADC_11db=3;
++inline unsigned long fakeNow=1000;
++inline int gpioLevels[49]={};
++inline void (*touchIsr)()=nullptr;
++inline bool powerInterruptEnabled = true;
++inline void pinMode(int,int) {}
++inline void digitalWrite(int p,int v) { gpioLevels[p]=v; }
++inline int digitalRead(int p) { return gpioLevels[p]; }
++inline void delay(unsigned long n) { fakeNow+=n; }
++inline void delayMicroseconds(unsigned int) {}
++inline unsigned long millis() { return fakeNow; }
++inline void analogSetAttenuation(int) {}
++inline int analogReadMilliVolts(int) { return 3300; }
++inline int analogRead(int) { return 4095; }
++inline int digitalPinToInterrupt(int p) { return p; }
++inline void attachInterrupt(int,void (*f)(),int) { touchIsr=f; }
++inline void detachInterrupt(int p) { if (p == 2) powerInterruptEnabled=false; else touchIsr=nullptr; }
++struct SerialStub { explicit operator bool() const { return false; } };
++inline SerialStub Serial;
+diff --git a/libs/hardware/InputManager/test/host/murphy_stubs/Wire.h b/libs/hardware/InputManager/test/host/murphy_stubs/Wire.h
+new file mode 100644
+index 0000000..3f6f3db
+--- /dev/null
++++ b/libs/hardware/InputManager/test/host/murphy_stubs/Wire.h
+@@ -0,0 +1,22 @@
++#pragma once
++#include <Arduino.h>
++#include <vector>
++struct WireStub {
++  std::vector<uint8_t> frame = std::vector<uint8_t>(16);
++  unsigned offset = 0;
++  unsigned timeout = 0;
++  bool began = false;
++  bool begin(int sda, int scl, uint32_t frequency) {
++    assert(sda == 13 && scl == 12 && frequency == 100000);
++    assert(gpioLevels[43] == HIGH && gpioLevels[45] == LOW);
++    began = true; return true;
++  }
++  void setTimeOut(unsigned value) { timeout = value; }
++  void beginTransmission(uint8_t address) { assert(address == 0x2e); }
++  void write(uint8_t value) { assert(value == 0); }
++  int endTransmission(bool stop = true) { return stop ? 0 : 2; }
++  unsigned requestFrom(uint8_t, uint8_t n, uint8_t) { offset = 0; return n; }
++  int available() { return frame.size() - offset; }
++  uint8_t read() { return frame.at(offset++); }
++};
++inline WireStub Wire;
+diff --git a/libs/hardware/InputManager/test/host/run_murphy.sh b/libs/hardware/InputManager/test/host/run_murphy.sh
+new file mode 100644
+index 0000000..c9b7b9e
+--- /dev/null
++++ b/libs/hardware/InputManager/test/host/run_murphy.sh
+@@ -0,0 +1,10 @@
++#!/bin/sh
++set -eu
++cd "$(dirname "$0")"
++BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/freeink-murphy-touch.XXXXXX")
++trap 'rm -rf "$BUILD_DIR"' EXIT
++c++ -std=c++17 -Wall -Wextra -Werror -Wno-unused-parameter \
++  -DFREEINK_DEVICE_MURPHY=1 -DARDUINO_USB_CDC_ON_BOOT=1 \
++  -Imurphy_stubs -Ipicco_stubs -I../../include -I../../../BoardConfig/include \
++  test_murphy.cpp ../../src/InputManager.cpp -o "$BUILD_DIR/test"
++"$BUILD_DIR/test"
+diff --git a/libs/hardware/InputManager/test/host/test_murphy.cpp b/libs/hardware/InputManager/test/host/test_murphy.cpp
+new file mode 100644
+index 0000000..1a42399
+--- /dev/null
++++ b/libs/hardware/InputManager/test/host/test_murphy.cpp
+@@ -0,0 +1,48 @@
++#include <InputManager.h>
++#include <Wire.h>
++#include <cassert>
++#include <cmath>
++#include <cstdio>
++
++static void sample(InputManager& input, bool down, uint8_t x=24, uint16_t y=24) {
++  Wire.frame.assign(16, 0);
++  Wire.frame[3] = down ? 0x80 : 0;
++  Wire.frame[4] = x;
++  Wire.frame[5] = y >> 8;
++  Wire.frame[6] = y & 0xff;
++  fakeNow += 10;
++  input.update();
++}
++
++int main() {
++  static_assert(FREEINK_SD_SDMMC, "Murphy must compile the SDMMC backend");
++  static_assert(BoardConfig::MURPHY_M3.sdmmc.busWidth == 4);
++  static_assert(BoardConfig::MURPHY_M3.sdmmc.clk == 16);
++  static_assert(BoardConfig::MURPHY_M3.sdmmc.cmd == 17);
++  static_assert(BoardConfig::MURPHY_M3.sd.powerEnable == 10);
++  static_assert(!BoardConfig::MURPHY_M3.sd.powerActiveHigh);
++  static_assert(BoardConfig::MURPHY_M3.batteryDividerMultiplier == 2.0f);
++  gpioLevels[0] = gpioLevels[1] = gpioLevels[2] = HIGH;
++  BoardConfig::holdPowerRails();
++  InputManager input;
++  input.begin();
++  assert(Wire.began && Wire.timeout == 10);
++  sample(input, true);
++  assert(input.wasTouchPressed());
++  float x=0, y=0;
++  assert(input.wasTouchPressedAt(x,y));
++  assert(x == 0.0f && y == 1.0f);
++  unsigned taps=0;
++  for (int i=0; i<20; ++i) {
++    sample(input, false);
++    if (input.wasTouchTap(x,y)) ++taps;
++    assert(!input.wasAnyPressed());
++  }
++  assert(taps == 1);
++  sample(input, true, 224, 398);
++  assert(input.wasTouchPressedAt(x,y));
++  assert(x == 1.0f && y == 0.0f);
++  for (int i=0; i<20; ++i) sample(input, false);
++  assert(!input.isTouchPressed());
++  std::puts("Murphy board/touch tests passed");
++}

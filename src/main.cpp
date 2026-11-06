@@ -1115,7 +1115,7 @@ void loop() {
       const unsigned long idleStart = millis();
       while (millis() - idleStart < 50) {
         delay(10);
-        if (gpio.rawInputActive()) break;
+        if (gpio.rawInputActive() || (FREEINK_DEVICE_MURPHY && gpio.hasTouch())) break;
       }
     } else {
       // Short delay to prevent tight loop while still being responsive
