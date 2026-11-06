@@ -19,16 +19,12 @@
 #include <string>
 #include <vector>
 
+#include "Fb2Passes.h"
+
 class Fb2Converter {
  public:
-  struct Metadata {
-    std::string title;
-    std::string author;
-    std::string language;
-    std::string seriesName;
-    std::string seriesNumber;  // raw textual position, "" when absent
-    std::string coverRef;      // binary id of the coverpage image, "" if none
-  };
+  // Moved to Fb2Passes.h (host-testable); kept under the class name for callers.
+  using Metadata = fb2passes::Metadata;
 
   // Convert the FB2 at fb2Path into an EPUB container at outPath.
   // On failure returns false and fills `error` with a short reason.
