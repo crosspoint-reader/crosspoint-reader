@@ -115,7 +115,11 @@ void UsbDriveActivity::render(RenderLock&&) {
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
-  renderer.displayBuffer();
+  // The connected message replaces the waiting one in the same place, and a fast refresh left the
+  // old anti-aliased text half drawn under it (Metalio Plus): that one change gets a full refresh.
+  // A half refresh did not finish while the host held the drive.
+  const bool connected = !preparing && !startFailed && state == State::Connected;
+  renderer.displayBuffer(connected ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
 }
 
 void UsbDriveActivity::driveScreen(UiScreen& screen, void* user) {

@@ -114,14 +114,22 @@ bool BmpViewerActivity::renderImage() {
   if (!decoder.getDimensions(filePath, dimensions)) return false;
   if (dimensions.width <= 0 || dimensions.height <= 0) return false;
 
-  const auto config = fitImage(dimensions, renderer);
+  // The decoder writes panel pixels: fit and decode in physical units, while
+  // the button hints stay in the UI's units.
+  const auto config = [&] {
+    const GfxRenderer::PhysicalScope physical(renderer);
+    return fitImage(dimensions, renderer);
+  }();
   const bool hasPrevious = siblingImages.size() > 1 && currentImageIndex > 0;
   const bool hasNext = siblingImages.size() > 1 && currentImageIndex != -1 &&
                        currentImageIndex < static_cast<int>(siblingImages.size()) - 1;
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
                                             hasPrevious ? "<" : "", hasNext ? ">" : "");
   const auto drawImage = [&]() {
-    if (!decoder.decodeToFramebuffer(filePath, renderer, config)) return false;
+    {
+      const GfxRenderer::PhysicalScope physical(renderer);
+      if (!decoder.decodeToFramebuffer(filePath, renderer, config)) return false;
+    }
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     return true;
   };
@@ -192,9 +200,12 @@ void BmpViewerActivity::onEnter() {
     // 2. Parse headers to get dimensions
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       int x, y;
+      // Image pixels are physical; lay them out in the screen's units.
+      const int imageWidth = renderer.bitmapWidth(bitmap);
+      const int imageHeight = renderer.bitmapHeight(bitmap);
 
-      if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
-        float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+      if (imageWidth > pageWidth || imageHeight > pageHeight) {
+        float ratio = static_cast<float>(imageWidth) / static_cast<float>(imageHeight);
         const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
 
         if (ratio > screenRatio) {
@@ -208,8 +219,8 @@ void BmpViewerActivity::onEnter() {
         }
       } else {
         // Center small images
-        x = (pageWidth - bitmap.getWidth()) / 2;
-        y = (pageHeight - bitmap.getHeight()) / 2;
+        x = (pageWidth - imageWidth) / 2;
+        y = (pageHeight - imageHeight) / 2;
       }
 
       // 4. Prepare Rendering
@@ -311,6 +322,8 @@ bool BmpViewerActivity::saveJpegSleepCover() {
     if (!keepBmpTemp) Storage.remove(CUSTOM_SLEEP_TMP_BMP);
   }};
 
+  // The sleep image is built from panel pixels.
+  const GfxRenderer::PhysicalScope physical(renderer);
   JpegToFramebufferConverter decoder;
   ImageDimensions dimensions;
   if (!decoder.getDimensions(filePath, dimensions)) return false;

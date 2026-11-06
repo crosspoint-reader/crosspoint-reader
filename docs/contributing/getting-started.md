@@ -84,7 +84,7 @@ virtual environment:
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install --upgrade 'https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip'
+python -m pip install --upgrade 'https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.2.0.zip'
 pio --version
 ```
 
@@ -99,7 +99,7 @@ nested core environment. Pin that core too before the first build, as CI does:
 ```sh
 python -m pip install uv
 pio pkg install -e default
-uv pip install --python ~/.platformio/penv/bin/python 'pioarduino==6.1.19'
+uv pip install --python ~/.platformio/penv/bin/python 'pioarduino==6.2.0'
 ```
 
 Replace `default` with the selected profile. The nested Python path above uses

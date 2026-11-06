@@ -109,15 +109,26 @@ EpdFontFamily notosans18FontFamily(18, &notosans18RegularFont, &notosans18BoldFo
 
 #endif  // OMIT_FONTS
 
-EpdFont smallFont(&ubuntu_8_regular);
+// Boards with a UI scale draw the UI faces from 2-bit sources, scaled at
+// runtime (GfxRenderer::insertUiFont): their grey edges keep stem widths even
+// after scaling. Unscaled boards keep the 1-bit faces; the faces a build does
+// not pick are dropped by the linker.
+#include <builtinFonts/ubuntu_10_bold_2bit.h>
+#include <builtinFonts/ubuntu_10_regular_2bit.h>
+#include <builtinFonts/ubuntu_12_bold_2bit.h>
+#include <builtinFonts/ubuntu_12_regular_2bit.h>
+#include <builtinFonts/ubuntu_8_regular_2bit.h>
+constexpr bool kScaledUi = BoardConfig::DEFAULT_DEVICE.uiScale != 1.0f;
+
+EpdFont smallFont(kScaledUi ? &ubuntu_8_regular_2bit : &ubuntu_8_regular);
 EpdFontFamily smallFontFamily(8, &smallFont);
 
-EpdFont ui10RegularFont(&ubuntu_10_regular);
-EpdFont ui10BoldFont(&ubuntu_10_bold);
+EpdFont ui10RegularFont(kScaledUi ? &ubuntu_10_regular_2bit : &ubuntu_10_regular);
+EpdFont ui10BoldFont(kScaledUi ? &ubuntu_10_bold_2bit : &ubuntu_10_bold);
 EpdFontFamily ui10FontFamily(10, &ui10RegularFont, &ui10BoldFont);
 
-EpdFont ui12RegularFont(&ubuntu_12_regular);
-EpdFont ui12BoldFont(&ubuntu_12_bold);
+EpdFont ui12RegularFont(kScaledUi ? &ubuntu_12_regular_2bit : &ubuntu_12_regular);
+EpdFont ui12BoldFont(kScaledUi ? &ubuntu_12_bold_2bit : &ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(12, &ui12RegularFont, &ui12BoldFont);
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
@@ -553,9 +564,10 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
 #endif  // OMIT_FONTS
-  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
-  renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  // UI faces follow the board's UI scale; reader fonts keep their own sizes.
+  renderer.insertUiFont(UI_10_FONT_ID, ui10FontFamily);
+  renderer.insertUiFont(UI_12_FONT_ID, ui12FontFamily);
+  renderer.insertUiFont(SMALL_FONT_ID, smallFontFamily);
 
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);
@@ -565,6 +577,16 @@ void setupDisplayAndFonts(bool seamless = false) {
 
 void setup() {
   BoardConfig::holdPowerRails();
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // A deep-sleep wake is the power-off fallback (the Plus's only deep sleep),
+  // woken by the expander's INT, which any key or the accelerometer can pull.
+  // Unless the power key is held, sleep again now: before the rest of setup, so
+  // a short press is still down, and without repeating the power-off pulses.
+  if (BoardConfig::isMetalioEInk4Plus() && esp_reset_reason() == ESP_RST_DEEPSLEEP &&
+      !freeink::metalioplus::powerKeyHeld()) {
+    powerManager.sleepOnExpanderKey();
+  }
+#endif
 
 #ifdef ENABLE_SERIAL_LOG
 #ifdef CROSSPOINT_WAIT_FOR_USB_SERIAL
@@ -606,15 +628,30 @@ void setup() {
     WiFi.onEvent(applyTxCap, ARDUINO_EVENT_WIFI_STA_START);
     WiFi.onEvent(applyTxCap, ARDUINO_EVENT_WIFI_AP_START);
   }
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // The AP dropped the S31 for missing ACKs (802.11 reason 34) seconds after
+  // joining and NTP replies went missing. Alongside the profile's 15 dBm TX cap:
+  // no modem sleep from station start (the web server only turns it off once it
+  // starts, after the NTP wait) and 802.11b/g/n only (the S31's 11ax runs on a
+  // pre-release driver). Set before the station connects.
+  WiFi.onEvent(
+      [](arduino_event_id_t, arduino_event_info_t) {
+        esp_err_t err = esp_wifi_set_ps(WIFI_PS_NONE);
+        if (err != ESP_OK) LOG_ERR("WIFI", "Disabling power save failed: %d", err);
+        err = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+        if (err != ESP_OK) LOG_ERR("WIFI", "Limiting to 802.11b/g/n failed: %d", err);
+      },
+      ARDUINO_EVENT_WIFI_STA_START);
+#endif
 
   const auto wakeupReason = gpio.getWakeupReason();
   // Sample the wake hold now — a click wake is released within milliseconds of
   // boot — but defer the sleep-or-boot decision until SETTINGS is loaded below:
   // click-to-wake is a setting, and an X4 battery power-off cuts all power, so
   // only SD state survives to the next boot.
-  // The Metalio boots after the button is released, so it skips the check.
+  // The Metalio boards boot after the button is released, so they skip the check.
   const bool wakeHoldVerified = wakeupReason != HalGPIO::WakeupReason::PowerButton || BoardConfig::isMetalioEInk4() ||
-                                gpio.verifyPowerButtonWakeup();
+                                BoardConfig::isMetalioEInk4Plus() || gpio.verifyPowerButtonWakeup();
 
   // X4 Pro and X4 Classic both map BTN_UP to GPIO0 — an ESP32-S3 boot strap — so
   // gate recovery on the non-strap Down key (GPIO7) to avoid a stuck-in-recovery loop.

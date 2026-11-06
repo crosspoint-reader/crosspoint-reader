@@ -124,6 +124,8 @@ struct Popup {
   std::vector<int> ownedStrings{0};
   std::function<void(int)> onSelectCallback;
   bool isActive() const { return active; }
+  // Viewport following is covered by test_option_popup.py.
+  void followSelection() {}
 """ + popup_buttons + r"""
   // Model an outside release after the shared touch router finds no dialog hit.
   bool handleInput(const Input& input, const std::function<void()>& update) {
