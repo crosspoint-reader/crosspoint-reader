@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cstring>
 #include <string>
@@ -110,6 +111,13 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
   int phyWidth = height;
   int phyHeight = width;
 
+  const uint32_t rowSizePadded = (phyWidth + 31) / 32 * 4;
+  auto rowBuffer = makeUniqueNoThrow<uint8_t[]>(rowSizePadded);
+  if (!rowBuffer) {
+    LOG_ERR("SCR", "Failed to allocate %u-byte screenshot row", rowSizePadded);
+    return false;
+  }
+
   std::string path(filename);
   size_t last_slash = path.find_last_of('/');
   if (last_slash != std::string::npos) {
@@ -143,21 +151,7 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
     return false;
   }
 
-  const uint32_t rowSizePadded = (phyWidth + 31) / 32 * 4;
-  // Max row size for 528px height (X3) after rotation = 68 bytes; use fixed buffer to avoid VLA
-  constexpr size_t kMaxRowSize = 68;
-  if (rowSizePadded > kMaxRowSize) {
-    LOG_ERR("SCR", "Row size %u exceeds buffer capacity", rowSizePadded);
-    // Explicitly close() file before calling Storage.remove()
-    file.close();
-    Storage.remove(filename);
-    return false;
-  }
-
   // rotate the image 90d counter-clockwise on-the-fly while writing to save memory
-  uint8_t rowBuffer[kMaxRowSize];
-  memset(rowBuffer, 0, rowSizePadded);
-
   for (int outY = 0; outY < phyHeight; outY++) {
     for (int outX = 0; outX < phyWidth; outX++) {
       // 90d counter-clockwise: source (srcX, srcY)
@@ -168,11 +162,11 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
       uint8_t pixel = (framebuffer[fbIndex] >> (7 - (srcX % 8))) & 0x01;
       rowBuffer[outX / 8] |= pixel << (7 - (outX % 8));
     }
-    if (file.write(rowBuffer, rowSizePadded) != rowSizePadded) {
+    if (file.write(rowBuffer.get(), rowSizePadded) != rowSizePadded) {
       write_error = true;
       break;
     }
-    memset(rowBuffer, 0, rowSizePadded);  // Clear the buffer for the next row
+    memset(rowBuffer.get(), 0, rowSizePadded);  // Clear the buffer for the next row
   }
 
   // Explicitly close() file before calling Storage.remove()
