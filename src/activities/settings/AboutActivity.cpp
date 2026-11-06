@@ -106,8 +106,12 @@ const char* touchControllerName(const BoardConfig::TouchController c) {
       return "FT6336U";
     case BoardConfig::TouchController::Gslx680:
       return "GSLX680";
+    case BoardConfig::TouchController::Cst816s:
+      return "CST816S";
+    case BoardConfig::TouchController::Tma525c:
+      return "TMA525C";
   }
-  return nullptr;
+  return "?";
 }
 }  // namespace
 
