@@ -14,6 +14,8 @@ class HalDisplay {
   using GrayscaleEncoding = freeink::GrayscaleEncoding;
 
   GrayscaleCapabilities grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const;
+  // Controller of the driver chosen at boot (null if the driver does not say).
+  const char* controllerName() const { return einkDisplay.getControllerName(); }
 
   // Constructor with pin configuration
   HalDisplay();
