@@ -2,6 +2,7 @@
 
 #include <Epub/htmlEntities.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -14,6 +15,13 @@ bool htmlTagStart(const std::string& input, size_t pos) {
 
 size_t htmlTagEnd(const std::string& input, size_t pos, size_t limit) {
   if (!htmlTagStart(input, pos)) return std::string::npos;
+  if (input.compare(pos, 4, "<!--") == 0) {
+    const size_t end = std::min(limit, input.size());
+    for (size_t i = pos + 4; i + 2 < end; ++i) {
+      if (input[i] == '-' && input[i + 1] == '-' && input[i + 2] == '>') return i + 2;
+    }
+    return std::string::npos;
+  }
   char quote = 0;
   for (size_t i = pos + 1; i < limit && i < input.size(); ++i) {
     const char c = input[i];
