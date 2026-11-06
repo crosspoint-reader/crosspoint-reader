@@ -99,7 +99,8 @@ class SdCardFontRegistry {
   // Bits 0-1: filename bold/italic hints. Bits 2-5: explicit suffix role.
   static uint8_t guessVectorStyle(const char* baseName, size_t baseLen);
   // Reject inspection failures, then prefer suffixes over filename hints OR metadata.
-  // Prefer lowest weight for non-bold roles, pure bold for bold roles. No file reuse.
+  // Rank nearest 400 (unsuffixed italic: regular weight) or regular weight + 300 for bold.
+  // Ties prefer heavier, then lexical. No file reuse.
   static void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
 #endif
   static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
