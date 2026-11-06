@@ -126,6 +126,7 @@ struct FontCache {
     ~Scope() { cache.scanning = false; }
   };
   Scope createPrewarmScope() { return Scope(*this); }
+  void releaseSdLayoutKernTables() {}
 };
 struct Renderer {
   using LaidOutText = ::LaidOutText;

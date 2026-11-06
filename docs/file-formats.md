@@ -90,6 +90,15 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 77
+
+Version 77 keeps the binary layout and rebuilds completed and partial sections.
+SD-font layout now adds the positive kerning that drawing applies, so kerned
+words no longer overlap the next space. This applies to styles whose sparse kern
+table (row offsets plus 2 bytes per positive class pair) fits in 16 KB. Larger
+styles still measure unkerned. Negative kerning is not measured. Cached line
+breaks and word positions change. Book metadata and saved progress are kept.
+
 ### Version 75
 
 Version 75 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,

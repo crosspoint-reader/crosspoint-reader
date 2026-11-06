@@ -42,6 +42,12 @@ void FontCacheManager::releaseSdFontCaches() {
 #endif
 }
 
+void FontCacheManager::releaseSdLayoutKernTables() {
+  for (auto& [id, font] : sdCardFonts_) {
+    font->releaseLayoutKernTables();
+  }
+}
+
 bool FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask, bool accumulate) {
   // TTF (vector) font prewarm path. This is the single dispatch every draw path
   // funnels through (reader endScanAndPrewarm, the settings preview, UI text),
