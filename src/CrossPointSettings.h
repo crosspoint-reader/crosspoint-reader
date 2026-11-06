@@ -108,15 +108,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
-  enum FONT_FAMILY { NOTOSANS = 0, LEXENDDECA = 1, BITTER = 2, FONT_FAMILY_COUNT };
+  enum FONT_FAMILY { NOTOSANS = 0, LITERATA = 1, FONT_FAMILY_COUNT };
   static constexpr uint8_t LEGACY_NOTOSERIF = 0;
   // Persisted IDs stay stable even though the built-in menu now starts at zero.
   static constexpr uint8_t STORED_NOTOSANS = 1;
   static constexpr uint8_t LEGACY_OPENDYSLEXIC = 2;
-  // This fork's extra built-in families persist as 3/4 — the legacy codes
-  // above stay reserved so old settings.json files keep their meaning.
-  static constexpr uint8_t STORED_LEXENDDECA = 3;
-  static constexpr uint8_t STORED_BITTER = 4;
+  // This fork's extra built-in family (Literata) persists as 3 — the legacy
+  // codes above stay reserved so old settings.json files keep their meaning.
+  static constexpr uint8_t STORED_LITERATA = 3;
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
   // Reader font size is a point size, not an enum slot — see fontPointSize.
   // Legacy 1.4-and-earlier files stored a 0..3 SMALL/MEDIUM/LARGE/EXTRA_LARGE

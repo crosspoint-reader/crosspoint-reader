@@ -1161,7 +1161,7 @@ bool EpubReaderActivity::tryFootnotePopup(const std::string& hrefStr) {
       const auto anchorPage = probe.findAnchor(anchor);
       if (anchorPage) probe.currentPage = *anchorPage;
     }
-    noteText = probe.getTextFromSectionFile();
+    noteText = TextPopupActivity::rejoinHyphenBreaks(probe.getTextFromSectionFile());
   }
   if (noteText.size() < 2) return false;
 

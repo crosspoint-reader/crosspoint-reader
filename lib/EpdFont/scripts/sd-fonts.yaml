@@ -158,6 +158,17 @@ families:
       italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter-Italic%5Bwght%5D.ttf", variable: {wght: 500}}
       bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter-Italic%5Bwght%5D.ttf", variable: {wght: 700}}
 
+  - name: Inglobal
+    description: "Rounded Cyrillic sans-serif by Kochetov/Davydov/Yurtaev (fork addition; local sources)"
+    scripts: [latin, cyrillic]
+    intervals: latin-ext,cyrillic,ipa-chars
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular:    {path: "builtinFonts/source/Inglobal/Inglobal-Regular.ttf"}
+      bold:       {path: "builtinFonts/source/Inglobal/Inglobal-Bold.ttf"}
+      italic:     {path: "builtinFonts/source/Inglobal/Inglobal-Italic.ttf"}
+      bolditalic: {path: "builtinFonts/source/Inglobal/Inglobal-BoldItalic.ttf"}
+
   - name: Domitian
     description: "A humanist serif for literary reading (Latin, Greek, Cyrillic)"
     scripts: [latin, cyrillic, greek]

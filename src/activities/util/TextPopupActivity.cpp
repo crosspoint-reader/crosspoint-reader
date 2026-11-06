@@ -62,6 +62,35 @@ void TextPopupActivity::layoutFrame() {
   frameY = (screenHeight - frameH) / 3;
 }
 
+std::string TextPopupActivity::rejoinHyphenBreaks(const std::string& text) {
+  // Undo the source layout's hyphenation, which cut words at the BOOK page
+  // width — inside the narrower popup frame those dangling "слово- продолжение"
+  // fragments land in wrong places. Rejoin a hyphen break when the next
+  // fragment starts with a lowercase continuation letter (a wrapped tail always
+  // continues the word; standalone dashes and em-dashes are untouched).
+  std::string out;
+  out.reserve(text.size());
+  size_t i = 0;
+  while (i < text.size()) {
+    const char c = text[i];
+    if (c == '-' && i + 1 < text.size() && text[i + 1] == ' ') {
+      size_t j = i + 2;
+      while (j < text.size() && (text[j] == ' ' || text[j] == '\t')) j++;
+      const unsigned char next = j < text.size() ? static_cast<unsigned char>(text[j]) : 0;
+      const bool continuation = (next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') ||
+                                (next >= 0xC0) || (next >= '0' && next <= '9');  // latin/cyr(incl. caps)/digit
+      if (continuation && j < text.size()) {
+        out += '-';
+        i = j;  // skip the space(s): glue the tail to the hyphen
+        continue;
+      }
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
 bool TextPopupActivity::wrapText() {
   const int textWidth = frameW - 2 * FRAME_INNER_PAD;
   const int lineHeight = renderer.getLineHeight(fontId, LINE_SPACING);
@@ -70,7 +99,9 @@ bool TextPopupActivity::wrapText() {
             fontId);
     return false;
   }
-  linesPerPage = std::max(1, (frameH - 2 * FRAME_INNER_PAD) / lineHeight - HEADER_LINES);
+  // Count the frame border against the text area: the last text line must stay
+  // inside the border, or the page counter under-reports what the frame shows.
+  linesPerPage = std::max(1, (frameH - 2 * FRAME_INNER_PAD - 2 * FRAME_LINE_WIDTH) / lineHeight - HEADER_LINES);
 
   // SD-card fonts: batch-load the glyphs up front (see
   // DictionaryDefinitionActivity::wrapText for the rationale); the title is a
@@ -153,9 +184,11 @@ bool TextPopupActivity::showText(std::string nextTitle, std::string nextText) {
 }
 
 void TextPopupActivity::scrollText(const int direction) {
+  // Clamp, don't reject: the last page is usually shorter than linesPerPage,
+  // so a full step would otherwise jump past it and leave it unreachable.
   const int maxScroll = std::max(0, static_cast<int>(lines.size()) - linesPerPage);
-  const int next = scrollLine + direction;
-  if (next < 0 || next > maxScroll) return;
+  const int next = std::clamp(scrollLine + direction, 0, maxScroll);
+  if (next == scrollLine) return;
   scrollLine = next;
   requestUpdate();
 }
@@ -190,8 +223,9 @@ void TextPopupActivity::drawPopupBody() {
   }
 
   if (lines.size() > static_cast<size_t>(linesPerPage)) {
-    // Scroll position indicator, bottom-right inside the frame.
-    const int current = firstLine / linesPerPage + 1;
+    // Scroll position indicator, bottom-right inside the frame. Round up: a
+    // clamped scrollLine (short last page) still names the page it shows.
+    const int current = (firstLine + linesPerPage - 1) / linesPerPage + 1;
     const int total = (static_cast<int>(lines.size()) + linesPerPage - 1) / linesPerPage;
     char counter[12];
     snprintf(counter, sizeof(counter), "%d/%d", current, total);

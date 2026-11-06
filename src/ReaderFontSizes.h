@@ -16,17 +16,15 @@
 // therefore come from whichever family is active: the built-in or vector set
 // below, or the .cpfont files a user installed for an SD family.
 
-// The built-in families (Noto Sans, Lexend Deca, Bitter — this fork) are
-// compiled in at exactly these point sizes (see the global font objects in
-// main.cpp).
+// The built-in families (Noto Sans, Literata — this fork) are compiled in at
+// exactly these point sizes (see the global font objects in main.cpp).
 inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {12, 14, 16, 18};
 
 // Selects a built-in size without loading it; returns 0 for other font families.
 inline int builtinReaderFontVariant(const int fontId, const float scale) {
   static constexpr int FAMILIES[][std::size(BUILTIN_READER_POINT_SIZES)] = {
       {NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID},
-      {LEXENDDECA_12_FONT_ID, LEXENDDECA_14_FONT_ID, LEXENDDECA_16_FONT_ID, LEXENDDECA_18_FONT_ID},
-      {BITTER_12_FONT_ID, BITTER_14_FONT_ID, BITTER_16_FONT_ID, BITTER_18_FONT_ID},
+      {LITERATA_12_FONT_ID, LITERATA_14_FONT_ID, LITERATA_16_FONT_ID, LITERATA_18_FONT_ID},
   };
   for (const int* family : FAMILIES) {
     const int* end = family + std::size(BUILTIN_READER_POINT_SIZES);

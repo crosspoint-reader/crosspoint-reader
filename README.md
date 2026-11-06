@@ -29,10 +29,14 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 > decoder and legacy-encoding tables) is adapted from
 > [papyrix-reader](https://github.com/bigbag/papyrix-reader) by bigbag — many thanks!
 >
-> **Built-in fonts Lexend Deca and Bitter** (fork addition, all reading sizes):
-> TTF sources picked for crisp e-ink rendering with Cyrillic coverage are adapted
-> from [CrossInk](https://github.com/uxjulia/CrossInk) by uxjulia (fonts themselves
-> are OFL) — thanks for the curation!
+> **Built-in font Literata** (fork addition, all reading sizes, Cyrillic incl.
+> italics): the book face from Google Play Books, instanced from Google Fonts'
+> variable sources (OFL) through the stock fontconvert pipeline. Bitter ships as
+> a downloadable SD-card family via the firmware's font catalog. Thanks to
+> [CrossInk](https://github.com/uxjulia/CrossInk) for the e-ink font inspiration.
+> The fork also carries **Inglobal** (rounded Cyrillic sans-serif © Kochetov /
+> Davydov / Yurtaev, 2014 — free for commercial use) as an SD-card family;
+> sources live in `lib/EpdFont/builtinFonts/source/Inglobal/`.
 
 - **Touch reading**: follow EPUB links and look up words in the dictionary on touch-enabled devices.
 

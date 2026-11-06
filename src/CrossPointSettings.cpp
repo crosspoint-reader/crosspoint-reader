@@ -94,9 +94,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonRight"] = frontButtonRight;
   // Font family and size — both use dynamic getter/setters in SettingsList (the
   // option lists depend on the SD font registry), so the generic loop skips them.
-  doc["fontFamily"] = fontFamily == LEXENDDECA ? STORED_LEXENDDECA
-                        : fontFamily == BITTER  ? STORED_BITTER
-                                                : STORED_NOTOSANS;
+  doc["fontFamily"] = fontFamily == LITERATA ? STORED_LITERATA : STORED_NOTOSANS;
   doc["fontSize"] = fontPointSize;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
@@ -249,9 +247,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   const uint8_t storedFontFamily = doc["fontFamily"] | STORED_NOTOSANS;
-  fontFamily = storedFontFamily == STORED_LEXENDDECA ? LEXENDDECA
-               : storedFontFamily == STORED_BITTER  ? BITTER
-                                                    : NOTOSANS;
+  fontFamily = storedFontFamily == STORED_LITERATA ? LITERATA : NOTOSANS;
   // These controls use board-specific display-index mappings and are skipped by
   // the generic settings loop. Persisted action IDs remain stable across boards.
   longPressMenuFunction = clamp(doc["longPressMenuFunction"] | (uint8_t)LP_MENU_DISABLED,
@@ -424,29 +420,17 @@ int CrossPointSettings::getReaderFontId() const {
   const uint8_t pt =
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
   switch (fontFamily) {
-    case LEXENDDECA:
+    case LITERATA:
       switch (pt) {
         case 12:
-          return LEXENDDECA_12_FONT_ID;
+          return LITERATA_12_FONT_ID;
         case 16:
-          return LEXENDDECA_16_FONT_ID;
+          return LITERATA_16_FONT_ID;
         case 18:
-          return LEXENDDECA_18_FONT_ID;
+          return LITERATA_18_FONT_ID;
         case 14:
         default:
-          return LEXENDDECA_14_FONT_ID;
-      }
-    case BITTER:
-      switch (pt) {
-        case 12:
-          return BITTER_12_FONT_ID;
-        case 16:
-          return BITTER_16_FONT_ID;
-        case 18:
-          return BITTER_18_FONT_ID;
-        case 14:
-        default:
-          return BITTER_14_FONT_ID;
+          return LITERATA_14_FONT_ID;
       }
     case NOTOSANS:
     default:
