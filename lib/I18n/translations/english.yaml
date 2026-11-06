@@ -678,3 +678,9 @@ STR_AIRDROP_DECLINE: "Decline"
 STR_AIRDROP_ASK_FILE: "Accept this file?\n%s"
 STR_AIRDROP_ASK_FILES: "Accept this transfer of %u files?\n%s"
 STR_AIRDROP_TOO_LARGE: "Transfer cancelled: the 30 MiB limit was exceeded. Send a smaller file or fewer files."
+
+STR_AIRDROP_WAIT_UPLOAD: "Accepted. Waiting for the sender to start."
+STR_AIRDROP_PROGRESS: "Receiving: received / saved"
+STR_AIRDROP_LOG_HINT: "If available, see /AirDrop/last-transfer.log"
+
+STR_AIRDROP_LOG_UNAVAILABLE: "Diagnostic log unavailable (SD write failed)."

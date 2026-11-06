@@ -81,7 +81,14 @@ typedef struct {
   int upload_drains;       /* 1 = the hook actually drained the body */
 } Harness;
 
+static int fail_write = 0, write_calls = 0, response_failures = 0;
+static void hz_response_failed(struct HttpServe* sv) {
+  (void)sv;
+  response_failures++;
+}
+
 static int hz_write(struct HttpServe* sv, const unsigned char* p, int n) {
+  if (++write_calls == fail_write) return n - 1;
   Harness* h = (Harness*)sv->io;
   if (h->outn + n < (int)sizeof(h->out)) {
     memcpy(h->out + h->outn, p, n);
@@ -150,6 +157,7 @@ static bool gate_upload(struct HttpServe* s) {
   (void)s;
   return authorized == 1;
 }
+static bool logs_enabled = true;
 static void harness_run_peer(Harness* h, Script* s, uint32_t peer_at_ms, bool wire_peer) {
   memset(h, 0, sizeof *h);
   h->s = s;
@@ -162,7 +170,7 @@ static void harness_run_peer(Harness* h, Script* s, uint32_t peer_at_ms, bool wi
   sv.io = h;
   sv.write = hz_write;
   sv.now = hz_now;
-  sv.log = hz_log;
+  sv.log = logs_enabled ? hz_log : NULL;
   sv.set_timeout = hz_set_timeout;
   static const unsigned char DISC[] = "DISCBODY";
   static const unsigned char ASK[] = "ASKBODY";
@@ -176,6 +184,7 @@ static void harness_run_peer(Harness* h, Script* s, uint32_t peer_at_ms, bool wi
   sv.ask_ok = &h->ask_ok;
   sv.desync = &h->desync;
   sv.on_ask_sent = hz_on_ask_sent;
+  sv.response_failed = hz_response_failed;
   sv.upload = hz_upload;
   if (wire_peer) sv.peer_waiting = hz_peer_waiting;
   if (metadata_mode) sv.prepare_ask = gate_metadata;
@@ -484,6 +493,31 @@ int main(void) {
       check("oversize metadata returns413 without consent or acceptance",
             consent_calls == 0 && !h.ask_ok && strstr(h.out, "413 Content Too Large"), NULL);
   }
+  {
+    Script s = {0};
+    Harness h;
+    const char* req = "POST /Discover HTTP/1.1\r\nContent-Length: 0\r\n\r\n";
+    s.close_at_end = 1;
+    script_add(&s, 0, req, strlen(req));
+    logs_enabled = false;
+    harness_run(&h, &s);
+    check("receiver without diagnostics still replies", h.disc_ok == 1 && strstr(h.out, "200 OK") && h.nlog == 0, NULL);
+  }
+  for (int failure = 1; failure <= 2; ++failure) {
+    Script s = {0};
+    Harness h;
+    const char* req = "POST /Ask HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc";
+    s.close_at_end = 1;
+    metadata_mode = 1;
+    consent = 1;
+    write_calls = response_failures = 0;
+    fail_write = failure;
+    script_add(&s, 0, req, strlen(req));
+    harness_run(&h, &s);
+    check("short acceptance response never starts a transfer",
+          h.ask_ok == 0 && h.ask_sent == 0 && response_failures == 1 && h.uploads == 0, NULL);
+  }
+  fail_write = 0;
   printf("\n%d checks, %d failed\n", ran, fails);
   return fails ? 1 : 0;
 }

@@ -12,7 +12,7 @@ HERE = Path(__file__).resolve().parent
 
 def main():
     with tempfile.TemporaryDirectory(prefix="crosspoint-airdrop-") as directory:
-        for name in ("cpio_test.c", "serve_test.c", "stream_test.cpp"):
+        for name in ("serve_test.c", "stream_test.cpp", "gauge_test.c", "ack_test.c"):
             cpp = name.endswith(".cpp")
             compiler = shlex.split(os.environ.get("CXX" if cpp else "CC", "c++" if cpp else "cc"))
             binary = Path(directory) / Path(name).stem
@@ -20,7 +20,7 @@ def main():
                            "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
                            str(HERE / name), "-o", str(binary)], check=True)
             subprocess.run([str(binary)], check=True)
-        for name in ("ask_test.py", "mailbox_test.py", "content_length_test.py"):
+        for name in ("ask_test.py", "mailbox_test.py", "content_length_test.py", "identity_test.py", "approval_test.py"):
             subprocess.run([sys.executable, str(HERE / name)], check=True)
 
 

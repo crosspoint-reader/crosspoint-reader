@@ -165,11 +165,19 @@ static void ga_shift(ga_t* g, int32_t d) {
   for (int i = 0; i < GA_SRC; i++)
     if (g->src[i].used && g->src[i].b_ok) g->src[i].B = ((uint32_t)((int32_t)g->src[i].B + d)) & GA_MASK;
 }
+static void ga_reverse(uint16_t* hist, int first, int end) {
+  while (first < --end) {
+    uint16_t value = hist[first];
+    hist[first++] = hist[end];
+    hist[end] = value;
+  }
+}
 static void ga_rotate(ga_t* g, int32_t d) {
-  static uint16_t tmp[GA_NB];
-  int shift = (int)((((uint32_t)d) & GA_MASK) >> GA_BSH);
-  for (int i = 0; i < GA_NB; i++) tmp[(i + shift) & (GA_NB - 1)] = g->hist[i];
-  memcpy(g->hist, tmp, sizeof(tmp));
+  int shift = ga_bin(d);
+  if (!shift) return;
+  ga_reverse(g->hist, 0, GA_NB);
+  ga_reverse(g->hist, 0, shift);
+  ga_reverse(g->hist, shift, GA_NB);
 }
 
 /* --- one-sender-one-vote on the AW integer ----------------------------------

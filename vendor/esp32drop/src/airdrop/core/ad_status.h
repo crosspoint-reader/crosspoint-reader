@@ -29,6 +29,11 @@ struct AdStatus {
 
   /* --- a transfer in flight ------------------------------------------------------- */
   bool rx_active;
+  bool awaiting_upload;
+  bool upload_pending;
+  uint32_t socket_rx_bytes;
+  uint32_t tls_failures;
+  int last_tls_error;
   uint32_t rx_bytes; /* compressed bytes received so far                      */
   uint32_t rx_max;   /* the archive ceiling in force, in bytes. What ad_begin()
                         was asked for, or less when PSRAM could not supply it;
@@ -51,7 +56,6 @@ struct AdStatus {
   uint32_t resp_tx;     /* ...of which we answered                                */
   uint32_t notus;       /* ...asked for nothing we hold (parsed, so not answered) */
   uint32_t ka_suppress; /* ...already held every record we would have sent        */
-  uint32_t dump_count;  /* mDNS payloads captured for offline decode              */
 
   /* --- which advertised port a sender actually dials ------------------------------ */
   uint32_t tcp_tous;

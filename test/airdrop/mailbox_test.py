@@ -3,7 +3,7 @@ import subprocess, tempfile
 r=Path(__file__).resolve().parents[2]
 s=(r/'vendor/esp32drop/src/airdrop/port/ad_port_esp32.cpp').read_text()
 mail=s[s.index('enum class StreamSlot'):s.index('// ---- /Upload receive + decode')]
-poll=s[s.index('  auto pending = StreamSlot::Pending;',s.index('void ad_poll(void)')):s.index('  if (!g_arch_ready) return;',s.index('void ad_poll(void)'))]
+poll=s[s.index('  auto pending = StreamSlot::Pending;',s.index('void ad_poll(void)')):s.index('\n}',s.index('void ad_poll(void)'))]
 code='''#include <atomic>
 #include <thread>
 #include <future>

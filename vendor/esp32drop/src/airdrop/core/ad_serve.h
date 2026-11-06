@@ -60,29 +60,33 @@ struct HttpServe {
   volatile uint32_t *disc_ms, *ask_ms;
   volatile uint32_t *disc_ok, *ask_ok, *desync;
 
-  http_hook_fn on_ask_sent;   // fired right after the /Ask 200: UI flip etc.
-  http_ask_fn prepare_ask;    // optional metadata read; NULL means success, else HTTP error
-  http_pred_fn cancelled;     // optional stop signal while reading metadata
-  http_pred_fn approve;       // optional user approval before /Ask succeeds
-  http_pred_fn authorized;    // optional peer-bound authorization for /Upload
-  http_pred_fn peer_waiting;  // optional: a connection is pending on the listener
-  http_upload_fn upload;      // the /Upload body pipeline (firmware: rx_upload)
+  http_hook_fn response_failed;  // optional: revoke consent/report a failed write
+  http_hook_fn on_ask_sent;      // fired right after the /Ask 200: UI flip etc.
+  http_ask_fn prepare_ask;       // optional metadata read; NULL means success, else HTTP error
+  http_pred_fn cancelled;        // optional stop signal while reading metadata
+  http_pred_fn approve;          // optional user approval before /Ask succeeds
+  http_pred_fn authorized;       // optional peer-bound authorization for /Upload
+  http_pred_fn peer_waiting;     // optional: a connection is pending on the listener
+  http_upload_fn upload;         // the /Upload body pipeline (firmware: rx_upload)
 
   uint32_t enter_ms;  // when the HTTP phase began (for http_idle_end)
 };
 
-static void http_send_response(struct HttpServe* sv, const char* status, const unsigned char* body, int blen,
+static bool http_send_response(struct HttpServe* sv, const char* status, const unsigned char* body, int blen,
                                bool close_it) {
   char h[192];
   int hl =
       snprintf(h, sizeof(h), "HTTP/1.1 %s\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n%s\r\n",
                status, blen, close_it ? "Connection: close\r\n" : "");
-  sv->write(sv, (const unsigned char*)h, hl);
-  if (body && blen) sv->write(sv, body, blen);
+  if (sv->write(sv, (const unsigned char*)h, hl) != hl || (body && blen && sv->write(sv, body, blen) != blen)) {
+    return false;
+  }
+  return true;
 }
 
 #define SV_LOG(sv, ...)                    \
   do {                                     \
+    if (!(sv)->log) break;                 \
     char _l[192];                          \
     snprintf(_l, sizeof(_l), __VA_ARGS__); \
     (sv)->log((sv), _l);                   \
@@ -252,7 +256,10 @@ static void serve_http_run(struct HttpServe* sv) {
 
     if (expect100) {
       const char* c = "HTTP/1.1 100 Continue\r\n\r\n";
-      sv->write(sv, (const unsigned char*)c, (int)strlen(c));
+      if (sv->write(sv, (const unsigned char*)c, (int)strlen(c)) != (int)strlen(c)) {
+        if (is_ask && sv->response_failed) sv->response_failed(sv);
+        break;
+      }
     }
 
     if (is_up) {
@@ -301,7 +308,7 @@ static void serve_http_run(struct HttpServe* sv) {
       // gained by waiting for it, and by the time we answered the sender had given
       // up and torn the connection down. Now: respond, then make a brief best-effort
       // attempt to consume the body so the close is graceful rather than a RST.
-      http_send_response(sv, "200 OK", sv->disc_body, sv->disc_len, true);
+      if (!http_send_response(sv, "200 OK", sv->disc_body, sv->disc_len, true)) break;
       (*sv->disc_ok)++;
       *sv->disc_ms = sv->now(sv);
       SV_LOG(sv, "disc_sent n=%lu ms_since_req=%lu -- tile should appear now", (unsigned long)*sv->disc_ok,
@@ -325,7 +332,10 @@ static void serve_http_run(struct HttpServe* sv) {
       }
       // Metadata-aware receivers consumed the body before consent. Legacy users
       // still use the bounded post-response drain below. Upload uses a new connection.
-      http_send_response(sv, "200 OK", sv->ask_body, sv->ask_len, true);
+      if (!http_send_response(sv, "200 OK", sv->ask_body, sv->ask_len, true)) {
+        if (sv->response_failed) sv->response_failed(sv);
+        break;
+      }
       *sv->ask_ms = sv->now(sv);
       (*sv->ask_ok)++;
       if (sv->on_ask_sent) sv->on_ask_sent(sv);  // firmware: flip to "Receiving" UI

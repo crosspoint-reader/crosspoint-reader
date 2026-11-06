@@ -14,10 +14,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-namespace {
-constexpr const char* RECEIVER_NAME = FREEINK_DEVICE_X4CLASSIC ? "CrossPoint X4C" : "CrossPoint X4 Pro";
-}
-
 void AirDropActivity::onEnter() {
   Activity::onEnter();
   if (auto* cache = renderer.getFontCacheManager()) cache->releaseSdFontCaches();
@@ -35,6 +31,8 @@ void AirDropActivity::onEnter() {
     showState();
     return;
   }
+  diagnosticsFailed = !Storage.openFileForWrite("AIRDROP", "/AirDrop/last-transfer.log", diagnostics);
+  recordDiagnostics(true);
   if (!ad_prepare_tls()) {
     ad_end();
     state = State::Error;
@@ -51,7 +49,7 @@ void AirDropActivity::onEnter() {
   }
   if (radioStarted) {
     ad_on_stream(&AirDropActivity::receiveStream, this);
-    receiverStarted = ad_begin(RECEIVER_NAME, RECEIVE_LIMIT) == 0;
+    receiverStarted = ad_begin(RECEIVE_LIMIT) == 0;
   }
   if (!receiverStarted) {
     ad_end();
@@ -69,6 +67,9 @@ void AirDropActivity::stop() {
     silentRestart();
   }
   receiverStarted = false;
+  ad_stats_read(&stats);
+  recordDiagnostics(true);
+  if (diagnostics) diagnostics.close();
   if (radioStarted && awdl_end() != ESP_OK) {
     LOG_ERR("AIRDROP", "Radio did not stop; restarting safely");
     silentRestart();
@@ -86,8 +87,13 @@ void AirDropActivity::onExit() {
 bool AirDropActivity::answerRequest(bool accept) {
   if (state != State::Asking || !ad_request_pending()) return false;
   if (!ad_request_answer(accept)) return false;
+  if (accept) {
+    stats.rx_bytes = 0;
+    writtenSize = 0;
+    maxWriteMs = 0;
+  }
   state = accept ? State::Receiving : State::Waiting;
-  receivingAt = millis();
+  lastProgressDraw = millis();
   popupNeedsUpdate = true;
   return true;
 }
@@ -96,7 +102,7 @@ void AirDropActivity::showState() {
   const char* body = nullptr;
   switch (state) {
     case State::Waiting:
-      snprintf(statusLine, sizeof(statusLine), tr(STR_AIRDROP_WAITING), RECEIVER_NAME);
+      snprintf(statusLine, sizeof(statusLine), tr(STR_AIRDROP_WAITING), ad_receiver_name());
       body = statusLine;
       break;
     case State::Asking: {
@@ -115,13 +121,19 @@ void AirDropActivity::showState() {
       body = tr(STR_AIRDROP_TOO_LARGE);
       break;
     case State::Receiving:
-      body = tr(STR_AIRDROP_RECEIVING);
+      snprintf(statusLine, sizeof(statusLine), "%s\n%lu KiB / %lu KiB%s%s",
+               stats.upload_pending || stats.rx_bytes ? tr(STR_AIRDROP_PROGRESS) : tr(STR_AIRDROP_WAIT_UPLOAD),
+               static_cast<unsigned long>(stats.rx_bytes / 1024), static_cast<unsigned long>(writtenSize / 1024),
+               diagnosticsFailed ? "\n" : "", diagnosticsFailed ? tr(STR_AIRDROP_LOG_UNAVAILABLE) : "");
+      body = statusLine;
       break;
     case State::Saved:
       body = savedPath;
       break;
     case State::Error:
-      body = tr(STR_AIRDROP_FAILED);
+      snprintf(statusLine, sizeof(statusLine), "%s\n%s", tr(STR_AIRDROP_FAILED),
+               diagnosticsFailed ? tr(STR_AIRDROP_LOG_UNAVAILABLE) : tr(STR_AIRDROP_LOG_HINT));
+      body = statusLine;
       break;
   }
   const char* options[] = {tr(STR_AIRDROP_STOP), tr(STR_AIRDROP_OPEN)};
@@ -218,7 +230,10 @@ bool AirDropActivity::writeFile(const uint8_t* data, uint32_t len) {
   if (!output || len > expectedSize - writtenSize) return false;
   for (uint32_t offset = 0; offset < len;) {
     const size_t chunk = std::min<uint32_t>(4096, len - offset);
-    if (output.write(data + offset, chunk) != chunk) return false;
+    const uint32_t writeStarted = millis();
+    const size_t saved = output.write(data + offset, chunk);
+    maxWriteMs = std::max<uint32_t>(maxWriteMs, millis() - writeStarted);
+    if (saved != chunk) return false;
     offset += chunk;
     writtenSize += chunk;
     delay(1);
@@ -242,12 +257,45 @@ bool AirDropActivity::endFile() {
   return true;
 }
 
+void AirDropActivity::recordDiagnostics(bool force) {
+  if (!diagnostics || (!force && millis() - lastDiagnostic < 10000)) return;
+  lastDiagnostic = millis();
+  AwdlTransportStats radio{};
+  if (radioStarted) awdl_transport_stats(&radio);
+  char line[256];
+  const int n = snprintf(
+      line, sizeof(line),
+      "%lu state=%u wait=%u upload=%u rx=%lu saved=%lu wire=%lu tcp=%lu tls=%lu fail=%lu/%d "
+      "ask=%lu err=%lu lock=%u mask=%04x drop=%lu q=%u flight=%u ackskip=%lu txdrop=%lu heap=%u sdms=%lu reason=%s\n",
+      static_cast<unsigned long>(millis()), static_cast<unsigned>(state), stats.awaiting_upload, stats.upload_pending,
+      static_cast<unsigned long>(stats.rx_bytes), static_cast<unsigned long>(writtenSize),
+      static_cast<unsigned long>(stats.socket_rx_bytes), static_cast<unsigned long>(stats.tcp_accept),
+      static_cast<unsigned long>(stats.tls_ok), static_cast<unsigned long>(stats.tls_failures), stats.last_tls_error,
+      static_cast<unsigned long>(stats.ask_ok), static_cast<unsigned long>(stats.file_err), radio.locked,
+      radio.channelMask, static_cast<unsigned long>(radio.ringDrops), radio.queued, radio.inflight,
+      static_cast<unsigned long>(radio.acksSkipped), static_cast<unsigned long>(radio.txQueueDrops), ESP.getFreeHeap(),
+      static_cast<unsigned long>(maxWriteMs), stats.file_errmsg);
+  if (n >= static_cast<int>(sizeof(line))) line[sizeof(line) - 2] = '\n';
+  const size_t bytes = n > 0 ? std::min<size_t>(n, sizeof(line) - 1) : 0;
+  if (diagnosticBytes + bytes > 32768) {
+    diagnostics.close();
+    return;
+  }
+  if (!bytes || diagnostics.write(line, bytes) != bytes) {
+    diagnosticsFailed = true;
+    popupNeedsUpdate = true;
+    diagnostics.close();
+    return;
+  }
+  diagnosticBytes += bytes;
+  diagnostics.flush();
+}
+
 void AirDropActivity::loop() {
   if (leaving) return;
   const auto before = state;
   if (receiverStarted) {
     ad_poll();
-    for (int i = 0; i < 4 && ad_diag_read_line(diagLine, sizeof(diagLine)); ++i) LOG_DBG("AIRDROP", "%s", diagLine);
     if (ad_request_pending())
       state = State::Asking;
     else if (state == State::Asking)
@@ -255,7 +303,6 @@ void AirDropActivity::loop() {
     if (millis() - lastStats > 1000) {
       lastStats = millis();
       ad_stats_read(&stats);
-      if (state == State::Receiving && !stats.rx_active && millis() - receivingAt > 45000) state = State::Waiting;
       if (stats.file_err != observedErrors) {
         observedErrors = stats.file_err;
         if (state != State::TooLarge) state = State::Error;
@@ -263,6 +310,11 @@ void AirDropActivity::loop() {
       if (stats.limit_rejections != observedLimitRejections) {
         observedLimitRejections = stats.limit_rejections;
         state = State::TooLarge;
+      }
+      recordDiagnostics(state != before);
+      if (state == State::Receiving && millis() - lastProgressDraw >= 10000) {
+        lastProgressDraw = millis();
+        popupNeedsUpdate = true;
       }
       LOG_DBG("AIRDROP", "discover=%u ask=%u rx=%u saved=%u heap=%u", stats.discover_ok, stats.ask_ok, stats.rx_bytes,
               received, ESP.getFreeHeap());
@@ -272,7 +324,7 @@ void AirDropActivity::loop() {
     RenderLock lock;
     showState();
   }
-  if (millis() - startedAt >= 600000 && state != State::Receiving && state != State::Asking && !ad_upload_pending()) {
+  if (millis() - startedAt >= 600000 && state == State::Waiting && !ad_upload_pending()) {
     leaving = true;
     activityManager.goHome();
     return;

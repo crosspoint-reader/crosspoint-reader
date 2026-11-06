@@ -1,25 +1,6 @@
 #include <freertos/idf_additions.h>
 
 #include <algorithm>
-/* ⚠️ THE RECEIVING HALF, AND IT IS ABSENT FROM A SENDER BUILD.
- *
- * Everything below compiles only when ESP32DROP_SENDER is NOT defined. The two roles cannot
- * share a device -- a listener task's 32,768-byte stack and a sender's lifelong TLS client
- * context do not both fit beside AWDL with anything left for an application -- so the build
- * decides which one exists instead of leaving a runtime flag to catch the mistake later.
- *
- * What a sender build stops carrying, measured: 5,662 bytes of static allocation
- * (g_adlog 1,616, ad_respond's frame 1,440, g_ssl 552, g_entropy 420, g_srvcert 408,
- * g_disc_body 320, g_ask_body 256, g_tlsconf 196, and the rest), plus every byte of the
- * receive path's code. More importantly it stops carrying ad_begin() itself: a send sketch
- * that called it by mistake would take a 32 KB task stack at runtime and only find out by
- * running short of memory somewhere else. Now it will not link, which is the earliest
- * possible place to be told.
- *
- * The symmetry is deliberate: ad_cycle.cpp and the bundled BLE advertiser are absent from a
- * RECEIVING build for exactly the same reason, in exactly the same way.
- */
-#if !defined(ESP32DROP_SENDER)
 
 /* ad_port_esp32.cpp -- the AirDrop application layer on the ESP32 backend.
  *
@@ -45,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wolfssl/ssl.h>
 
 #include <atomic>
 
@@ -52,22 +34,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lwip/sockets.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/net_sockets.h"
-#include "mbedtls/pk.h"
-#include "mbedtls/ssl.h"
-#include "mbedtls/ssl_cache.h"
-#include "mbedtls/x509_crt.h"
-#include "psa/crypto.h"
 
 /* The ONE include from src/awdl, and the rule permits exactly this one: the public
    header. It brings awdl_ring.h, whose SPSC cursor the diagnostic ring below reuses
    rather than growing a second, untested copy. */
 #include "../../ESP32AWDL.h"
-#include "../core/ad_bplist.h"
 #include "../core/ad_dvzip.h"
 #include "../core/ad_http.h"
+#include "../core/ad_identity.h"
 #include "../core/ad_serve.h"
 #include "../core/airdrop_cert.h"
 #include "ad_port_esp32.h"
@@ -108,7 +82,7 @@ static volatile uint32_t g_desync = 0;       // times the stream was out of fram
  * count AirDrop events -- who asked, what we answered, which advertised port a sender
  * dialled -- so they belong here, with the code that writes them. */
 static volatile uint32_t g_resp_tx = 0, g_resp_err = 0, g_query_seen = 0;
-static volatile uint32_t g_notus = 0, g_ka_suppress = 0, g_dump_count = 0;
+static volatile uint32_t g_notus = 0, g_ka_suppress = 0;
 static volatile uint32_t g_tcp_tous = 0;
 static volatile uint32_t g_syn_airdrop = 0, g_syn_pair1 = 0, g_syn_pair2 = 0, g_syn_other = 0;
 static volatile uint16_t g_syn_other_port = 0;
@@ -139,38 +113,6 @@ static volatile uint16_t g_syn_other_port = 0;
 #define AIRDROP_DNM "M5 Badge"
 
 static struct AwdlIdentity g_id; /* filled once, at ad_begin() */
-
-/* --- the two responses that carry our identity ------------------------------------
- *
- * The name on the sender's share sheet is ReceiverComputerName in the /Discover reply --
- * measured by giving three candidate name fields three different values and
- * looking at the tile. So the reply cannot be a constant: bplist strings are
- * length-prefixed, and a different name moves every offset in the table and three 64-bit
- * fields in the trailer. Both replies are built at ad_begin() and live here.
- *
- * ReceiverModelName picks the icon the sender draws [A -- not separately verified]. It
- * stays "M5Stack"; a user who wants a different one is choosing from Apple's set, not
- * from ours, and there is no measurement behind any other value. */
-#define AD_NAME_MAX 64
-static uint8_t g_disc_body[320], g_ask_body[256];
-static uint32_t g_disc_len = 0, g_ask_len = 0;
-static char g_name[AD_NAME_MAX] = {0};
-
-static bool ad_build_identity(const char* name) {
-  static const char MEDIA[] = "{\"Version\":1}";
-  struct AdBplistKV disc[] = {
-      {"ReceiverComputerName", AD_BP_STR, name, 0},
-      {"ReceiverMediaCapabilities", AD_BP_DATA, MEDIA, (uint32_t)(sizeof(MEDIA) - 1)},
-      {"ReceiverModelName", AD_BP_STR, "M5Stack", 0},
-  };
-  struct AdBplistKV ask[] = {
-      {"ReceiverComputerName", AD_BP_STR, name, 0},
-      {"ReceiverModelName", AD_BP_STR, "M5Stack", 0},
-  };
-  g_disc_len = ad_bplist_dict(g_disc_body, sizeof(g_disc_body), disc, 3);
-  g_ask_len = ad_bplist_dict(g_ask_body, sizeof(g_ask_body), ask, 2);
-  return g_disc_len && g_ask_len;
-}
 
 /* A byte search is not an interface. Nine lines, kept local rather than exported, the way
  * the link layer keeps its own copy. This is the FIRST, cheap filter: a message that
@@ -574,7 +516,7 @@ static void ad_respond(const uint8_t querier[6]) {
 }
 
 /* THE RX TAP. Runs on the AWDL frame task. Invariant: no Serial, no lwIP, no blocking --
- * awdl_diag_stage() and awdl_tx_ip6_now() are the only legal side effects.
+ * Only nonblocking frame inspection and awdl_tx_ip6_now() are allowed.
  *
  * iplen is the length of the IPv6 packet, so dns_avail is iplen - 48 exactly (40 bytes of
  * v6 header plus 8 of UDP). That is what preserves the FCS fix across this seam: the
@@ -596,7 +538,6 @@ static void ad_rx_tap(void*, const uint8_t src[6], const uint8_t* ip6, size_t ip
     bool relevant = contains_airdrop(dns, dns_len) || mem_contains(dns, dns_len, g_id.instance, strlen(g_id.instance));
     if (dns_len > 12 && relevant) {
       bool is_query = !(dns[2] & 0x80);
-      int ka_dec = -1;  // -1 not a query, 0 replied, 1 known-answer suppressed, 2 not ours
       if (is_query) {
         g_query_seen++;
         // RFC 6762 7.1: do not answer a question whose answer the querier already
@@ -620,35 +561,12 @@ static void ad_rx_tap(void*, const uint8_t src[6], const uint8_t* ip6, size_t ip
         // no question names a record we hold, is dropped.
         struct AdDnssdOwn own = {g_id.instance, AIRDROP_DNM};
         if (!ad_dnssd_asks_us(dns, dns_len, &own)) {
-          ka_dec = 2;
           g_notus++;
         } else if (ad_dnssd_known_answer_suppresses(dns, dns_len, &own)) {
-          ka_dec = 1;
           g_ka_suppress++;
         } else {
-          ka_dec = 0;
           ad_respond(src);
         }
-      }
-      // Dump the phone's (non-self) _airdrop DNS bytes for offline decode, so
-      // we can see EXACTLY what it asks/announces. Capped to avoid flooding.
-      // Spend the budget on what is RARE, not on what is common. A dropped reply
-      // (ka_dec > 0) is the event worth having bytes for -- it is the decision that
-      // could make us undiscoverable -- and it is rare by construction, so it bypasses
-      // the rate limit entirely. Ordinary answered queries take the budget. Without
-      // this the instrument captured 37 uninteresting queries and lost all four
-      // interesting ones in the same window, which is the wrong way round.
-      if (memcmp(src, g_id.mac, 6) != 0 && (ka_dec > 0 || awdl_diag_budget_ok())) {
-        g_dump_count++;
-        char hdr[96];
-        // ka= carries the suppression decision for these exact bytes. The dump already
-        // contains the query, so the decision and its input travel together and any
-        // offline re-run of ad_dnssd_known_answer_suppresses() on the hex either agrees
-        // or has found a wiring bug. Without it, "kasup=0" is indistinguishable from
-        // "the function is never actually reached".
-        snprintf(hdr, sizeof(hdr), "MDNS qr=%d src=%02x%02x%02x%02x%02x%02x len=%d ka=%d ", is_query ? 0 : 1, src[0],
-                 src[1], src[2], src[3], src[4], src[5], dns_len, ka_dec);
-        awdl_diag_stage(hdr, dns, dns_len);  // DUMP_MAX clamps; see stage_dump
       }
     }
   } else if (nh == 6) {
@@ -683,171 +601,37 @@ static void ad_rx_tap(void*, const uint8_t src[6], const uint8_t* ip6, size_t ip
   }
 }
 
-/* ---- staged diagnostics: the library does not own Serial ------------------------
- *
- * Every diagnostic line the AirDrop layer produces is now COPIED INTO A RING and written
- * out by whoever calls ad_diag_read_line() -- in practice the sketch's loop(). Three
- * reasons, in order of how much they cost when ignored:
- *
- * 1. A library must not decide that a user's Serial port is its log. There is no
- *    setLogSink() either: a sink is a callback, a callback runs on whatever task called
- *    it, and USBCDC::write busy-spins without yielding for up to 250 ms
- *    (cores/esp32/USBCDC.cpp) -- fifteen times one AW. Pull, never push.
- * 2. These lines were written from the TLS task. Serial.printf is not atomic, and this
- *    project has already lost the single line of evidence for a regression to two
- *    interleaved writes.
- * 3. Dropping is correct when the ring is full, and is counted. Blocking a protocol task
- *    to wait for a UART is how a diagnostic becomes an outage.
- *
- * SPSC, one producer (the TLS task) and one consumer, using the same cursor and the same
- * barrier discipline as the frame ring -- awdl_ring.h, which has 19 host checks. That is
- * the ONE thing this file takes from the AWDL layer, through the public header, which is
- * exactly what the layering rule in tools/check-library.sh permits.
- */
-/* -DAD_DIAG_DETAIL turns on the instruments that answer OPEN QUESTIONS rather than report
- * the device's state: the TLS session-cache probes, the listener's stack high-water sample,
- * and the once-a-second listener-loop line. It is off by default because the ring below
- * holds eight slots and a per-second producer spends one of them every second -- the lines
- * a reader actually came for are the rare ones, and they are the ones a steady drip evicts.
- * Nothing outside this file's diagnostics changes with it: no frame is built differently,
- * no byte is parsed differently, and no counter reported through ad_stats_read() moves. */
-#ifdef AIRDROP_CH_DUMP
-#define AD_DIAG_SLOTS 64 /* the CH witness bursts ~50 lines per adoption */
-#else
-#define AD_DIAG_SLOTS 8
-#endif
-#define AD_DIAG_LINE 200
-struct AdDiagRing {
-  struct AwdlRing cur;
-  char slot[AD_DIAG_SLOTS][AD_DIAG_LINE];
-};
-static struct AdDiagRing g_adlog;
+static uint32_t g_disc_ms = 0;  // when we last answered /Discover
+static uint32_t g_ask_ms = 0;   // when we last answered /Ask (the /Upload clock)
 
-static bool ad_diag_stage(const char* line, int n) {
-  if (!g_adlog.cur.mask) return false; /* before ad_begin(): nowhere to put it */
-  if (n <= 0) return false;
-  if (n > AD_DIAG_LINE - 1) n = AD_DIAG_LINE - 1;
-  int slot = awdl_ring_reserve(&g_adlog.cur);
-  if (slot < 0) return false; /* counted in g_adlog.cur.drops */
-  memcpy(g_adlog.slot[slot], line, (size_t)n);
-  g_adlog.slot[slot][n] = 0;
-  awdl_ring_commit(&g_adlog.cur);
-  return true;
-}
-
-size_t ad_diag_read_line(char* dst, size_t cap) {
-  int slot = awdl_ring_peek(&g_adlog.cur);
-  if (slot < 0 || !cap) return 0;
-  size_t n = strlen(g_adlog.slot[slot]);
-  if (n > cap - 1) n = cap - 1;
-  memcpy(dst, g_adlog.slot[slot], n);
-  dst[n] = 0;
-  awdl_ring_release(&g_adlog.cur);
-  return n;
-}
-
-#ifdef AIRDROP_BODY_KEEP
-/* Raw-body handoff for the probe build. Same release-flag discipline as g_arch_ready:
-   the TLS task publishes g_body_ready LAST, loopTask reads it first. */
-static uint8_t* g_body_block = nullptr;
-static uint32_t g_body_len = 0;
-static volatile bool g_body_ready = false;
-#endif
-
-#ifdef AIRDROP_BODY_KEEP
-uint32_t ad_body_peek(const uint8_t** p) {
-  if (!g_body_ready) return 0;  // acquire: read the flag before the pointer
-  if (p) *p = g_body_block;
-  return g_body_len;
-}
-void ad_body_release(void) {
-  if (!g_body_ready) return;
-  heap_caps_free(g_body_block);
-  g_body_block = nullptr;
-  g_body_len = 0;
-  g_body_ready = false;
-}
-#endif
-
-uint32_t ad_diag_dropped(void) { return g_adlog.cur.drops; }
-
-/* Formats into a local buffer and stages it. The trailing newline stays in the format
-   string exactly as it was when these were Serial.printf, so the output is unchanged. */
-#define AD_LOG(fmt, ...)                                                            \
-  do {                                                                              \
-    char _l[AD_DIAG_LINE];                                                          \
-    int _n = snprintf(_l, sizeof(_l), fmt, ##__VA_ARGS__);                          \
-    if (_n > 0) ad_diag_stage(_l, _n < (int)sizeof(_l) ? _n : (int)sizeof(_l) - 1); \
-  } while (0)
-
-#define EV(fmt, ...) AD_LOG("EV %lu " fmt "\n", (unsigned long)millis(), ##__VA_ARGS__)
-static uint32_t g_http_exit_ms = 0;   // when we last returned from serve_http
-static uint32_t g_http_enter_ms = 0;  // when we last entered it
-static uint32_t g_disc_ms = 0;        // when we last answered /Discover
-static uint32_t g_ask_ms = 0;         // when we last answered /Ask (the /Upload clock)
-
-// ---- received-image handoff (TLS task decodes -> main task draws) ------------
-// All SPI/display I/O must stay on the main task; the TLS task only decodes into
-// PSRAM and publishes the result. g_img_ready is set LAST as the release flag.
-/* When the receive state last CHANGED. "Receiving" is a claim about now, and it used to be
- * set by the /Ask reply and cleared only by a completed upload -- so a sender that answered
- * /Ask and then never sent anything (observed: reconnected, finished TLS, then ten seconds
- * of silence and gone) left the badge saying "Receiving" indefinitely. It is the same
- * mistake as awdl_status_discoverable's, in a different layer: a state reported from an
- * event that happened rather than from one that is still happening. */
+// Transfer progress is updated by the listener and read by the main task.
 #define AD_RX_STALL_MS 20000u
 static volatile uint32_t g_rx_touch_ms = 0;
 static volatile bool g_rx_active = false;  // transfer in progress: "Receiving" UI
 static volatile uint32_t g_rx_bytes = 0;   // compressed bytes received so far
-// A finished transfer is a cpio ARCHIVE, not an image. The TLS task publishes the whole
-// decoded block and does no parsing; ad_poll() walks it on the caller's task and hands over
-// every regular file it holds. Parsing on the consumer side is deliberate: the walk is
-// bounds-checked code fed by a remote sender (ad_cpio.h, 35 host checks under ASan), and
-// there is no reason to run it inside the task that is holding the TLS session open.
-static std::atomic<bool> g_arch_ready{false};  // an archive awaits delivery
-static uint8_t* g_arch_block = nullptr;        // PSRAM block, freed after delivery
-static const uint8_t* g_arch_buf = nullptr;    // the cpio within the block
-static volatile uint32_t g_arch_len = 0;
 static volatile uint32_t g_files_ok = 0;
 static volatile uint32_t g_img_err = 0;  // undecodable/oversize transfers
 static char g_img_errmsg[40] = {0};
-// Accumulation budget for bodies that are NOT decoded in flight (gzip, bare cpio,
-// and any shape the streaming sink declines): those still hold ~compressed +
-// ~decompressed at once, so the old cap and the old reasoning stand for them.
-// A DvZip body no longer pays this double occupancy -- it is decoded record by
-// record while it arrives (struct RxPump below) and its ceiling is the PSRAM free
-// block itself, minus the residue buffer. This constant also names the ceiling a
-// HEALTHY device must be able to offer: when streaming cannot allocate even this
-// much, the failure is reported as the device's (507), not the file's (413).
-/* The archive ceiling. Was a hard 6 MiB; now whatever ad_begin() was given, because the
-   sketch is the only thing that knows how much PSRAM it wants left for itself -- see the
-   note on ad_begin() in the header. RX_MAX_AUTO is the bound used when the caller passes 0:
-   still 6 MiB, so behaviour is unchanged for anyone who does not care. */
+// The caller supplies the archive limit; zero selects the library default.
 #define RX_MAX_AUTO (6u * 1024 * 1024)
 static uint32_t g_rx_max = RX_MAX_AUTO;    /* policy, set by ad_begin() */
 static volatile uint32_t g_rx_max_eff = 0; /* what a transfer actually got */
 
 // ---- TLS server config, built once ------------------------------------------
-// Reported in STAT even on the SNIFFER build (which has no mbedTLS at all), so
-// these three live OUTSIDE the guard below.
-static const char* g_tls_alg = "none";          // "EC"/"RSA" once cert loads
-static int g_ec_crt_err = 0, g_ec_key_err = 0;  // why EC fell back
-static mbedtls_entropy_context g_entropy;
-static mbedtls_ctr_drbg_context g_ctr_drbg;
-static mbedtls_x509_crt g_srvcert;
-static mbedtls_pk_context g_pkey;
-static mbedtls_ssl_config g_tlsconf;
-static mbedtls_ssl_context g_ssl;          // ONE session, reused via session_reset
-static mbedtls_net_context g_net;          // .fd swapped to the active connection
-static mbedtls_ssl_cache_context g_cache;  // abbreviated handshake on retries
+static const char* g_tls_alg = "none";
+static int g_ec_crt_err = 0, g_ec_key_err = 0;  // wolfSSL certificate/key load results
+static WOLFSSL_CTX* g_tlsconf = nullptr;
+static WOLFSSL* g_ssl = nullptr;
+static int g_tls_fd = -1;
 static bool g_tls_ready = false;
-static bool g_tls_tried = false;
 static std::atomic<bool> g_stop{false}, g_listener_running{false};
 enum class Consent { Idle, Asking, Accept, Decline };
 static std::atomic<Consent> g_consent{Consent::Idle};
 static uint8_t g_approved_peer[16];
 static uint32_t g_approved_at = 0;
-static bool g_approved = false;
+static std::atomic<bool> g_approved{false};
+static std::atomic<uint32_t> g_socket_rx_bytes{0}, g_tls_failures{0};
+static std::atomic<int> g_last_tls_error{0};
 static AdAskInfo g_request_info;
 static portMUX_TYPE g_request_lock = portMUX_INITIALIZER_UNLOCKED;
 static std::atomic<uint32_t> g_limit_rejections{0};
@@ -867,265 +651,96 @@ bool ad_request_answer(bool accept) {
   return g_consent.compare_exchange_strong(pending, accept ? Consent::Accept : Consent::Decline);
 }
 
-#ifdef AD_DIAG_DETAIL
-// Probes around the session cache, to answer "why does resumption not fire on
-// most reconnects" WITHOUT guessing. That is an open question, not a shipping
-// feature, so it is behind AD_DIAG_DETAIL; with the define off mbedTLS gets its
-// own cache callbacks directly and resumption behaves identically.
-// The three distinguishable worlds:
-//   - no `tlscache get` line before tlsok  -> the client offered no session ID
-//     (mbedtls only consults the cache for a non-empty ID in the ClientHello)
-//   - `get ... miss`                       -> client offered an ID we don't hold
-//   - `get ... HIT` + small hs_ms          -> abbreviated handshake worked
-// `set -> rc!=0` would mean the cache refused to store (e.g. alloc failure) --
-// a path that is otherwise invisible, because mbedtls ignores f_set_cache's return.
-static int tls_cache_get_probe(void* data, unsigned char const* id, size_t idlen, mbedtls_ssl_session* sess) {
-  int r = mbedtls_ssl_cache_get(data, id, idlen, sess);
-  EV("tlscache get id=%02x%02x%02x%02x len=%u -> %s", idlen > 0 ? id[0] : 0, idlen > 1 ? id[1] : 0,
-     idlen > 2 ? id[2] : 0, idlen > 3 ? id[3] : 0, (unsigned)idlen, r == 0 ? "HIT" : "miss");
-  return r;
+// wolfSSL is already used by CrossPoint's HTTPS transport. This session owns
+// only its context and connection; it never changes the process-wide allocator.
+static int tls_recv(WOLFSSL*, char* data, int len, void*) {
+  const int n = recv(g_tls_fd, data, len, 0);
+  if (n > 0) {
+    g_socket_rx_bytes.fetch_add(n);
+    return n;
+  }
+  if (!n) return WOLFSSL_CBIO_ERR_CONN_CLOSE;
+  if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) return WOLFSSL_CBIO_ERR_WANT_READ;
+  return WOLFSSL_CBIO_ERR_GENERAL;
 }
-static int tls_cache_set_probe(void* data, unsigned char const* id, size_t idlen, const mbedtls_ssl_session* sess) {
-  int r = mbedtls_ssl_cache_set(data, id, idlen, sess);
-  EV("tlscache set id=%02x%02x%02x%02x len=%u -> rc=%d", idlen > 0 ? id[0] : 0, idlen > 1 ? id[1] : 0,
-     idlen > 2 ? id[2] : 0, idlen > 3 ? id[3] : 0, (unsigned)idlen, r);
-  return r;
+static int tls_send(WOLFSSL*, char* data, int len, void*) {
+  const int n = send(g_tls_fd, data, len, 0);
+  if (n > 0) return n;
+  if (!n) return WOLFSSL_CBIO_ERR_CONN_CLOSE;
+  if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) return WOLFSSL_CBIO_ERR_WANT_WRITE;
+  return WOLFSSL_CBIO_ERR_GENERAL;
 }
-#endif /* AD_DIAG_DETAIL */
-
+static bool tls_want_io(int error) { return error == WOLFSSL_ERROR_WANT_READ || error == WOLFSSL_ERROR_WANT_WRITE; }
+static void tls_reset_session() {
+  if (g_ssl) wolfSSL_free(g_ssl);
+  g_ssl = nullptr;
+}
 static void airdrop_tls_release() {
-  mbedtls_ssl_free(&g_ssl);
-  mbedtls_ssl_cache_free(&g_cache);
-  mbedtls_ssl_config_free(&g_tlsconf);
-  mbedtls_pk_free(&g_pkey);
-  mbedtls_x509_crt_free(&g_srvcert);
-  mbedtls_ctr_drbg_free(&g_ctr_drbg);
-  mbedtls_entropy_free(&g_entropy);
+  tls_reset_session();
+  if (g_tlsconf) wolfSSL_CTX_free(g_tlsconf);
+  g_tlsconf = nullptr;
   g_tls_ready = false;
-  g_tls_tried = false;
 }
-
 static void airdrop_tls_init() {
   if (g_tls_ready) return;
-  /* A RETRY MUST GIVE BACK WHAT THE LAST ATTEMPT TOOK.
-   *
-   * tcp_listen_task calls this once a second until it succeeds, and every call used to
-   * re-init the same static contexts without freeing them. mbedtls_entropy_init allocates
-   * a message-digest accumulator; re-initialising over it drops the pointer and leaks it.
-   * A cert or key parsed by a pass that failed later leaks the same way.
-   *
-   * That made the retry a ONE-WAY RATCHET. Whatever caused the first failure -- a
-   * transient shortage while the radio was busy, say -- the loop then ground internal RAM
-   * down a few hundred bytes a second until even the accumulator would not fit, and from
-   * then on every pass failed at seeding FOREVER, long after the original cause had
-   * passed. Measured: 417 consecutive "[tls] seed -0x0034" lines over a 416-second
-   * capture, with free internal heap pinned at 24 bytes and dipping to 0. The device was
-   * not recovering because it could not: it was eating the memory it needed to recover.
-   *
-   * With the frees below, a pass that fails costs nothing, so a transient failure heals on
-   * the next tick instead of becoming permanent. */
-  if (g_tls_tried) airdrop_tls_release();
-  g_tls_tried = true;
-  mbedtls_entropy_init(&g_entropy);
-  mbedtls_ctr_drbg_init(&g_ctr_drbg);
-  mbedtls_x509_crt_init(&g_srvcert);
-  mbedtls_pk_init(&g_pkey);
-  mbedtls_ssl_config_init(&g_tlsconf);
-  const char* pers = "ESP32Drop-tls";
-  int r;
-  psa_crypto_init();  // some EC/PK paths route through PSA (MBEDTLS_PSA_CRYPTO_C on)
-  // EC P-256 cert: ECDSA sign is ~10-30ms vs RSA-2048's ~300ms. That speed is the
-  // whole game here: the response must be generated inside the ~52ms ch6 window so
-  // it reaches the sender before sharingd abandons the connection. (RSA sign blew
-  // past the window -> reply landed a window late -> handshake never converged.)
-  if ((r = mbedtls_ctr_drbg_seed(&g_ctr_drbg, mbedtls_entropy_func, &g_entropy, (const unsigned char*)pers,
-                                 strlen(pers)))) {
-    /* SAY HOW MUCH ROOM THERE WAS. "[tls] seed -0x0034" cost an hour: it names the failure
-       and not the reason, and the reason here is almost always that this library's mbedTLS
-       is built with CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC and internal RAM ran out at exactly
-       this moment. Adding 2,088 bytes of static to the sketch was enough to do it, and the
-       only visible symptom was that the device stopped appearing in the AirDrop share
-       sheet -- with the radio, the election and the cadence all reporting healthy. */
-    AD_LOG("[tls] seed failed -0x%04x, %lu B internal heap free (mbedTLS cannot use PSRAM)\n", -r,
-           (unsigned long)esp_get_free_internal_heap_size());
+  airdrop_tls_release();
+  g_tlsconf = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
+  if (!g_tlsconf) return;
+  // Everyone-mode AirDrop uses a self-signed server certificate, without client authentication.
+  wolfSSL_CTX_set_verify(g_tlsconf, WOLFSSL_VERIFY_NONE, nullptr);
+  g_ec_crt_err =
+      wolfSSL_CTX_use_certificate_buffer(g_tlsconf, AIRDROP_CRT_EC_DER, AIRDROP_CRT_EC_DER_LEN, WOLFSSL_FILETYPE_ASN1);
+  g_ec_key_err =
+      wolfSSL_CTX_use_PrivateKey_buffer(g_tlsconf, AIRDROP_KEY_EC_DER, AIRDROP_KEY_EC_DER_LEN, WOLFSSL_FILETYPE_ASN1);
+  if (g_ec_crt_err != WOLFSSL_SUCCESS || g_ec_key_err != WOLFSSL_SUCCESS) {
+    airdrop_tls_release();
     return;
   }
-  int ec_ok = 0, rc, rk;
-  rc = mbedtls_x509_crt_parse_der(&g_srvcert, AIRDROP_CRT_EC_DER, AIRDROP_CRT_EC_DER_LEN);
-  rk = rc ? -1
-          : mbedtls_pk_parse_key(&g_pkey, AIRDROP_KEY_EC_DER, AIRDROP_KEY_EC_DER_LEN, NULL, 0, mbedtls_ctr_drbg_random,
-                                 &g_ctr_drbg);
-  g_ec_crt_err = rc;
-  g_ec_key_err = rk;
-  if (!rc && !rk) {
-    ec_ok = 1;
-  } else
-    AD_LOG("[tls] EC(DER) crt=-0x%04x key=-0x%04x -> RSA fallback\n", -rc, -rk);
-  if (!ec_ok) {
-    // Fallback so we always have a working server even if EC parse fails.
-    mbedtls_x509_crt_free(&g_srvcert);
-    mbedtls_x509_crt_init(&g_srvcert);
-    mbedtls_pk_free(&g_pkey);
-    mbedtls_pk_init(&g_pkey);
-    if ((r = mbedtls_x509_crt_parse(&g_srvcert, (const unsigned char*)AIRDROP_CRT_RSA, strlen(AIRDROP_CRT_RSA) + 1))) {
-      AD_LOG("[tls] RSA crt -0x%04x\n", -r);
-      return;
-    }
-    if ((r = mbedtls_pk_parse_key(&g_pkey, (const unsigned char*)AIRDROP_KEY_RSA, strlen(AIRDROP_KEY_RSA) + 1, NULL, 0,
-                                  mbedtls_ctr_drbg_random, &g_ctr_drbg))) {
-      AD_LOG("[tls] RSA key -0x%04x\n", -r);
-      return;
-    }
-  }
-  if ((r = mbedtls_ssl_config_defaults(&g_tlsconf, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM,
-                                       MBEDTLS_SSL_PRESET_DEFAULT))) {
-    AD_LOG("[tls] defaults -0x%04x\n", -r);
+  wolfSSL_SetIORecv(g_tlsconf, tls_recv);
+  wolfSSL_SetIOSend(g_tlsconf, tls_send);
+  wolfSSL_CTX_set_session_cache_mode(g_tlsconf, WOLFSSL_SESS_CACHE_SERVER);
+  g_ssl = wolfSSL_new(g_tlsconf);
+  if (!g_ssl) {
+    airdrop_tls_release();
     return;
   }
-  mbedtls_ssl_conf_authmode(&g_tlsconf, MBEDTLS_SSL_VERIFY_NONE);  // Everyone: no client cert
-  mbedtls_ssl_conf_rng(&g_tlsconf, mbedtls_ctr_drbg_random, &g_ctr_drbg);
-  mbedtls_ssl_conf_min_tls_version(&g_tlsconf, MBEDTLS_SSL_VERSION_TLS1_2);
-  // Read timeout applies only to the HTTP phase (which uses the recv_timeout bio);
-  // the TLS handshake runs non-blocking via select() and ignores this.
-  mbedtls_ssl_conf_read_timeout(&g_tlsconf, 10000);
-  // Session cache: sharingd's follow-up/retry connections resume abbreviated
-  // (1-RTT, no cert, no EC sign) -- huge on this ~1-window/second link.
-  mbedtls_ssl_cache_init(&g_cache);
-  mbedtls_ssl_cache_set_max_entries(&g_cache, 4);
-#ifdef AD_DIAG_DETAIL
-  mbedtls_ssl_conf_session_cache(&g_tlsconf, &g_cache, tls_cache_get_probe, tls_cache_set_probe);
-#else
-  mbedtls_ssl_conf_session_cache(&g_tlsconf, &g_cache, mbedtls_ssl_cache_get, mbedtls_ssl_cache_set);
-#endif
-  if ((r = mbedtls_ssl_conf_own_cert(&g_tlsconf, &g_srvcert, &g_pkey))) {
-    AD_LOG("[tls] own_cert -0x%04x\n", -r);
-    return;
-  }
-  // Allocate the ONE ssl context now (34KB I/O buffers). session_reset() between
-  // connections reuses these buffers -> no per-connection alloc churn/fragmentation.
-  mbedtls_ssl_init(&g_ssl);
-  if ((r = mbedtls_ssl_setup(&g_ssl, &g_tlsconf))) {
-    AD_LOG("[tls] ssl_setup -0x%04x\n", -r);
-    return;
-  }
+  g_tls_alg = "ECDSA";
   g_tls_ready = true;
-  g_tls_alg = mbedtls_pk_get_name(&g_pkey);
-  AD_LOG("[tls] server config ready (%s, verify=none, select-loop)\n", g_tls_alg);
 }
-
 bool ad_prepare_tls() {
   if (g_listener_running.load()) return false;
   airdrop_tls_init();
   return g_tls_ready;
 }
-
-static int ssl_write_all(mbedtls_ssl_context* ssl, const unsigned char* p, int len) {
+static int ssl_write_all(WOLFSSL* ssl, const unsigned char* p, int len) {
   int off = 0;
-  while (off < len) {
-    int r = mbedtls_ssl_write(ssl, p + off, len - off);
-    if (r == MBEDTLS_ERR_SSL_WANT_READ || r == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
-    if (r <= 0) return r;
-    off += r;
+  const uint32_t start = millis();
+  while (off < len && !g_stop.load() && millis() - start < 10000) {
+    const int n = wolfSSL_write(ssl, p + off, len - off);
+    if (n > 0) {
+      off += n;
+      continue;
+    }
+    if (!tls_want_io(wolfSSL_get_error(ssl, n))) return -1;
+    vTaskDelay(pdMS_TO_TICKS(1));
   }
-  return off;
+  return off == len ? off : -1;
 }
-
-// The TLS read timeout is a per-config value that mbedtls reads on every recv, so
-// it can be retuned between phases of one session. One flat 10s value was very
-// expensive: it is the price of every stall, and two different stalls were measured
-// costing 10s each in a single /Discover exchange.
-static void set_rd_timeout(uint32_t ms) { mbedtls_ssl_conf_read_timeout(&g_tlsconf, ms); }
-
-// The byte source ad_http.h reads through. Its contract -- >0 bytes, 0 for a
-// TIMEOUT, <0 for a close -- is exactly mbedtls's, and keeping the three distinct is
-// the whole reason the layer can tell "nothing arrived yet" from "the peer is gone".
-#ifdef HTTP_TRACE
-/* ---- HTTP_TRACE: what a REAL Apple sender's /Discover and /Ask requests contain -------------
- *
- * The reference the send path's bplist writer is checked against. airdrop_cert.h's blobs
- * are RECEIVER-shaped, so a sender's request bodies are their own measurement,
- * and this is how that measurement is taken.
- *
- * IT SITS IN http_src_mbedtls(), on the one path every decrypted byte takes, so it cannot
- * go inert -- and it counts what it captured. That placement is what makes it worth
- * having: the /Ask -> /Upload transition is where desynchronisation hides, and the one
- * occurrence on record was caught only because a chunk-size line happened to look like a
- * hex number ("req 1F7BB"). A tap anywhere off the byte path cannot find that.
- *
- * DECRYPTED, unlike AIRDROP_CH_DUMP -- that one wraps the net BIO and therefore sees
- * ciphertext plus the plaintext ClientHello, which answers a different question.
- *
- * ⚠️ THE OUTPUT CONTAINS THE SENDER'S APPLE ID VALIDATION RECORD. It is capture of a
- * real person's identity material. It belongs in logs/ (which .gitignore excludes) and
- * MUST NOT be committed, and must not go into testdata/ even scrubbed.
- *
- * 4 KB per connection is deliberate: it covers /Discover, the /Ask body, the /Upload
- * request line and headers, and the first chunk header -- the entire region in question
- * -- without drowning the serial link in a 265 KB image. */
-#ifndef HTTP_TRACE_MAX
-#define HTTP_TRACE_MAX 4096
-#endif
-/* IT BUFFERS INTO PSRAM AND THE SKETCH DUMPS IT LATER, and that is not a refinement --
- * the first version staged hex lines directly and lost almost everything. Measured: of a
- * body the reader demonstrably consumed in full ("body read done ... to=0"), only 224
- * bytes reached the serial link. ht_put runs on the TLS task and can stage a hundred
- * lines in a millisecond; the ring is drained by loop() over USB CDC at ~45 B/ms. The
- * ring is drop-counted rather than blocking -- correctly, since a protocol task must not
- * wait on a log -- so the overflow is silent and looks exactly like a body that was never
- * read. AIRDROP_BODY_KEEP already solved this shape: hold the bytes, let the sketch pace
- * the output. Same pattern here. */
-static uint8_t* g_ht_buf = NULL; /* PSRAM: mbedTLS may not have this memory anyway */
-static int g_ht_len = 0;         /* bytes held                                     */
-static int g_ht_off = 0;         /* cumulative decrypted-stream offset             */
-static bool g_ht_full = false;
-
-static void ht_arm(void) {
-  if (g_ht_len > 0) return; /* a previous capture is still waiting to be read */
-  if (!g_ht_buf) g_ht_buf = (uint8_t*)heap_caps_malloc(HTTP_TRACE_MAX, MALLOC_CAP_SPIRAM);
-  g_ht_off = 0;
-  g_ht_full = false;
+static void set_rd_timeout(uint32_t ms) {
+  const timeval timeout = {static_cast<time_t>(ms / 1000), static_cast<suseconds_t>((ms % 1000) * 1000)};
+  setsockopt(g_tls_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+  setsockopt(g_tls_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 }
-
-static void ht_put(const unsigned char* b, int n) {
-  if (!g_ht_buf || g_ht_full || n <= 0) return;
-  int room = HTTP_TRACE_MAX - g_ht_off;
-  if (n > room) {
-    n = room;
-    g_ht_full = true;
-  }
-  if (n > 0) {
-    memcpy(g_ht_buf + g_ht_off, b, (size_t)n);
-    g_ht_off += n;
-    g_ht_len = g_ht_off;
-  }
-  if (g_ht_full) EV("httptrace full at %d B", g_ht_off);
-}
-
-/* Lend the capture to the sketch. The library still owns the block; ht_trace_release()
- * frees the hold so the next connection can arm. Same contract as ad_body_peek(). */
-uint32_t ht_trace_peek(const uint8_t** p) {
-  *p = g_ht_buf;
-  return (uint32_t)g_ht_len;
-}
-void ht_trace_release(void) {
-  g_ht_len = 0;
-  g_ht_off = 0;
-  g_ht_full = false;
-}
-#endif /* HTTP_TRACE */
-
-static int http_src_mbedtls(struct HttpRdr* r, unsigned char* buf, int len) {
-  mbedtls_ssl_context* ssl = (mbedtls_ssl_context*)r->ctx;
-  int ret;
-  do {
-    ret = mbedtls_ssl_read(ssl, buf, (size_t)len);
-  } while (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
-  if (ret == MBEDTLS_ERR_SSL_TIMEOUT) return 0;
-  if (ret <= 0) return -1;
-#ifdef HTTP_TRACE
-  ht_put(buf, ret);
-#endif
-  return ret;
+// HTTP uses blocking sockets: WANT_READ after a socket timeout means no bytes,
+// while a closed connection or a TLS error must poison the request.
+static int http_src_tls(struct HttpRdr* r, unsigned char* buf, int len) {
+  auto* ssl = static_cast<WOLFSSL*>(r->ctx);
+  const int n = wolfSSL_read(ssl, buf, len);
+  if (n > 0) return n;
+  const int error = wolfSSL_get_error(ssl, n);
+  if (tls_want_io(error)) return 0;
+  g_last_tls_error.store(error);
+  return -1;
 }
 static void http_set_timeout(struct HttpRdr* r, uint32_t ms) {
   r->timeout_ms = ms;
@@ -1135,11 +750,8 @@ static void http_set_timeout(struct HttpRdr* r, uint32_t ms) {
 // Firmware adapters for the transport-agnostic dispatch layer (ad_serve.h).
 // serve() below fills an HttpServe with these; the same struct on the host test
 // side points write/now/log at a capture buffer and a scripted clock.
-static int sv_write(struct HttpServe* s, const unsigned char* p, int n) {
-  return ssl_write_all((mbedtls_ssl_context*)s->io, p, n);
-}
+static int sv_write(struct HttpServe* s, const unsigned char* p, int n) { return ssl_write_all((WOLFSSL*)s->io, p, n); }
 static uint32_t sv_now(struct HttpServe*) { return millis(); }
-static void sv_log(struct HttpServe*, const char* l) { EV("%s", l); }
 
 static void set_nonblock(int fd, bool nb) {
   int fl = fcntl(fd, F_GETFL, 0);
@@ -1183,9 +795,8 @@ static bool stream_deliver(AdStreamEvent event, const uint8_t* data = nullptr, u
 }
 
 // ---- /Upload receive + decode ----------------------------------------------
-// Chunked and Content-Length bodies use the same DvZip record pump. With a
-// stream callback, fixed scratch is handed to ad_poll for incremental storage.
-// Without it, the legacy API retains a complete decoded archive in PSRAM.
+// Chunked and Content-Length bodies use the same DvZip record pump. Fixed
+// scratch is handed to ad_poll through the stream callback for incremental storage.
 // The TLS task never touches storage or the display. Receipt failures precede
 // the response; success waits for the consumer's final validation.
 
@@ -1193,7 +804,7 @@ enum {
   RXM_UNDECIDED = 0,  // fewer than 10 body bytes: no shape yet
   RXM_STREAM,         // DvZip signature seen: decode records as they complete
   RXM_RAW
-};  // anything else (gzip, bare cpio): accumulate, as always
+};  // unsupported body signature
 
 enum {
   RXF_NONE = 0,
@@ -1203,42 +814,33 @@ enum {
 };  // a record's zlib would not inflate -> 400
 
 struct RxPump {
-  uint8_t* out;  // whole archive or fixed record scratch, owned by RxPump until release
-  bool streaming;
+  uint8_t* out;  // fixed record scratch, owned by RxPump until release
   uint32_t out_len, out_cap;
   uint32_t in_total;      // body bytes ever appended -- sink->len is only the residue
   uint32_t residue_prev;  // sink->len as this hook last left it, for the delta
   uint32_t nrec, nstored;
-  int end;             // AdDvzipEnd of the FINAL drain; init to END_RUNNING
-  uint8_t mode;        // RXM_*
-  uint8_t fail;        // RXF_*, sticky
-  bool psram_limited;  // out_cap was capped by free PSRAM, not by any policy:
-                       // turns a later CAP into 507 (device) instead of 413 (file)
+  int end;       // AdDvzipEnd of the FINAL drain; init to END_RUNNING
+  uint8_t mode;  // RXM_*
+  uint8_t fail;  // RXF_*, sticky
 };
 
-/* Decode ONE complete record into the output block. Shared by the in-flight drain
-   and the whole-buffer fallback below, so there is exactly one decoder.
-   NO PER-RECORD LOGGING on success: the first version of the decode logged every
-   record, an eighteen-line burst into an eight-slot ring, and the lines it evicted
-   were the summary and the cut report -- the two it existed to produce. */
+// Decode one bounded record and deliver it through the main-task mailbox.
 static bool rx_pump_emit(void* vp, const struct AdDvzipRec* rec, const uint8_t* payload) {
   struct RxPump* p = (struct RxPump*)vp;
-  uint32_t room = p->streaming ? 256u * 1024u : p->out_cap - p->out_len;
-  uint8_t* target = p->out + (p->streaming ? 0 : p->out_len);
+  uint32_t room = 256u * 1024u;
+  uint8_t* target = p->out;
   if (rec->stored) {
     /* A STORED RECORD IS A COPY, NOT A DECOMPRESSION. macOS switches to these once
        deflate stops paying on an already-compressed image -- measured, 6 of the 18
        records in a 2.35 MB photo. Feeding one to the inflater is what used to cut the
        stream and deliver half an archive. */
     if (rec->len > room) {
-      p->fail = p->streaming ? RXF_INFLATE : RXF_CAP;
-      AD_LOG("DVZIP-CAP: stored record %lu wants %lu B, %lu B room\n", (unsigned long)(p->nrec + 1),
-             (unsigned long)rec->len, (unsigned long)room);
+      p->fail = RXF_INFLATE;
+
       return false;
     }
     memcpy(target, payload, rec->len);
-    if (p->streaming &&
-        (rec->len > p->out_cap - p->out_len || !stream_deliver(AdStreamEvent::Data, target, rec->len))) {
+    if (rec->len > p->out_cap - p->out_len || !stream_deliver(AdStreamEvent::Data, target, rec->len)) {
       p->fail = rec->len > p->out_cap - p->out_len ? RXF_CAP : (g_stream_oversized.load() ? RXF_CAP : RXF_OOM);
       return false;
     }
@@ -1254,11 +856,10 @@ static bool rx_pump_emit(void* vp, const struct AdDvzipRec* rec, const uint8_t* 
        so split them by room: the measured record grain is 128 KiB uncompressed, and
        a conforming record given two grains of room cannot have run out of space. */
     p->fail = (room < 2u * AD_DVZIP_GRAIN) ? RXF_CAP : RXF_INFLATE;
-    AD_LOG("DVZIP-REC: record %lu (%lu B zlib) failed with %lu B room -> %s\n", (unsigned long)(p->nrec + 1),
-           (unsigned long)rec->len, (unsigned long)room, p->fail == RXF_CAP ? "cap" : "inflate");
+
     return false;
   }
-  if (p->streaming && (got > p->out_cap - p->out_len || !stream_deliver(AdStreamEvent::Data, target, got))) {
+  if (got > p->out_cap - p->out_len || !stream_deliver(AdStreamEvent::Data, target, got)) {
     p->fail = got > p->out_cap - p->out_len ? RXF_CAP : (g_stream_oversized.load() ? RXF_CAP : RXF_OOM);
     return false;
   }
@@ -1267,13 +868,7 @@ static bool rx_pump_emit(void* vp, const struct AdDvzipRec* rec, const uint8_t* 
   return true;
 }
 
-/* Adopt streaming only on the DvZip wire signature: a plausible first record length
-   and a zlib header at offset 4 (or bit 31 -- a stored first record, never yet seen
-   first but legal). gzip's 1f 8b and cpio's "07070" both read as absurd record
-   lengths and fall to RXM_RAW, where the sink accumulates exactly as it always has.
-   A genuine DvZip body that fails this test (first record over the sane cap) also
-   falls to RAW and is STILL decoded -- once, at the end, through the same pump -- so
-   the streaming test gates only WHEN decoding happens, never WHETHER. */
+// Accept bounded DvZip records; unsupported body formats fail archive validation.
 #define RX_REC_SANE (1u * 1024 * 1024) /* largest measured compressed payload: 131,118 B */
 static int rx_body_shape(const uint8_t* b, uint32_t n) {
   if (n < 10) return RXM_UNDECIDED; /* same floor as ad_dvzip_looks_like */
@@ -1285,25 +880,8 @@ static int rx_body_shape(const uint8_t* b, uint32_t n) {
   return RXM_STREAM;
 }
 
-/* The output block, allocated ONCE, all-or-nothing, the moment streaming is adopted.
- *
- * Upfront rather than grown, because growth is what failed before: a doubling realloc
- * of a multi-MB block needs old and new at once when it cannot extend in place, and
- * 4 MiB + 7 MiB does not fit in an 8 MiB part -- the same arithmetic that killed the
- * 2,352,506-byte transfer this redesign started from. One allocation also moves the
- * OOM to record one, where it is answered as 507 before megabytes have flown, instead
- * of at second 70 of a 71-second transfer. The slack is given back by a shrinking
- * realloc at the end, the move the receive path already used.
- *
- * RX_OUT_HEADROOM is what the transfer itself may still need beside the output: the
- * residue buffer is already allocated when this runs, so this covers only incidental
- * PSRAM use during the transfer. Ceiling arithmetic, measured base: 7,864,308 B
- * largest free block - 320 KiB residue - this headroom ~= 7.1 MB of decoded archive. */
-static const uint32_t RX_OUT_HEADROOM = 384u * 1024;
-
 static bool rx_pump_open(struct RxPump* p) {
   if (g_stream_cb) {
-    p->streaming = true;
     p->out_cap = g_rx_max;
     g_rx_max_eff = g_rx_max;
     // Port owns one fixed PSRAM scratch block; rx_upload frees it on every exit.
@@ -1312,32 +890,11 @@ static bool rx_pump_open(struct RxPump* p) {
       p->fail = RXF_OOM;
       return false;
     }
-    AD_LOG("RX-SD: fixed 256 KiB decode scratch, %lu B archive ceiling\n", (unsigned long)p->out_cap);
+
     return true;
   }
-  /* TAKE WHAT THE SKETCH ALLOWED, NOT WHAT PSRAM HAPPENS TO HAVE.
-     This used to ask for largest_free_block - headroom, i.e. nearly all of PSRAM, for the
-     length of every transfer. That is right for a badge that does nothing else and wrong
-     for a sketch with its own buffers -- and the failure it produces is the sketch's
-     allocation returning NULL, which is a worse place for it to land than here. So the
-     ceiling is g_rx_max, and PSRAM only lowers it. */
-  uint32_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
-  uint32_t avail = (largest > RX_OUT_HEADROOM) ? largest - RX_OUT_HEADROOM : 0;
-  uint32_t want = (g_rx_max < avail) ? g_rx_max : avail;
-  p->psram_limited = avail < g_rx_max;
-  g_rx_max_eff = want;
-  p->out = want ? (uint8_t*)heap_caps_malloc(want, MALLOC_CAP_SPIRAM) : nullptr;
-  if (!p->out) {
-    AD_LOG("RX-OOM: decode block of %lu B refused, %lu free / %lu largest in PSRAM\n", (unsigned long)want,
-           (unsigned long)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
-           (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
-    p->fail = RXF_OOM;
-    return false;
-  }
-  p->out_cap = want;
-  AD_LOG("RX-STREAM: DvZip signature, decode-while-receive, %lu B ceiling%s\n", (unsigned long)want,
-         p->psram_limited ? " (PSRAM-limited)" : "");
-  return true;
+  p->fail = RXF_OOM;
+  return false;
 }
 
 // PSRAM-backed sink for ad_http.h's chunked receiver.
@@ -1368,8 +925,6 @@ static void rx_sink_progress(struct HttpSink* sk) {
        input a megabyte past the output ceiling is not a photo. */
     if (p->in_total > p->out_cap + (1u << 20)) {
       p->fail = RXF_CAP;
-      AD_LOG("RX-CAP: %lu B in vs %lu B out ceiling -- input bound tripped\n", (unsigned long)p->in_total,
-             (unsigned long)p->out_cap);
     }
   }
   if (p->mode == RXM_STREAM && !p->fail) {
@@ -1386,7 +941,7 @@ static void rx_sink_progress(struct HttpSink* sk) {
        rx_upload translates the reason into a status BEFORE the response -- which is
        the entire point of decoding in flight. */
     sk->max = 0;
-    if (p->fail == RXF_OOM || (p->fail == RXF_CAP && p->psram_limited)) g_rx_grow_failed = true; /* -> 507, not 413 */
+    if (p->fail == RXF_OOM) g_rx_grow_failed = true; /* -> 507, not 413 */
   }
   p->residue_prev = sk->len;
 }
@@ -1404,9 +959,7 @@ static bool rx_sink_grow(struct HttpSink* sk, uint32_t need) {
        opposite responses from a user, and they used to be indistinguishable in the log.
        This changes no behaviour; it only stops the log from misdiagnosing. */
     g_rx_grow_failed = true;
-    AD_LOG("RX-OOM: grow %lu -> %lu B failed (need %lu), %lu free / %lu largest in PSRAM\n", (unsigned long)sk->cap,
-           (unsigned long)nc, (unsigned long)need, (unsigned long)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
-           (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+
     return false;
   }
   sk->buf = np;
@@ -1422,7 +975,7 @@ static std::atomic<bool> g_upload_pending{false};
 bool ad_upload_pending() { return g_upload_pending.load(); }
 
 static void rx_upload(struct HttpRdr* r, bool chunked, int clen) {
-  mbedtls_ssl_context* ssl = (mbedtls_ssl_context*)r->ctx;
+  WOLFSSL* ssl = (WOLFSSL*)r->ctx;
   g_stream_oversized.store(false);
   g_upload_pending.store(true);
   g_rx_active = true;
@@ -1435,11 +988,6 @@ static void rx_upload(struct HttpRdr* r, bool chunked, int clen) {
   struct RxPump pump;
   memset(&pump, 0, sizeof(pump));
   pump.end = AD_DVZIP_END_RUNNING; /* zero is END_RECORD, which claims certainty */
-#ifdef AIRDROP_BODY_KEEP
-  pump.mode = RXM_RAW; /* the probe build keeps the RAW body: decoding
-                          in flight would destroy the evidence it exists
-                          to capture */
-#endif
 
   /* The receive buffer. Under streaming it holds only the RESIDUE -- one held-back
      record plus one arriving one, worst legit case 131,122 + ~131,126 B at the
@@ -1484,15 +1032,15 @@ static void rx_upload(struct HttpRdr* r, bool chunked, int clen) {
     switch (rc) {
       case HTTP_RECV_OK_END_RECORD:
         clean_end = true;
-        AD_LOG("UPLOAD: complete via DvZip end record\n");
+
         break;
       case HTTP_RECV_OK_LAST_CHUNK:
         clean_end = true;
-        AD_LOG("UPLOAD: complete via HTTP last-chunk\n");
+
         break;
       case HTTP_RECV_OK_SILENCE:
         clean_end = true;
-        AD_LOG("UPLOAD: complete via boundary + 3s silence\n");
+
         break;
       case HTTP_RECV_OVERFLOW:
         overflow = true;
@@ -1500,11 +1048,10 @@ static void rx_upload(struct HttpRdr* r, bool chunked, int clen) {
       default:
         /* The reason was thrown away here, which is why two identical 2,352,506-byte
            failures could not be told apart. rc IS the reason. */
-        AD_LOG("UPLOAD-STOP: rc=%d after %lu bytes\n", rc, (unsigned long)body_total);
+
         break;
     }
-    EV("upload_recv rc=%d total=%lu residue=%lu decoded=%lu poisoned=%d eof=%d", rc, (unsigned long)body_total,
-       (unsigned long)len, (unsigned long)pump.out_len, r->poisoned, r->eof);
+
   } else if (clen > 0) {
     HttpSink sk{};
     sk.buf = gz;
@@ -1550,7 +1097,7 @@ static void rx_upload(struct HttpRdr* r, bool chunked, int clen) {
      split repeats here because the final drain runs outside the progress hook.) */
   if (pump.fail == RXF_OOM || pump.fail == RXF_CAP) {
     overflow = true;
-    if (pump.fail == RXF_OOM || pump.psram_limited) g_rx_grow_failed = true;
+    if (pump.fail == RXF_OOM) g_rx_grow_failed = true;
   }
 
   {  // Reject known transport failures now; success waits for the SD callback.
@@ -1601,12 +1148,8 @@ static void rx_upload(struct HttpRdr* r, bool chunked, int clen) {
           r->p = r->n;
         }
       }
-      AD_LOG("UPLOAD-REPLY: %s; drained %lu B in %lu ms before closing\n", status, (unsigned long)binned,
-             (unsigned long)((uint32_t)(esp_timer_get_time() / 1000) - t0));
     }
   }
-  AD_LOG("UPLOAD: received %lu bytes (chunk=%d ovf=%d complete=%d)\n", (unsigned long)body_total, chunked, overflow,
-         clean_end);
   if (pump.fail == RXF_INFLATE) { /* before overflow, same order as the status */
     snprintf(g_img_errmsg, sizeof(g_img_errmsg), "record %lu would not inflate", (unsigned long)(pump.nrec + 1));
     g_img_err++;
@@ -1615,7 +1158,7 @@ static void rx_upload(struct HttpRdr* r, bool chunked, int clen) {
   if (overflow) {
     strlcpy(g_img_errmsg, g_rx_grow_failed ? "out of PSRAM" : "file too large", sizeof(g_img_errmsg));
     g_img_err++;
-    if (pump.fail == RXF_CAP && !pump.psram_limited) g_limit_rejections.fetch_add(1);
+    if (pump.fail == RXF_CAP) g_limit_rejections.fetch_add(1);
     goto done;
   }
   if (body_total < 6) {
@@ -1630,228 +1173,17 @@ static void rx_upload(struct HttpRdr* r, bool chunked, int clen) {
     goto done;
   }
 
-  if (g_stream_cb) {
-    if (pump.streaming && ad_dvzip_end_ok(pump.end) && stream_deliver(AdStreamEvent::Finish)) {
-      g_upload_ok++;
-      AD_LOG("UPLOAD-SD-OK: %lu decoded bytes\n", (unsigned long)pump.out_len);
-    } else {
-      g_img_err++;
-      strlcpy(g_img_errmsg, "stream incomplete or storage failed", sizeof(g_img_errmsg));
-    }
-    goto done;
-  }
-
-  if (pump.mode != RXM_STREAM) {
-    // dump the body head so the format is unambiguous next run (1f8b=gzip, 070707=odc
-    // cpio, else=unknown/DvZip). Streamed bodies consumed their head long ago; their
-    // shape is already on the RX-STREAM line.
-    char hx[3 * 32 + 1] = {0};
-    int hn = (len < 32) ? (int)len : 32;
-    for (int i = 0; i < hn; i++) sprintf(hx + i * 3, "%02x ", gz[i]);
-    AD_LOG("UPLOAD: body head (%lu bytes): %s\n", (unsigned long)len, hx);
-  }
-
-#ifdef AIRDROP_BODY_KEEP
-  /* THE PROBE BUILD KEEPS THE BODY INSTEAD OF PARSING IT.
-   *
-   * Every question we have asked about this stream so far -- is the top bit of a record
-   * length a flag, is the payload stored or deflated, does the record grain stay 128 KiB --
-   * has cost one physical AirDrop of a 2.4 MB photo and about 71 s of a person's time, and has
-   * answered exactly one hypothesis. That trade is bad and it does not have to be made:
-   * the bytes themselves answer every hypothesis, including the ones nobody has thought of
-   * yet, and they answer them offline, for ever.
-   *
-   * So this build does not inflate. It hands the raw body to the sketch, which writes it
-   * out and lets tools/decode-body.py reconstruct it to a file. One AirDrop, then the
-   * question moves to a host test where it belongs.
-   *
-   * Skipping the inflate is not laziness -- it is what makes the peak safe. Parsing would
-   * hold the 2.35 MB body and a 2.65 MB output buffer at once; this holds only the body. */
-  if (!g_body_ready) {
-    g_body_len = len;
-    g_body_block = gz;
-    gz = nullptr;
-    g_body_ready = true;  // release flag: set LAST
-    AD_LOG("BODY-KEEP: %lu bytes held for dump\n", (unsigned long)g_body_len);
+  if (pump.out && ad_dvzip_end_ok(pump.end) && stream_deliver(AdStreamEvent::Finish)) {
+    g_upload_ok++;
   } else {
-    AD_LOG("BODY-KEEP: previous body not yet dumped, discarding %lu bytes\n", (unsigned long)len);
-  }
-  goto done;
-#endif
-
-  {
-    const uint8_t* cpio = nullptr;
-    uint32_t cpio_len = 0;
-    uint8_t* outbuf = nullptr;
-    if (pump.mode == RXM_STREAM) {
-      // Decoded already, during receipt -- the outcome the response above was built
-      // from. All that is left is to give back the slack: the output block was
-      // allocated at the ceiling, and a shrinking realloc to the real size frees the
-      // tail in place.
-      heap_caps_free(gz);
-      gz = nullptr;  // the residue served its purpose
-      if (pump.out_len) {
-        uint8_t* shr = (uint8_t*)heap_caps_realloc(pump.out, pump.out_len, MALLOC_CAP_SPIRAM);
-        if (shr) pump.out = shr;
-      }
-      outbuf = pump.out;
-      pump.out = nullptr;  // ownership moves to the handoff
-      cpio = outbuf;
-      cpio_len = pump.out_len;
-      AD_LOG("DVZIP: %lu records (%lu stored), %lu in -> %lu out, end=%s\n", (unsigned long)pump.nrec,
-             (unsigned long)pump.nstored, (unsigned long)body_total, (unsigned long)cpio_len,
-             ad_dvzip_end_name(pump.end));
-      /* A WALK THAT STOPPED IS NOT A WALK THAT FINISHED. The whole files inside a
-         short archive are still real files, so they are still delivered -- but the
-         archive is not called complete. */
-      if (!ad_dvzip_end_ok(pump.end)) {
-        snprintf(g_img_errmsg, sizeof(g_img_errmsg), "dvzip %s at %lu of %lu", ad_dvzip_end_name(pump.end),
-                 (unsigned long)cpio_len, (unsigned long)body_total);
-        g_img_err++;
-      }
-    } else if (gz[0] == 0x1f && gz[1] == 0x8b && gz[2] == 0x08) {  // gzip -> gunzip
-      uint32_t off = 10;
-      uint8_t flg = gz[3];
-      if (flg & 0x04) {
-        if (off + 2 <= len) {
-          off += 2 + (gz[off] | (gz[off + 1] << 8));
-        }
-      }  // FEXTRA
-      if (flg & 0x08) {
-        while (off < len && gz[off]) off++;
-        off++;
-      }  // FNAME
-      if (flg & 0x10) {
-        while (off < len && gz[off]) off++;
-        off++;
-      }  // FCOMMENT
-      if (flg & 0x02) {
-        off += 2;
-      }  // FHCRC
-      uint32_t isize =
-          (len >= 4) ? (gz[len - 4] | (gz[len - 3] << 8) | (gz[len - 2] << 16) | ((uint32_t)gz[len - 1] << 24)) : 0;
-      if (off + 8 > len || isize == 0 || isize > g_rx_max) {
-        strlcpy(g_img_errmsg, "bad gzip", sizeof(g_img_errmsg));
-        g_img_err++;
-        goto done;
-      }
-      outbuf = (uint8_t*)heap_caps_malloc(isize, MALLOC_CAP_SPIRAM);
-      if (!outbuf) {
-        strlcpy(g_img_errmsg, "out of PSRAM", sizeof(g_img_errmsg));
-        g_img_err++;
-        goto done;
-      }
-      size_t out = tinfl_decompress_mem_to_mem(outbuf, isize, gz + off, len - off, 0);
-      if (out == TINFL_DECOMPRESS_MEM_TO_MEM_FAILED) {
-        heap_caps_free(outbuf);
-        strlcpy(g_img_errmsg, "inflate failed", sizeof(g_img_errmsg));
-        g_img_err++;
-        goto done;
-      }
-      cpio = outbuf;
-      cpio_len = out;
-      heap_caps_free(gz);
-      gz = nullptr;                            // free compressed ASAP
-    } else if (memcmp(gz, "07070", 5) == 0) {  // already-raw cpio (odc/newc)
-      cpio = gz;
-      cpio_len = len;
-    } else {
-      // A DvZip body that was NOT streamed: the probe build (BODY_KEEP forces RAW), a
-      // non-chunked body (the progress hook never ran), or a first record the streaming
-      // signature declined. Decoded here, once, through the SAME pump -- one decoder,
-      // whichever moment it runs at. This is the one decode still on the wrong side of
-      // the response; every shape a current macOS/iOS sender actually produces takes
-      // the streamed path above.
-      bool dvzip = ad_dvzip_looks_like(gz, len);
-      /* GIVE THE SLACK BACK FIRST. The receive buffer grows by DOUBLING, so the body
-         may sit in a block nearly twice its size while the pump below is about to ask
-         for the output ceiling out of an 8 MiB part. Shrinking to the actual length
-         costs one realloc that almost always stays in place. */
-      {
-        uint8_t* shr = (uint8_t*)heap_caps_realloc(gz, len ? len : 1, MALLOC_CAP_SPIRAM);
-        if (shr) gz = shr;
-      }
-      if (dvzip && rx_pump_open(&pump)) {
-        int dvend = AD_DVZIP_END_RUNNING;
-        (void)ad_dvzip_drain(gz, len, true, rx_pump_emit, &pump, &dvend);
-        pump.end = dvend;
-        heap_caps_free(gz);
-        gz = nullptr;
-        if (pump.fail) {
-          heap_caps_free(pump.out);
-          pump.out = nullptr;
-          strlcpy(g_img_errmsg,
-                  pump.fail == RXF_INFLATE ? "dvzip inflate failed"
-                  : pump.fail == RXF_OOM   ? "out of PSRAM"
-                                           : "file too large",
-                  sizeof(g_img_errmsg));
-          g_img_err++;
-          goto done;
-        }
-        if (pump.out_len) {
-          uint8_t* shr2 = (uint8_t*)heap_caps_realloc(pump.out, pump.out_len, MALLOC_CAP_SPIRAM);
-          if (shr2) pump.out = shr2;
-        }
-        outbuf = pump.out;
-        pump.out = nullptr;
-        cpio = outbuf;
-        cpio_len = pump.out_len;
-        AD_LOG("DVZIP: %lu records (%lu stored), %lu in -> %lu out, end=%s (post-hoc)\n", (unsigned long)pump.nrec,
-               (unsigned long)pump.nstored, (unsigned long)len, (unsigned long)cpio_len, ad_dvzip_end_name(pump.end));
-        /* A WALK THAT STOPPED IS NOT A WALK THAT FINISHED.
-           This used to return the buffer and say nothing: 1,310,889 bytes of a ~2,354,000
-           byte archive reached the caller labelled good, and the only reason anyone found
-           out was that a cpio walker two layers away happened to notice. The whole files
-           inside a short archive are still real files, so they are still delivered -- but
-           the archive is not called complete. */
-        if (!ad_dvzip_end_ok(pump.end)) {
-          snprintf(g_img_errmsg, sizeof(g_img_errmsg), "dvzip %s at %lu of %lu", ad_dvzip_end_name(pump.end),
-                   (unsigned long)cpio_len, (unsigned long)len);
-          g_img_err++;
-        }
-      } else {
-        strlcpy(g_img_errmsg, dvzip ? "out of PSRAM" : "not a cpio/gzip", sizeof(g_img_errmsg));
-        g_img_err++;
-        goto done;
-      }
-    }
-
-    {  // dump the reconstructed cpio head so we can see the format/first entry
-      char hx[3 * 48 + 1] = {0};
-      int hn = (cpio_len < 48) ? (int)cpio_len : 48;
-      for (int i = 0; i < hn; i++) sprintf(hx + i * 3, "%02x ", cpio[i]);
-      AD_LOG("CPIO: %lu bytes head: %s\n", (unsigned long)cpio_len, hx);
-    }
-    if (g_arch_ready) {
-      // A previous archive is still waiting to be handed over. Dropping the new one is
-      // right -- the alternative is freeing a block the consumer may be inside.
-      if (outbuf)
-        heap_caps_free(outbuf);
-      else if (gz) {
-        heap_caps_free(gz);
-        gz = nullptr;
-      }
-      g_img_err++;
-      strlcpy(g_img_errmsg, "previous not collected", sizeof(g_img_errmsg));
-    } else {
-      g_arch_block = outbuf ? outbuf : gz;
-      gz = nullptr;
-      outbuf = nullptr;  // ownership transferred
-      g_arch_buf = cpio;
-      g_arch_len = cpio_len;
-      g_upload_ok++;
-      g_arch_ready = true;  // release flag: set LAST
-      AD_LOG("UPLOAD-OK! %lu bytes of cpio -> handler\n", (unsigned long)cpio_len);
-    }
+    g_img_err++;
+    strlcpy(g_img_errmsg, "stream incomplete or storage failed", sizeof(g_img_errmsg));
   }
 
 done:
   if (g_stream_cb && g_img_err != err0) stream_deliver(AdStreamEvent::Abort);
   if (!response_sent) {
-    // The UI task owns SD access. Wait for its atomic archive-release acknowledgement.
-    const uint32_t saving_started = millis();
-    while (g_arch_ready.load() && !g_stop.load() && millis() - saving_started < 10000) vTaskDelay(pdMS_TO_TICKS(5));
-    const bool saved = !g_arch_ready.load() && !g_stop.load() && g_img_err == err0;
+    const bool saved = !g_stop.load() && g_img_err == err0;
     const char* status = saved ? "200 OK" : "507 Insufficient Storage";
     char reply[128];
     const int length =
@@ -1859,8 +1191,7 @@ done:
     ssl_write_all(ssl, reinterpret_cast<const unsigned char*>(reply), length);
   }
   if (gz) heap_caps_free(gz);
-  if (pump.out) heap_caps_free(pump.out);                           // a decode block that never reached handoff
-  if (g_img_err != err0) AD_LOG("UPLOAD-ERR: %s\n", g_img_errmsg);  // was silent before
+  if (pump.out) heap_caps_free(pump.out);  // a decode block that never reached handoff
   g_upload_pending.store(false);
   g_rx_active = false;
   return;
@@ -1876,7 +1207,7 @@ done:
 static bool peer_address(uint8_t out[16]) {
   sockaddr_in6 peer{};
   socklen_t len = sizeof(peer);
-  if (getpeername(g_net.fd, reinterpret_cast<sockaddr*>(&peer), &len) != 0) return false;
+  if (getpeername(g_tls_fd, reinterpret_cast<sockaddr*>(&peer), &len) != 0) return false;
   memcpy(out, &peer.sin6_addr, 16);
   return true;
 }
@@ -1913,22 +1244,39 @@ static const char* sv_prepare_ask(struct HttpServe* sv, bool chunked, int clen) 
 }
 static bool sv_approve(struct HttpServe*) {
   g_approved = false;
-  if (g_arch_ready || g_stop.load() || !peer_address(g_approved_peer)) return false;
+  if (g_stop.load() || !peer_address(g_approved_peer)) return false;
   g_consent.store(Consent::Asking);
   const uint32_t start = g_request_started_at;
   while (g_consent.load() == Consent::Asking && !g_stop.load() && millis() - start < 40000)
     vTaskDelay(pdMS_TO_TICKS(20));
   const Consent result = g_consent.exchange(Consent::Idle);
+  if (result == Consent::Asking && !g_stop.load()) {
+    strlcpy(g_img_errmsg, "acceptance timed out", sizeof(g_img_errmsg));
+    g_img_err++;
+  }
   g_approved = result == Consent::Accept && !g_stop.load();
   g_approved_at = millis();
   return g_approved;
 }
-static bool sv_authorized(struct HttpServe*) {
-  uint8_t peer[16];
-  const bool ok =
-      g_approved && millis() - g_approved_at < 90000 && peer_address(peer) && memcmp(peer, g_approved_peer, 16) == 0;
+static void sv_response_failed(struct HttpServe*) {
   g_approved = false;
-  return ok;
+  g_rx_active = false;
+  strlcpy(g_img_errmsg, "response write failed", sizeof(g_img_errmsg));
+  g_img_err++;
+}
+static void expire_approval() {
+  if (!g_approved || millis() - g_approved_at < 90000) return;
+  g_approved = false;
+  g_rx_active = false;
+  strlcpy(g_img_errmsg, "no upload after acceptance", sizeof(g_img_errmsg));
+  g_img_err++;
+}
+static bool sv_authorized(struct HttpServe*) {
+  expire_approval();
+  uint8_t peer[16];
+  if (!g_approved || !peer_address(peer) || memcmp(peer, g_approved_peer, 16) != 0) return false;
+  g_approved = false;
+  return true;
 }
 static void sv_upload(struct HttpServe* s, bool chunked, int clen) { rx_upload(s->r, chunked, clen); }
 /* Zero-timeout look at the listening socket: is the upload connection already sitting in
@@ -1950,34 +1298,34 @@ static void sv_on_ask_sent(struct HttpServe*) {
   g_rx_touch_ms = (uint32_t)(esp_timer_get_time() / 1000);
 }
 
-static void serve_http(mbedtls_ssl_context* ssl) {
+static void serve_http(WOLFSSL* ssl) {
   struct HttpRdr r;
-  http_rdr_init(&r, ssl, http_src_mbedtls);
+  http_rdr_init(&r, ssl, http_src_tls);
   struct HttpServe sv;
   memset(&sv, 0, sizeof(sv));
   sv.r = &r;
   sv.io = ssl;
   sv.write = sv_write;
   sv.now = sv_now;
-  sv.log = sv_log;
+  sv.log = nullptr;
   sv.set_timeout = http_set_timeout;
-  sv.disc_body = g_disc_body;
-  sv.disc_len = (int)g_disc_len;
-  sv.ask_body = g_ask_body;
-  sv.ask_len = (int)g_ask_len;
+  sv.disc_body = AD_DISC_BODY;
+  sv.disc_len = (int)sizeof(AD_DISC_BODY);
+  sv.ask_body = AD_ASK_BODY;
+  sv.ask_len = (int)sizeof(AD_ASK_BODY);
   sv.disc_ms = &g_disc_ms;
   sv.ask_ms = &g_ask_ms;
   sv.disc_ok = &g_discover_ok;
   sv.ask_ok = &g_ask_ok;
   sv.desync = &g_desync;
   sv.on_ask_sent = sv_on_ask_sent;
+  sv.response_failed = sv_response_failed;
   sv.upload = sv_upload;
   sv.peer_waiting = sv_peer_waiting;
   sv.prepare_ask = sv_prepare_ask;
   sv.cancelled = sv_cancelled;
   sv.approve = sv_approve;
   sv.authorized = sv_authorized;
-  sv.enter_ms = g_http_enter_ms;
   serve_http_run(&sv);
 }
 
@@ -1988,67 +1336,8 @@ static void serve_http(mbedtls_ssl_context* ssl) {
 // unread. Here every fd is O_NONBLOCK; we select() over all of them, adopt the
 // NEWEST fd that has a queued ClientHello (MSG_PEEK), step the handshake without
 // blocking, and preempt a silent active connection if a newer one gets a CH.
-// ClientHello witness: wrap the handshake-phase recv BIO and hexdump the first
-// CH_DUMP_MAX bytes of each adopted connection's inbound stream ("CH <ms> off=N <hex>").
-// This is the discriminating measurement for the cycle-start resumption misses: the
-// CH is plaintext, so its session_id + extensions (supported_versions 0x2b, key_share
-// 0x33, session_ticket 0x23, ALPN 0x10) settle at once (a) whether the unknown IDs
-// are TLS1.3-compat random fill, (b) whether enabling server tickets could even
-// negotiate, (c) whether ALPN/False Start is on the table, (d) whether the client
-// offers TLS1.3 at all. Dumping the byte STREAM (not per-segment) reassembles a CH
-// split across segments for free. The inbound segment ceiling is ~1220 B [D] -- the
-// 1280-byte AWDL path MTU less 40 bytes of IPv6 and 20 of TCP header; nothing on this
-// path records an actual inbound segment length, so that figure is arithmetic, not a
-// measurement. 1600B may truncate an oversized CH -- the offline parser sees the
-// record length and flags it; bump the cap and re-measure if that happens.
-// Runs in tcp_listen_task (not process_frame),
-// so the "no Serial in process_frame" invariant is untouched; worst case is one
-// ~4.8KB burst per adoption, which only fires on real sharingd connections.
-#ifdef AIRDROP_CH_DUMP
-#define CH_DUMP_MAX 1600
-static int g_chdump_left = 0;  // bytes still to dump for the current adoption
-static int g_chdump_off = 0;   // cumulative stream offset, for offline reassembly
-static int chdump_recv(void* ctx, unsigned char* buf, size_t len) {
-  int r = mbedtls_net_recv(ctx, buf, len);
-  if (r > 0 && g_chdump_left > 0) {
-    int n = (r < g_chdump_left) ? r : g_chdump_left;
-    for (int off = 0; off < n; off += 32) {
-      char line[160];
-      int m = (n - off < 32) ? (n - off) : 32;
-      int p = snprintf(line, sizeof(line), "CH %lu off=%d ", (unsigned long)millis(), g_chdump_off + off);
-      for (int i = 0; i < m && p < (int)sizeof(line) - 3; i++)
-        p += snprintf(line + p, sizeof(line) - p, "%02x", buf[off + i]);
-      line[p++] = '\n';
-      ad_diag_stage(line, p);
-    }
-    g_chdump_off += n;
-    g_chdump_left -= n;
-    if (g_chdump_left == 0) EV("chdump end off=%d more=%d", g_chdump_off, r - n);
-  }
-  return r;
-}
-#endif /* AIRDROP_CH_DUMP */
-
 #define MAXC 12
-/* THE LISTENER'S ACTUAL STACK NEED. SETTLED: 32,768 allocated, 17,348 used at the peak.
- *
- * The task is created with 32,768 bytes. It was raised there from 4,096 because the mbedTLS
- * handshake overflowed the smaller stack and crashed, which establishes 4,096 is too little. What is enough is the
- * measurement above: a real transfer peaks at 17,348 bytes used, so 32,768 carries roughly 15 KB of headroom. The
- * number is worth having because the reserve is expensive -- 32,768 CONTIGUOUS bytes of
- * internal RAM is the largest single allocation the library makes, out of the same heap
- * mbedTLS wants two ~16.6 KB blocks from, so a sketch that fails to start the listener is
- * short of contiguous internal heap rather than of stack.
- *
- * Because the answer is known, the SAMPLING is behind AD_DIAG_DETAIL. It was the first
- * statement of the select loop's for(;;), so it ran ~10 times a second for the life of the
- * device to re-derive a constant. With the define off nothing writes g_ls_stack_min and
- * ad_listen_stack_min_free() reports 0, which is exactly what it reports before the task
- * has run; re-open the question by rebuilding with -DAD_DIAG_DETAIL.
- *
- * It is the minimum over the task's life, not the instant value: a handshake's peak is what
- * matters and it is over in a second. uxTaskGetStackHighWaterMark returns BYTES on
- * ESP-IDF, not words, whatever the AWDL layer's function name suggests. */
+
 static volatile uint32_t g_ls_stack_min = 0xffffffffu;
 
 uint32_t ad_listen_stack_min_free(void) { return (g_ls_stack_min == 0xffffffffu) ? 0 : g_ls_stack_min; }
@@ -2062,12 +1351,7 @@ static void tcp_listen_task(void*) {
   int active = -1;
   uint32_t t_data = 0, t_hs0 = 0;
   while (!g_stop.load()) {
-#ifdef AD_DIAG_DETAIL
-    {
-      uint32_t hw = (uint32_t)uxTaskGetStackHighWaterMark(nullptr);
-      if (hw < g_ls_stack_min) g_ls_stack_min = hw;
-    }
-#endif
+    expire_approval();
     if (!g_tls_ready) {
       vTaskDelay(pdMS_TO_TICKS(1000));
       airdrop_tls_init();
@@ -2094,7 +1378,6 @@ static void tcp_listen_task(void*) {
       }
       set_nonblock(ls, true);
       g_listen_fd = ls;  // published for sv_peer_waiting(), which ends the /Ask drain
-      AD_LOG("[tcp] TLS listening (select loop) on [::]:%d\n", AIRDROP_PORT);
     }
 
     fd_set rf;
@@ -2115,7 +1398,6 @@ static void tcp_listen_task(void*) {
     // not call accept() at all, so connections sharingd opened during that window
     // sit in lwIP's listen backlog and all appear at once on the next pass. A
     // non-zero `since_http` on this line means we were deaf when the sender knocked.
-    int n_acc_this_pass = 0;
     for (;;) {
       struct sockaddr_in6 c;
       socklen_t cl = sizeof(c);
@@ -2125,9 +1407,7 @@ static void tcp_listen_task(void*) {
       setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
       set_nonblock(fd, true);
       g_tcp_accept++;
-      n_acc_this_pass++;
-      EV("accept fd=%d port=%u since_http=%lu", fd, ntohs(c.sin6_port),
-         (unsigned long)(g_http_exit_ms ? (now - g_http_exit_ms) : 0));
+
       int slot = -1;
       for (int i = 0; i < MAXC; i++)
         if (conn[i] < 0) {
@@ -2152,13 +1432,9 @@ static void tcp_listen_task(void*) {
         conn[slot] = fd;
         born[slot] = now;
       } else {
-        EV("drop fd=%d table_full", fd);
         close(fd);
       }
     }
-    if (n_acc_this_pass > 1)
-      EV("backlog n=%d since_http=%lu -- sender knocked while we were deaf", n_acc_this_pass,
-         (unsigned long)(g_http_exit_ms ? (now - g_http_exit_ms) : 0));
 
     // 2. Among fds select() marked READABLE, reap the EOF/error ones and pick the
     //    NEWEST that has a ClientHello queued. (Only peek readable fds -- an idle
@@ -2189,108 +1465,74 @@ static void tcp_listen_task(void*) {
       adopt = true;
     else if (active >= 0 && cand >= 0 && cand != active && born[cand] > born[active] &&
              (uint32_t)(now - t_data) > 1200) {
-      AD_LOG("[serve] preempt fd=%d -> fd=%d\n", conn[active], conn[cand]);
       close(conn[active]);
       conn[active] = -1;
       active = -1;
+      tls_reset_session();
       adopt = true;
     }
-    /* The select loop's own heartbeat: how many fds are held, how many are readable, and
-       which one the election above picked. It is gated only by a 1000 ms timer, so it fires
-       whether or not any connection exists, and it spends one of the ring's eight slots
-       every second -- against lines like `adopt`, `cull` and `hs_fail`, which arrive in
-       bursts and are the reason anyone reads the ring at all. Nothing in the tree parses
-       "[loop]"; it is for a human watching an election go wrong, so it is behind
-       AD_DIAG_DETAIL and off unless someone is watching. */
-#ifdef AD_DIAG_DETAIL
-    {
-      static uint32_t t_dbg = 0;
-      if ((uint32_t)(now - t_dbg) >= 1000) {
-        t_dbg = now;
-        int nc = 0, rd = 0;
-        for (int i = 0; i < MAXC; i++)
-          if (conn[i] >= 0) {
-            nc++;
-            if (FD_ISSET(conn[i], &rf)) rd++;
-          }
-        AD_LOG("[loop] nconn=%d rdbl=%d cand=%d active=%d acc=%lu\n", nc, rd, cand, active,
-               (unsigned long)g_tcp_accept);
-      }
-    }
-#endif
+
     if (adopt) {
-      mbedtls_ssl_session_reset(&g_ssl);
-      g_net.fd = conn[cand];
-#ifdef HTTP_TRACE
-      ht_arm();  // arm the decrypted-stream witness
-#endif
-#ifdef AIRDROP_CH_DUMP
-      g_chdump_left = CH_DUMP_MAX;
-      g_chdump_off = 0;  // arm the CH witness
-      mbedtls_ssl_set_bio(&g_ssl, &g_net, mbedtls_net_send, chdump_recv, NULL);
-#else
-      mbedtls_ssl_set_bio(&g_ssl, &g_net, mbedtls_net_send, mbedtls_net_recv, NULL);
-#endif
+      g_tls_fd = conn[cand];
+      if (!g_ssl) g_ssl = wolfSSL_new(g_tlsconf);
+      if (!g_ssl) {
+        close(conn[cand]);
+        conn[cand] = -1;
+        g_tls_fd = -1;
+        continue;
+      }
       active = cand;
       t_hs0 = t_data = now;
-      EV("adopt fd=%d age=%lu heap=%u", conn[cand], (unsigned long)(now - born[cand]),
-         (unsigned)esp_get_free_internal_heap_size());
     }
 
     // 4. Step the handshake on the active connection (non-blocking).
     if (active >= 0 && conn[active] >= 0) {
       if (FD_ISSET(conn[active], &rf)) t_data = now;
-      int r = mbedtls_ssl_handshake(&g_ssl);
-      if (r == 0) {
+      int r = wolfSSL_accept(g_ssl);
+      if (r == WOLFSSL_SUCCESS) {
         g_tls_ok++;
-        EV("tlsok fd=%d %s hs_ms=%lu heap=%u", conn[active], mbedtls_ssl_get_version(&g_ssl),
-           (unsigned long)(now - t_hs0), (unsigned)esp_get_free_internal_heap_size());
+
         int afd = conn[active];
-        int killed = 0;
         for (int i = 0; i < MAXC; i++)
           if (conn[i] >= 0 && i != active) {
             close(conn[i]);
             conn[i] = -1;
-            killed++;
           }
-        if (killed) EV("cull n=%d -- closed sharingd's other parallel connections", killed);
         set_nonblock(afd, false);  // HTTP phase: blocking + read timeout
-        mbedtls_ssl_set_bio(&g_ssl, &g_net, mbedtls_net_send, mbedtls_net_recv, mbedtls_net_recv_timeout);
-        g_http_enter_ms = millis();
-        EV("http_enter fd=%d", afd);
-        serve_http(&g_ssl);
-        g_http_exit_ms = millis();
-        EV("http_exit fd=%d blocked_ms=%lu since_disc=%lu", afd, (unsigned long)(g_http_exit_ms - g_http_enter_ms),
-           (unsigned long)(g_disc_ms ? (g_http_exit_ms - g_disc_ms) : 0));
-        mbedtls_ssl_close_notify(&g_ssl);
+        set_rd_timeout(10000);
+
+        serve_http(g_ssl);
+
+        wolfSSL_shutdown(g_ssl);
         close(afd);
         conn[active] = -1;
         active = -1;
-        mbedtls_ssl_session_reset(&g_ssl);
-      } else if (r != MBEDTLS_ERR_SSL_WANT_READ && r != MBEDTLS_ERR_SSL_WANT_WRITE) {
-        EV("hs_fail fd=%d err=-0x%04x", conn[active], -r);
+        tls_reset_session();
+      } else if (!tls_want_io(wolfSSL_get_error(g_ssl, r))) {
+        g_tls_failures.fetch_add(1);
+        g_last_tls_error.store(wolfSSL_get_error(g_ssl, r));
         close(conn[active]);
         conn[active] = -1;
         active = -1;
-        mbedtls_ssl_session_reset(&g_ssl);
+        tls_reset_session();
       }
     } else
       active = -1;
 
     // 5. Handshake deadline: drop a connection that never finishes.
     if (active >= 0 && (uint32_t)(now - t_hs0) > 15000) {
-      AD_LOG("[tls] handshake deadline (fd=%d)\n", conn[active]);
+      g_tls_failures.fetch_add(1);
       close(conn[active]);
       conn[active] = -1;
       active = -1;
-      mbedtls_ssl_session_reset(&g_ssl);
+      tls_reset_session();
     }
   }
   for (int i = 0; i < MAXC; i++)
     if (conn[i] >= 0) close(conn[i]);
   if (ls >= 0) close(ls);
   g_listen_fd = -1;
-  g_net.fd = -1;
+  g_tls_fd = -1;
   airdrop_tls_release();
   g_listener_running.store(false);
   vTaskDeleteWithCaps(nullptr);
@@ -2303,145 +1545,33 @@ static void tcp_listen_task(void*) {
 
 /* --- the received file ---------------------------------------------------- */
 
-static ad_file_cb_t g_file_cb = nullptr;
-static void* g_file_ctx = nullptr;
-
-void ad_on_file(ad_file_cb_t cb, void* ctx) {
-  g_file_cb = cb;
-  g_file_ctx = ctx;
-}
-
-/* The consumer half. The TLS task published a whole cpio archive and did no parsing; this
- * walks it and hands over every regular file, on the CALLER's task.
- *
- * The producer ordering in rx_upload -- block, then buf/len, then g_arch_ready LAST -- is
- * the release flag this relies on, and it is unchanged.
- *
- * ONE CALLBACK PER FILE, and the type is never a filter. What this replaces returned the
- * first JPEG or PNG in the archive and threw the rest away: a PDF, a text file, a contact
- * card, or the second of two photos disappeared, and the transfer was reported as "no
- * displayable image" rather than as delivered. The archives in the capture corpus are all
- * two entries -- a zero-byte "." directory and the file -- which is why the directory is
- * skipped by MODE rather than by guessing at names or at zero length.
- *
- * The PSRAM block is freed once, after the last file, which is why AdFile::data is
- * documented as callback-lifetime only. */
 void ad_poll(void) {
   auto pending = StreamSlot::Pending;
   if (g_stream_slot.compare_exchange_strong(pending, StreamSlot::Processing)) {
     g_stream_result = g_stream_cb && g_stream_cb(g_stream_ctx, g_stream_event, g_stream_data, g_stream_len);
     g_stream_slot.store(StreamSlot::Idle);
   }
-  if (!g_arch_ready) return;
-
-  const uint8_t* buf = g_arch_buf;
-  uint32_t blen = g_arch_len;
-
-  /* Count first, so a handler can say "file 2 of 3" without the library having to promise
-     an ordering it does not control. Two passes over an in-RAM buffer costs microseconds. */
-  uint32_t total = 0;
-  {
-    struct AdCpioIter it;
-    struct AdCpioEntry e;
-    ad_cpio_begin(&it, buf, blen);
-    while (ad_cpio_next(&it, &e))
-      if (ad_cpio_is_regular(e.mode)) total++;
-  }
-
-  uint32_t idx = 0;
-  bool any_refused = false;
-  {
-    struct AdCpioIter it;
-    struct AdCpioEntry e;
-    ad_cpio_begin(&it, buf, blen);
-    while (ad_cpio_next(&it, &e)) {
-      if (!ad_cpio_is_regular(e.mode)) continue; /* the "." every transfer carries */
-      /* The archive's name is not NUL-terminated in a way we should trust, so it is copied
-         into a bounded buffer rather than handed over as a pointer into remote bytes. */
-      char path[128], name[256];
-      uint32_t pl = e.name_len < sizeof(path) - 1 ? e.name_len : sizeof(path) - 1;
-      memcpy(path, e.name, pl);
-      path[pl] = 0;
-      uint32_t bl;
-      const char* b = ad_cpio_basename(e.name, e.name_len, &bl);
-      if (bl >= sizeof(name)) {
-        g_img_err++;
-        any_refused = true;
-        continue;
-      }
-      memcpy(name, b, bl);
-      name[bl] = 0;
-
-      struct AdFile f;
-      f.data = e.data;
-      f.len = e.len;
-      f.name = name;
-      f.path = path;
-      f.type = ad_cpio_sniff(e.data, e.len);
-      f.index = idx++;
-      f.count = total;
-
-      bool ok = g_file_cb ? g_file_cb(g_file_ctx, &f) : false;
-      if (ok)
-        g_files_ok++;
-      else {
-        g_img_err++;
-        any_refused = true;
-      }
-    }
-    if (it.truncated) {
-      g_img_err++;
-      strlcpy(g_img_errmsg, "archive truncated", sizeof(g_img_errmsg));
-      AD_LOG("CPIO-CUT: stopped at %lu of %lu after %lu regular files\n", (unsigned long)it.pos, (unsigned long)blen,
-             (unsigned long)total);
-    } else if (total == 0) {
-      g_img_err++;
-      strlcpy(g_img_errmsg, "archive held no files", sizeof(g_img_errmsg));
-    } else if (any_refused) {
-      strlcpy(g_img_errmsg, "handler refused a file", sizeof(g_img_errmsg));
-    }
-  }
-
-  if (g_arch_block) {
-    heap_caps_free(g_arch_block);
-    g_arch_block = nullptr;
-  }
-  g_arch_buf = nullptr;
-  g_arch_len = 0;
-  g_arch_ready = false;
-  g_rx_active = false;
 }
 
 /* --- lifecycle ------------------------------------------------------------ */
 
-static bool g_ad_role_receiver = false;
-bool ad_role_is_receiver(void) { return g_ad_role_receiver; }
+const char* ad_receiver_name() { return AD_RECEIVER_NAME; }
 
-int ad_begin(const char* name, uint32_t max_receive) {
-  /* The roles are exclusive: a receiver holds a 32 KB listener stack and a sender holds a
-     TLS client context for its whole life, and neither leaves room for the other beside
-     AWDL. Recording which one claimed the device lets the second attempt be refused
-     instead of half-working in a way nothing reports. */
-  if (g_listener_running.load()) return -1;
+int ad_begin(uint32_t max_receive) {
+  if (g_listener_running.load() || !g_stream_cb) return -1;
   g_stop.store(false);
   g_consent.store(Consent::Idle);
   g_approved = false;
-  g_ad_role_receiver = true;
 
-  /* 0 means the library's own default, RX_MAX_AUTO (6 MiB); PSRAM can only lower what is
-     actually granted, and AdStatus.rx_max reports it. A tiny value is honoured as given -- refusing to accept
-     anything is a legitimate thing for a sketch to want, and second-guessing it would just
-     hide the setting. What PSRAM cannot supply is reported through AdStatus.rx_max, not
-     silently substituted. */
+  g_rx_active = false;
+  g_rx_bytes = 0;
+  g_socket_rx_bytes = 0;
+  g_tls_failures = 0;
+  g_last_tls_error = 0;
+  g_img_errmsg[0] = 0;
+
+  // Limit total extracted content; the streaming buffers stay bounded independently.
   g_rx_max = max_receive ? max_receive : RX_MAX_AUTO;
-  awdl_ring_init(&g_adlog.cur, AD_DIAG_SLOTS); /* before the task that fills it */
-
-  /* The name is what a sender sees. Refusing a bad one here, before anything is
-     advertised, beats advertising something the user did not ask for: a name that cannot
-     be encoded is a mistake worth reporting, not worth papering over. */
-  if (!name || !*name) name = "ESP32";
-  strlcpy(g_name, name, sizeof(g_name));
-  if (!ad_build_identity(g_name)) return -2;
 
   /* AWDL must already be up: the identity below is derived from the interface MAC, and
      the mDNS records we are about to advertise are built out of it. */
@@ -2450,12 +1580,11 @@ int ad_begin(const char* name, uint32_t max_receive) {
   /* No announce callback is registered -- there is no periodic multicast announcement, for
      the reasons set out in the note above ad_respond(). The hook itself stays available. */
   // The listener performs no flash writes; its 32 KiB stack can use PSRAM.
-  // mbedTLS heap allocations still use the SDK internal-RAM allocator.
+  // TLS uses the existing wolfSSL allocator; only this task stack is forced to PSRAM.
   g_listener_running.store(true);
   if (xTaskCreatePinnedToCoreWithCaps(tcp_listen_task, "tcp_listen", 32768, nullptr, 2, nullptr, 1,
                                       MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
     g_listener_running.store(false);
-    g_ad_role_receiver = false;
     return -1;
   }
   return 0;
@@ -2464,21 +1593,14 @@ int ad_begin(const char* name, uint32_t max_receive) {
 bool ad_end() {
   g_stop.store(true);
   ad_request_answer(false);
-  if (g_listener_running.load() && g_net.fd >= 0) shutdown(g_net.fd, SHUT_RDWR);
+  if (g_listener_running.load() && g_tls_fd >= 0) shutdown(g_tls_fd, SHUT_RDWR);
   const uint32_t start = millis();
   while (g_listener_running.load() && millis() - start < 7000) vTaskDelay(pdMS_TO_TICKS(10));
   if (g_listener_running.load()) return false;
-  if (g_tls_tried) airdrop_tls_release();
+  airdrop_tls_release();
   awdl_rx_tap_set(nullptr, nullptr);
-  if (g_arch_block) heap_caps_free(g_arch_block);
-  g_arch_block = nullptr;
-  g_arch_buf = nullptr;
-  g_arch_len = 0;
-  g_arch_ready = false;
   g_rx_active = false;
-  g_ad_role_receiver = false;
   g_approved = false;
-  ad_on_file(nullptr, nullptr);
   ad_on_stream(nullptr, nullptr);
   g_stream_slot.store(StreamSlot::Idle);
   return true;
@@ -2499,6 +1621,11 @@ void ad_stats_read(struct AdStatus* out) {
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
     out->rx_active = g_rx_active && (uint32_t)(now_ms - g_rx_touch_ms) <= AD_RX_STALL_MS;
   }
+  out->awaiting_upload = g_approved.load();
+  out->upload_pending = g_upload_pending.load();
+  out->socket_rx_bytes = g_socket_rx_bytes.load();
+  out->tls_failures = g_tls_failures.load();
+  out->last_tls_error = g_last_tls_error.load();
   out->rx_bytes = g_rx_bytes;
   out->rx_max = g_rx_max_eff;
   out->files_ok = g_files_ok;
@@ -2512,7 +1639,6 @@ void ad_stats_read(struct AdStatus* out) {
   out->resp_tx = g_resp_tx;
   out->notus = g_notus;
   out->ka_suppress = g_ka_suppress;
-  out->dump_count = g_dump_count;
   out->tcp_tous = g_tcp_tous;
   out->syn_airdrop = g_syn_airdrop;
   out->syn_pair1 = g_syn_pair1;
@@ -2520,14 +1646,3 @@ void ad_stats_read(struct AdStatus* out) {
   out->syn_other = g_syn_other;
   out->syn_other_port = g_syn_other_port;
 }
-
-#else /* ESP32DROP_SENDER */
-
-/* A sender build. The receiving implementation is not here -- see the note at the top of
-   this file. Nothing is stubbed out: ad_begin(), ad_poll() and the rest simply do not
-   exist, so calling one is a link error rather than a silent waste of 32 KB.
-   ad_role_is_receiver() is the single exception, because ad_sender_begin() asks it. */
-#include "ad_port_esp32.h"
-bool ad_role_is_receiver(void) { return false; }
-
-#endif /* !ESP32DROP_SENDER */
