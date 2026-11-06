@@ -154,19 +154,15 @@ void AboutActivity::onEnter() {
     RenderLock lock;
     GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   }
+  // The firmware does not boot without a card, so About always has one.
   const uint64_t sdTotal = Storage.sdTotalBytes();
-  if (sdTotal == 0) {
-    rowValues_[ITEM_SD_SIZE] = "No card";
-    rowValues_[ITEM_SD_USED] = rowValues_[ITEM_SD_FREE] = "-";
+  rowValues_[ITEM_SD_SIZE] = formatBytes(sdTotal);
+  uint64_t sdUsed = 0;
+  if (Storage.sdUsedBytes(sdUsed)) {
+    rowValues_[ITEM_SD_USED] = formatBytes(sdUsed);
+    rowValues_[ITEM_SD_FREE] = formatBytes(sdUsed <= sdTotal ? sdTotal - sdUsed : 0);
   } else {
-    rowValues_[ITEM_SD_SIZE] = formatBytes(sdTotal);
-    uint64_t sdUsed = 0;
-    if (Storage.sdUsedBytes(sdUsed)) {
-      rowValues_[ITEM_SD_USED] = formatBytes(sdUsed);
-      rowValues_[ITEM_SD_FREE] = formatBytes(sdUsed <= sdTotal ? sdTotal - sdUsed : 0);
-    } else {
-      rowValues_[ITEM_SD_USED] = rowValues_[ITEM_SD_FREE] = "Error.";
-    }
+    rowValues_[ITEM_SD_USED] = rowValues_[ITEM_SD_FREE] = "Error.";
   }
 }
 
