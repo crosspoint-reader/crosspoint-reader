@@ -635,11 +635,11 @@ void setup() {
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
-  // Without a card the device still boots: settings stay at their defaults and
-  // are not saved, the library is empty, and Settings > About shows "No card".
-  const bool sdCardMounted = Storage.begin();
-  if (!sdCardMounted) {
-    LOG_ERR("MAIN", "SD card initialization failed, booting without storage");
+  if (!Storage.begin()) {
+    LOG_ERR("MAIN", "SD card initialization failed");
+    setupDisplayAndFonts(isSilentReboot);
+    activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
+    return;
   }
 
   HalSystem::checkPanic();
@@ -790,7 +790,7 @@ void setup() {
   // Output polarity is resolved per render by ActivityManager (night mode
   // inverts only the reading surfaces), so nothing to restore here.
 
-  if (recoveryFirmwareMode && sdCardMounted) {
+  if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
         std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
