@@ -106,6 +106,7 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
                       const uint16_t maxGlyphs) {
   loaded_ = false;
   master_ = nullptr;
+  for (uint8_t& lock : faceLocks_) lock = 0;
   if (!sources_[Regular].present) return false;
   pointSize_ = pointSize;
   // CrossPoint speaks point-size-at-150-DPI (matching the .cpfont converter's
@@ -146,14 +147,17 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
 bool TtfEpdFont::loadVariantOf(TtfEpdFont& master, const uint16_t pointSize, const bool twoBit,
                                const size_t glyphCacheBytes, const uint16_t maxGlyphs) {
   loaded_ = false;
-  if (!master.loaded_) return false;
-  master_ = &master;
+  TtfEpdFont* root = &master;
+  while (root->master_) root = root->master_;
+  if (!root->loaded_) return false;
+  master_ = root;
+  for (uint8_t& lock : faceLocks_) lock = 0;
   pointSize_ = pointSize;
   size26_6_ = (static_cast<uint32_t>(pointSize) * FONT_RASTER_DPI * 64u + 36u) / 72u;
   const uint16_t sizePx = static_cast<uint16_t>((size26_6_ + 32u) >> 6);
   for (int i = 0; i < 4; ++i) {
     Face& f = faces_[i];
-    const Face& mf = master.faces_[i];
+    const Face& mf = root->faces_[i];
     f.owner = this;
     f.ft = mf.ft;
     f.srcIndex = mf.srcIndex;
@@ -358,6 +362,7 @@ void TtfEpdFont::releaseResidentCaches() {
       f.ready = false;
       continue;
     }
+    if (faceLocks_[i] > 0) continue;
     if (f.inited) {
       f.ft->deinit();
       f.inited = false;
@@ -379,6 +384,9 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
   freeink::font::FtFont::GlyphId gid = f.ft->glyphId(cp);
   if (gid == 0 && cp >= 0xFB00u && cp <= 0xFB04u) gid = f.ligGid[cp - 0xFB00u];
   if (gid == 0 && cp != REPLACEMENT_GLYPH) return nullptr;
+
+  const size_t faceIdx = static_cast<size_t>(&f - faces_);
+  FaceLock lock(master_ ? master_ : this, faceIdx);
 
   // Glyph-ID render at the exact fractional ppem. The metrics pass costs a
   // second glyph load per MISS only (hits come from the cache) and yields the
