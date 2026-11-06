@@ -50,30 +50,20 @@ class RecordWriter {
     for (; i < size; ++i) {
       const unsigned char c = static_cast<unsigned char>(text[i]);
       if (c >= 0x80) {
-        const size_t count = c >= 0xC2 && c <= 0xDF ? 2 : c >= 0xE0 && c <= 0xEF ? 3 : c >= 0xF0 && c <= 0xF4 ? 4 : 0;
-        bool valid = count != 0 && count <= size - i;
-        for (size_t j = 1; valid && j < count; ++j) {
-          if ((static_cast<unsigned char>(text[i + j]) & 0xC0) != 0x80) valid = false;
-        }
-        if (valid && count == 3) {
-          const auto second = static_cast<unsigned char>(text[i + 1]);
-          if ((c == 0xE0 && second < 0xA0) || (c == 0xED && second >= 0xA0)) valid = false;
-        }
-        if (valid && count == 4) {
-          const auto second = static_cast<unsigned char>(text[i + 1]);
-          if ((c == 0xF0 && second < 0x90) || (c == 0xF4 && second >= 0x90)) valid = false;
-        }
-        const size_t encodedLength = valid ? count : 3;
+        // The shared decoder expects terminated input. Copy at most four bytes
+        // so a truncated field cannot make it read beyond the input budget.
+        unsigned char sequence[5] = {};
+        const size_t available = std::min<size_t>(4, size - i);
+        for (size_t j = 0; j < available; ++j) sequence[j] = static_cast<unsigned char>(text[i + j]);
+        const unsigned char* cursor = sequence;
+        const uint32_t codepoint = utf8NextCodepoint(&cursor);
+        char encoded[4];
+        const char* end = utf8AppendCodepoint(encoded, codepoint);
+        const size_t encodedLength = static_cast<size_t>(end - encoded);
         if (encodedLength > maxBytes - encodedBytes) break;
         encodedBytes += encodedLength;
-        if (valid) {
-          for (size_t j = 0; j < count; ++j) put(text[i + j]);
-          i += count - 1;
-        } else {
-          put(static_cast<char>(0xEF));
-          put(static_cast<char>(0xBF));
-          put(static_cast<char>(0xBD));
-        }
+        for (const char* p = encoded; p < end; ++p) put(*p);
+        i += static_cast<size_t>(cursor - sequence) - 1;
         continue;
       }
       if (encodedBytes == maxBytes) break;
@@ -122,34 +112,21 @@ size_t safeHtmlPrefixBytes(const std::string& source, const size_t start, const 
                            size_t* firstVisible = nullptr) {
   const size_t limit = start + utf8SafeTruncateBuffer(source.data() + start, std::min(source.size() - start, budget));
   size_t safeEnd = start;
-  bool inTag = false;
-  char quote = 0;
-  for (size_t i = start; i < limit; ++i) {
+  for (size_t i = start; i < limit;) {
     const char c = source[i];
-    if (inTag) {
-      if (quote) {
-        if (c == quote) quote = 0;
-      } else if (c == '"' || c == '\'') {
-        quote = c;
-      } else if (c == '>') {
-        inTag = false;
-        safeEnd = i + 1;
-      }
-      continue;
-    }
     if (c == '<') {
       if (i + 1 == limit && limit < source.size()) break;
-      if (i + 1 < limit) {
-        const unsigned char next = static_cast<unsigned char>(source[i + 1]);
-        if (next == '/' || next == '!' || next == '?' || std::isalpha(next)) {
-          inTag = true;
-          continue;
-        }
+      if (htmlTagStart(source, i)) {
+        const size_t close = htmlTagEnd(source, i, limit);
+        if (close == std::string::npos) break;
+        safeEnd = close + 1;
+        i = close + 1;
+        continue;
       }
     }
     if (firstVisible && *firstVisible == std::string::npos && !std::isspace(static_cast<unsigned char>(c)))
       *firstVisible = i;
-    safeEnd = i + 1;
+    safeEnd = ++i;
   }
   if (safeEnd > start && safeEnd < source.size()) {
     const size_t entityStart = source.rfind('&', safeEnd - 1);

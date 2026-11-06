@@ -26,6 +26,17 @@ TEST(HtmlToPlainText, StripsTagsAndKeepsText) {
   EXPECT_EQ(htmlToPlainText("", '\x01'), "");
 }
 
+TEST(HtmlToPlainText, QuotedAttributesCanContainGreaterThan) {
+  EXPECT_EQ(htmlToPlainText("<span title=\"a > b\">word</span>", '\x01'), "word");
+  EXPECT_EQ(htmlToPlainText("<span title='a > b'>word</span>", '\x01'), "word");
+  EXPECT_EQ(htmlToPlainText("<div data-test=\"a > b\">first</div><p>second</p>", '\x01'), "first\n\nsecond");
+
+  const std::string html = "<span title=\"a > b\">word</span>";
+  const size_t end = htmlTagEnd(html, 0, html.size());
+  EXPECT_EQ(end, html.find(">word"));
+  EXPECT_EQ(htmlTagEnd(html, 0, end), std::string::npos);
+}
+
 TEST(HtmlToPlainText, BlockElementsBecomeBreaks) {
   EXPECT_EQ(htmlToPlainText("a<br>b", '\x01'), "a\nb");
   EXPECT_EQ(htmlToPlainText("<div>a</div><div>b</div>", '\x01'), "a\nb");
