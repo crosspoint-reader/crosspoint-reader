@@ -102,7 +102,11 @@ void AboutActivity::onEnter() {
   rowValues_[ITEM_CHIP] = buf;
   snprintf(buf, sizeof(buf), "%u MB", static_cast<unsigned>(ESP.getFlashChipSize() / (1024u * 1024u)));
   rowValues_[ITEM_FLASH] = buf;
-  rowValues_[ITEM_DISPLAY] = displayControllerName(BoardConfig::ACTIVE.displayController);
+  // The profile names a boot default; boards that probe their panel (Picco,
+  // Sticky) can run another driver, and the driver knows which.
+  const char* liveController = display.controllerName();
+  rowValues_[ITEM_DISPLAY] =
+      liveController ? liveController : displayControllerName(BoardConfig::ACTIVE.displayController);
   snprintf(buf, sizeof(buf), "%ux%u", static_cast<unsigned>(BoardConfig::ACTIVE.displayWidth),
            static_cast<unsigned>(BoardConfig::ACTIVE.displayHeight));
   rowValues_[ITEM_RESOLUTION] = buf;
