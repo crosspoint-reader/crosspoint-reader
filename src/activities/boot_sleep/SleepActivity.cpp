@@ -14,6 +14,9 @@
 #include <Memory.h>
 #include <PNGdec.h>
 #include <Xtc.h>
+#ifndef SIMULATOR
+#include <esp_attr.h>
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -25,6 +28,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "SleepImageCursor.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -505,6 +509,55 @@ bool findNextValidSleepImage(HalFile& dir, const SleepRecentKind recentKind, cha
   return false;
 }
 
+// Sequential sleep images: each sleep shows the next valid image after the last one shown, in path order across
+// both sleep directories, wrapping to the first. The folders are rescanned on every sleep, so added and removed
+// images take effect at once. One pass, no name list in RAM; the last shown path is kept on the card.
+constexpr char SLEEP_LAST_SHOWN_PATH[] = "/.crosspoint/sleep_last.txt";
+#ifdef SIMULATOR
+SleepImageCursor unsavedSleepCursor{};
+#else
+RTC_DATA_ATTR SleepImageCursor unsavedSleepCursor{};
+#endif
+static_assert(MAX_SLEEP_FILE_NAME_LEN + 32 <= SleepImageCursor::PATH_CAPACITY);
+
+bool selectNextSleepFileInOrder(const char* firstDirPath, const char* secondDirPath, std::string& selectedPath) {
+  auto name = makeUniqueNoThrow<char[]>(MAX_SLEEP_FILE_NAME_LEN);
+  if (!name) {
+    LOG_ERR("SLP", "OOM: sleep filename buffer");
+    return false;
+  }
+  std::string lastShown;
+  if (Storage.exists(SLEEP_LAST_SHOWN_PATH)) {
+    Storage.readFileToString("SLP", SLEEP_LAST_SHOWN_PATH, MAX_SLEEP_FILE_NAME_LEN + 32, lastShown);
+  }
+
+  const char* cursor = unsavedSleepCursor.lastShown(lastShown.c_str());
+  std::string first;
+  std::string next;
+  std::string path;
+  for (const char* dirPath : {firstDirPath, secondDirPath}) {
+    auto dir = Storage.open(dirPath);
+    if (!dir || !dir.isDirectory()) continue;
+    while (findNextValidSleepImage(dir, SleepRecentKind::Standard, name.get())) {
+      path = dirPath;
+      path += '/';
+      path += name.get();
+      if (first.empty() || path < first) first = path;
+      if (path > cursor && (next.empty() || path < next)) next = path;
+    }
+  }
+  if (first.empty()) return false;
+
+  selectedPath = next.empty() ? first : next;
+  Storage.mkdir("/.crosspoint");
+  const bool saved = Storage.writeFile(SLEEP_LAST_SHOWN_PATH, String(selectedPath.c_str()));
+  if (!saved) LOG_ERR("SLP", "Failed to save last sleep image");
+  if (!unsavedSleepCursor.record(selectedPath, saved)) {
+    LOG_ERR("SLP", "Sleep image path exceeds retained cursor capacity");
+  }
+  return true;
+}
+
 bool selectRandomSleepFile(const char* firstDirPath, const char* secondDirPath, const SleepRecentKind recentKind,
                            std::string& selectedPath) {
   auto name = makeUniqueNoThrow<char[]>(MAX_SLEEP_FILE_NAME_LEN);
@@ -806,7 +859,11 @@ void SleepActivity::renderCustomSleepScreen() const {
   if (renderCustomSleepBmp("/sleep.bmp")) return;
 
   std::string selectedPath;
-  selectRandomSleepFile("/.sleep", "/sleep", SleepRecentKind::Standard, selectedPath);
+  if (SETTINGS.sleepImageOrder == CrossPointSettings::SLEEP_ORDER_SEQUENTIAL) {
+    selectNextSleepFileInOrder("/.sleep", "/sleep", selectedPath);
+  } else {
+    selectRandomSleepFile("/.sleep", "/sleep", SleepRecentKind::Standard, selectedPath);
+  }
   if (!selectedPath.empty()) {
     delay(100);
     if (renderCustomSleepBmp(selectedPath)) return;
