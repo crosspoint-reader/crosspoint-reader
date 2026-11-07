@@ -6,11 +6,14 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+#include "LocalSendReceiveActivity.h"
+#endif
 
 namespace fui = freeink::ui;
 
 namespace {
-constexpr StrId menuItems[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
+constexpr StrId menuItems[NetworkModeSelectionActivity::BASE_MENU_ITEM_COUNT] = {
     StrId::STR_JOIN_NETWORK,
     StrId::STR_CALIBRE_WIRELESS,
     StrId::STR_CREATE_HOTSPOT,
@@ -18,7 +21,7 @@ constexpr StrId menuItems[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
     StrId::STR_USB_DRIVE,
 #endif
 };
-constexpr StrId menuDescs[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
+constexpr StrId menuDescs[NetworkModeSelectionActivity::BASE_MENU_ITEM_COUNT] = {
     StrId::STR_JOIN_DESC,
     StrId::STR_CALIBRE_DESC,
     StrId::STR_HOTSPOT_DESC,
@@ -26,7 +29,7 @@ constexpr StrId menuDescs[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
     StrId::STR_USB_DRIVE_DESC,
 #endif
 };
-constexpr UIIcon menuIcons[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
+constexpr UIIcon menuIcons[NetworkModeSelectionActivity::BASE_MENU_ITEM_COUNT] = {
     UIIcon::Wifi,
     UIIcon::Library,
     UIIcon::Hotspot,
@@ -39,7 +42,7 @@ constexpr UIIcon menuIcons[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
 NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiListActivity("NetworkModeSelection", renderer, mappedInput) {
   // Entirely static, so built once here rather than every buildScreen() call.
-  for (int i = 0; i < MENU_ITEM_COUNT; i++) {
+  for (int i = 0; i < BASE_MENU_ITEM_COUNT; i++) {
     fui::ListItem item;
     item.label = I18N.get(menuItems[i]);
     item.subtitle = I18N.get(menuDescs[i]);
@@ -47,9 +50,20 @@ NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer
     item.actionValue = static_cast<int16_t>(i);
     rowItems_[i] = item;
   }
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+  if (LocalSendReceiveActivity::isAvailable()) {
+    fui::ListItem item;
+    item.label = "Local Send";
+    item.subtitle = "Receive files from nearby devices";
+    item.icon = listIconFor(UIIcon::Wifi, 32);
+    item.actionValue = BASE_MENU_ITEM_COUNT;
+    rowItems_[BASE_MENU_ITEM_COUNT] = item;
+    visibleItems_ = MENU_ITEM_COUNT;
+  }
+#endif
 }
 
-int NetworkModeSelectionActivity::listCount() const { return MENU_ITEM_COUNT; }
+int NetworkModeSelectionActivity::listCount() const { return visibleItems_; }
 
 const char* NetworkModeSelectionActivity::headerTitle() const { return tr(STR_FILE_TRANSFER); }
 
@@ -58,7 +72,12 @@ void NetworkModeSelectionActivity::activateIndex(const int index) {
   // element on the next render.
   app.clearTapFlash();
   nav.selected = index;
-
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+  if (index == BASE_MENU_ITEM_COUNT && visibleItems_ == MENU_ITEM_COUNT) {
+    onModeSelected(NetworkMode::LOCAL_SEND);
+    return;
+  }
+#endif
   onModeSelected(static_cast<NetworkMode>(index));
 }
 
@@ -73,7 +92,7 @@ void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {
   // repaint.
   fui::ListProps props;
   props.items = rowItems_;
-  props.count = static_cast<uint16_t>(MENU_ITEM_COUNT);
+  props.count = static_cast<uint16_t>(visibleItems_);
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.subtitleText = screen.theme().smallText;

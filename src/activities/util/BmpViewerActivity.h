@@ -8,7 +8,8 @@
 
 class BmpViewerActivity final : public Activity {
  public:
-  BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath);
+  BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath,
+                    bool returnToCaller = false);
 
   void onEnter() override;
   void onExit() override;
@@ -22,6 +23,7 @@ class BmpViewerActivity final : public Activity {
   bool saveJpegSleepCover();
 
   std::string filePath;
+  bool returnToCaller = false;
   std::vector<std::string> siblingImages;
   int currentImageIndex = -1;
 };

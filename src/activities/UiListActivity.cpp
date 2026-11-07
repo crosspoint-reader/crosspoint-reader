@@ -261,5 +261,6 @@ void UiListActivity::render(RenderLock&&) {
     renderUi();
   }
   drawFooter();
+  renderOverlay();
   renderer.displayBuffer();
 }
