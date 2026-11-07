@@ -411,6 +411,7 @@ void SdCardFontSystem::freeTtfSources() {
 }
 
 bool SdCardFontSystem::loadTtfVariant(const uint8_t pointSize, const int fontId) {
+  if (!ttf_) return false;
   for (auto& variant : ttfVariants_) {
     if (variant.fontId == fontId) {
       variant.lastUse = ++variantClock_;
@@ -429,9 +430,9 @@ bool SdCardFontSystem::loadTtfVariant(const uint8_t pointSize, const int fontId)
     LOG_ERR("SDFS", "OOM: TtfEpdFont variant @%upt", pointSize);
     return false;
   }
-  // Variants carry headings and inline runs, so a modest cache covers them.
-  addTtfSources(*font);
-  if (!font->load(pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/64 * 1024, /*maxGlyphs=*/512)) return false;
+  // Variants carry headings and inline runs, sharing ttf_'s FreeType faces.
+  if (!font->loadVariantOf(*ttf_, pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/64 * 1024, /*maxGlyphs=*/512))
+    return false;
   font->build(" ");
   renderer_->insertFont(fontId, font->family());
   renderer_->registerTtfFont(fontId, font.get());
@@ -574,16 +575,12 @@ void SdCardFontSystem::addTtfSources(TtfEpdFont& font) {
 }
 
 void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
-  if (ttfFamily_.empty()) return;
-  // Small caches: UI strings (titles/rows) are short. Each UI family is 4-style
-  // but LAZY, so only the regular face is ever built for UI text — the bold/
-  // italic faces cost nothing. All faces share the reader's sources (streamed
-  // handles or resident bytes), so no extra copy of any font file.
-  // Each fallback instance carries its own FreeType face and lazy glyph
-  // arena. Without PSRAM those compete with the reader's section build for
-  // internal DRAM, and the build must win: below this floor, skip the
-  // fallback (built-in bitmap UI fonts keep covering Latin UI text).
-  static constexpr size_t kUiFallbackMinInternalHeap = 160 * 1024;
+  if (!ttf_ || ttfFamily_.empty()) return;
+
+  // Small caches: UI strings (titles/rows) are short. Each UI family is a sized
+  // variant of ttf_, sharing its FreeType faces without parsing font files or
+  // allocating separate FT_Face objects in DRAM.
+  static constexpr size_t kUiFallbackMinInternalHeap = 24 * 1024;
   for (const auto& ui : kUiFontSizes) {
     if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) == 0) {
       const size_t internalFree = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -598,8 +595,8 @@ void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
       LOG_ERR("SDFS", "OOM: TtfEpdFont for UI fallback @%upt", ui.pointSize);
       continue;  // built-in bitmap UI fonts keep covering this size
     }
-    addTtfSources(*f);
-    const bool ok = f->load(ui.pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/16 * 1024, /*maxGlyphs=*/384);
+    const bool ok =
+        f->loadVariantOf(*ttf_, ui.pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/16 * 1024, /*maxGlyphs=*/384);
     if (!ok) continue;
     LOG_DBG("SDFS", "TTF UI fallback @%upt loaded (heap free %u)", ui.pointSize, (unsigned)ESP.getFreeHeap());
     // Distinct id from the reader-size font: a UI size can equal the reader size
