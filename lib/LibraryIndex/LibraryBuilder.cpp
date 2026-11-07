@@ -10,7 +10,6 @@
 #include <Memory.h>
 #include <Utf8.h>
 #include <Xtc.h>
-#include <strings.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -214,7 +213,11 @@ bool isLibrarySkipped(const std::string_view path) {
   const std::string_view relativePath = normalizeLibraryRootAliases(path);
   const std::string_view name = relativePath.substr(0, relativePath.find('/'));
   for (const auto root : ROOTS) {
-    if (name.size() == root.size() && strncasecmp(name.data(), root.data(), root.size()) == 0) return true;
+    if (std::equal(name.begin(), name.end(), root.begin(), root.end(), [](const char a, const char b) {
+          return (a >= 'A' && a <= 'Z' ? static_cast<char>(a + ('a' - 'A')) : a) == b;
+        })) {
+      return true;
+    }
   }
   return false;
 }

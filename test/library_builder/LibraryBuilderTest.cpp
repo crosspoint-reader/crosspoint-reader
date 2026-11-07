@@ -113,6 +113,17 @@ TEST(LibraryBookFileTest, RejectsResourceRootsButNotNestedNamesOrSubstrings) {
   EXPECT_FALSE(isLibraryBookFile("/DICTIONARIES/nested/book.epub"));
 }
 
+TEST(LibraryBookFileTest, ResourceRootsUseAsciiCaseInsensitiveMatching) {
+  for (const auto* name : {"FoNtS", "DiCtIoNaRiEs", "PlUgInS", "SlEeP", "SlEeP-OvErLaY"}) {
+    const std::string root = std::string("/") + name;
+    EXPECT_FALSE(isLibraryBookFile(root + "/book.epub")) << root;
+    EXPECT_TRUE(isLibraryBookFile("/books" + root + "/book.epub")) << root;
+    EXPECT_TRUE(isLibraryBookFile(root + "-books/book.epub")) << root;
+  }
+  EXPECT_TRUE(isLibraryBookFile("/f\xC3\xB6nt/book.epub"));
+  EXPECT_TRUE(isLibraryBookFile("/font\xC5\xBF/book.epub"));
+}
+
 TEST_F(LibraryBuilderTest, ScansNestedSkippedNamesAndRootSubstringNames) {
   std::vector<std::string> expected = {"/a.epub", "/b.epub"};
   expected.reserve(expected.size() + 5 * 4);
