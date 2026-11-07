@@ -370,10 +370,11 @@ static bool loadSleepFrameBuffer() {
 // now — over the live connection, or by bringing WiFi up when a plugin
 // subscribes (e.g. fetching a fresh /sleep.bmp so THIS sleep shows it — the
 // drain runs before goToSleep() renders the sleep screen). The connect path
-// is bounded (join deadline + drain event budget), skipped on low battery,
-// and sleep is never blocked on the network: a failed join or delivery just
-// sleeps with the previous image and the queued events retry on the next
-// drain (at-least-once). The caller's WiFi shutdown tears the radio down
+// is skipped on low battery. After joining, the drain shares four HTTP
+// operations and a 15-second cooperative deadline; blocking SDK DNS/TCP
+// connect can exceed it. A failed join or delivery keeps the previous image,
+// and queued events retry on the next drain (at-least-once). The caller's
+// WiFi shutdown tears the radio down
 // either way. Deferrable events already queued (reader.exit) ride along in
 // the same drain.
 static void deliverSleepPluginEvents(const bool allowNetwork) {
@@ -400,7 +401,7 @@ static void deliverSleepPluginEvents(const bool allowNetwork) {
   pluginevents::emit(pluginevents::Event::SleepEnter, vars, varCount);
   if (!allowNetwork) return;
   if (WiFi.status() == WL_CONNECTED) {
-    pluginevents::drain(&renderer);
+    pluginevents::drain(&renderer, 4, {4, 15000});
     return;
   }
   // Any connect-flagged queued event justifies the join, not only
@@ -422,7 +423,7 @@ static void deliverSleepPluginEvents(const bool allowNetwork) {
   }
   if (WiFi.status() == WL_CONNECTED) {
     trustedtime::startSync();  // snap the clock floor while the network is up
-    pluginevents::drain(&renderer);
+    pluginevents::drain(&renderer, 4, {4, 15000});
   } else {
     LOG_DBG("MAIN", "Sleep-event WiFi join timed out; deferring delivery");
   }
