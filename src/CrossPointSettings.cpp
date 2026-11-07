@@ -94,7 +94,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonRight"] = frontButtonRight;
   // Font family and size — both use dynamic getter/setters in SettingsList (the
   // option lists depend on the SD font registry), so the generic loop skips them.
-  doc["fontFamily"] = fontFamily == LITERATA ? STORED_LITERATA : STORED_NOTOSANS;
+  doc["fontFamily"] = STORED_NOTOSANS;
   doc["fontSize"] = fontPointSize;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
@@ -247,7 +247,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   const uint8_t storedFontFamily = doc["fontFamily"] | STORED_NOTOSANS;
-  fontFamily = storedFontFamily == STORED_LITERATA ? LITERATA : NOTOSANS;
+  fontFamily = NOTOSANS;
   // These controls use board-specific display-index mappings and are skipped by
   // the generic settings loop. Persisted action IDs remain stable across boards.
   longPressMenuFunction = clamp(doc["longPressMenuFunction"] | (uint8_t)LP_MENU_DISABLED,
@@ -275,6 +275,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
         break;
       case LEGACY_OPENDYSLEXIC:
         copyToField(sdFontFamilyName, "OpenDyslexic", sizeof(sdFontFamilyName));
+        break;
+      case LEGACY_LITERATA:
+        // The fork's former built-in Literata now ships as an SD family;
+        // keep the reader on it when the .cpfont package is installed.
+        copyToField(sdFontFamilyName, "Literata", sizeof(sdFontFamilyName));
         break;
     }
   }
@@ -419,31 +424,15 @@ int CrossPointSettings::getReaderFontId() const {
   // in the page render loop) so rendering is correct even before it has run.
   const uint8_t pt =
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
-  switch (fontFamily) {
-    case LITERATA:
-      switch (pt) {
-        case 12:
-          return LITERATA_12_FONT_ID;
-        case 16:
-          return LITERATA_16_FONT_ID;
-        case 18:
-          return LITERATA_18_FONT_ID;
-        case 14:
-        default:
-          return LITERATA_14_FONT_ID;
-      }
-    case NOTOSANS:
+  switch (pt) {
+    case 12:
+      return NOTOSANS_12_FONT_ID;
+    case 16:
+      return NOTOSANS_16_FONT_ID;
+    case 18:
+      return NOTOSANS_18_FONT_ID;
+    case 14:
     default:
-      switch (pt) {
-        case 12:
-          return NOTOSANS_12_FONT_ID;
-        case 16:
-          return NOTOSANS_16_FONT_ID;
-        case 18:
-          return NOTOSANS_18_FONT_ID;
-        case 14:
-        default:
-          return NOTOSANS_14_FONT_ID;
-      }
+      return NOTOSANS_14_FONT_ID;
   }
 }

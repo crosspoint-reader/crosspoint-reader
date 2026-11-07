@@ -36,6 +36,7 @@
 #include "CrossPointState.h"
 #include "DictionaryPopupActivity.h"
 #include "DictionaryWordSelectActivity.h"
+#include "FootnoteTextExtractor.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderClippingListActivity.h"
@@ -1128,42 +1129,22 @@ bool EpubReaderActivity::tryFootnotePopup(const std::string& hrefStr) {
     anchor = hrefStr.substr(hashPos + 1);
   }
 
-  // The probe section lays out through the renderer (and the framebuffer loan
-  // touches render buffers), so the whole build runs under the render lock —
-  // the same discipline the reader's own section builds follow. `top`/`left`
-  // also position the popup frame, so they live outside the lock scope.
+  // Read the note's source XHTML straight from the book instead of the
+  // laid-out page cache: page text carries the BOOK's hyphenation cuts and
+  // covers one page of the section only (long notes arrived truncated, page
+  // counts underreported). The source gives whole words and the full note.
+  footnotes::StringSink sink;
+  if (!epub->readItemContentsToStream(epub->getSpineItem(targetSpineIndex).href, sink, 8192)) {
+    LOG_ERR("ERS", "Footnote popup source read failed: %s", hrefStr.c_str());
+    return false;
+  }
+  std::string noteText = footnotes::extractNoteText(sink.out, anchor);
+  // Chapter-sized content is not a popup footnote; 12 KB of plain text maps to
+  // well over a dozen popup pages.
+  if (noteText.size() < 2 || noteText.size() > 12 * 1024) return false;
+
   int top = 0, right = 0, bottom = 0, left = 0;
   renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
-  std::string noteText;
-  {
-    RenderLock lock;
-    // Viewport identical to the reader's build, so the target's section cache
-    // is reusable by the normal jump later.
-    const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
-    const uint16_t viewportWidth =
-        renderer.getScreenWidth() - (left + SETTINGS.screenMargin) - (right + SETTINGS.screenMargin);
-    const uint16_t viewportHeight = renderer.getScreenHeight() - (top + SETTINGS.screenMargin) -
-                                    std::max<uint16_t>(SETTINGS.screenMargin, statusBarHeight);
-    const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight);
-
-    Section probe(epub, targetSpineIndex, renderer);
-    if (!probe.loadSectionFile(renderSpec)) {
-      GfxRenderer::FrameBufferLoan loan(renderer);
-      if (!probe.createSectionFile(renderSpec)) {
-        LOG_ERR("ERS", "Footnote popup build failed for %s", hrefStr.c_str());
-        return false;
-      }
-    }
-    // A multi-page target is chapter-sized content: not a popup footnote.
-    if (probe.pageCount > 3) return false;
-
-    if (!anchor.empty()) {
-      const auto anchorPage = probe.findAnchor(anchor);
-      if (anchorPage) probe.currentPage = *anchorPage;
-    }
-    noteText = TextPopupActivity::rejoinHyphenBreaks(probe.getTextFromSectionFile());
-  }
-  if (noteText.size() < 2) return false;
 
   // Title: the footnote's marker number when the page knows it, else the
   // generic label.

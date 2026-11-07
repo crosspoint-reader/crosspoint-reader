@@ -27,12 +27,6 @@ class TextPopupActivity : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
 
-  // Section text (getTextFromSectionFile) comes back pre-hyphenated at the book
-  // page width; popups re-wrap it at their own frame width, so the fragments
-  // must be re-joined first. Footnote popups call this on the extracted text;
-  // dictionary articles are raw and must NOT pass through it (list markers).
-  static std::string rejoinHyphenBreaks(const std::string& text);
-
  protected:
   // Layout and display `text` under `title`; false on heap/geometry failure
   // (payload cleared). Once true, the base loop/render take over.

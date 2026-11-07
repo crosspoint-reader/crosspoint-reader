@@ -29,14 +29,14 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 > decoder and legacy-encoding tables) is adapted from
 > [papyrix-reader](https://github.com/bigbag/papyrix-reader) by bigbag — many thanks!
 >
-> **Built-in font Literata** (fork addition, all reading sizes, Cyrillic incl.
-> italics): the book face from Google Play Books, instanced from Google Fonts'
-> variable sources (OFL) through the stock fontconvert pipeline. Bitter ships as
-> a downloadable SD-card family via the firmware's font catalog. Thanks to
+> **SD-card font families for this fork** (personal build, not distributed):
+> **Literata** (book face from Google Play Books, OFL — instanced from Google
+> Fonts variable sources), **Inglobal** (rounded Cyrillic sans-serif © Kochetov /
+> Davydov / Yurtaev, 2014 — free for commercial use) and **Bitter** (in the
+> upstream catalog) ship as .cpfont families instead of built-ins — sources live
+> under `lib/EpdFont/builtinFonts/source/`, packaging via
+> `lib/EpdFont/scripts/sd-fonts.yaml` / `build-sd-fonts.py`. Thanks to
 > [CrossInk](https://github.com/uxjulia/CrossInk) for the e-ink font inspiration.
-> The fork also carries **Inglobal** (rounded Cyrillic sans-serif © Kochetov /
-> Davydov / Yurtaev, 2014 — free for commercial use) as an SD-card family;
-> sources live in `lib/EpdFont/builtinFonts/source/Inglobal/`.
 
 - **Touch reading**: follow EPUB links and look up words in the dictionary on touch-enabled devices.
 

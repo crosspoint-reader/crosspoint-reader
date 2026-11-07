@@ -105,26 +105,6 @@ EpdFont notosans18ItalicFont(&notosans_18_italic);
 EpdFont notosans18BoldItalicFont(&notosans_18_bolditalic);
 EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, &notosans18ItalicFont,
                                    &notosans18BoldItalicFont);
-
-// Literata (this fork's extra built-in family, Cyrillic incl. italics)
-#define CROSSPOINT_EXTRA_FONT(fam, size)                  \
-  EpdFont fam##size##RegularFont(&fam##_##size##_regular); \
-  EpdFont fam##size##BoldFont(&fam##_##size##_bold);       \
-  EpdFont fam##size##ItalicFont(&fam##_##size##_italic);   \
-  EpdFont fam##size##BoldItalicFont(&fam##_##size##_bolditalic);
-CROSSPOINT_EXTRA_FONT(literata, 12)
-CROSSPOINT_EXTRA_FONT(literata, 14)
-CROSSPOINT_EXTRA_FONT(literata, 16)
-CROSSPOINT_EXTRA_FONT(literata, 18)
-EpdFontFamily literata12FontFamily(&literata12RegularFont, &literata12BoldFont, &literata12ItalicFont,
-                                   &literata12BoldItalicFont);
-EpdFontFamily literata14FontFamily(&literata14RegularFont, &literata14BoldFont, &literata14ItalicFont,
-                                   &literata14BoldItalicFont);
-EpdFontFamily literata16FontFamily(&literata16RegularFont, &literata16BoldFont, &literata16ItalicFont,
-                                   &literata16BoldItalicFont);
-EpdFontFamily literata18FontFamily(&literata18RegularFont, &literata18BoldFont, &literata18ItalicFont,
-                                   &literata18BoldItalicFont);
-#undef CROSSPOINT_EXTRA_FONT
 #endif  // OMIT_FONTS
 
 EpdFont smallFont(&ubuntu_8_regular);
@@ -565,10 +545,6 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
-  renderer.insertFont(LITERATA_12_FONT_ID, literata12FontFamily);
-  renderer.insertFont(LITERATA_14_FONT_ID, literata14FontFamily);
-  renderer.insertFont(LITERATA_16_FONT_ID, literata16FontFamily);
-  renderer.insertFont(LITERATA_18_FONT_ID, literata18FontFamily);
 #endif  // OMIT_FONTS
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);

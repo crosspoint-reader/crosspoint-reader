@@ -62,35 +62,6 @@ void TextPopupActivity::layoutFrame() {
   frameY = (screenHeight - frameH) / 3;
 }
 
-std::string TextPopupActivity::rejoinHyphenBreaks(const std::string& text) {
-  // Undo the source layout's hyphenation, which cut words at the BOOK page
-  // width — inside the narrower popup frame those dangling "слово- продолжение"
-  // fragments land in wrong places. Rejoin a hyphen break when the next
-  // fragment starts with a lowercase continuation letter (a wrapped tail always
-  // continues the word; standalone dashes and em-dashes are untouched).
-  std::string out;
-  out.reserve(text.size());
-  size_t i = 0;
-  while (i < text.size()) {
-    const char c = text[i];
-    if (c == '-' && i + 1 < text.size() && text[i + 1] == ' ') {
-      size_t j = i + 2;
-      while (j < text.size() && (text[j] == ' ' || text[j] == '\t')) j++;
-      const unsigned char next = j < text.size() ? static_cast<unsigned char>(text[j]) : 0;
-      const bool continuation = (next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') ||
-                                (next >= 0xC0) || (next >= '0' && next <= '9');  // latin/cyr(incl. caps)/digit
-      if (continuation && j < text.size()) {
-        out += '-';
-        i = j;  // skip the space(s): glue the tail to the hyphen
-        continue;
-      }
-    }
-    out += c;
-    i++;
-  }
-  return out;
-}
-
 bool TextPopupActivity::wrapText() {
   const int textWidth = frameW - 2 * FRAME_INNER_PAD;
   const int lineHeight = renderer.getLineHeight(fontId, LINE_SPACING);
