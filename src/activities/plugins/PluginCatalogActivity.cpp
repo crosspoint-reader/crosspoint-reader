@@ -177,11 +177,15 @@ std::string persistentNoticeId(JsonVariantConst notice) {
   return {};
 }
 
+std::string noticeMarkerDir(const std::string& pluginDir) {
+  if (pluginDir.empty()) return {};
+  return "/.crosspoint/notice_" + md5Hex(pluginDir);
+}
+
 std::string noticeMarkerPath(const std::string& manifestPath, const std::string& noticeId) {
-  if (noticeId.empty()) return {};
-  const std::string plugin = pluginNameFromManifestPath(manifestPath);
-  if (plugin.empty() || plugin.size() > 96) return {};
-  return "/.crosspoint/notice_" + md5Hex(plugin + "\n" + noticeId) + ".ok";
+  if (noticeId.empty() || pluginNameFromManifestPath(manifestPath).empty()) return {};
+  const size_t slash = manifestPath.rfind('/');
+  return noticeMarkerDir(manifestPath.substr(0, slash)) + "/" + md5Hex(noticeId) + ".ok";
 }
 
 // book.downloaded plugin event, fired after a catalog download lands on SD.
@@ -644,7 +648,12 @@ void PluginCatalogActivity::confirmUninstallPlugin(const int pickerIndex) {
     if (result.isCancelled) return;
     const bool removed = !Storage.exists(plugin.dir.c_str()) || Storage.removeDir(plugin.dir.c_str());
     if (!removed) LOG_ERR("PCAT", "Failed to recursively uninstall plugin: %s", plugin.dir.c_str());
-    if (removed) pickerReturnName = returnPluginName;
+    if (removed) {
+      const std::string markerDir = noticeMarkerDir(plugin.dir);
+      if (Storage.exists(markerDir.c_str()) && !Storage.removeDir(markerDir.c_str()))
+        LOG_ERR("PCAT", "Failed to clear plugin notices: %s", markerDir.c_str());
+      pickerReturnName = returnPluginName;
+    }
     enterPluginPicker();
   });
 }
@@ -708,9 +717,12 @@ void PluginCatalogActivity::openList(const int index) {
       return;
     }
     const std::string marker = noticeMarkerPath(manifestPath, manifest.browseLists[index].noticeId);
-    if (!marker.empty() &&
-        (!Storage.ensureDirectoryExists("/.crosspoint") || !Storage.writeFile(marker.c_str(), String("1"))))
-      LOG_ERR("PCAT", "Failed to persist browse-list notice: %s", marker.c_str());
+    if (!marker.empty()) {
+      const std::string markerDir = marker.substr(0, marker.rfind('/'));
+      if (!Storage.ensureDirectoryExists("/.crosspoint") || !Storage.ensureDirectoryExists(markerDir.c_str()) ||
+          !Storage.writeFile(marker.c_str(), String("1")))
+        LOG_ERR("PCAT", "Failed to persist browse-list notice: %s", marker.c_str());
+    }
     currentList = index;
     startBrowse();
   });

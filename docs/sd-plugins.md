@@ -424,9 +424,10 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   picker.
 - **Named-list notices (`notice`)**: optionally include `once: true` (boolean) and
   a stable `id` of 1–64 ASCII letters, digits, hyphens, underscores, or dots.
-  The firmware remembers **Continue** per installed plugin and notice ID on the
-  SD card, across reboots and plugin updates. Lists sharing the same ID within
-  a plugin share the acknowledgement. **Go Back** never acknowledges. Missing,
+  The firmware remembers **Continue** per plugin installation directory and
+  notice ID on the SD card, across reboots and plugin updates. Lists sharing
+  the same ID within a plugin share the acknowledgement; uninstalling the
+  plugin clears its acknowledgements. **Go Back** never acknowledges. Missing,
   invalid, or mistyped `id`/`once` fields keep the normal per-visit notice.
   If the SD write fails, Continue still opens the list, but the notice returns
   on a later visit.
