@@ -206,7 +206,7 @@ To make `.cpfont` files for any device, convert your TrueType/OpenType fonts:
 | `armenian` | Armenian |
 | `ethiopic` | Ethiopic + Extended |
 | `vietnamese` | Vietnamese subset (ơ/ư and combining marks) |
-| `ipa-chars` | IPA Extensions + Spacing Modifier Letters (phonetic transcription) |
+| `ipa-chars` | IPA Extensions + Spacing Modifier Letters + Combining Diacritical Marks (phonetic transcription) |
 | `punctuation` | General punctuation (U+2000–U+206F) |
 | `cjk` | CJK Unified Ideographs + Hiragana + Katakana + Fullwidth |
 | `hangul` | Korean Hangul syllables + Jamo + Compatibility Jamo |
