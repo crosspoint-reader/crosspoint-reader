@@ -255,6 +255,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Night mode: inverted output polarity, applied to every activity per
   // render by ActivityManager. The sleep screen opts out itself.
   uint8_t screenInverted = 0;
+  // Night mode schedule: at the on-time night mode is set on, at the off-time
+  // off, and a manual change holds until the next one (src/util/NightSchedule.h).
+  // Times are half-hour slots of the day.
+  uint8_t nightScheduleEnabled = 0;
+  uint8_t nightScheduleOnSlot = 44;   // 22:00
+  uint8_t nightScheduleOffSlot = 14;  // 07:00
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter

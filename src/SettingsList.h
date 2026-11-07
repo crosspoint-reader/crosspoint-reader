@@ -281,6 +281,9 @@ inline bool isHiddenOnDevice(const SettingInfo& s) {
     case StrId::STR_RESTORE_LIGHT_ON_WAKE:
       return !Frontlight.present() || slideSwitchOwnsLight();
     case StrId::STR_NIGHT_MODE:
+    case StrId::STR_NIGHT_MODE_SCHEDULE:
+    case StrId::STR_NIGHT_MODE_ON_AT:
+    case StrId::STR_NIGHT_MODE_OFF_AT:
       return slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE);
     case StrId::STR_TOUCH_READER_CONTROLS:
       return slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_TOUCH_CONTROLS);
