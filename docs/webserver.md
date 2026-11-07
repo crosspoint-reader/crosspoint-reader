@@ -171,3 +171,7 @@ Endpoint details are documented in [webserver-endpoints.md](./webserver-endpoint
 - [Webserver Endpoints](./webserver-endpoints.md)
 - [SD Card Fonts](./sd-card-fonts.md)
 - [Troubleshooting](./troubleshooting.md)
+
+## AirDrop
+
+See [AirDrop receiving](./airdrop.md) for X4 Pro/X4C support, usage, limits, and validation.

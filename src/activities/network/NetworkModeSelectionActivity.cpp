@@ -6,32 +6,38 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
+#if CROSSPOINT_AIRDROP
+#include "components/icons/airdrop.h"
+#endif
 
 namespace fui = freeink::ui;
 
 namespace {
 constexpr StrId menuItems[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
-    StrId::STR_JOIN_NETWORK,
-    StrId::STR_CALIBRE_WIRELESS,
-    StrId::STR_CREATE_HOTSPOT,
+    StrId::STR_JOIN_NETWORK, StrId::STR_CALIBRE_WIRELESS, StrId::STR_CREATE_HOTSPOT,
 #if FREEINK_CAP_USB_MSC
     StrId::STR_USB_DRIVE,
 #endif
+#if CROSSPOINT_AIRDROP
+    StrId::STR_AIRDROP,
+#endif
 };
 constexpr StrId menuDescs[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
-    StrId::STR_JOIN_DESC,
-    StrId::STR_CALIBRE_DESC,
-    StrId::STR_HOTSPOT_DESC,
+    StrId::STR_JOIN_DESC,      StrId::STR_CALIBRE_DESC, StrId::STR_HOTSPOT_DESC,
 #if FREEINK_CAP_USB_MSC
     StrId::STR_USB_DRIVE_DESC,
 #endif
+#if CROSSPOINT_AIRDROP
+    StrId::STR_AIRDROP_DESC,
+#endif
 };
-constexpr UIIcon menuIcons[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
-    UIIcon::Wifi,
-    UIIcon::Library,
-    UIIcon::Hotspot,
+const fui::BitmapRef menuIcons[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
+    listIconFor(UIIcon::Wifi, 32),        listIconFor(UIIcon::Library, 32), listIconFor(UIIcon::Hotspot, 32),
 #if FREEINK_CAP_USB_MSC
-    UIIcon::Usb,
+    listIconFor(UIIcon::Usb, 32),
+#endif
+#if CROSSPOINT_AIRDROP
+    fui::bitmapFromIcon(icon_airdrop_32),
 #endif
 };
 }  // namespace
@@ -43,7 +49,7 @@ NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer
     fui::ListItem item;
     item.label = I18N.get(menuItems[i]);
     item.subtitle = I18N.get(menuDescs[i]);
-    item.icon = listIconFor(menuIcons[i], 32);  // subtitle rows carry the larger icon
+    item.icon = menuIcons[i];  // subtitle rows carry the larger icon
     item.actionValue = static_cast<int16_t>(i);
     rowItems_[i] = item;
   }
