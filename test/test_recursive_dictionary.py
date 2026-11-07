@@ -47,7 +47,10 @@ marker = next(line for line in (ROOT / "src/util/Dictionary.h").read_text().spli
               if "DICTIONARY_PLAIN_HEADWORD_MARKER =" in line)
 selection = block(selector, "struct Selection {", True)
 plain_scratch = block(viewer, "struct DictionaryDefinitionActivity::PlainSelectionLine {", True)
-constants = viewer.split("namespace {", 1)[1].split("}  // namespace", 1)[0]
+constants = viewer.split("namespace {", 1)[1].split("struct PlainLineLayout {", 1)[0]
+layout_helpers = "struct PlainLineLayout {" + viewer.split("struct PlainLineLayout {", 1)[1].split("}  // namespace", 1)[0]
+layout_helpers = layout_helpers.replace("GfxRenderer", "Renderer").replace(
+    "void drawJustifiedPlainLine(", "[[maybe_unused]] void drawJustifiedPlainLine(")
 # The harness copies every constant but only some methods; clang's -Wall flags the unused ones.
 constants = re.sub(r"^constexpr ", "[[maybe_unused]] constexpr ", constants, flags=re.MULTILINE)
 viewer_loop = block(viewer, "void DictionaryDefinitionActivity::loop()")
@@ -81,6 +84,7 @@ harness = r'''
 #include <Memory.h>
 #include "activities/ActivityResult.h"
 #include "components/HeaderBackTapTarget.h"
+namespace BidiUtils { enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 }; }
 #define LOG_ERR(...) ((void)0)
 template<typename... Args> void logDebug(Args&&...) {}
 #define LOG_DBG(...) logDebug(__VA_ARGS__)
@@ -128,7 +132,10 @@ struct Renderer {
   size_t prepareCalls = 0;
   int preparedStyles = 0;
   FontCacheManager* getFontCacheManager() { return &cache; }
-  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style) const {
+  enum class TextMeasureMode { Layout, Rendered };
+  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style, int8_t = 0,
+                      BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO,
+                      TextMeasureMode = TextMeasureMode::Layout) const {
     const auto* ptr = reinterpret_cast<const unsigned char*>(text);
     int width = 0;
     while (*ptr) { utf8NextCodepoint(&ptr); ++width; }
@@ -143,11 +150,19 @@ struct Renderer {
   }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 1; }
   int getLineHeight(int, float) const { return 10; }
+  void drawText(int, int, int, const char*, bool, EpdFontFamily::Style) const {}
+};
+struct CrossPointSettings {
+  enum { JUSTIFIED, LEFT_ALIGN, CENTER_ALIGN, RIGHT_ALIGN, BOOK_STYLE };
 };
 struct Settings {
   bool touchReaderControls = true;
+  int paragraphAlignment = CrossPointSettings::JUSTIFIED;
+  bool extraParagraphSpacing = false;
+  float getReaderLineCompression() const { return 1.2f; }
   int getReaderFontId() const { return 0; }
 } SETTINGS;
+''' + layout_helpers + r'''
 struct MappedInputManager {
   enum class Button { Back };
   bool touch = false;

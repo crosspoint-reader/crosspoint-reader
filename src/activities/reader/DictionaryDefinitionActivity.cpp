@@ -47,13 +47,27 @@ struct PlainLineLayout {
   int gaps = 0;
 };
 
-bool isWordSeparator(const char c) { return c == ' ' || c == '\t' || c == '\r'; }
+bool isWordSeparator(const char c) {
+  return c == ' ' || c == '\t' || c == '\r' || c == DICTIONARY_PLAIN_HEADWORD_MARKER;
+}
+
+int renderedPlainPrefixWidth(const GfxRenderer& renderer, const int fontId, const char* text, size_t len,
+                             const EpdFontFamily::Style style) {
+  char visible[MAX_LINE_BYTES + 1];
+  size_t count = 0;
+  for (size_t i = 0; i < std::min(len, MAX_LINE_BYTES); ++i) {
+    if (text[i] != DICTIONARY_PLAIN_HEADWORD_MARKER) visible[count++] = text[i];
+  }
+  visible[count] = '\0';
+  return renderer.getTextAdvanceX(fontId, visible, style, 0, BidiUtils::BidiBaseDir::AUTO,
+                                  GfxRenderer::TextMeasureMode::Rendered);
+}
 
 PlainLineLayout getPlainLineLayout(const GfxRenderer& renderer, const int fontId, const char* text, const bool bold,
                                    const bool wraps, const int width) {
   PlainLineLayout result;
   const auto style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
-  const int remaining = std::max(0, width - renderer.getTextAdvanceX(fontId, text, style));
+  const int remaining = std::max(0, width - renderedPlainPrefixWidth(renderer, fontId, text, strlen(text), style));
   switch (SETTINGS.paragraphAlignment) {
     case CrossPointSettings::CENTER_ALIGN:
       result.xOffset = remaining / 2;
@@ -69,18 +83,20 @@ PlainLineLayout getPlainLineLayout(const GfxRenderer& renderer, const int fontId
         break;
       }
       bool inWord = false;
-      bool afterWord = false;
+      bool seenWord = false;
+      bool afterSpace = false;
       for (const char* p = text; *p; ++p) {
         if (isWordSeparator(*p)) {
-          if (inWord) afterWord = true;
+          if (*p != DICTIONARY_PLAIN_HEADWORD_MARKER && seenWord) afterSpace = true;
           inWord = false;
         } else {
           if (!inWord && BidiUtils::startsWithRtl(p)) {
             result.gaps = 0;
             return result;
           }
-          if (afterWord) result.gaps++;
-          afterWord = false;
+          if (!inWord && afterSpace) result.gaps++;
+          afterSpace = false;
+          seenWord = true;
           inWord = true;
         }
       }
@@ -98,16 +114,18 @@ void drawJustifiedPlainLine(const GfxRenderer& renderer, const int fontId, const
   const auto style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
   int gapIndex = 0;
   bool hasWord = false;
+  bool afterSpace = false;
   for (size_t i = 0; text[i];) {
-    while (isWordSeparator(text[i])) ++i;
+    while (isWordSeparator(text[i])) {
+      if (text[i] != DICTIONARY_PLAIN_HEADWORD_MARKER && hasWord) afterSpace = true;
+      ++i;
+    }
     if (!text[i]) break;
-    if (hasWord) ++gapIndex;
+    if (afterSpace) ++gapIndex;
+    afterSpace = false;
     const size_t start = i;
     while (text[i] && !isWordSeparator(text[i])) ++i;
-    const char prefix = text[start];
-    text[start] = '\0';
-    const int advance = renderer.getTextAdvanceX(fontId, text, style);
-    text[start] = prefix;
+    const int advance = renderedPlainPrefixWidth(renderer, fontId, text, start, style);
     const char suffix = text[i];
     text[i] = '\0';
     renderer.drawText(fontId, x + advance + placement.justifyExtra * gapIndex / placement.gaps, y, text + start, true,
@@ -182,20 +200,20 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
       positions.push_back(x);
       x += owner.renderer.getTextAdvanceX(fontId, words[index].c_str(), family);
     }
-    if (placement.gaps > 0 && !reordered) {
+    if (!reordered) {
       int gapIndex = 0;
       for (size_t n = 0; n < ranges.size(); ++n) {
         const size_t start = ranges[n].start - offset;
-        if (n > 0) {
+        if (placement.gaps > 0 && n > 0) {
           for (size_t j = ranges[n - 1].end - offset; j < start; ++j) {
-            if (isWordSeparator(bytes[j])) {
+            if (isWordSeparator(bytes[j]) && bytes[j] != DICTIONARY_PLAIN_HEADWORD_MARKER) {
               ++gapIndex;
               break;
             }
           }
         }
-        positions[n] =
-            owner.measureSpan(fontId, bytes, start, family) + placement.justifyExtra * gapIndex / placement.gaps;
+        positions[n] = renderedPlainPrefixWidth(owner.renderer, fontId, bytes, start, family) +
+                       (placement.gaps > 0 ? placement.justifyExtra * gapIndex / placement.gaps : 0);
       }
     }
     if (reordered) {
@@ -809,9 +827,11 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     const int y = startY + (i - firstLine) * lineHeight;
     if (placement.gaps > 0)
       drawJustifiedPlainLine(renderer, fontId, x, y, buf, lines[i].bold, placement);
-    else
+    else {
+      *std::remove(buf, buf + len, DICTIONARY_PLAIN_HEADWORD_MARKER) = '\0';
       renderer.drawText(fontId, x + placement.xOffset, y, buf, true,
                         lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    }
   }
 }
 
