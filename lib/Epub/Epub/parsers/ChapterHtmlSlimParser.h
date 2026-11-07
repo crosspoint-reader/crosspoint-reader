@@ -143,6 +143,8 @@ class ChapterHtmlSlimParser {
   uint8_t paragraphLinesOnPage = 0;
   uint8_t keepWithNextLines = 0;                       // trailing heading lines on this page
   uint32_t recentLineOffsets[MAX_CARRIED_LINES] = {};  // visible offsets of this page's last lines, newest last
+  // Anchor ranges follow the same six trailing lines when pagination carries them.
+  std::pair<size_t, size_t> recentLineAnchors[MAX_CARRIED_LINES] = {};
   uint8_t recentLineCount = 0;
   size_t linesToCarry(size_t& paragraphLines) const;
   size_t keepWithNextCarry() const;
@@ -201,7 +203,13 @@ class ChapterHtmlSlimParser {
   // anchors needs ~28 KB contiguous, and a failed allocation aborts).
   int completedPageCount = 0;
   std::deque<std::pair<std::string, uint16_t>> anchorData;
-  std::string pendingAnchorId;          // deferred until after previous text block is flushed
+  std::string pendingAnchorId;  // deferred until after previous text block is flushed
+  // Inline targets wait for the line containing their visible-text offset.
+  std::deque<std::pair<std::string, uint32_t>> inlineAnchorIds;
+  // Anchors whose block has started but placed nothing yet. Their page is the page of the block's
+  // first content, which can differ from the page open at block start: the first line may not fit,
+  // or the orphan rule may move it to the next page.
+  std::vector<std::string> unplacedAnchorIds;
   std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
@@ -244,9 +252,12 @@ class ChapterHtmlSlimParser {
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle, bool paragraphEnd = true);
   void flushPendingAnchor();
+  void placeInlineAnchors(uint32_t endOffset, bool remaining = false);
+  void placeTrailingInlineAnchors();
+  void placeUnplacedAnchors();
   void completeCurrentPage();
   void emitCurrentPage();
-  void noteContent(int top, int bottom);
+  void noteContent(int top, int bottom, bool recordAnchors = true);
   int lastLineGlyphBottom() const;
   void openBoxScope(BlockStyle& ownStyle, const CssStyle& cssStyle);
   void closeBoxScope();
