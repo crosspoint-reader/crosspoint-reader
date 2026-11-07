@@ -31,12 +31,14 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
+#include "Epub/EpubSearch.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderClippingListActivity.h"
 #include "EpubReaderFootnoteSelectActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
+#include "EpubSearchResultsActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -53,6 +55,7 @@
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "clippings/ClippingText.h"
 #include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
@@ -1239,6 +1242,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           });
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::SEARCH_IN_BOOK: {
+      startInBookSearch();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
       openDictionaryWordSelect();
       break;
@@ -1725,8 +1732,9 @@ void EpubReaderActivity::renderBook() {
         const bool anchorJump = !pendingAnchor.empty();
 
         if (section->isPartial() &&
-            (anchorJump ? section->getPageForAnchor(pendingAnchor).has_value()
-                        : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
+            (anchorJump               ? section->getPageForAnchor(pendingAnchor).has_value()
+             : offsetJump.has_value() ? section->getPageForVisibleTextOffset(*offsetJump).has_value()
+                                      : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
           LOG_DBG("ERS", "Partial covers target %d of %d; deferring extension build", target, section->pageCount);
         } else {
           const size_t spineBytes =
@@ -1736,6 +1744,9 @@ void EpubReaderActivity::renderBook() {
           bool showPopup;
           if (anchorJump) {
             showPopup = !section->findAnchor(pendingAnchor).has_value() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+          } else if (offsetJump.has_value()) {
+            showPopup = !section->getPageForVisibleTextOffset(*offsetJump).has_value() &&
+                        spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate;
           } else {
             const bool targetAvailable = target < static_cast<int>(section->pageCount);
             showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
@@ -3472,4 +3483,74 @@ CrossPointPosition EpubReaderActivity::getCurrentPosition() const {
     localPos.hasParagraphIndex = true;
   }
   return localPos;
+}
+
+void EpubReaderActivity::startInBookSearch(std::string initialQuery) {
+  if (!epub) return;
+  {
+    RenderLock lock;
+    if (section) {
+      rememberCurrentContentOffset();
+      cachedSpineIndex = currentSpineIndex;
+      cachedChapterTotalPageCount = section->pageCount;
+      nextPageNumber = section->currentPage;
+      section.reset();
+    }
+  }
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH_IN_BOOK), initialQuery,
+                                                           32, InputType::Text);
+  if (!keyboard) {
+    LOG_ERR("ERS", "OOM: KeyboardEntryActivity for search");
+    openReaderMenu();
+    return;
+  }
+  startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+    if (result.isCancelled) {
+      openReaderMenu();
+      return;
+    }
+    const auto& keyboardResult = std::get<KeyboardResult>(result.data);
+    const std::string& rawQuery = keyboardResult.text;
+    const auto start = rawQuery.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) {
+      startInBookSearch("");
+      return;
+    }
+    const auto end = rawQuery.find_last_not_of(" \t\r\n");
+    std::string query = rawQuery.substr(start, end - start + 1);
+
+    std::vector<EpubSearchResult> searchResults;
+    bool found = false;
+    {
+      RenderLock lock;
+      GUI.drawPopup(renderer, tr(STR_SEARCHING));
+      found = EpubSearch::search(*epub, query, searchResults, 30);
+      if (!found) {
+        renderer.clearScreen();
+        GUI.drawPopup(renderer, tr(STR_NO_MATCHES_FOUND));
+      }
+    }
+    if (!found) {
+      delay(1200);
+      startInBookSearch(std::move(query));
+      return;
+    }
+
+    auto resultsActivity =
+        makeUniqueNoThrow<EpubSearchResultsActivity>(renderer, mappedInput, query, std::move(searchResults));
+    if (!resultsActivity) {
+      LOG_ERR("ERS", "OOM: EpubSearchResultsActivity");
+      openReaderMenu();
+      return;
+    }
+    startActivityForResult(std::move(resultsActivity),
+                           [this, query = std::move(query)](const ActivityResult& searchRes) {
+                             if (searchRes.isCancelled) {
+                               startInBookSearch(query);
+                               return;
+                             }
+                             const auto& change = std::get<ProgressChangeResult>(searchRes.data);
+                             applyProgressChange(change);
+                           });
+  });
 }
