@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "CrossPointSettings.h"
+#include "DictionaryWordSelectActivity.h"
 #include "HapticFeedback.h"
 #include "ReaderUtils.h"
 #include "components/HeaderBackTapTarget.h"
@@ -124,10 +125,16 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
 };
 
 // cppcheck-suppress constParameterReference // the lookup state holds the dictionary by non-const reference
-bool DictionaryDefinitionActivity::enableLookup(Dictionary& dictionary, std::string&& query) {
+bool DictionaryDefinitionActivity::enableLookup(Dictionary& dictionary, std::string&& query,
+                                                DictionaryWordSelectActivity* controller, const bool found) {
   lookup = makeUniqueNoThrow<LookupState>(dictionary);
   if (!lookup) LOG_ERR("DICT", "OOM: lookup history (%u bytes)", static_cast<unsigned>(sizeof(LookupState)));
-  if (lookup) lookup->query = std::move(query);
+  if (lookup) {
+    lookup->query = std::move(query);
+    lookup->controller = controller;
+    content.missing = !found;
+    if (!found) htmlDefinition = false;
+  }
   return lookup != nullptr;
 }
 
@@ -138,6 +145,7 @@ void DictionaryDefinitionActivity::onEnter() {
     content.lines.clear();
     showMessage(StrId::STR_DICT_LOW_MEMORY);
   }
+  if (lookup && lookup->controller) lookup->controller->prefetch(lookup->query);
   requestUpdate();
 }
 
@@ -152,6 +160,7 @@ bool DictionaryDefinitionActivity::prepareDefinition(Definition& next, const boo
 }
 
 void DictionaryDefinitionActivity::onExit() {
+  if (lookup && lookup->controller) lookup->controller->stopPrefetch();
   Activity::onExit();
   if (auto* fcm = renderer.getFontCacheManager()) {
     fcm->releaseSdFontCaches();
@@ -382,8 +391,15 @@ void DictionaryDefinitionActivity::showMessage(const StrId nextMessage) {
 bool DictionaryDefinitionActivity::restoreCurrentDefinition(const bool styled) {
   const int page = content.currentPage;
   auto result = Dictionary::LookupResult::Found;
-  if (!lookup->dictionary.lookup(lookup->query.c_str(), content.text, content.headword, &result) ||
-      !prepareDefinition(content, !styled) || styled != !content.pages.empty() || page >= content.totalPages) {
+  bool found = readDefinition(lookup->dictionaryIndex, lookup->query.c_str(), content, &result);
+  if (!found && result == Dictionary::LookupResult::NotFound && content.missing) {
+    content.headword = lookup->query;
+    content.text = tr(STR_DICT_NOT_FOUND);
+    htmlDefinition = false;
+    found = true;
+  }
+  if (!found || !prepareDefinition(content, !styled) || styled != !content.pages.empty() ||
+      page >= content.totalPages) {
     LOG_ERR("DICT", "Cannot recover current definition after failed lookup");
     finish();
     return false;
@@ -413,7 +429,8 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
   Definition next;
   auto result = Dictionary::LookupResult::Found;
   const char* word = back ? lookup->history[lookup->depth - 1].query.c_str() : lookup->pendingWord.c_str();
-  const bool found = lookup->dictionary.lookup(word, next.text, next.headword, &result);
+  const size_t dictionaryIndex = back ? lookup->history[lookup->depth - 1].dictionaryIndex : lookup->dictionaryIndex;
+  const bool found = readDefinition(dictionaryIndex, word, next, &result);
   const auto recover = [this, back, styled, &next](const StrId error) {
     lookup->pendingWord.clear();
     next.releasePayload();
@@ -457,12 +474,14 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
       return;
     }
     lookup->query = std::move(previous.query);
+    lookup->dictionaryIndex = previous.dictionaryIndex;
     next.currentPage = previous.page;
     next.selectionPage = previous.selectionPage;
     next.selection = previous.selection;
     --lookup->depth;
   } else {
     auto& previous = lookup->history[lookup->depth++];
+    previous.dictionaryIndex = lookup->dictionaryIndex;
     previous.query = std::move(lookup->query);
     lookup->query = std::move(lookup->pendingWord);
     previous.page = content.currentPage;
@@ -472,6 +491,55 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
   }
   lookup->pendingWord.clear();
   content = std::move(next);
+  if (lookup->controller) lookup->controller->prefetch(lookup->query);
+  requestUpdate();
+}
+
+bool DictionaryDefinitionActivity::readDefinition(const size_t dictionaryIndex, const char* word, Definition& next,
+                                                  Dictionary::LookupResult* result) {
+  const bool found = lookup->controller ? lookup->controller->lookupInDictionary(dictionaryIndex, word, next.text,
+                                                                                 next.headword, result)
+                                        : lookup->dictionary.lookup(word, next.text, next.headword, result);
+  if (lookup->controller) htmlDefinition = lookup->dictionary.definitionsAreHtml();
+  return found;
+}
+
+void DictionaryDefinitionActivity::switchDictionary(const bool forward) {
+  const size_t count = lookup->controller->dictionaryCount();
+  const size_t index = (lookup->dictionaryIndex + (forward ? 1 : count - 1)) % count;
+  if (!lookup->controller->hasSearchCache(index, lookup->query.c_str())) {
+    {
+      RenderLock lock;
+      showMessage(StrId::STR_DICT_LOOKING_UP);
+    }
+    requestUpdateAndWait();
+  }
+  RenderLock lock;
+  messageVisible = false;
+  const bool styled = !content.pages.empty();
+  content.releasePayload();
+  if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
+  Definition next;
+  auto result = Dictionary::LookupResult::NotFound;
+  bool found = readDefinition(index, lookup->query.c_str(), next, &result);
+  if (!found && result == Dictionary::LookupResult::NotFound) {
+    next.missing = true;
+    next.headword = lookup->query;
+    next.text = tr(STR_DICT_NOT_FOUND);
+    htmlDefinition = false;
+    found = true;
+  }
+  if (!found || !prepareDefinition(next)) {
+    next.releasePayload();
+    const auto error = result == Dictionary::LookupResult::Decompress            ? StrId::STR_DICT_DECOMPRESS_ERROR
+                       : !found && result != Dictionary::LookupResult::LowMemory ? StrId::STR_DICT_READ_FAILED
+                                                                                 : StrId::STR_DICT_LOW_MEMORY;
+    if (restoreCurrentDefinition(styled)) showMessage(error);
+    return;
+  }
+  lookup->dictionaryIndex = index;
+  content = std::move(next);
+  lookup->controller->prefetch(lookup->query);
   requestUpdate();
 }
 
@@ -540,6 +608,7 @@ bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
 }
 
 void DictionaryDefinitionActivity::startSelection(const int x, const int y) {
+  if (lookup->controller) lookup->controller->stopPrefetch();
   RenderLock lock;
   if (!content.selection.valid || x >= 0) {
     content.selectionPage = content.currentPage;
@@ -571,7 +640,10 @@ void DictionaryDefinitionActivity::startSelection(const int x, const int y) {
   startActivityForResult(std::move(selection), [this](const ActivityResult& result) {
     RenderLock lock;
     lookup->selectionPages.clear();
-    if (result.isCancelled) return;
+    if (result.isCancelled) {
+      if (lookup->controller) lookup->controller->prefetch(lookup->query);
+      return;
+    }
     const auto& selected = std::get<ClippingResult>(result.data);
     content.currentPage = content.selectionPage + selected.endPageOffset;
     content.selection = {selected.startPageOffset, selected.endPageOffset, selected.startWordIndex,
@@ -623,13 +695,25 @@ void DictionaryDefinitionActivity::loop() {
       finish();
     return;
   }
-  if (longPress && SETTINGS.touchReaderControls) {
+  if (longPress && SETTINGS.touchReaderControls && !content.missing) {
     startSelection(sx, sy);
     return;
   }
-  if (lookup && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (lookup && mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !content.missing) {
     startSelection();
     return;
+  }
+
+  if (lookup && lookup->controller && lookup->controller->dictionaryCount() > 1) {
+    const auto swipe = mappedInput.wasSwipe();
+    const bool next = mappedInput.hasTouch() ? swipe == MappedInputManager::SwipeDir::Left
+                                             : mappedInput.wasReleased(MappedInputManager::Button::Right);
+    const bool previous = mappedInput.hasTouch() ? swipe == MappedInputManager::SwipeDir::Right
+                                                 : mappedInput.wasReleased(MappedInputManager::Button::Left);
+    if (next || previous) {
+      switchDictionary(next);
+      return;
+    }
   }
 
   // Page navigation must keep polling input while the render task refreshes the display.
@@ -655,21 +739,29 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this, &currentPage] {
-    if (currentPage + 1 < content.totalPages) {
-      currentPage++;
-      content.selection.valid = false;
-      requestUpdate();
-    }
-  });
+  const bool cycling =
+      lookup && lookup->controller && lookup->controller->dictionaryCount() > 1 && !mappedInput.hasTouch();
+  buttonNavigator.onPressAndContinuous(
+      cycling ? std::initializer_list<MappedInputManager::Button>{MappedInputManager::Button::PageForward}
+              : ButtonNavigator::getNextButtons(),
+      [this, &currentPage] {
+        if (currentPage + 1 < content.totalPages) {
+          currentPage++;
+          content.selection.valid = false;
+          requestUpdate();
+        }
+      });
 
-  buttonNavigator.onPrevious([this, &currentPage] {
-    if (currentPage > 0) {
-      currentPage--;
-      content.selection.valid = false;
-      requestUpdate();
-    }
-  });
+  buttonNavigator.onPressAndContinuous(
+      cycling ? std::initializer_list<MappedInputManager::Button>{MappedInputManager::Button::PageBack}
+              : ButtonNavigator::getPreviousButtons(),
+      [this, &currentPage] {
+        if (currentPage > 0) {
+          currentPage--;
+          content.selection.valid = false;
+          requestUpdate();
+        }
+      });
 }
 
 // Draws the current page: a styled Page when the HTML layout succeeded,
@@ -716,10 +808,14 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   const int contentWidth = renderer.getScreenWidth() - hintGutterWidth;
   const int contentY = isInverted ? metrics.buttonHintsHeight : 0;
 
-  char counter[16] = {};
+  char counter[160] = {};
+  const char* dictionaryName =
+      lookup && lookup->controller ? lookup->controller->dictionaryName(lookup->dictionaryIndex) : "";
   if (totalPages > 1) {
-    snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
+    snprintf(counter, sizeof(counter), "%s%s%d/%d", dictionaryName, dictionaryName[0] ? "  " : "", currentPage + 1,
+             totalPages);
   }
+  if (totalPages <= 1) snprintf(counter, sizeof(counter), "%s", dictionaryName);
   GUI.drawHeader(renderer, Rect{contentX, contentY + metrics.topPadding, contentWidth, metrics.headerHeight},
                  content.headword.c_str(), counter[0] ? counter : nullptr);
 
@@ -734,8 +830,11 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   scope.endScanAndPrewarm();
   drawBody(fontId, body.x, body.y, currentPage);
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), lookup ? tr(STR_LOOKUP) : "", (currentPage > 0 ? "<" : ""),
-                                            (currentPage + 1 < totalPages ? ">" : ""));
+  const bool cycling =
+      lookup && lookup->controller && lookup->controller->dictionaryCount() > 1 && !mappedInput.hasTouch();
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), lookup && !content.missing ? tr(STR_LOOKUP) : "",
+                                            cycling ? tr(STR_DICT_PREVIOUS) : (currentPage > 0 ? "<" : ""),
+                                            cycling ? tr(STR_DICT_NEXT) : (currentPage + 1 < totalPages ? ">" : ""));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   if (messageVisible) {
     GUI.drawPopup(renderer, I18N.get(message));
