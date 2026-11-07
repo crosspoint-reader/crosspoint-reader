@@ -56,6 +56,14 @@ On the very first lookup with a dictionary (and again whenever the `.idx` or `.s
 3. **Stemming** — still no match: common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
 4. **Not found** — a short popup appears. Touchscreen devices return to reading; buttons-only devices return to word selection.
 
+## Vocabulary History
+
+Successful lookups started from a book page are appended to `/Vocabulary.txt` at the root of the SD card. This is separate from `My Clippings.txt`; looking up a word does not create a highlight. Failed lookups are not recorded, and an SD-card write failure does not interrupt the dictionary.
+
+The file uses UTF-8 **JSON Lines**: one JSON object per line, versioned with `"v":1`. Each record has a random `id`, `word` (selected text), `headword` (dictionary match), `definition` (plain text), and `timestamp` (Unix seconds, or `null` when the clock is unavailable). It also includes `title`, `author`, `series`, `series_index`, `chapter`, `page` (1-based chapter page), `spine` (0-based EPUB spine index), and `start_offset` (EPUB source offset, or `null` when unavailable). Missing series information is represented by an empty name and a `null` index. Definitions are limited to 2 KiB, looked-up words and matched headwords to 160 UTF-8 bytes each, and book fields to bounded lengths. The `definition_truncated` boolean indicates whether the definition (but not the word or headword) was shortened; when possible the saved definition ends at a complete line. HTML dictionary definitions are converted to plain text.
+
+Repeated lookups are recorded separately. Positions reflect the reader layout at lookup time and may change when the book is reflowed. The `chapter` title is resolved from the selected word's rendered page, not its exact offset: if two TOC chapter boundaries share a page, the title may refer to the later chapter rather than the one containing the word. Lookups made from inside a dictionary definition are not currently included.
+
 ## The Definition Screen
 
 When a word is found, the definition screen shows the matched headword at the top and the definition text below, with a page counter for long definitions. A word that maps to several definitions shows them one after another, each labelled with its headword. Definitions that exceed the remaining size limit are skipped, and later definitions are still considered. If no labelled definition fits, the first definition is shown alone without an extra label.

@@ -27,6 +27,8 @@ class HomeActivity final : public Activity {
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
   size_t coverBufferSize = 0;      // Bytes allocated to coverBuffer
+  // Output polarity the snapshot was taken in (night mode stores images pre-inverted).
+  bool coverBufferInverted = false;
   // Logical rect last passed to drawRecentBookCover. The cover snapshot only
   // needs to cover this region, not the entire framebuffer, so we cache the
   // tile instead of all 48 KB. Set in render() before the call.

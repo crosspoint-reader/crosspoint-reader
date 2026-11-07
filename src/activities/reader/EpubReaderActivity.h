@@ -22,6 +22,7 @@
 
 class EpubReaderActivity final : public ReaderActivity {
   std::shared_ptr<Epub> epub;
+  std::unique_ptr<Epub::SyncMetadata> vocabularyMetadata;
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
