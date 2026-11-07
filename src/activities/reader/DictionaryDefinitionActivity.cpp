@@ -90,7 +90,8 @@ PlainLineLayout getPlainLineLayout(const GfxRenderer& renderer, const int fontId
           if (*p != DICTIONARY_PLAIN_HEADWORD_MARKER && seenWord) afterSpace = true;
           inWord = false;
         } else {
-          if (!inWord && BidiUtils::startsWithRtl(p)) {
+          // Any RTL codepoint needs whole-line bidi ordering, even after an LTR prefix.
+          if ((static_cast<unsigned char>(*p) & 0xC0) == 0xC0 && BidiUtils::startsWithRtl(p, 1)) {
             result.gaps = 0;
             return result;
           }

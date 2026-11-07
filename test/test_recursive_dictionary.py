@@ -118,8 +118,8 @@ struct TextBlock {
 struct PageElement { virtual ~PageElement() = default; };
 struct PageLine : PageElement {
   std::unique_ptr<TextBlock> block;
-  int y;
-  PageLine(std::unique_ptr<TextBlock> block, int, int y) : block(std::move(block)), y(y) {}
+  int x, y;
+  PageLine(std::unique_ptr<TextBlock> block, int x, int y) : block(std::move(block)), x(x), y(y) {}
 };
 struct Page { std::vector<std::unique_ptr<PageElement>> elements; };
 struct FontCacheManager {
@@ -133,13 +133,13 @@ struct Renderer {
   int preparedStyles = 0;
   FontCacheManager* getFontCacheManager() { return &cache; }
   enum class TextMeasureMode { Layout, Rendered };
-  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style, int8_t = 0,
+  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style style, int8_t = 0,
                       BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO,
-                      TextMeasureMode = TextMeasureMode::Layout) const {
+                      TextMeasureMode mode = TextMeasureMode::Layout) const {
     const auto* ptr = reinterpret_cast<const unsigned char*>(text);
     int width = 0;
     while (*ptr) { utf8NextCodepoint(&ptr); ++width; }
-    return width;
+    return width * (style == EpdFontFamily::BOLD ? (mode == TextMeasureMode::Rendered ? 2 : 3) : 1);
   }
   bool isSdCardFont(int) const { return true; }
   void ensureSdCardFontReady(int, const char* text, int styles) {
@@ -150,7 +150,11 @@ struct Renderer {
   }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 1; }
   int getLineHeight(int, float) const { return 10; }
-  void drawText(int, int, int, const char*, bool, EpdFontFamily::Style) const {}
+  struct DrawCall { int x, y; std::string text; EpdFontFamily::Style style; };
+  mutable std::vector<DrawCall> drawCalls;
+  void drawText(int, int x, int y, const char* text, bool, EpdFontFamily::Style style) const {
+    drawCalls.push_back({x, y, text, style});
+  }
 };
 struct CrossPointSettings {
   enum { JUSTIFIED, LEFT_ALIGN, CENTER_ALIGN, RIGHT_ALIGN, BOOK_STYLE };
@@ -245,7 +249,8 @@ struct DictionaryDefinitionActivity {
   ActivityResult result;
   std::unique_ptr<ClipSelectionActivity> child;
   ActivityResultHandler callback;
-  BodyArea bodyArea() const { return {0, 0, 12, 20}; }
+  int bodyWidth = 12, bodyHeight = 20;
+  BodyArea bodyArea() const { return {0, 0, bodyWidth, bodyHeight}; }
   void requestUpdate() {}
   void requestUpdateAndWait() {}
   void finish() { finished = true; }
@@ -413,8 +418,9 @@ int main() {
   assert(rtl.ranges[0].start > rtl.ranges[1].start);
   view.lookup->selectionPages.clear();
   view.content = {};
-  view.content.text = "one אבג דהו";
+  view.content.text = "one אבג דהו tail";
   assert(view.prepareDefinition(view.content) && view.buildPlainSelectionPages());
+  assert(view.content.lines[0].wraps);
   const auto& mixed = *static_cast<const PageLine&>(*view.lookup->selectionPages[0]->elements[0]).block;
   assert(mixed.words == std::vector<std::string>({"one", "דהו", "אבג"}));
   assert(mixed.positions == std::vector<int16_t>({0, 4, 8}));
@@ -424,6 +430,94 @@ int main() {
   assert(!view.buildPlainSelectionPages());
   HalMemory::available = 1024 * 1024;
   dictionary.canRead = {};
+  // Justified drawing uses the same word positions as plain-text selection.
+  {
+    Renderer drawing;
+    char justified[] = "one two three";
+    const auto placement = getPlainLineLayout(drawing, 0, justified, false, true, 20);
+    assert(placement.gaps == 2 && placement.justifyExtra == 7);
+    drawJustifiedPlainLine(drawing, 0, 5, 7, justified, false, placement);
+    assert(drawing.drawCalls.size() == 3);
+    assert(drawing.drawCalls[0].text == "one" && drawing.drawCalls[0].x == 5);
+    assert(drawing.drawCalls[1].text == "two" && drawing.drawCalls[1].x == 12);
+    assert(drawing.drawCalls[2].text == "three" && drawing.drawCalls[2].x == 20);
+    for (const auto& call : drawing.drawCalls) assert(call.y == 7 && call.style == EpdFontFamily::REGULAR);
+    // An RTL run after five digits must use full-line bidi rendering, not logical-order justification.
+    char mixedRtl[] = "one 123456אבג 123456דהו tail";
+    assert(getPlainLineLayout(drawing, 0, mixedRtl, false, true, 60).gaps == 0);
+    char embeddedRtl[] = "one prefixאבג other";
+    assert(getPlainLineLayout(drawing, 0, embeddedRtl, false, true, 60).gaps == 0);
+  }
+  {
+    SETTINGS.paragraphAlignment = CrossPointSettings::JUSTIFIED;
+    SETTINGS.extraParagraphSpacing = false;
+    DictionaryDefinitionActivity boldView;
+    boldView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+    boldView.bodyWidth = 20;
+    boldView.content.text = std::string(1, DICTIONARY_PLAIN_HEADWORD_MARKER) + "ab cd ef gh";
+    assert(boldView.prepareDefinition(boldView.content));
+    assert(boldView.content.lines[0].bold && boldView.content.lines[0].wraps);
+    assert(boldView.buildPlainSelectionPages());
+    const auto& selected = *static_cast<const PageLine&>(*boldView.lookup->selectionPages[0]->elements[0]).block;
+    assert(selected.words == std::vector<std::string>({"ab", "cd", "ef"}));
+    assert(selected.positions == std::vector<int16_t>({0, 8, 16}));
+    auto& drawing = boldView.renderer;
+    assert(drawing.getTextAdvanceX(0, "ab", EpdFontFamily::BOLD) == 6);
+    assert(drawing.getTextAdvanceX(0, "ab", EpdFontFamily::BOLD, 0,
+                                   BidiUtils::BidiBaseDir::AUTO, Renderer::TextMeasureMode::Rendered) == 4);
+    char justified[] = "ab cd ef";
+    const auto placement = getPlainLineLayout(drawing, 0, justified, true, true, 20);
+    assert(placement.gaps == 2 && placement.justifyExtra == 4);
+    drawJustifiedPlainLine(drawing, 0, 0, 0, justified, true, placement);
+    assert(drawing.drawCalls.size() == selected.positions.size());
+    for (size_t i = 0; i < selected.positions.size(); ++i) {
+      assert(drawing.drawCalls[i].text == selected.words[i]);
+      assert(drawing.drawCalls[i].x == selected.positions[i]);
+      assert(drawing.drawCalls[i].style == EpdFontFamily::BOLD);
+    }
+  }
+  // Alignment offsets are part of the selectable PageLine, including later pages.
+  for (const int alignment : {CrossPointSettings::CENTER_ALIGN, CrossPointSettings::RIGHT_ALIGN}) {
+    SETTINGS.paragraphAlignment = alignment;
+    DictionaryDefinitionActivity alignView;
+    alignView.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+    alignView.content.text = "one two\nthree four\nfive";
+    assert(alignView.prepareDefinition(alignView.content) && alignView.buildPlainSelectionPages());
+    assert(alignView.content.totalPages == 2 && alignView.lookup->selectionPages.size() == 2);
+    const auto& firstPage = alignView.lookup->selectionPages[0]->elements;
+    const auto& secondPage = alignView.lookup->selectionPages[1]->elements;
+    assert(firstPage.size() == 2 && secondPage.size() == 1);
+    const int firstX = static_cast<const PageLine&>(*firstPage[0]).x;
+    const int secondX = static_cast<const PageLine&>(*firstPage[1]).x;
+    const int thirdX = static_cast<const PageLine&>(*secondPage[0]).x;
+    if (alignment == CrossPointSettings::CENTER_ALIGN)
+      assert(firstX == 2 && secondX == 1 && thirdX == 4);
+    else
+      assert(firstX == 5 && secondX == 2 && thirdX == 8);
+  }
+  SETTINGS.paragraphAlignment = CrossPointSettings::JUSTIFIED;
+  SETTINGS.extraParagraphSpacing = true;
+  {
+    DictionaryDefinitionActivity spaced;
+    spaced.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+    spaced.bodyHeight = 40;
+    spaced.content.text = "intro\n1. one\n2. two\n3. three\n4. four\n5. five\n6. six";
+    assert(spaced.prepareDefinition(spaced.content) && spaced.buildPlainSelectionPages());
+    assert(spaced.content.linesPerPage == 4 && spaced.content.totalPages == 3);
+    assert(spaced.content.lines.size() == 9);
+    assert(spaced.content.lines[1].len == 0 && spaced.content.lines[5].len == 0);
+    assert(spaced.content.lines[4].len > 0 && spaced.content.lines[8].len > 0);
+    assert(spaced.lookup->selectionPages.size() == 3);
+    const auto& p0 = spaced.lookup->selectionPages[0]->elements;
+    const auto& p1 = spaced.lookup->selectionPages[1]->elements;
+    const auto& p2 = spaced.lookup->selectionPages[2]->elements;
+    assert(p0.size() == 3 && p1.size() == 3 && p2.size() == 1);
+    assert(static_cast<const PageLine&>(*p0[1]).y == 20);
+    assert(static_cast<const PageLine&>(*p1[0]).y == 0);
+    assert(static_cast<const PageLine&>(*p1[1]).y == 20);
+    assert(static_cast<const PageLine&>(*p2[0]).y == 0);
+  }
+  SETTINGS.extraParagraphSpacing = false;
   // Short Back restores one entry; long Back waits for release and cancels the entire flow.
   for (const unsigned long heldMs : {999ul, 1000ul, 2000ul}) {
     DictionaryDefinitionActivity backView;
