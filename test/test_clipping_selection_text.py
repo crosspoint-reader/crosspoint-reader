@@ -28,6 +28,8 @@ def method(name, next_name, text=source):
     return text[start:text.index(next_name, signature)].rstrip()
 
 extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSelectionActivity::closestInRow")
+line_region = method("void ClipSelectionActivity::renderLineRegion", "void ClipSelectionActivity::drawWordClean")
+gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "void ClipSelectionActivity::renderLineRegion")
 clean_draw = method("void ClipSelectionActivity::drawWordClean", "void ClipSelectionActivity::drawWordHighlight")
 highlight_draw = method("void ClipSelectionActivity::drawWordHighlight", "bool ClipSelectionActivity::renderIncremental")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
@@ -39,6 +41,7 @@ saved_draw = method("void EpubReaderActivity::drawClippingHighlights", "void Epu
 # Compile production extraction, export, and redraws with bounded UI/rendering stubs.
 harness = r"""
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -57,7 +60,7 @@ harness = r"""
 #include "ClippingStore.h"
 #include <Epub/ReaderRenderSpec.h>
 namespace BidiUtils { enum class BidiBaseDir : int8_t { AUTO = -1, LTR = 0, RTL = 1 }; }
-struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4 }; };
+struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4, STRIKETHROUGH = 8 }; };
 constexpr int TAG_PageLine = 1;
 struct Rect { int x = 0, y = 0, width = 0, height = 0; };
 enum class Color { LightGray };
@@ -69,6 +72,8 @@ struct Block {
   const char* text = "one";
   std::string packedText;
   std::vector<EpdFontFamily::Style> styles;
+  std::vector<int> positions;
+  void render(const Renderer&, int, int, int) const;
   bool paragraphStart = true;
   bool prefixSpace = false;
   bool valid() const { return true; }
@@ -89,7 +94,7 @@ struct Block {
   }
   uint16_t wordTextLen(uint16_t i) const { return std::char_traits<char>::length(wordText(i)); }
   EpdFontFamily::Style wordStyle(uint16_t i) const { return styles.empty() ? EpdFontFamily::REGULAR : styles[i]; }
-  int wordXpos(uint16_t) const { return 0; }
+  int wordXpos(uint16_t i) const { return positions.empty() ? 0 : positions[i]; }
   Range wordSourceRange(uint16_t i) const {
     return prefixSpace && i == 0 ? Range{range.start, range.start + 1} : range;
   }
@@ -105,9 +110,27 @@ struct PageLine {
 struct Page { std::vector<std::unique_ptr<PageLine>> elements; };
 struct Renderer {
   enum RenderMode { BW };
+  enum class DitherMode { Replace, PreserveInk };
   struct Draw { int x, width, tracking; };
   mutable std::vector<Draw> draws;
   mutable std::vector<Draw> fills;
+  mutable std::set<std::pair<int, int>> ink;
+  mutable std::array<int, 4> clip{0, 0, 1000, 1000};
+  auto getClipRect() const { return std::array<int, 4>{clip[0], clip[1], clip[2] - clip[0], clip[3] - clip[1]}; }
+  void setClipRect(int x, int y, int w, int h) const { clip = {x, y, x + w, y + h}; }
+  void clearInk(int x, int y, int width, int height) const {
+    for (auto it = ink.begin(); it != ink.end();) {
+      const auto [px, py] = *it;
+      if (px >= std::max(x, clip[0]) && px < std::min(x + width, clip[2]) &&
+          py >= std::max(y, clip[1]) && py < std::min(y + height, clip[3])) it = ink.erase(it);
+      else ++it;
+    }
+  }
+  void drawLine(int x, int y, int endX, int, int thickness, bool) const {
+    for (int py = y; py < y + thickness; ++py)
+      for (int px = x; px <= endX; ++px)
+        if (px >= clip[0] && px < clip[2] && py >= clip[1] && py < clip[3]) ink.emplace(px, py);
+  }
   bool sdFont = false;
   mutable size_t coldMeasurements = 0;
   std::set<std::pair<uint8_t, uint32_t>> advances;
@@ -148,13 +171,34 @@ struct Renderer {
   }
   void drawText(int font, int x, int, const char* text, bool, EpdFontFamily::Style style,
                 BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const {
+    if (!clippingText::hasVisibleText(text)) return;
     draws.push_back({x, getTextAdvanceX(font, text, style, tracking), tracking});
   }
-  void fillRect(int x, int, int width, int, bool) const { fills.push_back({x, width, 0}); }
-  void fillRectDither(int x, int, int width, int, Color) const { fills.push_back({x, width, 0}); }
+  void fillRect(int x, int y, int width, int height, bool) const {
+    fills.push_back({x, width, 0}); clearInk(x, y, width, height);
+  }
+  void fillRectDither(int x, int y, int width, int height, Color,
+                      DitherMode mode = DitherMode::Replace) const {
+    fills.push_back({x, width, 0});
+    if (mode == DitherMode::Replace) clearInk(x, y, width, height);
+  }
   void drawRect(int, int, int, int, bool) const {}
   void drawPixel(int, int, bool) const {}
 };
+void Block::render(const Renderer& renderer, int font, int x, int y) const {
+  // The source line owns decorations, including continuous ink across word gaps.
+  for (uint16_t i = 0; i < wordCount(); ++i) {
+    renderer.drawText(font, x + wordXpos(i), y, wordText(i), true, wordStyle(i),
+                       BidiUtils::BidiBaseDir::AUTO, style.characterSpacing);
+    const int right = x + wordXpos(i) + renderer.getTextAdvanceX(font, wordText(i), wordStyle(i), style.characterSpacing);
+    for (const auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH}) {
+      if (!(wordStyle(i) & decoration)) continue;
+      const int left = i > 0 && (wordStyle(i - 1) & decoration) ? x + wordXpos(i - 1) : x + wordXpos(i);
+      const int lineY = y + (decoration == EpdFontFamily::UNDERLINE ? 14 : 8);
+      renderer.drawLine(left, lineY, right, lineY, 2, true);
+    }
+  }
+}
 struct Theme {
   void drawSelectionHandle(const Renderer&, Rect, bool) const {}
   void drawSelectionActions(const Renderer&, Rect, int = 3, int = 0) const {}
@@ -216,14 +260,16 @@ struct ClipSelectionActivity {
   void drawWordHighlight(int, int, int, int, int) const;
   void drawSelection() const;
   void prewarmWord(int) const {}
-  void clearGapBetween(const WordBox&, const WordBox&, int, int) const {}
-  void ditherGapBetween(const WordBox&, const WordBox&, int, int) const {}
-  int textOffset() const { return 0; }
-  int textXOffset() const { return 0; }
+  void renderLineRegion(const WordBox&, int, int, int, int, int, int) const;
+  void clearGapBetween(const WordBox&, const WordBox&, int, int) const;
+  void ditherGapBetween(const WordBox&, const WordBox&, int, int) const;
+  int testOffsetX = 0, testOffsetY = 0;
+  int textOffset() const { return testOffsetY; }
+  int textXOffset() const { return testOffsetX; }
   Rect handleRect(int, bool) const { return {}; }
   Rect actionRect() const { return {}; }
 };
-""" + build_text + extract_words + clean_draw + highlight_draw + selection_draw + r"""
+""" + build_text + extract_words + gap_draw + line_region + clean_draw + highlight_draw + selection_draw + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -270,6 +316,44 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
   assert(text == expected);
 }
 int main() {
+  for (auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH}) {
+    ClipSelectionActivity decorated;
+    decorated.marginLeft = 11;
+    decorated.marginTop = 7;
+    decorated.testOffsetX = 7;
+    decorated.testOffsetY = 11;
+    auto page = std::make_unique<Page>();
+    auto blank = std::make_unique<PageLine>();
+    blank->block.text = " ";
+    page->elements.push_back(std::move(blank));
+    auto line = std::make_unique<PageLine>();
+    line->xPos = 3;
+    line->yPos = 5;
+    line->block.packedText = std::string("one\0two\0", 8);
+    line->block.positions = {0, 40};
+    line->block.styles = {decoration, decoration};
+    line->block.render(decorated.renderer, 0, decorated.marginLeft + line->xPos + decorated.testOffsetX,
+                        decorated.marginTop + line->yPos + decorated.testOffsetY);
+    page->elements.push_back(std::move(line));
+    decorated.pages.push_back(std::move(page));
+    assert(decorated.extractWords());
+    const auto originalInk = decorated.renderer.ink;
+    decorated.rangeStart = 0;
+    decorated.selected = 1;
+    decorated.drawSelection();
+    assert(decorated.renderer.ink == originalInk);
+    decorated.drawWordClean(0, decorated.testOffsetX, decorated.testOffsetY);
+    assert(decorated.renderer.ink == originalInk);
+    decorated.drawWordHighlight(1, 0, 1, decorated.testOffsetX, decorated.testOffsetY);
+    assert(decorated.renderer.ink == originalInk);
+    // A redraw must respect its caller's clip and leave the clip unchanged.
+    decorated.renderer.setClipRect(decorated.words[0].x + decorated.testOffsetX + 2,
+                                    decorated.words[0].y + decorated.testOffsetY + 2, 8, 13);
+    const auto clip = decorated.renderer.getClipRect();
+    decorated.drawWordClean(0, decorated.testOffsetX, decorated.testOffsetY);
+    assert(decorated.renderer.getClipRect() == clip);
+    assert(decorated.renderer.ink == originalInk);
+  }
   // Returning from a definition releases the SD font caches before selection is rebuilt.
   for (const bool rtl : {false, true}) {
     ClipSelectionActivity cold;
@@ -366,11 +450,11 @@ int main() {
     activity.drawSelection();
     activity.drawWordClean(0, 0, 0);  // Cursor leaves the old word.
     activity.drawWordHighlight(1, 1, 1, 0, 0);
-    assert(activity.renderer.draws.size() == 4);
+    assert(activity.renderer.draws.size() == 2);
     assert(activity.renderer.fills.size() == 4);
-    for (size_t i = 0; i < 4; ++i) {
+    for (size_t i = 0; i < 2; ++i) {
       const auto& draw = activity.renderer.draws[i];
-      const auto& fill = activity.renderer.fills[i];
+      const auto& fill = activity.renderer.fills[i + 2];
       assert(draw.tracking == tracking);
       assert(draw.width == 24 + 2 * tracking);
       assert(fill.width == draw.width);
