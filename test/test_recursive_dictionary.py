@@ -426,6 +426,32 @@ int main() {
   assert(mixed.positions == std::vector<int16_t>({0, 4, 8}));
   assert(mixed.ranges[1].start > mixed.ranges[2].start);
   view.lookup->selectionPages.clear();
+  {
+    DictionaryDefinitionActivity spacedRtl;
+    spacedRtl.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+    spacedRtl.bodyWidth = 14;
+    spacedRtl.content.text = "one   אבג  דהו tail";
+    assert(spacedRtl.prepareDefinition(spacedRtl.content) && spacedRtl.buildPlainSelectionPages());
+    assert(spacedRtl.content.lines[0].wraps);
+    const auto& visual = *static_cast<const PageLine&>(*spacedRtl.lookup->selectionPages[0]->elements[0]).block;
+    assert(visual.words == std::vector<std::string>({"one", "דהו", "אבג"}));
+    assert(visual.positions == std::vector<int16_t>({0, 6, 11}));
+    std::string rendered;
+    assert(BidiUtils::applyBidiVisual("one   אבג  דהו", rendered));
+    assert(rendered == "one   והד  גבא");
+    spacedRtl.lookup->selectionPages.clear();
+    spacedRtl.content = {};
+    spacedRtl.bodyWidth = 20;
+    spacedRtl.content.text = "one   אבג  דהו    tail padding";
+    assert(spacedRtl.prepareDefinition(spacedRtl.content) && spacedRtl.buildPlainSelectionPages());
+    assert(spacedRtl.content.lines[0].wraps);
+    const auto& both = *static_cast<const PageLine&>(*spacedRtl.lookup->selectionPages[0]->elements[0]).block;
+    assert(both.words == std::vector<std::string>({"one", "דהו", "אבג", "tail"}));
+    assert(both.positions == std::vector<int16_t>({0, 6, 11, 18}));
+    assert(BidiUtils::applyBidiVisual("one   אבג  דהו    tail", rendered));
+    assert(rendered == "one   והד  גבא    tail");
+  }
+  view.lookup->selectionPages.clear();
   HalMemory::available = 0;
   assert(!view.buildPlainSelectionPages());
   HalMemory::available = 1024 * 1024;

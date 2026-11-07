@@ -194,9 +194,19 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
         const size_t previous = reordered ? visualOrder[n - 1] : n - 1;
         const size_t left = std::min(previous, index);
         const size_t right = std::max(previous, index);
-        x += right == left + 1 ? owner.measureSpan(fontId, text.c_str() + ranges[left].end - offset,
-                                                   ranges[right].start - ranges[left].end, family)
-                               : owner.renderer.getSpaceWidth(fontId, family);
+        // Reordering can split an RTL run from the preceding LTR word. Keep the
+        // actual separator width at that visual boundary, not a single space.
+        size_t gapLeft = left;
+        if (right != left + 1 && reordered) {
+          if (n + 1 < words.size() && static_cast<size_t>(visualOrder[n + 1]) + 1 == index &&
+              previous + 1 < ranges.size())
+            gapLeft = previous;  // entering a reversed run
+          else if (index > 0)
+            gapLeft = index - 1;  // leaving a reversed run
+        }
+        x += gapLeft + 1 < ranges.size() ? owner.measureSpan(fontId, text.c_str() + ranges[gapLeft].end - offset,
+                                                             ranges[gapLeft + 1].start - ranges[gapLeft].end, family)
+                                         : owner.renderer.getSpaceWidth(fontId, family);
       }
       positions.push_back(x);
       x += owner.renderer.getTextAdvanceX(fontId, words[index].c_str(), family);
