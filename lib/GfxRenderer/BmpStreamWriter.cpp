@@ -13,51 +13,44 @@
 
 namespace {
 
-constexpr uint32_t FP_ONE = 1UL << 16;
+bool writeByte(Print& out, const uint8_t value) { return out.write(value) == 1; }
 
-void write16(Print& output, const uint16_t value) {
-  output.write(value & 0xFF);
-  output.write((value >> 8) & 0xFF);
+bool write16(Print& out, const uint16_t value) {
+  return writeByte(out, static_cast<uint8_t>(value & 0xFF)) &&
+         writeByte(out, static_cast<uint8_t>((value >> 8) & 0xFF));
 }
 
-void write32(Print& output, const uint32_t value) {
-  output.write(value & 0xFF);
-  output.write((value >> 8) & 0xFF);
-  output.write((value >> 16) & 0xFF);
-  output.write((value >> 24) & 0xFF);
+bool write32(Print& out, const uint32_t value) {
+  return writeByte(out, static_cast<uint8_t>(value & 0xFF)) &&
+         writeByte(out, static_cast<uint8_t>((value >> 8) & 0xFF)) &&
+         writeByte(out, static_cast<uint8_t>((value >> 16) & 0xFF)) &&
+         writeByte(out, static_cast<uint8_t>((value >> 24) & 0xFF));
 }
 
-void writeBmpHeader(Print& output, const int width, const int height, const int bitsPerPixel) {
-  const int paletteColors = 1 << bitsPerPixel;
+bool write32Signed(Print& out, const int32_t value) { return write32(out, static_cast<uint32_t>(value)); }
+
+bool writeBmpHeader(Print& bmpOut, const int width, const int height, const bool oneBit) {
+  const int bitsPerPixel = oneBit ? 1 : 2;
+  const int colors = 1 << bitsPerPixel;
   const int bytesPerRow = (width * bitsPerPixel + 31) / 32 * 4;
-  const uint32_t imageSize = bytesPerRow * height;
-  const uint32_t pixelOffset = 14 + 40 + paletteColors * 4;
+  const int imageSize = bytesPerRow * height;
+  const uint32_t headerSize = 54 + colors * 4;
+  const uint32_t fileSize = headerSize + imageSize;
 
-  output.write('B');
-  output.write('M');
-  write32(output, pixelOffset + imageSize);
-  write32(output, 0);
-  write32(output, pixelOffset);
-
-  write32(output, 40);
-  write32(output, static_cast<uint32_t>(width));
-  write32(output, static_cast<uint32_t>(-height));
-  write16(output, 1);
-  write16(output, bitsPerPixel);
-  write32(output, 0);
-  write32(output, imageSize);
-  write32(output, 2835);
-  write32(output, 2835);
-  write32(output, paletteColors);
-  write32(output, paletteColors);
-
-  for (int i = 0; i < paletteColors; i++) {
-    const uint8_t gray = static_cast<uint8_t>(i * 255 / (paletteColors - 1));
-    output.write(gray);
-    output.write(gray);
-    output.write(gray);
-    output.write(static_cast<uint8_t>(0));
+  if (!writeByte(bmpOut, 'B') || !writeByte(bmpOut, 'M') || !write32(bmpOut, fileSize) || !write32(bmpOut, 0) ||
+      !write32(bmpOut, headerSize) || !write32(bmpOut, 40) || !write32Signed(bmpOut, width) ||
+      !write32Signed(bmpOut, -height) || !write16(bmpOut, 1) || !write16(bmpOut, bitsPerPixel) || !write32(bmpOut, 0) ||
+      !write32(bmpOut, imageSize) || !write32(bmpOut, 2835) || !write32(bmpOut, 2835) || !write32(bmpOut, colors) ||
+      !write32(bmpOut, colors)) {
+    return false;
   }
+
+  for (int i = 0; i < colors; ++i) {
+    const auto gray = static_cast<uint8_t>(i * (oneBit ? 255 : 85));
+    if (!writeByte(bmpOut, gray) || !writeByte(bmpOut, gray) || !writeByte(bmpOut, gray) || !writeByte(bmpOut, 0))
+      return false;
+  }
+  return true;
 }
 
 }  // namespace
@@ -113,7 +106,10 @@ bool BmpStreamWriter::begin(Print& output, const int width, const int height, co
     }
   }
 
-  writeBmpHeader(output, width, height, oneBit ? 1 : 2);
+  if (!writeBmpHeader(output, width, height, oneBit)) {
+    LOG_ERR("BMP", "Failed to write BMP header");
+    return false;
+  }
   return true;
 }
 
