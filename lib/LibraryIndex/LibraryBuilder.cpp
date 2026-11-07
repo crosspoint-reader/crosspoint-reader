@@ -207,10 +207,10 @@ std::string_view normalizeLibraryRootAliases(std::string_view path) {
   return path;
 }
 
-bool isLibrarySkipped(const std::string_view path) {
+bool isLibrarySkipped(const std::string_view path, bool isNormalizedPath = false) {
   // Library-only exclusions: these directories must remain accessible in file managers.
   constexpr std::string_view ROOTS[] = {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"};
-  const std::string_view relativePath = normalizeLibraryRootAliases(path);
+  const std::string_view relativePath = isNormalizedPath ? path : normalizeLibraryRootAliases(path);
   const std::string_view name = relativePath.substr(0, relativePath.find('/'));
   for (const auto root : ROOTS) {
     if (std::equal(name.begin(), name.end(), root.begin(), root.end(), [](const char a, const char b) {
@@ -1088,7 +1088,7 @@ const char* libraryIndexPath() { return INDEX_PATH; }
 bool isLibraryBookFile(const std::string_view path) {
   // Match the walk's exclusions in every path component. A lone "." names the folder itself.
   const std::string_view relativePath = normalizeLibraryRootAliases(path);
-  if (isLibrarySkipped(relativePath)) return false;
+  if (isLibrarySkipped(relativePath, true)) return false;
   size_t start = 0;
   while (start < relativePath.size()) {
     const size_t slash = relativePath.find('/', start);
