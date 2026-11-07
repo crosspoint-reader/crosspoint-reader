@@ -255,6 +255,7 @@
       // Group by category
       const groups = {};
       allSettings.forEach(function(s) {
+        if (!s.category) return;
         if (!groups[s.category]) groups[s.category] = [];
         groups[s.category].push(s);
       });
@@ -306,7 +307,7 @@
     if (Object.keys(changes).length === 0) {
       showWebToast('No changes to save.', false);
       btn.textContent = 'Save Settings';
-      return;
+      return true;
     }
 
     try {
@@ -322,17 +323,22 @@
       }
 
       // Update original values to new values
+      // s.value too: the OPDS section redraws its download options from it.
       for (const key in changes) {
         originalValues[key] = changes[key];
+        findSetting(key).value = changes[key];
       }
 
       showWebToast('Settings saved successfully!', false);
+      btn.textContent = 'Save Settings';
+      return true;
     } catch (e) {
       console.error(e);
       showWebToast('Error: ' + e.message, true);
     }
 
     btn.textContent = 'Save Settings';
+    return false;
   }
 
   // --- Wi-Fi Network Management ---
@@ -508,11 +514,56 @@
     '</div>';
   }
 
-  function renderOpdsSection() {
+  // Download folder and filename format: settings without a card of their own,
+  // shown here as on the device's OPDS server screen. Saved with the other settings.
+  const OPDS_DOWNLOAD_KEYS = ['opdsDownloadFolder', 'opdsFilenameFormat'];
+
+  function opdsDownloadUnsaved() {
+    return OPDS_DOWNLOAD_KEYS.some(function(key) {
+      const s = findSetting(key);
+      return s && s.value !== originalValues[key];
+    });
+  }
+
+  function renderOpdsDownloadOptions() {
+    const rows = OPDS_DOWNLOAD_KEYS.map(findSetting).filter(Boolean);
+    if (rows.length === 0) return '';
+    // Keep unsaved edits across a redraw of the OPDS section.
+    rows.forEach(function(s) {
+      const current = getValue(s);
+      if (current !== undefined) s.value = current;
+    });
+    let html = '<div class="item-box" oninput="enableItemSave(this)" onchange="enableItemSave(this)">';
+    rows.forEach(function(s) {
+      html += '<div class="setting-row" id="row-setting-' + s.key + '">' +
+        '<label class="setting-name" for="setting-' + s.key + '">' + escapeHtml(s.name) + '</label>' +
+        '<span class="setting-control">' + renderControl(s) + '</span>' +
+        '</div>';
+    });
+    return html + '<div class="item-actions">' +
+      '<button class="btn-small btn-save-server" id="opds-download-save" onclick="saveOpdsDownloadOptions()"' + (opdsDownloadUnsaved() ? '' : ' disabled') + '>Save</button>' +
+      '</div></div>';
+  }
+
+  // An edit made while the save is in flight keeps the button enabled.
+  async function saveOpdsDownloadOptions() {
+    if (!await saveSettings()) return;
+    OPDS_DOWNLOAD_KEYS.map(findSetting).filter(Boolean).forEach(function(s) {
+      const current = getValue(s);
+      if (current !== undefined) s.value = current;
+    });
+    // Looked up again: the OPDS section may have redrawn during the save.
+    const btn = document.getElementById('opds-download-save');
+    if (btn) btn.disabled = !opdsDownloadUnsaved();
+  }
+
+  function renderOpdsSection(loadFailed) {
     const container = document.getElementById('opds-container');
     let html = '<div class="card"><h2>OPDS Servers</h2>';
 
-    if (opdsServers.length === 0) {
+    if (loadFailed) {
+      html += '<p style="color:var(--danger-color);text-align:center;">Failed to load OPDS servers</p>';
+    } else if (opdsServers.length === 0) {
       html += '<p style="color:var(--label-color);text-align:center;">No OPDS servers configured</p>';
     } else {
       opdsServers.forEach(function(srv, idx) {
@@ -522,7 +573,7 @@
 
     html += '<div style="margin-top:12px;text-align:center;">' +
       '<button class="btn-small btn-add" onclick="addOpdsServer()">+ Add Server</button>' +
-    '</div></div>';
+    '</div>' + renderOpdsDownloadOptions() + '</div>';
     container.innerHTML = html;
   }
 
@@ -534,6 +585,7 @@
       renderOpdsSection();
     } catch (e) {
       console.error('OPDS load error:', e);
+      renderOpdsSection(true);
     }
   }
 

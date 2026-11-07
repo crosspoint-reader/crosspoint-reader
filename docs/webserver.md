@@ -111,7 +111,10 @@ The Settings page exposes many firmware settings in the browser. It also has
 cards for:
 
 - Saved Wi-Fi networks
-- OPDS servers
+- OPDS servers, with the download folder and filename format below the server list
+
+Brightness and the frontlight switch appear in a Frontlight card only on
+boards that have a frontlight.
 
 Passwords are accepted when adding or editing entries, but saved passwords are
 not returned by the API.

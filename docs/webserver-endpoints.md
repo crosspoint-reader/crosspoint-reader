@@ -258,6 +258,11 @@ Example item:
 }
 ```
 
+`category` is the settings-page group. It is missing for settings that have no
+group, such as the OPDS download options, which the page shows in its OPDS
+section instead. Settings for hardware the board lacks, such as the frontlight
+on an X4, are left out of both the list and `POST /api/settings`.
+
 `value` is always an index into `options`, never the option's text. The
 `fontSize` options depend on the selected family. A `.cpfont` family installed
 at 10/12/14 pt offers those three sizes. TTF/OTF/TTC families offer the
