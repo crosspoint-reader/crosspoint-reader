@@ -118,12 +118,8 @@ bool EpubReaderFootnoteSelectActivity::drawHighlightWithSnapshot() {
   snapshotH = static_cast<int16_t>(hh);
   snapshotIdx = saved ? selected : -1;
 
-  renderer.fillRect(hx, hy, hw, hh, true);
-  // Draw a small marker (the footnote number) at the highlight position
-  const char* number = footnoteLinks[selected].footnote->number;
-  if (number[0]) {
-    renderer.drawText(SETTINGS.getReaderFontId(), x, y - 1, number, false);
-  }
+  renderer.fillRectDither(x, y, link->width, link->height, Color::LightGray, GfxRenderer::DitherMode::PreserveInk);
+  renderer.drawRect(x - 2, y - 2, link->width + 4, link->height + 4, true);
   return saved;
 }
 

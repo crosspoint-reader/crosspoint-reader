@@ -1038,7 +1038,9 @@ void GfxRenderer::drawPixelDither<Color::DarkGray>(const int x, const int y) con
   drawPixel(x, y, (x + y) % 2 == 0);  // TODO: maybe find a better pattern?
 }
 
-void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color) const {
+void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color,
+                                 const DitherMode mode) const {
+  if (mode == DitherMode::PreserveInk && color == Color::White) return;
   switch (color) {
     case Color::Clear:
       break;
@@ -1049,16 +1051,17 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
       fillRectImpl<Color::White>(x, y, width, height);
       break;
     case Color::LightGray:
-      fillRectImpl<Color::LightGray>(x, y, width, height);
+      fillRectImpl<Color::LightGray>(x, y, width, height, mode);
       break;
     case Color::DarkGray:
-      fillRectImpl<Color::DarkGray>(x, y, width, height);
+      fillRectImpl<Color::DarkGray>(x, y, width, height, mode);
       break;
   }
 }
 
 template <Color C>
-void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const int height) const {
+void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const int height,
+                               const DitherMode mode) const {
   if constexpr (C == Color::Clear) return;
   if (width <= 0 || height <= 0) return;
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
@@ -1202,11 +1205,21 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
       const uint8_t blackMask = blackMasks[py & 1];
       const uint8_t whiteMask = static_cast<uint8_t>(~blackMask);
 
-      // Dither writes BOTH inks (the slow path called drawPixel for every
-      // pixel — setting or clearing — so we must do the same). Inside the
-      // rect mask: write whiteMask (1s where white, 0s where black). Outside
-      // the rect mask: leave the framebuffer untouched.
       uint8_t* row = target + static_cast<int32_t>(py - originY) * panelStride;
+      switch (mode) {
+        case DitherMode::PreserveInk:
+          for (int byte = byteStart; byte <= byteEnd; ++byte) {
+            uint8_t mask = blackMask;
+            if (byte == byteStart) mask &= headMask;
+            if (byte == byteEnd) mask &= tailMask;
+            row[byte] &= static_cast<uint8_t>(~mask);
+          }
+          continue;
+        case DitherMode::Replace:
+          break;
+      }
+
+      // Replace writes both inks inside the rectangle and leaves other pixels untouched.
       if (byteStart == byteEnd) {
         const uint8_t rectMask = headMask & tailMask;
         row[byteStart] = static_cast<uint8_t>((row[byteStart] & ~rectMask) | (rectMask & whiteMask));
@@ -1222,10 +1235,10 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
   }
 }
 
-template void GfxRenderer::fillRectImpl<Color::Black>(int, int, int, int) const;
-template void GfxRenderer::fillRectImpl<Color::White>(int, int, int, int) const;
-template void GfxRenderer::fillRectImpl<Color::LightGray>(int, int, int, int) const;
-template void GfxRenderer::fillRectImpl<Color::DarkGray>(int, int, int, int) const;
+template void GfxRenderer::fillRectImpl<Color::Black>(int, int, int, int, DitherMode) const;
+template void GfxRenderer::fillRectImpl<Color::White>(int, int, int, int, DitherMode) const;
+template void GfxRenderer::fillRectImpl<Color::LightGray>(int, int, int, int, DitherMode) const;
+template void GfxRenderer::fillRectImpl<Color::DarkGray>(int, int, int, int, DitherMode) const;
 
 void GfxRenderer::maskRoundedRectOutsideCorners(const int x, const int y, const int width, const int height,
                                                 const int radius, const Color color) const {
