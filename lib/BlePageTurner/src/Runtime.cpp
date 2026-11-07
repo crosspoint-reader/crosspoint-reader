@@ -419,8 +419,6 @@ bool tick(const Scene& s) {
   // S3 profile: Home may start the radio too, once its first frame is up and a remote is chosen.
   const bool home = s.where == Where::Home && activeProfile().homeStartLargest != 0;
   if (!(reader || home) || !config->enabled || s.visit != visit.id) {
-    // A build hold belongs to one book visit; the next visit may start the radio again.
-    if (s.visit != visit.id) heldForBuild.store(false, std::memory_order_relaxed);
     visit.attempted = false;
     visit.reconnectArmed = false;
     visit.manualConnect = false;

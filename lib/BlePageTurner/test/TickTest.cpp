@@ -220,13 +220,42 @@ TEST_F(TickTest, BuildHoldWaitsForThePageNotAKey) {
   EXPECT_TRUE(radio().running);
 }
 
-TEST_F(TickTest, BuildHoldDoesNotOutliveTheVisit) {
+// The book closing lets go of its hold (the reader's destructor calls afterPaint()); the next
+// book starts the radio again.
+TEST_F(TickTest, BuildHoldEndsWhenTheBookLetsGo) {
   running();
   ASSERT_EQ(bleturner::beforeChapterBuild(), BuildRelease::Released);
+  bleturner::afterPaint();
   pass(fake::reading(2));
-  Scene s = fake::reading(2);
-  s.localKey = true;
-  pass(s);
+  EXPECT_EQ(radio().creates, 2u);
+}
+
+// The render task can build the first page before the main loop's first pass of the visit:
+// a book opened at boot (wake from sleep), or right after an update that drops every cached
+// chapter. That hold is this visit's.
+TEST_F(TickTest, BuildHoldTakenBeforeTheVisitsFirstPassHolds) {
+  ASSERT_EQ(bleturner::beforeChapterBuild(), BuildRelease::Released);
+  pass(fake::reading(1));
+  EXPECT_EQ(radio().creates, 0u) << "the chapter is still building";
+  bleturner::afterPaint();
+  pass(fake::reading(1));
+  EXPECT_EQ(radio().creates, 1u);
+  EXPECT_TRUE(radio().running);
+}
+
+// The reader menu or the quick settings pushed over the book and popped again: two new
+// visits, the same book, the same build still running.
+TEST_F(TickTest, BuildHoldOutlivesAScreenPushedOverTheBook) {
+  running();
+  ASSERT_EQ(bleturner::beforeChapterBuild(), BuildRelease::Released);
+  Scene menu{};
+  menu.where = bleturner::Where::Elsewhere;
+  menu.visit = 2;
+  pass(menu);
+  pass(fake::reading(3));
+  EXPECT_EQ(radio().creates, 1u) << "the chapter is still building";
+  bleturner::afterPaint();
+  pass(fake::reading(3));
   EXPECT_EQ(radio().creates, 2u);
 }
 
