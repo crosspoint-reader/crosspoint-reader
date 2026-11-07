@@ -2497,8 +2497,8 @@ void CrossPointWebServer::handleFetch() {
     server->send(400, "application/json", "{\"error\":\"unsupported method\"}");
     return;
   }
-  // The body stays in DRAM, and goes out as one TLS record, while the session
-  // needs its heap: keep it small, and check it before copying.
+  // The body stays in DRAM while the session needs its heap: keep it small, and
+  // check it before copying.
   static constexpr size_t FETCH_MAX_REQUEST_BODY = 4 * 1024;
   const JsonVariantConst bodyField = req["body"];
   if (!bodyField.isNull() && !bodyField.is<const char*>()) {
