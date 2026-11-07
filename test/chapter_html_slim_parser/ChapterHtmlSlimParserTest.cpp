@@ -1716,6 +1716,84 @@ TEST_F(ChapterWidowOrphanTest, TwoLineParagraphMovesWhole) {
   EXPECT_EQ(linesOnPage(0), 4u);
 }
 
+TEST_F(ChapterWidowOrphanTest, FullPagesJustifyTextAndLinksButShortEndingsKeepSpacing) {
+  parser.viewportHeight = 89;
+  open("p", nullptr);
+  const XML_Char* attrs[] = {"href", "#target", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", attrs);
+  text(words(13 * 8));
+  close("a");
+  close("p");
+  ASSERT_EQ(pages.size(), 1u);
+  ASSERT_EQ(linesOnPage(0), 5u);
+  ASSERT_EQ(pages[0]->links.size(), 5u);
+  const int expectedY[] = {0, 18, 36, 54, 73};
+  for (size_t i = 0; i < 5; ++i) {
+    EXPECT_EQ(pages[0]->elements[i]->yPos, expectedY[i]);
+    EXPECT_EQ(pages[0]->links[i].y, expectedY[i]);
+    EXPECT_EQ(pages[0]->links[i].height, 16);
+  }
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_EQ(pages.size(), 2u);
+  ASSERT_EQ(linesOnPage(1), 3u);
+  for (size_t i = 0; i < 3; ++i) EXPECT_EQ(pages[1]->elements[i]->yPos, i * 16);
+}
+
+TEST_F(ChapterWidowOrphanTest, JustificationDoesNotMoveCarriedLines) {
+  parser.viewportHeight = 136;
+  paragraph(13 * 9);
+  ASSERT_EQ(pages.size(), 1u);
+  ASSERT_EQ(linesOnPage(0), 7u);
+  for (size_t i = 0; i < 7; ++i) EXPECT_EQ(pages[0]->elements[i]->yPos, i * 20);
+  ASSERT_EQ(parser.currentPage->elements.size(), 2u);
+  EXPECT_EQ(parser.currentPage->elements[0]->yPos, 0);
+  EXPECT_EQ(parser.currentPage->elements[1]->yPos, 16);
+}
+
+TEST_F(ChapterWidowOrphanTest, JustificationPreservesTrailingBlockAndSectionSpacing) {
+  parser.viewportHeight = 105;
+  open("p", "margin-bottom: 8px; padding-bottom: 8px");
+  text(words(13 * 4));
+  close("p");
+  open("br", "display: block");
+  close("br");
+  paragraph(13 * 3);
+  ASSERT_EQ(pages.size(), 1u);
+  ASSERT_EQ(linesOnPage(0), 4u);
+  EXPECT_EQ(pages[0]->elements.front()->yPos, 0);
+  EXPECT_EQ(pages[0]->elements.back()->yPos + 16, parser.viewportHeight - 32);
+  ASSERT_EQ(parser.currentPage->elements.size(), 3u);
+  EXPECT_EQ(parser.currentPage->elements.front()->yPos, 0);
+}
+
+TEST_F(ChapterTightSpacingTest, JustificationReservesGlyphsAndBlankLinesAndMovesRaisedLinks) {
+  parser.viewportHeight = 136;
+  open("p", nullptr);
+  text(words(13 * 4));
+  close("p");
+  ASSERT_EQ(parser.currentPage->elements.size(), 4u);
+  ASSERT_TRUE(parser.currentPage->addLink("#target", 0, 19, 8, 27));
+  open("br", nullptr);
+  close("br");
+  parser.justifyCurrentPage(parser.currentPageNextY);
+  EXPECT_EQ(parser.currentPage->elements.front()->yPos, 0);
+  EXPECT_EQ(parser.currentPage->elements.back()->yPos + GLYPH_HEIGHT, parser.viewportHeight - 23);
+  EXPECT_EQ(parser.currentPage->links[0].y, 22);
+}
+
+TEST_F(ChapterWidowOrphanTest, JustificationKeepsMixedContentAndColumnsInPlace) {
+  parser.viewportHeight = 89;
+  paragraph(13 * 5);
+  ASSERT_NE(parser.currentPage, nullptr);
+  parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(20, 1, 0, 80));
+  parser.justifyCurrentPage(parser.currentPageNextY);
+  for (size_t i = 0; i < 5; ++i) EXPECT_EQ(parser.currentPage->elements[i]->yPos, i * 16);
+  parser.currentPage->elements.pop_back();
+  parser.currentPage->elements[1]->yPos = 0;
+  parser.justifyCurrentPage(parser.currentPageNextY);
+  EXPECT_EQ(parser.currentPage->elements.back()->yPos, 64);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, PassesIndentSettingsToNewTextBlock) {
   for (bool extraSpacing : {false, true}) {
     parser.extraParagraphSpacing = extraSpacing;
