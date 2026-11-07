@@ -100,10 +100,10 @@ bool LocalSendReceiveActivity::loadDefinition() {
   return true;
 }
 
-void LocalSendReceiveActivity::loadPreferences() {
+bool LocalSendReceiveActivity::loadPreferences() {
   JsonDocument doc;
   if (!readState(doc, STATE_PATH)) {
-    if (!readState(doc, STATE_BACKUP)) return;
+    if (!readState(doc, STATE_BACKUP)) return !Storage.exists(STATE_PATH) && !Storage.exists(STATE_BACKUP);
     // A valid backup is authoritative only when the primary file is unusable.
     if ((!Storage.exists(STATE_PATH) || Storage.remove(STATE_PATH)) && !Storage.rename(STATE_BACKUP, STATE_PATH))
       LOG_ERR("LSEND", "Failed to restore Local Send settings backup");
@@ -122,6 +122,7 @@ void LocalSendReceiveActivity::loadPreferences() {
       }
     }
   }
+  return true;
 }
 
 bool LocalSendReceiveActivity::saveFingerprint() {
@@ -194,7 +195,28 @@ void LocalSendReceiveActivity::onEnter() {
     finish();
     return;
   }
-  loadPreferences();
+  if (!loadPreferences()) {
+    const char* actions[] = {tr(STR_CANCEL), "Reset"};
+    popup.showMessage("Invalid Local Send settings", "Reset saved settings to start receiving?", actions, 2, 0,
+                      [this](int choice) {
+                        if (choice != 1) {
+                          finish();
+                          return;
+                        }
+                        if ((Storage.exists(STATE_PATH) && !Storage.remove(STATE_PATH)) ||
+                            (Storage.exists(STATE_BACKUP) && !Storage.remove(STATE_BACKUP))) {
+                          showFileError("Unable to reset Local Send settings");
+                          return;
+                        }
+                        initializeReceiver();
+                      });
+    requestUpdate();
+    return;
+  }
+  initializeReceiver();
+}
+
+void LocalSendReceiveActivity::initializeReceiver() {
   std::snprintf(ipAddress, sizeof(ipAddress), "%s:53317", WiFi.localIP().toString().c_str());
   receiver = makeUniqueNoThrow<LocalSendReceiver>();
   if (!receiver) {
@@ -265,6 +287,10 @@ void LocalSendReceiveActivity::confirmDeleteFile(const int entry) {
 
 void LocalSendReceiveActivity::showFileDetails(const int entry) {
   if (entry < 0 || entry >= sessionCount) return;
+  if (receiver && receiver->hasActiveBatch()) {
+    showFileError("Wait until all files finish receiving");
+    return;
+  }
   char message[128];
   std::snprintf(message, sizeof(message), "Saved in: %s", destination);
   const char* actions[] = {tr(STR_OPEN), tr(STR_DELETE), "Close"};
@@ -279,6 +305,10 @@ void LocalSendReceiveActivity::showFileDetails(const int entry) {
 }
 
 void LocalSendReceiveActivity::handleFileAction(const FileAction action, const int entry) {
+  if (receiver && receiver->hasActiveBatch()) {
+    showFileError("Wait until all files finish receiving");
+    return;
+  }
   if (entry < 0 || entry >= sessionCount || !localsend::safeReceiveName(sessionNames[entry])) {
     showFileError("Received file not found");
     return;
@@ -418,7 +448,7 @@ void LocalSendReceiveActivity::loop() {
     handleFileAction(action, entry);
     return;
   }
-  if (leaveRequested || popup.isActive() || !listening || !receiver) return;
+  if (leaveRequested || !listening || !receiver || (popup.isActive() && !receiver->hasActiveBatch())) return;
   if (WiFi.status() != WL_CONNECTED) {
     receiver->stop();
     listening = false;
@@ -431,7 +461,7 @@ void LocalSendReceiveActivity::loop() {
     return;
   }
   recordCompleted();
-  if (receiver->pendingOffer()) showConsent();
+  if (receiver->pendingOffer() && !popup.isActive()) showConsent();
 }
 
 int LocalSendReceiveActivity::listCount() const { return 1 + sessionCount; }

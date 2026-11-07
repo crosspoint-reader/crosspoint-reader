@@ -16,7 +16,7 @@ class LocalSendReceiveActivity final : public UiListActivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  bool skipLoopDelay() override { return listening && !popup.isActive(); }
+  bool skipLoopDelay() override { return listening && (!popup.isActive() || (receiver && receiver->hasActiveBatch())); }
   bool preventAutoSleep() override { return listening; }
 
  private:
@@ -45,7 +45,8 @@ class LocalSendReceiveActivity final : public UiListActivity {
 
   static bool cancelled(void* context);
   bool loadDefinition();
-  void loadPreferences();
+  bool loadPreferences();
+  void initializeReceiver();
   bool saveFingerprint();
   bool startReceiver();
   void showConsent();

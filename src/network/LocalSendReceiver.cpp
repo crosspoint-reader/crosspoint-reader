@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <numeric>
 
 #include "LocalSendJson.h"
 #include "util/TaskWatchdog.h"
@@ -49,6 +50,26 @@ void deviceInfo(JsonDocument& doc, const char* fingerprint, const char* alias) {
   doc["port"] = PORT;
   doc["protocol"] = "http";
   doc["download"] = false;
+}
+// Reclaim only uploads staged by this receiver (32 lowercase hex characters + ".part").
+void reclaimStagingFiles() {
+  constexpr const char* DIR = "/.crosspoint/localsend";
+  auto directory = Storage.open(DIR);
+  if (!directory || !directory.isDirectory()) return;
+  while (auto entry = directory.openNextFile()) {
+    char name[48]{};
+    entry.getName(name, sizeof(name));
+    name[sizeof(name) - 1] = '\0';
+    bool staging = !entry.isDirectory() && std::strlen(name) == 37 && !std::strcmp(name + 32, ".part");
+    for (size_t i = 0; staging && i < 32; ++i)
+      if (!((name[i] >= '0' && name[i] <= '9') || (name[i] >= 'a' && name[i] <= 'f'))) staging = false;
+    entry.close();
+    if (!staging) continue;
+    char path[96];
+    std::snprintf(path, sizeof(path), "%s/%s", DIR, name);
+    if (!Storage.remove(path)) LOG_ERR("LSEND", "Could not reclaim abandoned upload %s", path);
+  }
+  directory.close();
 }
 }  // namespace
 bool LocalSendReceiver::validDeviceId(const char* id) {
@@ -86,6 +107,7 @@ bool LocalSendReceiver::setDestination(const char* path) {
 bool LocalSendReceiver::begin(CancelCheck check, void* context) {
   stop();
   if (WiFi.status() != WL_CONNECTED) return false;
+  reclaimStagingFiles();
   cancelCheck = check;
   cancelContext = context;
   listener.begin();
@@ -519,11 +541,19 @@ void LocalSendReceiver::decide(bool accept) {
     }
   }
   if (code == 200) {
-    uint64_t requestedBytes = 0;
-    for (uint8_t i = 0; i < session.fileCount; ++i) requestedBytes += session.files[i].expected;
     const uint64_t cardBytes = Storage.sdTotalBytes();
     uint64_t usedBytes = 0;
     const bool spaceKnown = Storage.sdUsedBytes(usedBytes);
+    // Total/used are both whole FAT/exFAT clusters; their GCD is a safe upper bound
+    // on the allocation unit. Cap it at exFAT's 32 MiB maximum.
+    constexpr uint64_t MAX_ALLOC_UNIT = 32ull * 1024 * 1024;
+    const uint64_t unit = std::max<uint64_t>(1, std::min(std::gcd(cardBytes, usedBytes), MAX_ALLOC_UNIT));
+    // Reserve clusters for staging/destination directory growth, including possible parent creation.
+    uint64_t requestedBytes = unit * (3 + std::count(destination, destination + std::strlen(destination), '/'));
+    for (uint8_t i = 0; i < session.fileCount; ++i) {
+      const uint64_t size = session.files[i].expected;
+      requestedBytes += ((size + unit - 1) / unit + 2) * unit;  // File data and two directory entries.
+    }
     if (!cardBytes || !spaceKnown || usedBytes > cardBytes) {
       LOG_ERR("LSEND", "Transfer acceptance rejected: could not verify free SD card space");
       rejectionReason = "Unable to verify free space on SD card";
@@ -548,6 +578,8 @@ void LocalSendReceiver::decide(bool accept) {
     auto response =
         (!doc.overflowed() && responseSize < MAX_RESPONSE) ? makeUniqueNoThrow<char[]>(responseSize + 1) : nullptr;
     if (!response) {
+      if (!doc.overflowed() && responseSize < MAX_RESPONSE)
+        LOG_ERR("LSEND", "OOM: %u-byte consent response", unsigned(responseSize + 1));
       code = 500;
       reply(pendingClient, code);
     } else {

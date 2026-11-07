@@ -253,6 +253,8 @@ int Session::prepare(const char* json, size_t length, uint32_t address, uint32_t
     if (!safeReceiveName(name.c_str())) return reject(400, "filename unsafe or extension unsupported");
     if (!key || !key.size() || key.size() > 128 || key.size() != std::strlen(key.c_str()))
       return reject(400, "file ID missing, oversized or invalid");
+    for (const unsigned char* p = reinterpret_cast<const unsigned char*>(key.c_str()); *p; ++p)
+      if (*p < 32 || *p == 127) return reject(400, "file ID contains control characters");
     if (!offer["size"].is<uint32_t>()) return reject(400, "file size missing, invalid or larger than uint32");
     const uint32_t size = offer["size"].as<uint32_t>();
     if (size < 4 || size > MAX_FILE_BYTES) return reject(400, "each file must be 4 bytes to 1 GiB");

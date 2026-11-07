@@ -14,6 +14,9 @@ class LocalSendReceiver {
   void poll();
   void pollConsent();
   const localsend::Session* pendingOffer() const;
+  bool hasActiveBatch() const {
+    return session.state == localsend::State::Prepared || session.state == localsend::State::Receiving;
+  }
   void decide(bool accept);
   bool setDestination(const char* path);
   static bool validDeviceId(const char* id);
