@@ -10,7 +10,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 mapped_input_source = (ROOT / "src/MappedInputManager.cpp").read_text()
 mapping = mapped_input_source[
-    mapped_input_source.index("bool MappedInputManager::isNavDirectionSwapped()"):
+    mapped_input_source.index("bool MappedInputManager::readButton("):
     mapped_input_source.index("namespace {", mapped_input_source.index("bool MappedInputManager::mapButton("))
 ]
 viewer = (ROOT / "src/activities/reader/DictionaryDefinitionActivity.cpp").read_text()
@@ -37,6 +37,7 @@ struct HalGPIO {
   bool wasPressed(uint8_t button) const { return pressEdge && pressed == button; }
   bool wasReleased(uint8_t button) const { return releaseEdge && pressed == button; }
   bool isPressed(uint8_t button) const { return held && pressed == button; }
+  bool isCapacitivePagePressed(uint8_t) const { return false; }
   bool isPowerButtonPhysicallyPressed() const { return isPressed(BTN_POWER); }
 };
 """
