@@ -10,77 +10,23 @@
 
 #include <cstring>
 
-#include "BitmapHelpers.h"
+#include "BmpStreamWriter.h"
 
 namespace {
 
 constexpr uint16_t MAX_CANVAS_HEIGHT = 3072;
 
-inline bool writeByte(Print& out, const uint8_t value) { return out.write(value) == 1; }
-
-inline bool write16(Print& out, const uint16_t value) {
-  return writeByte(out, static_cast<uint8_t>(value & 0xFF)) &&
-         writeByte(out, static_cast<uint8_t>((value >> 8) & 0xFF));
-}
-
-inline bool write32(Print& out, const uint32_t value) {
-  return writeByte(out, static_cast<uint8_t>(value & 0xFF)) &&
-         writeByte(out, static_cast<uint8_t>((value >> 8) & 0xFF)) &&
-         writeByte(out, static_cast<uint8_t>((value >> 16) & 0xFF)) &&
-         writeByte(out, static_cast<uint8_t>((value >> 24) & 0xFF));
-}
-
-inline bool write32Signed(Print& out, const int32_t value) { return write32(out, static_cast<uint32_t>(value)); }
-
-bool writeBmpHeader(Print& bmpOut, const int width, const int height, const bool oneBit) {
-  const int bitsPerPixel = oneBit ? 1 : 2;
-  const int colors = 1 << bitsPerPixel;
-  const int bytesPerRow = (width * bitsPerPixel + 31) / 32 * 4;
-  const int imageSize = bytesPerRow * height;
-  const uint32_t headerSize = 54 + colors * 4;
-  const uint32_t fileSize = headerSize + imageSize;
-
-  if (!writeByte(bmpOut, 'B') || !writeByte(bmpOut, 'M') || !write32(bmpOut, fileSize) || !write32(bmpOut, 0) ||
-      !write32(bmpOut, headerSize) || !write32(bmpOut, 40) || !write32Signed(bmpOut, width) ||
-      !write32Signed(bmpOut, -height) || !write16(bmpOut, 1) || !write16(bmpOut, bitsPerPixel) || !write32(bmpOut, 0) ||
-      !write32(bmpOut, imageSize) || !write32(bmpOut, 2835) || !write32(bmpOut, 2835) || !write32(bmpOut, colors) ||
-      !write32(bmpOut, colors)) {
-    return false;
-  }
-
-  for (int i = 0; i < colors; ++i) {
-    const auto gray = static_cast<uint8_t>(i * (oneBit ? 255 : 85));
-    if (!writeByte(bmpOut, gray) || !writeByte(bmpOut, gray) || !writeByte(bmpOut, gray) || !writeByte(bmpOut, 0))
-      return false;
-  }
-  return true;
-}
-
 struct GifBmpContext {
-  Print* bmpOut{nullptr};
   int srcWidth{0};
   int srcHeight{0};
   GifCommon::ImageLayout layout;
-  int dstWidth{0};
-  int dstHeight{0};
-  bool oneBit{false};
-  bool needsScaling{false};
-  uint32_t scaleX_fp{1u << 16};
-  uint32_t scaleY_fp{1u << 16};
-  int bytesPerRow{0};
-  int currentOutY{0};
-  uint32_t nextOutYSrcStart{0};
+  BmpStreamWriter output;
+  GrayRowScaler scaler;
   int nextExpectedSrcY{0};
   const uint8_t* activePalette24{nullptr};
   uint8_t grayPalette[256] = {0};
   std::unique_ptr<uint8_t[]> grayRow;
-  std::unique_ptr<uint8_t[]> scaledGrayRow;
   std::unique_ptr<uint8_t[]> whiteRow;
-  std::unique_ptr<uint8_t[]> rowBuffer;
-  std::unique_ptr<uint32_t[]> rowAccum;
-  std::unique_ptr<uint32_t[]> rowCount;
-  std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
-  std::unique_ptr<Atkinson1BitDitherer> atkinson1BitDitherer;
   bool success{true};
   uint32_t lastYieldMs{0};
 };
@@ -124,80 +70,9 @@ void updateGrayPalette(const GIFDRAW* pDraw, GifBmpContext& ctx) {
   }
 }
 
-void emitOutputRow(const uint8_t* row, GifBmpContext& ctx) {
-  memset(ctx.rowBuffer.get(), 0, static_cast<size_t>(ctx.bytesPerRow));
-
-  if (ctx.oneBit) {
-    for (int x = 0; x < ctx.dstWidth; ++x) {
-      const uint8_t bit = ctx.atkinson1BitDitherer->processPixel(row[x], x);
-      const int byteIndex = x / 8;
-      const int bitOffset = 7 - (x % 8);
-      ctx.rowBuffer[byteIndex] |= (bit << bitOffset);
-    }
-    ctx.atkinson1BitDitherer->nextRow();
-  } else {
-    for (int x = 0; x < ctx.dstWidth; ++x) {
-      const uint8_t gray = adjustPixel(row[x]);
-      const uint8_t twoBit = ctx.atkinsonDitherer->processPixel(gray, x);
-      const int byteIndex = (x * 2) / 8;
-      const int bitOffset = 6 - ((x * 2) % 8);
-      ctx.rowBuffer[byteIndex] |= (twoBit << bitOffset);
-    }
-    ctx.atkinsonDitherer->nextRow();
-  }
-
-  const size_t bytesPerRow = static_cast<size_t>(ctx.bytesPerRow);
-  const size_t written = ctx.bmpOut->write(ctx.rowBuffer.get(), bytesPerRow);
-  if (written != bytesPerRow) {
-    LOG_ERR("GIF", "Short BMP row write (%u of %u bytes)", static_cast<unsigned>(written),
-            static_cast<unsigned>(bytesPerRow));
-    ctx.success = false;
-  }
-}
-
 void processCanvasRow(const uint8_t* grayRow, int srcY, GifBmpContext& ctx) {
   if (!ctx.success || srcY < ctx.layout.sourceY || srcY >= ctx.layout.sourceY + ctx.layout.sourceHeight) return;
-  srcY -= ctx.layout.sourceY;
-  grayRow += ctx.layout.sourceX;
-
-  if (!ctx.needsScaling) {
-    emitOutputRow(grayRow, ctx);
-    return;
-  }
-
-  for (int outX = 0; outX < ctx.dstWidth; ++outX) {
-    const int srcXStart = (static_cast<uint32_t>(outX) * ctx.scaleX_fp) >> 16;
-    const int srcXEnd = (static_cast<uint32_t>(outX + 1) * ctx.scaleX_fp) >> 16;
-
-    int sum = 0;
-    int count = 0;
-    for (int srcX = srcXStart; srcX < srcXEnd && srcX < ctx.layout.sourceWidth; ++srcX) {
-      sum += grayRow[srcX];
-      count++;
-    }
-    if (count == 0 && srcXStart < ctx.layout.sourceWidth) {
-      sum = grayRow[srcXStart];
-      count = 1;
-    }
-
-    ctx.rowAccum[outX] += sum;
-    ctx.rowCount[outX] += count;
-  }
-
-  const uint32_t srcY_fp = static_cast<uint32_t>(srcY + 1) << 16;
-  while (ctx.success && srcY_fp >= ctx.nextOutYSrcStart && ctx.currentOutY < ctx.dstHeight) {
-    for (int x = 0; x < ctx.dstWidth; ++x) {
-      ctx.scaledGrayRow[x] = static_cast<uint8_t>((ctx.rowCount[x] > 0) ? (ctx.rowAccum[x] / ctx.rowCount[x]) : 255);
-    }
-    emitOutputRow(ctx.scaledGrayRow.get(), ctx);
-    ctx.currentOutY++;
-    ctx.nextOutYSrcStart = static_cast<uint32_t>(ctx.currentOutY + 1) * ctx.scaleY_fp;
-    if (srcY_fp >= ctx.nextOutYSrcStart) {
-      continue;
-    }
-    memset(ctx.rowAccum.get(), 0, static_cast<size_t>(ctx.dstWidth) * sizeof(uint32_t));
-    memset(ctx.rowCount.get(), 0, static_cast<size_t>(ctx.dstWidth) * sizeof(uint32_t));
-  }
+  ctx.success = ctx.scaler.writeRow(grayRow + ctx.layout.sourceX, srcY - ctx.layout.sourceY);
 }
 
 void processGapRowsUpTo(int canvasY, GifBmpContext& ctx) {
@@ -287,68 +162,32 @@ bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpO
     return false;
   }
   GifBmpContext& ctx = *ctxPtr;
-  ctx.bmpOut = &bmpOut;
   ctx.srcWidth = info.canvasWidth;
   ctx.srcHeight = info.canvasHeight;
-  ctx.oneBit = oneBit;
 
   if (!GifCommon::calculateLayout(ctx.srcWidth, ctx.srcHeight, targetWidth, targetHeight, crop, ctx.layout)) {
     LOG_ERR("GIF", "Invalid GIF output dimensions: %dx%d", targetWidth, targetHeight);
     return false;
   }
-  ctx.dstWidth = ctx.layout.width;
-  ctx.dstHeight = ctx.layout.height;
-  ctx.scaleX_fp = (static_cast<uint32_t>(ctx.layout.sourceWidth) << 16) / ctx.dstWidth;
-  ctx.scaleY_fp = (static_cast<uint32_t>(ctx.layout.sourceHeight) << 16) / ctx.dstHeight;
-  ctx.needsScaling = ctx.layout.sourceWidth != ctx.dstWidth || ctx.layout.sourceHeight != ctx.dstHeight;
-  ctx.nextOutYSrcStart = ctx.scaleY_fp;
   const uint32_t bitsPerPixel = oneBit ? 1 : 2;
-  const uint32_t rowBytes = ((static_cast<uint32_t>(ctx.dstWidth) * bitsPerPixel + 31) / 32) * 4;
+  const uint32_t rowBytes = ((static_cast<uint32_t>(ctx.layout.width) * bitsPerPixel + 31) / 32) * 4;
   const uint32_t headerBytes = 54 + (1u << bitsPerPixel) * 4;
-  if (static_cast<uint64_t>(rowBytes) * ctx.dstHeight + headerBytes > GifCommon::MAX_BMP_BYTES) {
+  if (static_cast<uint64_t>(rowBytes) * ctx.layout.height + headerBytes > GifCommon::MAX_BMP_BYTES) {
     LOG_ERR("GIF", "GIF BMP exceeds output byte limit");
-    return false;
-  }
-
-  ctx.bytesPerRow = rowBytes;
-  if (!writeBmpHeader(bmpOut, ctx.dstWidth, ctx.dstHeight, oneBit)) {
-    LOG_ERR("GIF", "Failed to write BMP header");
     return false;
   }
 
   ctx.grayRow = makeUniqueNoThrow<uint8_t[]>(ctx.srcWidth);
   ctx.whiteRow = makeUniqueNoThrow<uint8_t[]>(ctx.srcWidth);
-  ctx.rowBuffer = makeUniqueNoThrow<uint8_t[]>(ctx.bytesPerRow);
-  if (!ctx.grayRow || !ctx.whiteRow || !ctx.rowBuffer) {
+  if (!ctx.grayRow || !ctx.whiteRow) {
     LOG_ERR("GIF", "OOM: GIF BMP row buffers");
     return false;
   }
   memset(ctx.whiteRow.get(), 255, static_cast<size_t>(ctx.srcWidth));
 
-  if (ctx.needsScaling) {
-    ctx.rowAccum = makeUniqueNoThrow<uint32_t[]>(ctx.dstWidth);
-    ctx.rowCount = makeUniqueNoThrow<uint32_t[]>(ctx.dstWidth);
-    ctx.scaledGrayRow = makeUniqueNoThrow<uint8_t[]>(ctx.dstWidth);
-    if (!ctx.rowAccum || !ctx.rowCount || !ctx.scaledGrayRow) {
-      LOG_ERR("GIF", "OOM: GIF scaling accumulators");
-      return false;
-    }
-    memset(ctx.rowAccum.get(), 0, static_cast<size_t>(ctx.dstWidth) * sizeof(uint32_t));
-    memset(ctx.rowCount.get(), 0, static_cast<size_t>(ctx.dstWidth) * sizeof(uint32_t));
-  }
-
-  if (oneBit) {
-    ctx.atkinson1BitDitherer = makeUniqueNoThrow<Atkinson1BitDitherer>(ctx.dstWidth);
-    if (!ctx.atkinson1BitDitherer || !ctx.atkinson1BitDitherer->isValid()) {
-      LOG_ERR("GIF", "OOM: Atkinson1BitDitherer");
-      return false;
-    }
-  } else {
-    ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(ctx.dstWidth, originalThresholds);
-    if (!ctx.atkinsonDitherer || !ctx.atkinsonDitherer->isValid()) {
-      LOG_ERR("GIF", "OOM: AtkinsonDitherer");
-      return false;
-    }
+  if (!ctx.output.begin(bmpOut, ctx.layout.width, ctx.layout.height, oneBit, originalThresholds) ||
+      !ctx.scaler.begin(ctx.layout.sourceWidth, ctx.layout.sourceHeight, ctx.output)) {
+    return false;
   }
 
   s_gifFile = &gifFile;
