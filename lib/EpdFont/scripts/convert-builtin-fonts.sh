@@ -78,6 +78,22 @@ python fontconvert.py ubuntu_8_regular 8 \
   ../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-Regular.ttf \
   --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/ubuntu_8_regular.h
 
+# 2-bit sources for the UI faces on boards with a UI scale above 1, where
+# GfxRenderer scales them at runtime (ScaledFont). Their grey edge levels keep
+# stem widths even after scaling; the 1-bit faces stay for unscaled boards.
+for spec in "8 Regular" "10 Regular" "10 Bold" "12 Regular" "12 Bold"; do
+  read -r size style <<< "$spec"
+  font_name="ubuntu_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')_2bit"
+  python fontconvert.py $font_name $size \
+    ../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf \
+    ../builtinFonts/source/NotoSans/NotoSans-${style}.ttf \
+    ../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-${style}.ttf \
+    ../builtinFonts/source/NotoSansArabic/NotoSansArabic-${style}.ttf \
+    ../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-${style}.ttf \
+    --2bit --compress --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/${font_name}.h
+  echo "Generated ../builtinFonts/${font_name}.h"
+done
+
 echo ""
 echo "Running compression verification..."
 python verify_compression.py ../builtinFonts/

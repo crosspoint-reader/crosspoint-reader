@@ -60,7 +60,8 @@ bool HomeCoverCache::paint(fui::Rect rect, size_t index, const std::string& path
         // edge moves with each cover's fit margin): a dark band with a
         // dithered crease makes every cover read as a bound book. Drawn here
         // so the PSRAM snapshot below captures it.
-        const int artLeft = std::max<int>(rect.x, rect.x + (rect.width - coverBitmap.getWidth()) / 2 + ART_SHIFT);
+        const int artLeft =
+            std::max<int>(rect.x, rect.x + (rect.width - renderer.bitmapWidth(coverBitmap)) / 2 + ART_SHIFT);
         renderer.fillRect(artLeft, rect.y, 3, rect.height);
         renderer.fillRectDither(artLeft + 3, rect.y, 2, rect.height, Color::LightGray);
       }

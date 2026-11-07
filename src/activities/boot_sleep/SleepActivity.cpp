@@ -398,6 +398,7 @@ AlphaScanResult scanForUsefulAlpha(HalFile& file, const OverlayBmpInfo& info, ui
 
 AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& renderer, const char* pathForLog,
                                                   const Bitmap* grayCover) {
+  const GfxRenderer::PhysicalScope physical(renderer);
   OverlayBmpInfo info;
   if (!parseOverlayBmpHeader(file, info, false)) return AlphaOverlayResult::NotAlphaOverlay;
 
@@ -837,6 +838,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground) const {
+  const GfxRenderer::PhysicalScope physical(renderer);
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
@@ -945,6 +947,7 @@ bool SleepActivity::renderSleepOverlayFile(HalFile& file, const char* pathForLog
 }
 
 bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
+  const GfxRenderer::PhysicalScope physical(renderer);
   ImageDimensions dimensions;
   if (!PngToFramebufferConverter::getDimensionsStatic(path, dimensions)) return false;
 

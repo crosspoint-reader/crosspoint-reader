@@ -46,6 +46,9 @@ class UITheme {
   static void drawCoverGridHome(CoverGridHomeUi& home);
   void reload();
   void setTheme(CrossPointSettings::UI_THEME type);
+  // Thumbs are generated at physical pixels: a logical cover height times the
+  // board's UI scale. getCoverThumbPath() names the file by that size too.
+  static int coverThumbPixels(int coverHeight);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(const std::string& filename);
   static int getStatusBarHeight();

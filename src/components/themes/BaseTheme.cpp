@@ -55,59 +55,6 @@ void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int 
 
 }  // namespace
 
-void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
-  // Top line
-  renderer.drawLine(x + 1, y, x + battWidth - 3, y);
-  // Bottom line
-  renderer.drawLine(x + 1, y + rectHeight - 1, x + battWidth - 3, y + rectHeight - 1);
-  // Left line
-  renderer.drawLine(x, y + 1, x, y + rectHeight - 2);
-  // Battery end
-  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rectHeight - 2);
-  renderer.drawPixel(x + battWidth - 1, y + 3);
-  renderer.drawPixel(x + battWidth - 1, y + rectHeight - 4);
-  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rectHeight - 5);
-}
-
-void BaseTheme::drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY) {
-  // Draw lightning bolt (white/inverted on black fill for visibility)
-  renderer.drawLine(boltX + 4, boltY + 0, boltX + 5, boltY + 0, false);
-  renderer.drawLine(boltX + 3, boltY + 1, boltX + 4, boltY + 1, false);
-  renderer.drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 2, false);
-  renderer.drawLine(boltX + 3, boltY + 3, boltX + 4, boltY + 3, false);
-  renderer.drawLine(boltX + 2, boltY + 4, boltX + 3, boltY + 4, false);
-  renderer.drawLine(boltX + 1, boltY + 5, boltX + 4, boltY + 5, false);
-  renderer.drawLine(boltX + 2, boltY + 6, boltX + 3, boltY + 6, false);
-  renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, false);
-}
-
-void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const {
-  const bool charging = gpio.isUsbConnected();
-
-  const int maxFillWidth = rect.width - 5;
-  const int fillHeight = rect.height - 4;
-  if (maxFillWidth <= 0 || fillHeight <= 0) {
-    return;
-  }
-  // +1 to round up so we always fill at least one pixel
-  int filledWidth = percentage * maxFillWidth / 100 + 1;
-  if (filledWidth > maxFillWidth) {
-    filledWidth = maxFillWidth;
-  }
-
-  // When charging, ensure minimum fill so lightning bolt is fully visible
-  constexpr int minFillForBolt = 8;
-  if (charging && filledWidth < minFillForBolt) {
-    filledWidth = std::min(minFillForBolt, maxFillWidth);
-  }
-
-  renderer.fillRect(rect.x + 2, rect.y + 2, filledWidth, fillHeight);
-
-  if (charging) {
-    drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2);
-  }
-}
-
 void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   // Left aligned: icon on left, percentage on right (reader mode)
   const uint16_t percentage = powerManager.getBatteryPercentage();
@@ -117,19 +64,32 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
   const auto fontIt = renderer.getFontMap().find(SMALL_FONT_ID);
   if (fontIt != renderer.getFontMap().end()) {
     if (const auto glyph = fontIt->second.getGlyph('0', EpdFontFamily::REGULAR)) {
-      const int inkTop = renderer.getFontAscenderSize(SMALL_FONT_ID) - static_cast<int>(glyph->top);
-      y = rect.y + inkTop + (static_cast<int>(glyph->height) - rect.height) / 2;
+      // Glyph metrics are physical pixels; rect and the ascender are logical.
+      const float scale = renderer.uiScale();
+      const int glyphTop = static_cast<int>(lroundf(glyph->top / scale));
+      const int glyphH = static_cast<int>(lroundf(glyph->height / scale));
+      const int inkTop = renderer.getFontAscenderSize(SMALL_FONT_ID) - glyphTop;
+      y = rect.y + inkTop + (glyphH - rect.height) / 2;
     }
   }
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText.c_str());
+    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width + 2, rect.y, percentageText.c_str());
   }
 
-  const Rect iconRect{rect.x, y, rect.width, rect.height};
-  drawBatteryOutline(renderer, rect.x, y, rect.width, rect.height);
-  fillBatteryIcon(renderer, iconRect, percentage);
+  namespace fui = freeink::ui;
+  fui::GfxRendererFrame<1> ui(renderer, SMALL_FONT_ID);
+  fui::BatteryIndicatorProps props;
+  props.percent = static_cast<uint8_t>(std::min<uint16_t>(percentage, 100));
+  props.charging = gpio.isUsbConnected();
+  props.glyphWidth = static_cast<int16_t>(rect.width);
+  props.glyphHeight = static_cast<int16_t>(rect.height);
+  // The SDK glyph width excludes its two-pixel terminal nub.
+  fui::batteryIndicator(ui.frame,
+                        fui::Rect{static_cast<int16_t>(rect.x), static_cast<int16_t>(y),
+                                  static_cast<int16_t>(rect.width + 2), static_cast<int16_t>(rect.height)},
+                        props);
 }
 
 void BaseTheme::drawCoverPlaceholder(const GfxRenderer& renderer, Rect rect) {
@@ -149,14 +109,16 @@ void BaseTheme::drawCoverPlaceholder(const GfxRenderer& renderer, Rect rect) {
 bool BaseTheme::drawCoverThumbFill(const GfxRenderer& renderer, const Bitmap& bitmap, Rect slot, const int xOffset) {
   if (slot.width <= 0 || slot.height <= 0) return false;
   // xOffset nudges the centered art sideways; the clip stays on the slot.
-  const int x = slot.x + (slot.width - bitmap.getWidth()) / 2 + xOffset;
-  const int y = slot.y + (slot.height - bitmap.getHeight()) / 2;
+  const int bw = renderer.bitmapWidth(bitmap);
+  const int bh = renderer.bitmapHeight(bitmap);
+  const int x = slot.x + (slot.width - bw) / 2 + xOffset;
+  const int y = slot.y + (slot.height - bh) / 2;
   const auto clip = renderer.getClipRect();
   const int left = std::max(slot.x, clip[0]);
   const int top = std::max(slot.y, clip[1]);
   renderer.setClipRect(left, top, std::max(0, std::min(slot.x + slot.width, clip[0] + clip[2]) - left),
                        std::max(0, std::min(slot.y + slot.height, clip[1] + clip[3]) - top));
-  const bool drawn = renderer.drawBitmap(bitmap, x, y, bitmap.getWidth(), bitmap.getHeight());
+  const bool drawn = renderer.drawBitmap(bitmap, x, y, bw, bh);
   renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
   return drawn;
 }
@@ -515,8 +477,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       Bitmap bitmap(file);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
         hasCoverImage = true;
-        const int imgWidth = bitmap.getWidth();
-        const int imgHeight = bitmap.getHeight();
+        const int imgWidth = renderer.bitmapWidth(bitmap);
+        const int imgHeight = renderer.bitmapHeight(bitmap);
 
         // Calculate width based on aspect ratio, maintaining baseHeight
         if (imgWidth > 0 && imgHeight > 0) {
@@ -886,7 +848,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     GUI.drawBatteryLeft(renderer,
                         Rect{leftClusterX + leftClusterWidth, textY, metrics.batteryWidth, metrics.batteryHeight},
                         showBatteryPercentage);
-    int batteryWidth = metrics.batteryWidth;
+    int batteryWidth = metrics.batteryWidth + 2;
 
     if (showBatteryPercentage) {
       const uint16_t percentage = powerManager.getBatteryPercentage();

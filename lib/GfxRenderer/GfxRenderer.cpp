@@ -12,6 +12,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <vector>
 
 #include "../Memory/Memory.h"
 #include "FontCacheManager.h"
@@ -168,6 +169,8 @@ void GfxRenderer::ensureSdCardFontReady(const int fontId, const char* const* seg
 }
 
 void GfxRenderer::begin() {
+  uiScale_ = BoardConfig::ACTIVE.uiScale;
+  uiScaleActive_ = uiScale_ != 1.0f;
   frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
     LOG_ERR("GFX", "!! No framebuffer");
@@ -265,6 +268,33 @@ void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   if (!result.second) {
     LOG_ERR("GFX", "Font ID %d already registered, ignoring duplicate", fontId);
   }
+}
+
+void GfxRenderer::insertUiFont(const int fontId, const EpdFontFamily& font) {
+  if (uiScale_ == 1.0f || fontMap.count(fontId) != 0) {
+    insertFont(fontId, font);
+    return;
+  }
+  // One scaled face per distinct source face; a style the family lacks stays
+  // null so the scaled family falls back the same way the source does.
+  const EpdFontData* regularData = font.getData(EpdFontFamily::REGULAR);
+  const EpdFont* faces[4] = {};
+  const EpdFontFamily::Style styles[4] = {EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::ITALIC,
+                                          EpdFontFamily::BOLD_ITALIC};
+  for (int i = 0; i < 4; ++i) {
+    const EpdFontData* data = font.getData(styles[i]);
+    if (i > 0 && data == regularData) continue;
+    auto face = std::make_unique<ScaledFont>();
+    if (!face->init(*this, *data, uiScale_)) {
+      LOG_ERR("GFX", "Font %d: cannot scale, drawing it unscaled", fontId);
+      insertFont(fontId, font);
+      return;
+    }
+    faces[i] = face->font();
+    scaledFaces_.push_back(std::move(face));
+  }
+  const auto pointSize = static_cast<uint16_t>(font.getSizeInPixels() * uiScale_ * 72.0f / FONT_RASTER_DPI + 0.5f);
+  insertFont(fontId, EpdFontFamily(pointSize, faces[0], faces[1], faces[2], faces[3]));
 }
 
 int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const EpdFontFamily::Style style) const {
@@ -621,6 +651,11 @@ void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
 // efficient as possible.
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    fillRect(sp(x), sp(y), sp(x + 1) - sp(x), sp(y + 1) - sp(y), state);
+    return;
+  }
   if (x < clipLeft_ || y < clipTop_ || x >= clipRight_ || y >= clipBottom_) return;
   int phyX = 0;
   int phyY = 0;
@@ -659,6 +694,10 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style,
                               const BidiUtils::BidiBaseDir baseDir) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getTextWidth(fontId, text, style, baseDir));
+  }
   if (text == nullptr || *text == '\0') {
     return 0;
   }
@@ -696,6 +735,11 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,
                            const int8_t tracking) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawText(fontId, sp(x), sp(y), text, black, style, baseDir, tracking);
+    return;
+  }
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -837,6 +881,11 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
 }  // namespace
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawLine(sp(x1), sp(y1), sp(x2), sp(y2), spw(1), state);
+    return;
+  }
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
   if (x1 == x2) {
     if (y2 < y1) {
@@ -879,12 +928,23 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
 }
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const int lineWidth, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawLine(sp(x1), sp(y1), sp(x2), sp(y2), spw(lineWidth), state);
+    return;
+  }
   for (int i = 0; i < lineWidth; i++) {
     drawLine(x1, y1 + i, x2, y2 + i, state);
   }
 }
 
-void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const bool state) const {
+void GfxRenderer::drawRect(int x, int y, int width, int height, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    drawRect(x, y, width, height, spw(1), state);
+    return;
+  }
   drawLine(x, y, x + width - 1, y, state);
   drawLine(x + width - 1, y, x + width - 1, y + height - 1, state);
   drawLine(x + width - 1, y + height - 1, x, y + height - 1, state);
@@ -892,8 +952,13 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
 }
 
 // Border is inside the rectangle
-void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const int lineWidth,
-                           const bool state) const {
+void GfxRenderer::drawRect(int x, int y, int width, int height, const int lineWidth, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    drawRect(x, y, width, height, spw(lineWidth), state);
+    return;
+  }
   // Keep the border inside [x, x+width) like the thin overload: the previous
   // right/bottom edges at x+width / y+height sat one pixel outside the rect,
   // so stroked boxes looked shifted against fills computed from the rect.
@@ -907,6 +972,11 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
 
 void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir,
                           const int lineWidth, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawArc(sp(maxRadius), sp(cx), sp(cy), xDir, yDir, spw(lineWidth), state);
+    return;
+  }
   const int stroke = std::min(lineWidth, maxRadius);
   const int innerRadius = std::max(maxRadius - stroke, 0);
   const int outerRadius = maxRadius;
@@ -952,9 +1022,16 @@ void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, con
 }
 
 // Border is inside the rectangle, rounded corners
-void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, const int height, const int lineWidth,
-                                  const int cornerRadius, bool roundTopLeft, bool roundTopRight, bool roundBottomLeft,
-                                  bool roundBottomRight, bool state) const {
+void GfxRenderer::drawRoundedRect(int x, int y, int width, int height, const int lineWidth, const int cornerRadius,
+                                  bool roundTopLeft, bool roundTopRight, bool roundBottomLeft, bool roundBottomRight,
+                                  bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    drawRoundedRect(x, y, width, height, spw(lineWidth), sp(cornerRadius), roundTopLeft, roundTopRight, roundBottomLeft,
+                    roundBottomRight, state);
+    return;
+  }
   if (lineWidth <= 0 || width <= 0 || height <= 0) {
     return;
   }
@@ -1003,7 +1080,13 @@ void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, con
   }
 }
 
-void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
+void GfxRenderer::fillRect(int x, int y, int width, int height, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    fillRect(x, y, width, height, state);
+    return;
+  }
   if (state) {
     fillRectImpl<Color::Black>(x, y, width, height);
   } else {
@@ -1038,7 +1121,13 @@ void GfxRenderer::drawPixelDither<Color::DarkGray>(const int x, const int y) con
   drawPixel(x, y, (x + y) % 2 == 0);  // TODO: maybe find a better pattern?
 }
 
-void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color) const {
+void GfxRenderer::fillRectDither(int x, int y, int width, int height, Color color) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    fillRectDither(x, y, width, height, color);
+    return;
+  }
   switch (color) {
     case Color::Clear:
       break;
@@ -1227,8 +1316,14 @@ template void GfxRenderer::fillRectImpl<Color::White>(int, int, int, int) const;
 template void GfxRenderer::fillRectImpl<Color::LightGray>(int, int, int, int) const;
 template void GfxRenderer::fillRectImpl<Color::DarkGray>(int, int, int, int) const;
 
-void GfxRenderer::maskRoundedRectOutsideCorners(const int x, const int y, const int width, const int height,
-                                                const int radius, const Color color) const {
+void GfxRenderer::maskRoundedRectOutsideCorners(int x, int y, int width, int height, const int radius,
+                                                const Color color) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    maskRoundedRectOutsideCorners(x, y, width, height, sp(radius), color);
+    return;
+  }
   if (radius <= 0 || color == Color::Clear) {
     return;
   }
@@ -1306,9 +1401,16 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
   fillRoundedRect(x, y, width, height, cornerRadius, true, true, true, true, color);
 }
 
-void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, const int height, const int cornerRadius,
-                                  bool roundTopLeft, bool roundTopRight, bool roundBottomLeft, bool roundBottomRight,
+void GfxRenderer::fillRoundedRect(int x, int y, int width, int height, const int cornerRadius, bool roundTopLeft,
+                                  bool roundTopRight, bool roundBottomLeft, bool roundBottomRight,
                                   const Color color) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    fillRoundedRect(x, y, width, height, sp(cornerRadius), roundTopLeft, roundTopRight, roundBottomLeft,
+                    roundBottomRight, color);
+    return;
+  }
   if (width <= 0 || height <= 0) {
     return;
   }
@@ -1375,6 +1477,11 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
 }
 
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawImageScaled(bitmap, sp(x), sp(y), width, height, sp(x + width) - sp(x), sp(y + height) - sp(y));
+    return;
+  }
   int rotatedX = 0;
   int rotatedY = 0;
   rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, panelWidth, panelHeight);
@@ -1398,6 +1505,11 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
 }
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int size) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawIconScaled(bitmap, sp(x), sp(y), size, sp(x + size) - sp(x));
+    return;
+  }
   // Plot the icon pixel-by-pixel through drawPixel (which applies the orientation
   // transform) instead of the byte-aligned framebuffer blit. The blit snaps the
   // icon's position to 8px (one byte) along the rotated axis, which prevents it
@@ -1405,20 +1517,81 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
   // Icons are square and 1bpp (MSB-first, bit==0 = ink). The (size-1-row, col)
   // mapping reproduces the Portrait orientation the blit produced; drawIcon is
   // only called by the UI themes, which all render in forced Portrait.
+  drawIconScaled(bitmap, x, y, size, size);
+}
+
+// Ink of output pixel (dstX, dstY) when a srcW x srcH 1-bit mask is scaled to
+// dstW x dstH: bilinear coverage of the four nearest source pixels, inked from
+// half coverage, so curves and diagonals step evenly instead of in blocks.
+template <typename InkAt>
+static bool smoothInk(const InkAt& inkAt, const int srcW, const int srcH, const int dstX, const int dstY,
+                      const int dstW, const int dstH) {
+  // Source position of the output pixel centre, 8.8 fixed point.
+  const int sx = ((2 * dstX + 1) * srcW * 128) / dstW - 128;
+  const int sy = ((2 * dstY + 1) * srcH * 128) / dstH - 128;
+  const int x0 = sx >> 8, y0 = sy >> 8, fx = sx & 0xFF, fy = sy & 0xFF;
+  const auto at = [&](const int x, const int y) {
+    return x >= 0 && y >= 0 && x < srcW && y < srcH && inkAt(x, y) ? 1 : 0;
+  };
+  const int upper = at(x0, y0) * (256 - fx) + at(x0 + 1, y0) * fx;
+  const int lower = at(x0, y0 + 1) * (256 - fx) + at(x0 + 1, y0 + 1) * fx;
+  return (upper * (256 - fy) + lower * fy) * 2 >= 256 * 256;
+}
+
+// drawIcon at outSize x outSize physical pixels, smoothly scaled from the
+// size x size source.
+void GfxRenderer::drawIconScaled(const uint8_t bitmap[], const int x, const int y, const int size,
+                                 const int outSize) const {
   const int rowBytes = (size + 7) / 8;
-  for (int row = 0; row < size; row++) {
-    for (int col = 0; col < size; col++) {
-      const uint8_t byte = bitmap[row * rowBytes + (col >> 3)];
-      const bool ink = ((byte >> (7 - (col & 7))) & 1) == 0;
+  const auto inkAt = [&](const int col, const int row) {
+    return ((bitmap[row * rowBytes + (col >> 3)] >> (7 - (col & 7))) & 1) == 0;
+  };
+  for (int row = 0; row < outSize; row++) {
+    for (int col = 0; col < outSize; col++) {
+      const bool ink = size == outSize ? inkAt(col, row) : smoothInk(inkAt, size, size, col, row, outSize, outSize);
       if (ink) {
-        drawPixel(x + (size - 1 - row), y + col, true);
+        drawPixel(x + (outSize - 1 - row), y + col, true);
       }
     }
   }
 }
 
-bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY, const bool whiteAsTransparent) const {
+// drawImage of a width x height panel-native bitmap at outWidth x outHeight,
+// smoothly scaled through a temporary enlarged copy.
+void GfxRenderer::drawImageScaled(const uint8_t bitmap[], const int x, const int y, const int width, const int height,
+                                  const int outWidth, const int outHeight) const {
+  if (outWidth == width && outHeight == height) {
+    drawImage(bitmap, x, y, width, height);
+    return;
+  }
+  const int srcRowBytes = (width + 7) / 8;
+  const int outW = (outWidth + 7) & ~7;
+  const int outRowBytes = outW / 8;
+  std::vector<uint8_t> scaled(static_cast<size_t>(outRowBytes) * outHeight, 0xFF);
+  const auto inkAt = [&](const int col, const int row) {
+    return !(bitmap[row * srcRowBytes + (col >> 3)] & (0x80 >> (col & 7)));
+  };
+  for (int row = 0; row < outHeight; ++row) {
+    for (int col = 0; col < outWidth; ++col) {
+      if (smoothInk(inkAt, width, height, col, row, outWidth, outHeight)) {
+        scaled[row * outRowBytes + (col >> 3)] &= static_cast<uint8_t>(~(0x80 >> (col & 7)));
+      }
+    }
+  }
+  drawImage(scaled.data(), x, y, outW, outHeight);
+}
+
+bool GfxRenderer::drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, const float cropX,
+                             const float cropY, const bool whiteAsTransparent) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, maxWidth, maxHeight);
+    // A box sized from bitmapWidth()/bitmapHeight() rounds back to within a
+    // pixel of the bitmap; draw that 1:1 instead of resampling it.
+    if (std::abs(maxWidth - bitmap.getWidth()) <= 1) maxWidth = bitmap.getWidth();
+    if (std::abs(maxHeight - bitmap.getHeight()) <= 1) maxHeight = bitmap.getHeight();
+    return drawBitmap(bitmap, x, y, maxWidth, maxHeight, cropX, cropY, whiteAsTransparent);
+  }
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return false;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
@@ -1528,8 +1701,12 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   return true;
 }
 
-bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
-                                 const int maxHeight) const {
+bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, maxWidth, maxHeight);
+    return drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
+  }
   float scale = 1.0f;
   bool isScaled = false;
   if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
@@ -1641,6 +1818,16 @@ void GfxRenderer::preserveImagePolarity(const int x, const int y, const int widt
 }
 
 void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    std::vector<int> px(xPoints, xPoints + numPoints), py(yPoints, yPoints + numPoints);
+    for (int i = 0; i < numPoints; ++i) {
+      px[i] = sp(px[i]);
+      py[i] = sp(py[i]);
+    }
+    fillPolygon(px.data(), py.data(), numPoints, state);
+    return;
+  }
   if (numPoints < 3) return;
 
   // Find bounding box
@@ -1787,6 +1974,11 @@ HalDisplay::GrayscaleCapabilities GfxRenderer::grayscaleCapabilities(HalDisplay:
 bool GfxRenderer::supportsAsyncGrayscaleBase() const { return grayscaleCapabilities().asyncBase; }
 
 size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, w, h);
+    return readFramebufferRegion(x, y, w, h, dst, dstCapacity);
+  }
   if (dst == nullptr || w <= 0 || h <= 0) return 0;
 
   const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
@@ -1805,6 +1997,12 @@ size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* d
 }
 
 void GfxRenderer::writeFramebufferRegion(int x, int y, int w, int h, const uint8_t* src) {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, w, h);
+    writeFramebufferRegion(x, y, w, h, src);
+    return;
+  }
   if (src == nullptr || w <= 0 || h <= 0) return;
 
   const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
@@ -1934,6 +2132,10 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
 
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
 int GfxRenderer::getScreenWidth() const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getScreenWidth());
+  }
   switch (orientation) {
     case Portrait:
     case PortraitInverted:
@@ -1948,6 +2150,10 @@ int GfxRenderer::getScreenWidth() const {
 }
 
 int GfxRenderer::getScreenHeight() const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getScreenHeight());
+  }
   switch (orientation) {
     case Portrait:
     case PortraitInverted:
@@ -1988,6 +2194,9 @@ void GfxRenderer::tapToLogical(float nx, float ny, int& outX, int& outY) const {
       outY = phyY;
       break;
   }
+  // Input runs beside rendering; PhysicalScope must not change its logical coordinate space.
+  outX = lp(outX);
+  outY = lp(outY);
 }
 
 // Translate a logical rect through rotateCoordinates and take the bounding
@@ -2024,6 +2233,11 @@ static bool logicalRectToPhysicalBounds(GfxRenderer::Orientation orientation, in
 }
 
 size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(lx, ly, lw, lh);
+    return getRegionByteSize(lx, ly, lw, lh);
+  }
   int x0, y0, x1, y1;
   if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
     return 0;
@@ -2038,6 +2252,11 @@ size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
 }
 
 bool GfxRenderer::copyRegionToBuffer(int lx, int ly, int lw, int lh, uint8_t* buf, size_t bufSize) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(lx, ly, lw, lh);
+    return copyRegionToBuffer(lx, ly, lw, lh, buf, bufSize);
+  }
   int x0, y0, x1, y1;
   if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
     return false;
@@ -2056,6 +2275,11 @@ bool GfxRenderer::copyRegionToBuffer(int lx, int ly, int lw, int lh, uint8_t* bu
 }
 
 bool GfxRenderer::copyBufferToRegion(int lx, int ly, int lw, int lh, const uint8_t* buf, size_t bufSize) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(lx, ly, lw, lh);
+    return copyBufferToRegion(lx, ly, lw, lh, buf, bufSize);
+  }
   int x0, y0, x1, y1;
   if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
     return false;
@@ -2074,6 +2298,10 @@ bool GfxRenderer::copyBufferToRegion(int lx, int ly, int lw, int lh, const uint8
 }
 
 int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style style) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getSpaceWidth(fontId, style));
+  }
   // Advance table fast-path for SD card fonts during layout
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
@@ -2092,6 +2320,10 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
 
 int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
                                  const EpdFontFamily::Style style) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getSpaceAdvance(fontId, leftCp, rightCp, style));
+  }
   // Advance table fast-path for SD card fonts during layout.
   // Kern data is not loaded during layout (consistent with previous metadataOnly behavior),
   // so we return just the space advance without kerning.
@@ -2114,6 +2346,10 @@ int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const 
 
 int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
                             const EpdFontFamily::Style style, const int8_t tracking) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getKerning(fontId, leftCp, rightCp, style, tracking));
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return 0;
   const int kernFP = fontIt->second.getKerning(leftCp, rightCp, style);      // 4.4 fixed-point
@@ -2122,6 +2358,10 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style, const int8_t tracking,
                                  const BidiUtils::BidiBaseDir baseDir, const TextMeasureMode mode) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getTextAdvanceX(fontId, text, style, tracking, baseDir, mode));
+  }
   // Match the font drawText would use for non-Latin strings (see resolveTextFontId).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
   // Measure the exact codepoint stream drawText renders: bidi-reordered and
@@ -2223,6 +2463,13 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 
 bool GfxRenderer::getCodepointMetrics(const int fontId, const uint32_t cp, const EpdFontFamily::Style style,
                                       int32_t& advanceFP, int& top) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    const bool ok = getCodepointMetrics(fontId, cp, style, advanceFP, top);
+    advanceFP = static_cast<int32_t>(lroundf(advanceFP / uiScale_));
+    top = lp(top);
+    return ok;
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return false;
   const EpdGlyph* glyph = fontIt->second.getGlyph(cp, style);
@@ -2234,6 +2481,10 @@ bool GfxRenderer::getCodepointMetrics(const int fontId, const uint32_t cp, const
 
 int GfxRenderer::drawScaledCodepoint(const int fontId, const uint32_t cp, const EpdFontFamily::Style style, const int x,
                                      const int baselineY, const int scale256) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(drawScaledCodepoint(fontId, cp, style, sp(x), sp(baselineY), scale256));
+  }
   if (scale256 <= 0) return 0;
   if (fontCacheManager_ && fontCacheManager_->isScanning()) {
     char utf8[5] = {};
@@ -2287,6 +2538,10 @@ int GfxRenderer::drawScaledCodepoint(const int fontId, const uint32_t cp, const 
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getFontAscenderSize(fontId));
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -2297,6 +2552,10 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getLineHeight(fontId));
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -2307,6 +2566,10 @@ int GfxRenderer::getLineHeight(const int fontId) const {
 }
 
 int GfxRenderer::getLineHeight(const int fontId, const float compression) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getLineHeight(fontId, compression));
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -2316,6 +2579,10 @@ int GfxRenderer::getLineHeight(const int fontId, const float compression) const 
 }
 
 int GfxRenderer::getTextHeight(const int fontId) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getTextHeight(fontId));
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -2326,6 +2593,11 @@ int GfxRenderer::getTextHeight(const int fontId) const {
 
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
                                       const EpdFontFamily::Style style) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawTextRotated90CW(fontId, sp(x), sp(y), text, black, style);
+    return;
+  }
   // Cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -2421,6 +2693,12 @@ bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDispla
 void GfxRenderer::preconditionGrayscale() const { display.preconditionGrayscale(); }
 
 void GfxRenderer::preconditionGrayscale(int x, int y, int w, int h) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, w, h);
+    preconditionGrayscale(x, y, w, h);
+    return;
+  }
   if (w <= 0 || h <= 0) return;
   // Rotate the logical rect's opposite corners to physical panel coords; the
   // physical bbox stays axis-aligned for all four orientations.
@@ -2555,6 +2833,14 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    getOrientedViewableTRBL(outTop, outRight, outBottom, outLeft);
+    for (int* v : {outTop, outRight, outBottom, outLeft}) {
+      if (v) *v = lp(*v);
+    }
+    return;
+  }
   // Board truth: the bezel insets live in the active profile (panel-native
   // portrait frame); this only rotates them into the current orientation.
   const BoardConfig::ViewableInsets& vi = BoardConfig::ACTIVE.viewableInsets;

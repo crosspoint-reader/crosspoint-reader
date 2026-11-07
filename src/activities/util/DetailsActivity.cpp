@@ -224,7 +224,10 @@ void DetailsActivity::render(RenderLock&&) {
 
   if (coverRect.width > 0 && coverRect.height > 0) {
     if (ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(spec.coverPath)) {
+      // The decoder writes panel pixels: decode at the cover box's physical size.
       RenderConfig cfg{coverRect.x, coverRect.y, coverRect.width, coverRect.height};
+      renderer.physicalRect(cfg.x, cfg.y, cfg.maxWidth, cfg.maxHeight);
+      const GfxRenderer::PhysicalScope physical(renderer);
       decoder->decodeToFramebuffer(spec.coverPath, renderer, cfg);
     }
   }

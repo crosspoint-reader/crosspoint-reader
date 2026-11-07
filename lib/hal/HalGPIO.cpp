@@ -109,6 +109,9 @@ void HalGPIO::begin() {
   _deviceType = DeviceType::X4;
 #endif
   inputMgr.begin();
+#if FREEINK_DEVICE_METALIO_EINK4 || FREEINK_DEVICE_METALIO_EINK4_PLUS
+  if (!inputMgr.beginBufferedTouch()) LOG_ERR("GPIO", "Touch sampler unavailable; using main-loop polling");
+#endif
 #if FREEINK_DEVICE_LILYGO
   // T5S3 IO48 key sits behind the PCA9535 expander. Mirrors BoardT5S3::begin(), which also
   // re-inits I2C/SPI and is unsafe to call here. inputMgr.begin() has started Wire.
@@ -148,6 +151,7 @@ bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
 
 bool HalGPIO::rawInputActive() {
   if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
+  if (inputMgr.touchContactPending()) return true;
 #if FREEINK_DEVICE_LILYGO
   if (BoardConfig::ACTIVE.board == BoardConfig::Board::LilyGoT5S3 && BoardT5S3::readButton()) return true;
 #endif
@@ -196,6 +200,13 @@ unsigned long HalGPIO::lastTouchHeldMs() const { return inputMgr.lastTouchHeldMs
 
 bool HalGPIO::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const {
   return inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
+}
+
+bool HalGPIO::wasPinch(float& scale) const {
+  float nx = 0.0f;
+  float ny = 0.0f;
+  unsigned long durationMs = 0;
+  return inputMgr.wasMultiTouchPinch(scale, nx, ny, durationMs);
 }
 
 bool HalGPIO::wasTouchActivity() const { return inputMgr.wasTouchActivity(); }
@@ -283,6 +294,15 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
       coldBootImpliesPowerButton()) {
     return WakeupReason::PowerButton;
   }
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // The Plus sleeps powered off, and its power switch cuts power even on USB;
+  // plugging USB in does not turn it back on (measured), so a cold boot with
+  // USB connected is the power key too.
+  if (BoardConfig::isMetalioEInk4Plus() && wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED &&
+      resetReason == ESP_RST_POWERON) {
+    return WakeupReason::PowerButton;
+  }
+#endif
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected) {
     return WakeupReason::AfterFlash;
   }

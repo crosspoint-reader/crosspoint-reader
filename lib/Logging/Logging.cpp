@@ -2,6 +2,8 @@
 
 #include <BoardConfig.h>
 #include <esp_rom_sys.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <string>
 
@@ -66,6 +68,15 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
   // Sticky's USB serial bridge uses UART0; ROM output also works before Serial0.begin().
   esp_rom_printf("%s", buf);
 #else
+  // Global constructors run before the scheduler starts, and the serial object
+  // may not be constructed yet (cross-file construction order is unspecified;
+  // on ESP32-S31 builds UITheme's constructor logs first). The ROM printer is
+  // always usable.
+  if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED) {
+    esp_rom_printf("%s", buf);
+    addToLogRingBuffer(buf);
+    return;
+  }
   // Write even when `logSerial` reports disconnected: after a brief SOF-watchdog flap
   // (common at the 10 MHz low-power clock) HWCDC keeps `connected` false until its next
   // TX interrupt. write() queues without blocking in that state and re-arms that interrupt.
