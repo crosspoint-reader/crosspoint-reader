@@ -61,7 +61,7 @@ struct Chunk {
 
 uint8_t pixel(const int x, const int y, const bool books) {
   if (x < 0 || y < 0 || x >= W || y >= H) return 255;
-  for (const auto& f : FID) {
+  for (const int* const f : FID) {
     const int dx = x - f[0], dy = y - f[1];
     if (dx >= -F / 2 && dx < F / 2 && dy >= -F / 2 && dy < F / 2) {
       const bool hole = dx >= -HOLE / 2 && dx < HOLE / 2 && dy >= -HOLE / 2 && dy < HOLE / 2;
@@ -128,8 +128,8 @@ void writePng(Sink& out, const bool books) {
     }
     pos += len;
   }
-  uint8_t adler[4] = {static_cast<uint8_t>(b >> 8), static_cast<uint8_t>(b), static_cast<uint8_t>(a >> 8),
-                      static_cast<uint8_t>(a)};
+  const uint8_t adler[4] = {static_cast<uint8_t>(b >> 8), static_cast<uint8_t>(b), static_cast<uint8_t>(a >> 8),
+                            static_cast<uint8_t>(a)};
   c.put(adler, 4);
   c.end();
   Chunk e(out, 0, "IEND");
