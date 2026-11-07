@@ -121,8 +121,11 @@ void Txt::invalidateCache(const std::string& cachePath) {
 bool Txt::validateCache(const std::string& filepath, const std::string& cachePath, size_t cachedSize) {
   bool valid = true;
 
-  // 1. If html/0.html exists, check its embedded version comment
   const std::string htmlPath = cachePath + "/html/0.html";
+  // Markdown layouts are reusable only when their converter version can be checked.
+  if (FsHelpers::hasMarkdownExtension(filepath) && !Storage.exists(htmlPath.c_str())) valid = false;
+
+  // 1. If html/0.html exists, check its embedded version comment
   if (Storage.exists(htmlPath.c_str())) {
     HalFile htmlFile;
     if (Storage.openFileForRead("TXT", htmlPath, htmlFile)) {

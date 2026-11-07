@@ -637,6 +637,10 @@ See [docs/sd-card-fonts.md](./docs/sd-card-fonts.md) for full installation detai
 
 Once you have opened a book, the button layout changes to facilitate reading.
 
+### Text and Markdown files
+
+Markdown (`.md`) files support headings (`# ` through `###### `), `**bold**`, `*italic*` (also `_italic_` and `__bold__`), and single-backtick inline code in the normal reader font. A backslash escapes punctuation outside formatting spans. Formatting spans must open and close on the same line and cannot nest. Each source line stays on a separate line. Flat lists (`- `, `* `, `+ `, or digits followed by `. `) and blockquotes (`> `) are supported at the start of a line. Quotes are indented when Embedded Style is on. Ordered lists count from 1; a blank line or a change of block type ends the list. Nesting, tables, links, images, and raw HTML are not converted. Lines longer than 4,096 bytes display as plain text. After upgrading from literal Markdown rendering, saved reading positions, bookmarks, and highlights may point to different text. Plain text (`.txt`) files keep their original formatting.
+
 ### Page Turning
 
 | Action            | Buttons                              |
