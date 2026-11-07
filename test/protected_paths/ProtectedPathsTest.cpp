@@ -2,6 +2,7 @@
 
 #include "network/ProtectedPaths.h"
 
+using protectedpaths::isHiddenName;
 using protectedpaths::isPluginPath;
 using protectedpaths::isSensitivePath;
 
@@ -46,4 +47,14 @@ TEST(ProtectedPaths, PluginPathRules) {
   EXPECT_FALSE(isPluginPath("/"));
   EXPECT_TRUE(isPluginPath("/.crosspoint/month-wallpaper.json"));
   EXPECT_TRUE(isPluginPath("/Books/new.epub"));
+}
+
+TEST(ProtectedPaths, HiddenNames) {
+  EXPECT_TRUE(isHiddenName(".crosspoint"));
+  EXPECT_TRUE(isHiddenName("._Some Book.epub"));
+  EXPECT_TRUE(isHiddenName("System Volume Information"));
+  EXPECT_TRUE(isHiddenName("xtcache"));
+  EXPECT_FALSE(isHiddenName("Books"));
+  EXPECT_FALSE(isHiddenName("XTCache2"));
+  EXPECT_FALSE(isHiddenName(""));
 }
