@@ -27,6 +27,7 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
   doc["matchMethod"] = static_cast<uint8_t>(getMatchMethod());
   doc["sendMetadata"] = getSendMetadata();
   doc["syncClippings"] = getSyncClippings();
+  doc["checkOnOpen"] = getCheckOnOpen();
   doc["syncBehavior"] = static_cast<uint8_t>(getSyncBehavior());
   JsonArray headers = doc["headers"].to<JsonArray>();
   for (const auto& header : customHeaders) {
@@ -85,6 +86,7 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
   }
   setSendMetadata(doc["sendMetadata"] | false);
   setSyncClippings(doc["syncClippings"] | false);
+  setCheckOnOpen(doc["checkOnOpen"] | false);
 
   size_t headerIndex = 0;
   for (JsonObjectConst headerObj : doc["headers"].as<JsonArrayConst>()) {

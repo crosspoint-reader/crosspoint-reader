@@ -313,7 +313,8 @@ void SettingsActivity::toggleSelectedSetting() {
         startActivityForResult(std::make_unique<OpdsServerListActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::Network: {
-        auto activity = makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput, false);
+        auto activity = makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput,
+                                                                 WifiSelectionActivity::ConnectMode::ListOnly);
         if (!activity) {
           LOG_ERR("SETTINGS", "OOM: WifiSelectionActivity");
           return;

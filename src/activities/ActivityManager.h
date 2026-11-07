@@ -93,7 +93,8 @@ class ActivityManager {
   void goToLibrary();
   void goToBrowser();
   void goToPlugins(bool showOpds);
-  void goToReader(std::string path, bool allowFastInitialRefresh = false);
+  // checkSyncOnOpen: the user picked this book, so it may run the sync open check.
+  void goToReader(std::string path, bool allowFastInitialRefresh = false, bool checkSyncOnOpen = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
