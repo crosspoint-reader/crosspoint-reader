@@ -7,9 +7,10 @@
 // comes back exactly as it was, regardless of the Restore Light on Wake
 // preference.
 
-void silentRestart();            // home screen
-void silentRestartToReader();    // currently-open EPUB (APP_STATE.openEpubPath)
-void silentRestartToSettings();  // settings screen
+void silentRestart();                  // home screen
+void silentRestartToReader();          // currently-open EPUB (APP_STATE.openEpubPath)
+void silentRestartToSettings();        // Network settings
+void silentRestartToReaderSettings();  // Reader settings
 // Reboot into the File Transfer > Join Network flow on a pristine heap, so the
 // WiFi + TLS working set has the contiguous RAM it needs on tight boards. A
 // no-op on touch boards (a soft reset would cycle their externally-powered
