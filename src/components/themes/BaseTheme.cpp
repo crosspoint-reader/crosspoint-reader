@@ -184,16 +184,20 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
 }
 
-// Centre hint labels by text height, wrapping to at most two lines.
+// Centre one-line hint labels on cap height; wrapped ones on text height, at most two lines.
 void BaseTheme::drawHintLabel(const GfxRenderer& renderer, const int fontId, const char* label, const int x,
                               const int boxWidth, const int boxTop, const int boxHeight) {
   constexpr int textPadding = 4;  // keeps a wrapped label off the button's border
   const int maxTextWidth = boxWidth - (textPadding * 2);
 
   const int textHeight = renderer.getTextHeight(fontId);
+  int32_t advance;
+  int capHeight = textHeight;
+  renderer.getCodepointMetrics(fontId, 'H', EpdFontFamily::REGULAR, advance, capHeight);
+  const int inkTop = textHeight - capHeight;  // drawText's y is above the capitals by this much
   const int textWidth = renderer.getTextWidth(fontId, label);
   if (textWidth <= maxTextWidth) {
-    const int textY = boxTop + std::max(1, (boxHeight - textHeight) / 2);
+    const int textY = boxTop + (boxHeight - capHeight) / 2 - inkTop;
     renderer.drawText(fontId, x + (boxWidth - 1 - textWidth) / 2, textY, label);
     return;
   }
