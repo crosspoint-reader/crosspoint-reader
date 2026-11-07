@@ -324,26 +324,26 @@ void ActivityManager::goToPlugins(bool showOpds) {
   replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, showOpds, /*rootMode=*/true));
 }
 
-void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
+bool ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
   if (path.empty()) {
     goToFileBrowser("/");
-    return;
+    return true;
   }
 
   if (FsHelpers::hasImageExtension(path)) {
     auto activity = makeUniqueNoThrow<BmpViewerActivity>(renderer, mappedInput, std::move(path));
     if (!activity) {
       LOG_ERR("ACT", "OOM: bitmap viewer activity");
-      return;
+      return false;
     }
     replaceActivity(std::move(activity));
-    return;
+    return true;
   }
 
   auto activity = ReaderActivity::create(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
-  if (activity) {
-    replaceActivity(std::move(activity));
-  }
+  if (!activity) return false;
+  replaceActivity(std::move(activity));
+  return true;
 }
 
 void ActivityManager::goToSleep(bool fromTimeout) {
@@ -422,6 +422,21 @@ bool ActivityManager::remoteClick(const RemoteButton button) {
   if (!isRemoteReaderContext() || RenderLock::peek() || requestedUpdate.load()) return false;
   return mappedInput.injectRemoteClick(button);
 }
+
+#ifdef ENABLE_SERIAL_CONTROL
+bool ActivityManager::consoleClick(const RemoteButton button) {
+  // A pending screen change would hand the click to the screen that is leaving.
+  if (pendingAction != PendingAction::None || RenderLock::peek() || requestedUpdate.load()) return false;
+  // A held button (Power included) can send the main loop down a combo or sleep
+  // path that returns before the screen sees the click.
+  for (uint8_t b = 0; b <= static_cast<uint8_t>(MappedInputManager::Button::ScreenDown); ++b) {
+    if (mappedInput.isPressed(static_cast<MappedInputManager::Button>(b))) return false;
+  }
+  return mappedInput.injectRemoteClick(button);
+}
+
+const char* ActivityManager::foregroundName() const { return currentActivity ? currentActivity->name.c_str() : ""; }
+#endif
 
 bool ActivityManager::isForegroundHomeShown() const {
   return pendingAction == PendingAction::None && currentActivity && currentActivity->name == "Home" &&

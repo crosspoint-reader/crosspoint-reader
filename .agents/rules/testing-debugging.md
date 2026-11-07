@@ -73,6 +73,11 @@ Use `python3 scripts/debugging_monitor.py` for enhanced logs or
 `pio device monitor` / the IDE monitor. Device access and measurements remain
 within the authorized task.
 
+To drive a connected reader without the human (open a book, press buttons,
+restart, screenshot, wait for a log line), use `scripts/device_control.py`; its
+`run` command replays a script of steps with one continuous log. See
+[Drive the reader from a script](../../docs/contributing/testing-debugging.md#drive-the-reader-from-a-script).
+
 ### Live Debugging Patterns
 
 Use `LOG_DBG` for measurements, `LOG_LEVEL=2` for debug logging, and
