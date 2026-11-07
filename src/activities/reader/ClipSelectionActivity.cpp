@@ -17,6 +17,7 @@
 #include "MappedInputManager.h"
 #include "activities/ActivityResult.h"
 #include "clippings/ClippingText.h"
+#include "clippings/SelectionActionPolicy.h"
 #include "clippings/SelectionGeometry.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -443,6 +444,35 @@ void ClipSelectionActivity::confirmSelection(const ClippingResult::Action action
   finish();
 }
 
+int ClipSelectionActivity::selectedWordCount() const {
+  return rangeStart < 0 ? 1 : std::abs(selected - rangeStart) + 1;
+}
+
+const char* ClipSelectionActivity::confirmLabel() const {
+  const bool direct =
+      mode == Mode::DefinitionLookup || selectionAction::runsWithoutMenu(selectedWordCount(), lookupAvailable);
+  return direct && lookupAvailable ? tr(STR_LOOKUP) : tr(STR_DONE);
+}
+
+// First press anchors. Then a single word looks up at once; longer selections pick Look up / Clip from a menu.
+void ClipSelectionActivity::confirmWithButtons() {
+  if (rangeStart < 0 || mode == Mode::DefinitionLookup) {
+    confirmSelection(ClippingResult::Action::Lookup);
+    return;
+  }
+  const int count = selectedWordCount();
+  if (selectionAction::runsWithoutMenu(count, lookupAvailable)) {
+    confirmSelection(lookupAvailable ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
+    return;
+  }
+  static constexpr StrId OPTIONS[] = {StrId::STR_LOOKUP, StrId::STR_CLIP};
+  const int defaultIndex = selectionAction::defaultAction(count, true) == selectionAction::Kind::Lookup ? 0 : 1;
+  actionPopup.show(StrId::STR_SELECT, OPTIONS, 2, defaultIndex, [this](const int index) {
+    confirmSelection(index == 0 ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
+  });
+  requestUpdate();
+}
+
 void ClipSelectionActivity::cancel() {
   ActivityResult result;
   result.isCancelled = true;
@@ -630,7 +660,7 @@ bool ClipSelectionActivity::handleButtons(const uint8_t buttons) {
   }
 
   if (buttons & Input::INPUT_CONFIRM) {
-    confirmSelection(isLookup() ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
+    confirmWithButtons();
     return true;
   }
 

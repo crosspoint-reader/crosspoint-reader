@@ -89,6 +89,9 @@ class ClipSelectionActivity final : public Activity {
   int textOffset() const;
   int textXOffset() const;
   void cancel();
+  const char* confirmLabel() const;
+  int selectedWordCount() const;
+  void confirmWithButtons();
   bool buildSelectedText(int first, int last, std::string& text) const;
   void drawSelection() const;
   bool renderIncremental();
