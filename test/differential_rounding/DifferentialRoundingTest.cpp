@@ -24,11 +24,11 @@ namespace {
 
 // clang-format off
 const EpdGlyph kGlyphs[] = {
-  // idx  width  height  advanceX  left  top  dataLength  dataOffset
-  /* 0 'T' */ { 8, 12, 137, 0, 12, 0, 0 },
-  /* 1 'a' */ { 7,  8, 130, 0,  8, 0, 0 },
-  /* 2 'o' */ { 8,  8, 145, 0,  8, 0, 0 },
-  /* 3 'x' */ { 7,  8, 136, 0,  8, 0, 0 },
+  // idx  width  height  advanceX  left  top  dataOffset
+  /* 0 'T' */ { 8, 12, 137, 0, 12, 0 },
+  /* 1 'a' */ { 7,  8, 130, 0,  8, 0 },
+  /* 2 'o' */ { 8,  8, 145, 0,  8, 0 },
+  /* 3 'x' */ { 7,  8, 136, 0,  8, 0 },
 };
 
 const EpdUnicodeInterval kIntervals[] = {
@@ -397,7 +397,7 @@ TEST(EpdFont, MissingSolidSymbolsHaveVisibleBounds) {
 }
 
 TEST(EpdFont, SolidSymbolsUseEmAdvanceAndKeepRealGlyphs) {
-  const EpdGlyph glyphs[] = {{10, 12, 168, 0, 12, 0, 0}, {3, 4, 64, 1, 4, 1, 0}};
+  const EpdGlyph glyphs[] = {{10, 12, 168, 0, 12, 0}, {3, 4, 64, 1, 4, 0}};
   const EpdUnicodeInterval intervals[] = {{'M', 'M', 0}, {0x25A0, 0x25A0, 1}};
   EpdFontData data{};
   data.glyph = glyphs;
@@ -415,7 +415,7 @@ TEST(EpdFont, SolidSymbolsUseEmAdvanceAndKeepRealGlyphs) {
 }
 
 TEST(EpdFont, SolidFallbackOverridesReplacementGlyph) {
-  const EpdGlyph replacement{2, 3, 32, 0, 3, 1, 0};
+  const EpdGlyph replacement{2, 3, 32, 0, 3, 0};
   const EpdUnicodeInterval interval{0xFFFD, 0xFFFD, 0};
   EpdFontData data{};
   data.glyph = &replacement;
@@ -432,7 +432,7 @@ TEST(EpdFont, SolidFallbackOverridesReplacementGlyph) {
 }
 
 TEST(EpdFont, SolidSymbolsRespectOnDemandFontCoverage) {
-  const EpdGlyph realBlock{7, 9, 112, 0, 9, 1, 0};
+  const EpdGlyph realBlock{7, 9, 112, 0, 9, 0};
   EpdFontData data{};
   data.ascender = 12;
   data.glyphMissCtx = const_cast<EpdGlyph*>(&realBlock);
@@ -456,7 +456,7 @@ TEST(EpdFont, EmptyFontStillMeasuresSolidSymbols) {
 }
 
 TEST(EpdFont, MissingTurnedCommaUsesQuoteAndNativeGlyphWins) {
-  const EpdGlyph glyphs[] = {{3, 5, 64, 0, 8, 1, 0}, {4, 6, 80, 0, 9, 1, 1}};
+  const EpdGlyph glyphs[] = {{3, 5, 64, 0, 8, 0}, {4, 6, 80, 0, 9, 1}};
   const EpdUnicodeInterval intervals[] = {{0x02BB, 0x02BB, 0}, {0x2018, 0x2018, 1}};
   EpdFontData data{};
   data.glyph = glyphs;
