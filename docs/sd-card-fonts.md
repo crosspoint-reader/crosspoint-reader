@@ -197,7 +197,7 @@ To make `.cpfont` files for any device, convert your TrueType/OpenType fonts:
 |--------|----------|
 | `ascii` | U+0020–U+007E (Basic Latin) |
 | `latin1` | U+0080–U+00FF (Latin-1 Supplement) |
-| `latin-ext` | European languages (Latin + Extended-A/B + punctuation + currency + letterlike symbols such as ™ and № + minus sign + ligatures) |
+| `latin-ext` | European languages (Latin + Extended-A/B + combining diacritical marks + punctuation + currency + letterlike symbols such as ™ and № + minus sign + ligatures) |
 | `greek` | Greek + Extended Greek |
 | `cyrillic` | Cyrillic + Supplement |
 | `hebrew` | Hebrew + Alphabetic Presentation Forms |
@@ -206,7 +206,7 @@ To make `.cpfont` files for any device, convert your TrueType/OpenType fonts:
 | `armenian` | Armenian |
 | `ethiopic` | Ethiopic + Extended |
 | `vietnamese` | Vietnamese subset (ơ/ư and combining marks) |
-| `ipa-chars` | IPA Extensions + Spacing Modifier Letters + Combining Diacritical Marks (phonetic transcription) |
+| `ipa-chars` | IPA Extensions + Spacing Modifier Letters (phonetic transcription) |
 | `punctuation` | General punctuation (U+2000–U+206F) |
 | `cjk` | CJK Unified Ideographs + Hiragana + Katakana + Fullwidth |
 | `hangul` | Korean Hangul syllables + Jamo + Compatibility Jamo |
