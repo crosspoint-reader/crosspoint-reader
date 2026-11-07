@@ -28,7 +28,6 @@ namespace {
 // Longest measurable/drawable span. Wrapped lines stay under the screen width
 // (far below this); only pathological unbreakable tokens are split at this cap.
 constexpr size_t MAX_LINE_BYTES = 191;
-constexpr float PLAIN_TEXT_LINE_SPACING = 2.0f;
 constexpr size_t HEAP_HEADROOM = 8 * 1024;
 constexpr unsigned long MESSAGE_DURATION_MS = 1500;
 constexpr size_t SELECTION_PAGE_WINDOW = 3;
@@ -41,6 +40,82 @@ constexpr size_t MAX_PLAIN_WORDS = (MAX_LINE_BYTES + 1) / 2;
 // reader and word-select. Bigger definitions take the span-based plain-text
 // path, which holds no per-page copies.
 constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;
+
+struct PlainLineLayout {
+  int xOffset = 0;
+  int justifyExtra = 0;
+  int gaps = 0;
+};
+
+bool isWordSeparator(const char c) { return c == ' ' || c == '\t' || c == '\r'; }
+
+PlainLineLayout getPlainLineLayout(const GfxRenderer& renderer, const int fontId, const char* text, const bool bold,
+                                   const bool wraps, const int width) {
+  PlainLineLayout result;
+  const auto style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+  const int remaining = std::max(0, width - renderer.getTextAdvanceX(fontId, text, style));
+  switch (SETTINGS.paragraphAlignment) {
+    case CrossPointSettings::CENTER_ALIGN:
+      result.xOffset = remaining / 2;
+      break;
+    case CrossPointSettings::RIGHT_ALIGN:
+      result.xOffset = remaining;
+      break;
+    case CrossPointSettings::JUSTIFIED:
+    case CrossPointSettings::BOOK_STYLE: {
+      if (!wraps || remaining == 0) break;
+      if (BidiUtils::detectParagraphLevel(text) == 1) {
+        result.xOffset = remaining;
+        break;
+      }
+      bool inWord = false;
+      bool afterWord = false;
+      for (const char* p = text; *p; ++p) {
+        if (isWordSeparator(*p)) {
+          if (inWord) afterWord = true;
+          inWord = false;
+        } else {
+          if (!inWord && BidiUtils::startsWithRtl(p)) {
+            result.gaps = 0;
+            return result;
+          }
+          if (afterWord) result.gaps++;
+          afterWord = false;
+          inWord = true;
+        }
+      }
+      if (result.gaps > 0) result.justifyExtra = remaining;
+      break;
+    }
+    default:
+      break;
+  }
+  return result;
+}
+
+void drawJustifiedPlainLine(const GfxRenderer& renderer, const int fontId, const int x, const int y, char* text,
+                            const bool bold, const PlainLineLayout& placement) {
+  const auto style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+  int gapIndex = 0;
+  bool hasWord = false;
+  for (size_t i = 0; text[i];) {
+    while (isWordSeparator(text[i])) ++i;
+    if (!text[i]) break;
+    if (hasWord) ++gapIndex;
+    const size_t start = i;
+    while (text[i] && !isWordSeparator(text[i])) ++i;
+    const char prefix = text[start];
+    text[start] = '\0';
+    const int advance = renderer.getTextAdvanceX(fontId, text, style);
+    text[start] = prefix;
+    const char suffix = text[i];
+    text[i] = '\0';
+    renderer.drawText(fontId, x + advance + placement.justifyExtra * gapIndex / placement.gaps, y, text + start, true,
+                      style);
+    text[i] = suffix;
+    hasWord = true;
+  }
+}
 
 }  // namespace
 
@@ -56,7 +131,9 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
   std::vector<TextBlock::SourceRange> visualRanges;
   BlockStyle style;
 
-  void layout(const DictionaryDefinitionActivity& owner, const int fontId, const uint32_t offset) {
+  void layout(const DictionaryDefinitionActivity& owner, const int fontId, const uint32_t offset, const bool bold,
+              const PlainLineLayout& placement) {
+    const auto family = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
     const char* bytes = text.c_str();
     const size_t length = text.size();
     words.clear();
@@ -86,7 +163,7 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
         i = ptr - reinterpret_cast<const unsigned char*>(bytes);
       }
       words.emplace_back(bytes + start, i - start);
-      styles.push_back(EpdFontFamily::REGULAR);
+      styles.push_back(family);
       ranges.push_back({static_cast<uint32_t>(offset + start), static_cast<uint32_t>(offset + i)});
     }
     style.isRtl = BidiUtils::detectParagraphLevel(bytes) == 1;
@@ -99,11 +176,27 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
         const size_t left = std::min(previous, index);
         const size_t right = std::max(previous, index);
         x += right == left + 1 ? owner.measureSpan(fontId, text.c_str() + ranges[left].end - offset,
-                                                   ranges[right].start - ranges[left].end)
-                               : owner.renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
+                                                   ranges[right].start - ranges[left].end, family)
+                               : owner.renderer.getSpaceWidth(fontId, family);
       }
       positions.push_back(x);
-      x += owner.renderer.getTextAdvanceX(fontId, words[index].c_str(), EpdFontFamily::REGULAR);
+      x += owner.renderer.getTextAdvanceX(fontId, words[index].c_str(), family);
+    }
+    if (placement.gaps > 0 && !reordered) {
+      int gapIndex = 0;
+      for (size_t n = 0; n < ranges.size(); ++n) {
+        const size_t start = ranges[n].start - offset;
+        if (n > 0) {
+          for (size_t j = ranges[n - 1].end - offset; j < start; ++j) {
+            if (isWordSeparator(bytes[j])) {
+              ++gapIndex;
+              break;
+            }
+          }
+        }
+        positions[n] =
+            owner.measureSpan(fontId, bytes, start, family) + placement.justifyExtra * gapIndex / placement.gaps;
+      }
     }
     if (reordered) {
       visualWords.clear();
@@ -263,7 +356,7 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
   const BodyArea body = bodyArea();
   const int maxWidth = body.width;
   const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
-  const int lineHeight = renderer.getLineHeight(fontId, PLAIN_TEXT_LINE_SPACING);
+  const int lineHeight = renderer.getLineHeight(fontId, SETTINGS.getReaderLineCompression());
   next.linesPerPage = std::max(1, body.height / lineHeight);
 
   const char* text = definition.c_str();
@@ -273,9 +366,9 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
   int lineWidth = 0;
   bool lineBold = false;
 
-  const auto flushLine = [&](uint32_t nextStart) {
+  const auto flushLine = [&](uint32_t nextStart, bool wraps) {
     if (lines.size() == lines.capacity() && !reserveLines(next, lines.capacity() * 2)) return false;
-    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), lineBold});
+    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), lineBold, wraps});
     lineStart = nextStart;
     lineEnd = nextStart;
     lineWidth = 0;
@@ -296,7 +389,19 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
     }
     const char c = text[i];
     if (c == '\n' || c == '\0') {
-      if (!flushLine(i + 1)) return false;
+      if (!flushLine(i + 1, false)) return false;
+      const int rowOnPage = static_cast<int>(lines.size()) % next.linesPerPage;
+      if (c == '\n' && SETTINGS.extraParagraphSpacing && lines.back().len != 0 && rowOnPage > 0 &&
+          rowOnPage + 1 < next.linesPerPage) {
+        uint32_t pos = i + 1;
+        const uint32_t firstDigit = pos;
+        while (pos < n && pos - firstDigit < 3 && text[pos] >= '0' && text[pos] <= '9') pos++;
+        if (pos > firstDigit && pos + 1 < n && (text[pos] == '.' || text[pos] == ')') &&
+            isWordSeparator(text[pos + 1])) {
+          if (lines.size() == lines.capacity() && !reserveLines(next, lines.capacity() * 2)) return false;
+          lines.push_back({i + 1, 0, false, false});
+        }
+      }
       i++;
       continue;
     }
@@ -329,7 +434,7 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
       lineEnd = tokenStart + tokenLen;
       lineWidth += spaceWidth + tokenWidth;
     } else {
-      if (!flushLine(tokenStart)) return false;
+      if (!flushLine(tokenStart, true)) return false;
       lineEnd = tokenStart + tokenLen;
       lineWidth = tokenWidth;
     }
@@ -356,13 +461,13 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
       }
       const uint32_t rest = lineStart + lastFit;
       lineEnd = rest;
-      if (!flushLine(rest)) return false;
+      if (!flushLine(rest, true)) return false;
       lineEnd = rest + (len - lastFit);
       lineWidth = measureSpan(fontId, text + lineStart, lineEnd - lineStart,
                               lineBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
     }
   }
-  if (lineEnd > lineStart && !flushLine(n)) return false;
+  if (lineEnd > lineStart && !flushLine(n, false)) return false;
 
   // Trim trailing blank lines so the last page is not empty padding.
   while (!lines.empty() && lines.back().len == 0) lines.pop_back();
@@ -478,7 +583,8 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
 bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
   // Only the selection window gets packed word arenas; the definition keeps its cheap line spans.
   const int fontId = SETTINGS.getReaderFontId();
-  const int lineHeight = renderer.getLineHeight(fontId, PLAIN_TEXT_LINE_SPACING);
+  const int lineHeight = renderer.getLineHeight(fontId, SETTINGS.getReaderLineCompression());
+  const int lineWidth = bodyArea().width;
   const int pageCount = std::min<int>(SELECTION_PAGE_WINDOW, content.totalPages - content.selectionPage);
   const size_t scratchBytes =
       sizeof(PlainSelectionLine) + MAX_LINE_BYTES + 1 +
@@ -518,16 +624,18 @@ bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
       const size_t length =
           utf8SafeTruncateBuffer(content.text.c_str() + line.start, std::min<size_t>(line.len, MAX_LINE_BYTES));
       scratch->text.assign(content.text.c_str() + line.start, length);
+      const auto placement =
+          getPlainLineLayout(renderer, fontId, scratch->text.c_str(), line.bold, line.wraps, lineWidth);
       heap = HalMemory::getDefaultHeap();
       const size_t lineBytes = length * (sizeof(TextBlock::SourceRange) + 12) + sizeof(TextBlock) + 1024;
       if (heap.freeBytes < lineBytes + HEAP_HEADROOM || heap.largestBlockBytes < lineBytes) return false;
-      scratch->layout(*this, fontId, line.start);
+      scratch->layout(*this, fontId, line.start, line.bold, placement);
       auto block = scratch->pack();
       if (!block || !block->valid()) {
         LOG_ERR("DICT", "OOM: selection line (%u byte budget)", static_cast<unsigned>(lineBytes));
         return false;
       }
-      auto element = makeUniqueNoThrow<PageLine>(std::move(block), 0, (row - firstLine) * lineHeight);
+      auto element = makeUniqueNoThrow<PageLine>(std::move(block), placement.xOffset, (row - firstLine) * lineHeight);
       if (!element) {
         LOG_ERR("DICT", "OOM: selection element (%u bytes)", static_cast<unsigned>(sizeof(PageLine)));
         return false;
@@ -686,7 +794,8 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     pages[currentPage]->render(renderer, fontId, x, startY);
     return;
   }
-  const int lineHeight = renderer.getLineHeight(fontId, PLAIN_TEXT_LINE_SPACING);
+  const int lineHeight = renderer.getLineHeight(fontId, SETTINGS.getReaderLineCompression());
+  const int lineWidth = bodyArea().width;
   char buf[MAX_LINE_BYTES + 1];
   const int firstLine = currentPage * linesPerPage;
   const int lastLine = std::min(firstLine + linesPerPage, static_cast<int>(lines.size()));
@@ -696,8 +805,13 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
                                               std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES));
     memcpy(buf, definition.c_str() + lines[i].start, len);
     buf[len] = '\0';
-    renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, buf, true,
-                      lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    const auto placement = getPlainLineLayout(renderer, fontId, buf, lines[i].bold, lines[i].wraps, lineWidth);
+    const int y = startY + (i - firstLine) * lineHeight;
+    if (placement.gaps > 0)
+      drawJustifiedPlainLine(renderer, fontId, x, y, buf, lines[i].bold, placement);
+    else
+      renderer.drawText(fontId, x + placement.xOffset, y, buf, true,
+                        lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
   }
 }
 
