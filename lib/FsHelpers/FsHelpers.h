@@ -15,6 +15,9 @@ std::string normalisePath(const std::string& path);
 // before str2. Same ordering sortFileList applies within the file/directory groups.
 bool naturalLess(const std::string& str1, const std::string& str2);
 
+// True when names compare equal before naturalLess applies its deterministic spelling tie-break.
+bool naturalEquivalent(const std::string& str1, const std::string& str2);
+
 void sortFileList(std::vector<std::string>& strs);
 
 /**
