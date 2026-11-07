@@ -34,6 +34,8 @@ methods = "\n".join(block(viewer, signature) for signature in (
     "void DictionaryDefinitionActivity::showMessage",
     "bool DictionaryDefinitionActivity::restoreCurrentDefinition",
     "void DictionaryDefinitionActivity::navigateDefinition",
+    "void DictionaryDefinitionActivity::switchDictionary",
+    "bool DictionaryDefinitionActivity::readDefinition",
     "bool DictionaryDefinitionActivity::buildPlainSelectionPages",
     "void DictionaryDefinitionActivity::startSelection",
 ))
@@ -51,8 +53,9 @@ constants = viewer.split("namespace {", 1)[1].split("}  // namespace", 1)[0]
 # The harness copies every constant but only some methods; clang's -Wall flags the unused ones.
 constants = re.sub(r"^constexpr ", "[[maybe_unused]] constexpr ", constants, flags=re.MULTILINE)
 viewer_loop = block(viewer, "void DictionaryDefinitionActivity::loop()")
+cycle_handler = block(viewer_loop, "if (lookup && lookup->controller && lookup->controller->dictionaryCount() > 1)")
 back_handler = viewer_loop.split("  int sx = 0;", 1)[1].split(
-    "  if (lookup && mappedInput.wasReleased(MappedInputManager::Button::Confirm))", 1
+    "  if (lookup && mappedInput.wasReleased(MappedInputManager::Button::Confirm)", 1
 )[0]
 back_handler = "  int sx = 0;" + back_handler
 lookup_source = (ROOT / "src/activities/reader/DictionaryWordSelectActivity.cpp").read_text()
@@ -91,6 +94,8 @@ enum class StrId { STR_DICT_LOOKING_UP, STR_DICT_NOT_FOUND, STR_DICT_LOW_MEMORY,
                    STR_DICT_DECOMPRESS_ERROR, STR_DICT_RESTORE_FAILED, STR_DICT_HISTORY_FULL };
 struct RenderLock { ~RenderLock() {} };
 unsigned long millis() { return 0; }
+const char* translate(StrId) { return "Not found"; }
+#define tr(key) translate(StrId::key)
 struct HalMemory {
   struct Heap { size_t freeBytes = 1024 * 1024, largestBlockBytes = 1024 * 1024; };
   static inline size_t available = 1024 * 1024;
@@ -149,7 +154,11 @@ struct Settings {
   int getReaderFontId() const { return 0; }
 } SETTINGS;
 struct MappedInputManager {
-  enum class Button { Back };
+  enum class Button { Back, Left, Right };
+  enum class SwipeDir { None, Left, Right };
+  SwipeDir swipe = SwipeDir::None;
+  SwipeDir wasSwipe() const { return swipe; }
+  Button releasedButton = Button::Back;
   bool touch = false;
   bool hasTouch() const { return touch; }
   bool released = false;
@@ -157,7 +166,7 @@ struct MappedInputManager {
   bool longPress = false;
   bool contactSuppressed = false;
   int touchX = 0, touchY = 0;
-  bool wasReleased(Button) const { return released; }
+  bool wasReleased(Button button) const { return released && button == releasedButton; }
   unsigned long getHeldTime() const { return heldMs; }
   bool wasScreenLongPress(int& x, int& y) {
     if (!longPress) return false;
@@ -197,6 +206,29 @@ struct Dictionary {
     return readDefinition(location, text, result);
   }
   std::string lastQuery;
+  bool html = false;
+  bool definitionsAreHtml() const { return html; }
+};
+struct DictionaryWordSelectActivity {
+  Dictionary& dictionary;
+  size_t selected = 0;
+  size_t count = 3;
+  unsigned prefetches = 0, stops = 0;
+  bool failLookup = false;
+  bool miss = false;
+  size_t dictionaryCount() const { return count; }
+  bool cacheReady = false;
+  bool hasSearchCache(size_t, const char*) const { return cacheReady; }
+  bool lookupInDictionary(size_t index, const char* word, std::string& text, std::string& headword,
+                           Dictionary::LookupResult* result) {
+    selected = index;
+    dictionary.html = index == 1;
+    if (failLookup && index == 2) { *result = Dictionary::LookupResult::ReadError; return false; }
+    if (miss && index == 2) { *result = Dictionary::LookupResult::NotFound; return false; }
+    return dictionary.lookup(word, text, headword, result);
+  }
+  void prefetch(const std::string&) { ++prefetches; }
+  void stopPrefetch() { ++stops; }
 };
 struct ClipSelectionActivity {
 ''' + selection + r'''
@@ -232,10 +264,12 @@ struct DictionaryDefinitionActivity {
   ActivityResultHandler callback;
   BodyArea bodyArea() const { return {0, 0, 12, 20}; }
   void requestUpdate() {}
-  void requestUpdateAndWait() {}
+  unsigned refreshWaits = 0;
+  void requestUpdateAndWait() { ++refreshWaits; }
   void finish() { finished = true; }
   void setResult(ActivityResult&& next) { result = std::move(next); }
   void openDictionaryWordSelect() { selectionOpened = true; }
+  void handleDictionaryInput() { ''' + cycle_handler + r''' }
   void handleBack() { ''' + back_handler + r''' }
   void onDefinitionResult(const ActivityResult& child) { (''' + definition_result + r''')(child); }
   void onLookupResult(const ActivityResult& child) { (''' + lookup_result + r''')(child); }
@@ -251,6 +285,8 @@ struct DictionaryDefinitionActivity {
   int measureSpan(int, const char*, size_t, EpdFontFamily::Style = EpdFontFamily::REGULAR) const;
   void showMessage(StrId);
   void navigateDefinition(bool);
+  void switchDictionary(bool);
+  bool readDefinition(size_t, const char*, Definition&, Dictionary::LookupResult*);
   bool restoreCurrentDefinition(bool);
   bool buildPlainSelectionPages();
   void startSelection(int x = -1, int y = -1);
@@ -271,6 +307,66 @@ int main() {
   }
   Dictionary dictionary;
   dictionary.entries = {{10, "first entry one two three four five six"}, {20, "other definition"}};
+  {
+    DictionaryWordSelectActivity controller{dictionary};
+    DictionaryDefinitionActivity cycle;
+    cycle.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+    cycle.lookup->controller = &controller;
+    cycle.lookup->query = "original";
+    cycle.content.text = dictionary.entries.at(10);
+    assert(cycle.prepareDefinition(cycle.content));
+    controller.cacheReady = true;
+    cycle.switchDictionary(true);
+    assert(cycle.refreshWaits == 0);  // cached switches do not flash a busy popup
+    controller.cacheReady = false;
+    cycle.switchDictionary(false);
+    assert(cycle.refreshWaits == 1);  // uncached work still gives loading feedback
+    cycle.switchDictionary(true);
+    assert(cycle.lookup->dictionaryIndex == 1 && controller.selected == 1 && cycle.htmlDefinition);
+    cycle.lookup->pendingWord = "alias";
+    cycle.navigateDefinition(false);
+    assert(cycle.lookup->depth == 1 && cycle.lookup->history[0].dictionaryIndex == 1);
+    cycle.switchDictionary(true);
+    assert(cycle.lookup->dictionaryIndex == 2 && cycle.lookup->query == "alias");
+    cycle.navigateDefinition(true);
+    assert(cycle.lookup->dictionaryIndex == 1 && controller.selected == 1 && cycle.lookup->query == "original");
+    cycle.switchDictionary(false);
+    cycle.switchDictionary(false);
+    assert(cycle.lookup->dictionaryIndex == 2);  // wrap backward
+    cycle.switchDictionary(true);
+    assert(cycle.lookup->dictionaryIndex == 0);  // wrap forward
+    controller.failLookup = true;
+    cycle.switchDictionary(false);
+    assert(!cycle.finished && cycle.lookup->dictionaryIndex == 0 && controller.selected == 0);
+    controller.failLookup = false;
+    controller.miss = true;
+    cycle.switchDictionary(false);
+    assert(cycle.content.missing && cycle.lookup->dictionaryIndex == 2 && !cycle.htmlDefinition);
+    cycle.switchDictionary(true);
+    assert(!cycle.content.missing && cycle.lookup->dictionaryIndex == 0);
+    cycle.mappedInput.touch = true;
+    cycle.mappedInput.released = true;
+    cycle.mappedInput.releasedButton = MappedInputManager::Button::Right;
+    cycle.handleDictionaryInput();
+    assert(cycle.lookup->dictionaryIndex == 0);  // touch devices ignore cycling buttons
+    cycle.mappedInput.swipe = MappedInputManager::SwipeDir::Left;
+    cycle.handleDictionaryInput();
+    assert(cycle.lookup->dictionaryIndex == 1);
+    cycle.mappedInput.swipe = MappedInputManager::SwipeDir::Right;
+    cycle.handleDictionaryInput();
+    assert(cycle.lookup->dictionaryIndex == 0);
+    cycle.mappedInput.touch = false;
+    cycle.mappedInput.released = false;
+    cycle.handleDictionaryInput();
+    assert(cycle.lookup->dictionaryIndex == 0);  // button devices ignore swipes
+    cycle.mappedInput.released = true;
+    cycle.handleDictionaryInput();
+    assert(cycle.lookup->dictionaryIndex == 1);
+    controller.count = 1;
+    cycle.handleDictionaryInput();
+    assert(cycle.lookup->dictionaryIndex == 1);  // no cycling with a single dictionary
+
+  }
   DictionaryDefinitionActivity view;
   view.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
   view.lookup->query = "same";
@@ -525,7 +621,8 @@ int main() {
 
 dictionary_source = (ROOT / "src/util/Dictionary.cpp").read_text()
 lookup_methods = "\n".join(block(dictionary_source, name) for name in (
-    "std::string Dictionary::cleanWord", "void Dictionary::stemVariants", "bool Dictionary::lookup"
+    "std::string Dictionary::cleanWord", "void Dictionary::stemVariants", "bool Dictionary::search",
+    "bool Dictionary::cacheSearch", "bool Dictionary::loadSearch", "bool Dictionary::lookup"
 ))
 lookup_harness = r'''
 #include <algorithm>
@@ -534,6 +631,8 @@ lookup_harness = r'''
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <map>
+#include <Memory.h>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -541,6 +640,31 @@ lookup_harness = r'''
 #include <Utf8.h>
 #define LOG_ERR(...) ((void)0)
 #define LOG_INF(...) ((void)0)
+constexpr int O_WRONLY = 1, O_CREAT = 2, O_TRUNC = 4;
+struct HalFile {
+  std::vector<uint8_t>* bytes = nullptr;
+  size_t pos = 0;
+  operator bool() const { return bytes != nullptr; }
+  int read(void* out, size_t count) {
+    count = std::min(count, bytes->size() - pos);
+    std::memcpy(out, bytes->data() + pos, count);
+    pos += count;
+    return static_cast<int>(count);
+  }
+  size_t write(const void* data, size_t count) {
+    const auto* first = static_cast<const uint8_t*>(data);
+    bytes->insert(bytes->end(), first, first + count);
+    return count;
+  }
+};
+struct StorageStub {
+  std::map<std::string, std::vector<uint8_t>> files;
+  HalFile open(const char* path, int flags = 0) {
+    if (flags) { files[path].clear(); return {&files[path]}; }
+    const auto it = files.find(path);
+    return it == files.end() ? HalFile{} : HalFile{&it->second};
+  }
+} Storage;
 constexpr size_t DEFINITION_HEAP_HEADROOM_BYTES = 8192;
 struct HalMemory {
   struct Heap { size_t freeBytes, largestBlockBytes; };
@@ -563,28 +687,74 @@ class Dictionary {
   struct LookupSession {};
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
   bool hasSyn = false;
+  bool groupFromSynonyms = false;
   bool htmlDefinitions = false;
-  unsigned searches = 0;
+  unsigned searches = 0, reads = 0;
+  char wordBuf[256] = {};
   std::unique_ptr<DictEntryList> entryList = std::make_unique<DictEntryList>();
   bool isOpen() const { return true; }
   bool openSession(LookupSession&) { return true; }
-  void locateAll(LookupSession&, const char*, DictEntryList&, bool* readError) {
+  void locateAll(LookupSession&, const char* word, DictEntryList& group, bool* readError) {
     ++searches;
+    if (std::strcmp(word, "hit") == 0 || std::strcmp(word, "twice") == 0) {
+      group.appendUnique("headword", DictLocation{10, 5, true, false});
+      if (std::strcmp(word, "twice") == 0) group.appendUnique("headword", DictLocation{20, 5, true, false});
+    }
     if (readError) *readError = false;
   }
-  bool locateSynonyms(LookupSession&, const char*, DictEntryList&, bool*) {
+  bool locateSynonyms(LookupSession&, const char* word, DictEntryList& group, bool*) {
     ++searches;
+    if (std::strcmp(word, "alias") == 0) group.appendUnique("other", DictLocation{30, 5, true, false});
     return false;
   }
-  bool readDefinition(DictLocation, std::string&, LookupResult*, bool = false, bool* = nullptr) { return false; }
+  bool readDefinition(DictLocation where, std::string& text, LookupResult* result, bool append = false, bool* = nullptr) {
+    ++reads;
+    if (!append) text.clear();
+    text += "entry" + std::to_string(where.offset);
+    if (result) *result = LookupResult::Found;
+    return true;
+  }
   static std::string cleanWord(const char*);
   static void stemVariants(const std::string&, std::vector<std::string>&);
-  bool lookup(const char*, std::string&, std::string&, LookupResult*);
+  bool search(const char*, std::string&, LookupResult*);
+  bool cacheSearch(const char*, const char*);
+  bool loadSearch(const char*, const char*, std::string&);
+  bool lookup(const char*, std::string&, std::string&, LookupResult*, const char* = nullptr);
 };
-''' + lookup_methods + r'''
+''' + block(dictionary_source, 'bool DictEntryList::appendUnique') + '\n' + lookup_methods + r'''
 int main() {
   Dictionary dictionary;
   std::string definition = "unchanged", headword = "unchanged";
+  {
+    auto result = Dictionary::LookupResult::ReadError;
+    for (const char* word : {"hit", "twice", "alias", "missing"}) {
+      dictionary.hasSyn = true;
+      dictionary.reads = 0;
+      assert(dictionary.cacheSearch(word, "snapshot"));
+      assert(dictionary.reads == 0);  // prefetch never reads or inflates a definition
+      std::string expectedText, expectedHeadword;
+      const bool expected = dictionary.lookup(word, expectedText, expectedHeadword, &result);
+      dictionary.entryList->clear();
+      dictionary.searches = 0;
+      std::string cachedText, cachedHeadword;
+      assert(dictionary.lookup(word, cachedText, cachedHeadword, &result, "snapshot") == expected);
+      assert(dictionary.searches == 0 && cachedText == expectedText);
+      if (expected) assert(cachedHeadword == expectedHeadword);
+      else assert(result == Dictionary::LookupResult::NotFound);
+    }
+    assert(dictionary.cacheSearch("twice", "snapshot"));
+    const auto complete = Storage.files.at("snapshot");
+    for (size_t length = 0; length < complete.size(); ++length) {
+      Storage.files["snapshot"] = {complete.begin(), complete.begin() + length};
+      dictionary.searches = 0;
+      assert(dictionary.lookup("hit", definition, headword, &result, "snapshot"));
+      assert(dictionary.searches > 0 && definition == "entry10");
+    }
+    Storage.files["snapshot"] = complete;
+    Storage.files["snapshot"][8] = 255;  // reject an oversized entry count
+    assert(dictionary.lookup("hit", definition, headword, &result, "snapshot"));
+  }
+  definition = headword = "unchanged";
   for (const char* suffix : {"ing", "ed", "ies"}) {
     const std::string phrase = std::string(4096 - std::strlen(suffix), 'a') + suffix;
     auto result = Dictionary::LookupResult::Found;
@@ -622,6 +792,7 @@ with tempfile.TemporaryDirectory() as directory:
     (path / "lookup.cpp").write_text(lookup_harness)
     subprocess.run(["c++", "-std=c++20", "-Wall", "-Wextra", "-Werror",
                     "-I", str(ROOT / "lib/Epub/Epub"), "-I", str(ROOT / "lib/Utf8"),
+                    "-I", str(ROOT / "lib/Memory"),
                     str(path / "lookup.cpp"),
                     str(ROOT / "lib/Utf8/Utf8.cpp"), str(ROOT / "lib/Epub/Epub/CjkBreaks.cpp"),
                     str(ROOT / "lib/Epub/Epub/hyphenation/HyphenationCommon.cpp"),

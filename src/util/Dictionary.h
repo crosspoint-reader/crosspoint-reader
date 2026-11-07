@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -120,7 +121,8 @@ class Dictionary {
   // ~64KB consumed to feed the watchdog / repaint the UI. *outResult (if
   // provided) reports why a failed build failed; only the mandatory .idx pass
   // can fail the build (a failed .syn pass just disables synonyms).
-  bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr, IndexResult* outResult = nullptr);
+  bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr, IndexResult* outResult = nullptr,
+                  const std::atomic<bool>* cancelled = nullptr);
 
   // Clean the word, look it up, and on a miss retry dictionary-authored
   // synonyms then mini stem variants (-'s/-s/-es/-ies/-ed/-ing). When several
@@ -131,7 +133,10 @@ class Dictionary {
   // hit. *outResult (if provided) reports the precise outcome so the UI can
   // distinguish a genuine miss from a decompression / low-memory / read failure.
   bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
-              LookupResult* outResult = nullptr);
+              LookupResult* outResult = nullptr, const char* searchCache = nullptr);
+
+  // Session-only search snapshots: no definition reading or decompression.
+  bool cacheSearch(const char* word, const char* path);
 
   // Reload the exact entry, including synonym targets with duplicate headwords.
   // With exceedsLimit, enforce the combined-output cap and report a size rejection separately from IO failure.
@@ -143,6 +148,10 @@ class Dictionary {
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
 
  private:
+  bool search(const char* word, std::string& matchedHeadwordOut, LookupResult* outResult);
+  bool loadSearch(const char* path, const char* word, std::string& matchedHeadwordOut);
+  bool groupFromSynonyms = false;
+
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
 
   // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
@@ -226,7 +235,8 @@ class Dictionary {
   // (8 for .idx: offset+size; 4 for .syn: ordinal). magic tags the sidecar.
   // *outResult (if provided) reports why a failed pass failed.
   static bool buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic,
-                           uint32_t suffixBytes, void (*yieldFn)(void*), void* ctx, IndexResult* outResult);
+                           uint32_t suffixBytes, void (*yieldFn)(void*), void* ctx, IndexResult* outResult,
+                           const std::atomic<bool>* cancelled);
 
   // True when sidecarPath must be (re)built from sourcePath: missing/unreadable/
   // wrong-version sidecar, or a source-size mismatch. Shared by needsIndex() and

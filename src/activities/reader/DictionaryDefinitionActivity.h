@@ -14,6 +14,8 @@
 #include "util/ButtonNavigator.h"
 #include "util/Dictionary.h"
 
+class DictionaryWordSelectActivity;
+
 // Paged viewer for one dictionary definition. HTML definitions are laid out
 // through the EPUB chapter parser into styled Pages; anything else (plain
 // text, or HTML too damaged to parse) is word-wrapped once on entry and each
@@ -26,7 +28,8 @@ class DictionaryDefinitionActivity final : public Activity {
         content{.headword = std::move(headword), .text = std::move(definition)},
         htmlDefinition(htmlDefinition) {}
 
-  bool enableLookup(Dictionary& dictionary, std::string&& query);
+  bool enableLookup(Dictionary& dictionary, std::string&& query, DictionaryWordSelectActivity* controller = nullptr,
+                    bool found = true);
 
   void onEnter() override;
   void onExit() override;
@@ -63,6 +66,7 @@ class DictionaryDefinitionActivity final : public Activity {
     int totalPages = 1;
     int linesPerPage = 1;
     int selectionPage = 0;
+    bool missing = false;
     ClipSelectionActivity::Selection selection;
 
     void releasePayload() {
@@ -75,6 +79,7 @@ class DictionaryDefinitionActivity final : public Activity {
   // Replay the original query: the displayed headword may be a stem or synonym.
   struct HistoryEntry {
     std::string query;
+    size_t dictionaryIndex = 0;
     int page = 0;
     int selectionPage = 0;
     ClipSelectionActivity::Selection selection;
@@ -84,6 +89,8 @@ class DictionaryDefinitionActivity final : public Activity {
   struct LookupState {
     explicit LookupState(Dictionary& dictionary) : dictionary(dictionary) {}
     Dictionary& dictionary;  // Owned by the retained DictionaryWordSelectActivity parent.
+    DictionaryWordSelectActivity* controller = nullptr;
+    size_t dictionaryIndex = 0;
     std::array<HistoryEntry, 16> history;
     size_t depth = 0;
     std::string query;
@@ -101,11 +108,13 @@ class DictionaryDefinitionActivity final : public Activity {
   void startSelection(int x = -1, int y = -1);
   bool buildPlainSelectionPages();
   void navigateDefinition(bool back);
+  void switchDictionary(bool next);
+  bool readDefinition(size_t dictionaryIndex, const char* word, Definition& next, Dictionary::LookupResult* result);
   bool restoreCurrentDefinition(bool styled);
   void showMessage(StrId message);
 
   Definition content;
-  const bool htmlDefinition;
+  bool htmlDefinition;
   std::unique_ptr<LookupState> lookup;
   StrId message = StrId::STR_DICT_NOT_FOUND;
   unsigned long messageTime = 0;

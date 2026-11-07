@@ -665,3 +665,6 @@ STR_BT_HOLD: "hold"
 STR_BT_MAPPING_CLEARED: "Mapping cleared"
 STR_DELETE_ITEM_CONFIRM: "Delete?"
 STR_SET_SLEEP_COVER_CONFIRM: "Set Sleep Cover?"
+
+STR_DICT_PREVIOUS: "< Dict"
+STR_DICT_NEXT: "Dict >"

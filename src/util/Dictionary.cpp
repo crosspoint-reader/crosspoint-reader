@@ -278,7 +278,7 @@ bool Dictionary::open(const char* folderName) {
   // here and reused by every lookup, so a lookup never grows a container on the
   // heap. A failure is reported instead of aborting: the lookup would abort
   // later on the same starved heap.
-  entryList = makeUniqueNoThrow<DictEntryList>();
+  if (!entryList) entryList = makeUniqueNoThrow<DictEntryList>();
   if (!entryList) {
     LOG_ERR("DICT", "Out of memory for the %u byte entry list", static_cast<unsigned>(sizeof(DictEntryList)));
     return false;
@@ -321,7 +321,8 @@ bool Dictionary::needsIndex() {
   return hasSyn && sidecarIsStale(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC);
 }
 
-bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outResult) {
+bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outResult,
+                            const std::atomic<bool>* cancelled) {
   const auto fail = [outResult](IndexResult r) {
     if (outResult) *outResult = r;
     return false;
@@ -333,7 +334,7 @@ bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outR
   // stale so a .syn-only change doesn't force a needless rescan of the (much
   // larger) .idx, and vice versa.
   if (sidecarIsStale(basePath + ".idx", basePath + ".qidx", QIDX_MAGIC) &&
-      !buildSidecar(basePath + ".idx", basePath + ".qidx", QIDX_MAGIC, 8, yieldFn, ctx, outResult)) {
+      !buildSidecar(basePath + ".idx", basePath + ".qidx", QIDX_MAGIC, 8, yieldFn, ctx, outResult, cancelled)) {
     return false;
   }
 
@@ -343,15 +344,17 @@ bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outR
   // means "a .syn file exists", so needsIndex() keeps reporting the sidecar
   // stale and a later build retries. openSynonyms() is what declines the
   // synonym path while the sidecar is unusable.
+  if (cancelled && cancelled->load()) return false;
   if (hasSyn && sidecarIsStale(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC) &&
-      !buildSidecar(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC, 4, yieldFn, ctx, nullptr)) {
+      !buildSidecar(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC, 4, yieldFn, ctx, nullptr, cancelled)) {
     LOG_ERR("DICT", "Synonym index build failed; synonyms disabled for %s", basePath.c_str());
   }
   return true;
 }
 
 bool Dictionary::buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic,
-                              uint32_t suffixBytes, void (*yieldFn)(void*), void* ctx, IndexResult* outResult) {
+                              uint32_t suffixBytes, void (*yieldFn)(void*), void* ctx, IndexResult* outResult,
+                              const std::atomic<bool>* cancelled) {
   const auto fail = [outResult](IndexResult r) {
     if (outResult) *outResult = r;
     return false;
@@ -390,6 +393,10 @@ bool Dictionary::buildSidecar(const std::string& sourcePath, const std::string& 
   uint32_t suffixLeft = 0;  // 0 while scanning a word, else suffix bytes remaining
   uint32_t sinceYield = 0;
   while (ok && pos < srcSize) {
+    if (cancelled && cancelled->load()) {
+      ok = false;
+      break;
+    }
     const int n = src.read(buf.get(), CHUNK_BYTES);
     if (n <= 0) {
       LOG_ERR("DICT", "Index scan read failed at %lu", static_cast<unsigned long>(pos));
@@ -845,8 +852,7 @@ void Dictionary::stemVariants(const std::string& word, std::vector<std::string>&
   }
 }
 
-bool Dictionary::lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
-                        LookupResult* outResult) {
+bool Dictionary::search(const char* word, std::string& matchedHeadwordOut, LookupResult* outResult) {
   const auto setResult = [outResult](LookupResult r) {
     if (outResult) *outResult = r;
   };
@@ -878,7 +884,7 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   // at several headwords. All of them are shown, one label per entry.
   DictEntryList& group = *entryList;
   group.clear();
-  bool groupFromSynonyms = false;
+  groupFromSynonyms = false;
   bool searchFailed = false;
   {
     LookupSession session;
@@ -934,6 +940,75 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     if (searchFailed) setResult(LookupResult::ReadError);
     return false;
   }
+
+  setResult(LookupResult::Found);
+  return true;
+}
+
+// DLK1 snapshots live only for one query; the controller publishes them after close.
+bool Dictionary::cacheSearch(const char* word, const char* path) {
+  std::string headword;
+  auto result = LookupResult::NotFound;
+  search(word, headword, &result);
+  if (result != LookupResult::Found && result != LookupResult::NotFound) return false;
+  auto file = Storage.open(path, O_WRONLY | O_CREAT | O_TRUNC);
+  if (!file) {
+    LOG_ERR("DICT", "Cannot create search snapshot");
+    return false;
+  }
+  const uint32_t header[] = {0x314b4c44, groupFromSynonyms ? 1u : 0u,
+                             result == LookupResult::Found ? static_cast<uint32_t>(entryList->size()) : 0u};
+  bool ok = file.write(header, sizeof(header)) == sizeof(header);
+  for (size_t i = 0; ok && i < header[2]; ++i) {
+    const auto& entry = entryList->at(i);
+    const uint32_t data[] = {entry.location.offset, entry.location.size,
+                             static_cast<uint32_t>(strlen(entry.headword.get()))};
+    ok = data[2] < sizeof(wordBuf) && file.write(data, sizeof(data)) == sizeof(data) &&
+         file.write(entry.headword.get(), data[2]) == data[2];
+  }
+  if (!ok) LOG_ERR("DICT", "Cannot write search snapshot");
+  return ok;
+}
+
+bool Dictionary::loadSearch(const char* path, const char* word, std::string& matchedHeadwordOut) {
+  const size_t wordBytes = strlen(word) + 1;
+  const auto heap = HalMemory::getDefaultHeap();
+  if (heap.freeBytes < 5 * wordBytes + 6 * sizeof(std::string) + DEFINITION_HEAP_HEADROOM_BYTES ||
+      heap.largestBlockBytes < 2 * wordBytes)
+    return false;
+  auto file = Storage.open(path);
+  uint32_t header[3];
+  if (!file || !entryList || file.read(header, sizeof(header)) != sizeof(header) || header[0] != 0x314b4c44 ||
+      header[1] > 1 || header[2] > DictEntryList::kMaxEntries)
+    return false;
+  entryList->clear();
+  groupFromSynonyms = header[1] != 0;
+  for (size_t i = 0; i < header[2]; ++i) {
+    uint32_t data[3];
+    if (file.read(data, sizeof(data)) != sizeof(data) || data[2] == 0 || data[2] >= sizeof(wordBuf) ||
+        file.read(wordBuf, data[2]) != static_cast<int>(data[2]))
+      return false;
+    wordBuf[data[2]] = '\0';
+    if (!entryList->appendUnique(wordBuf, DictLocation{data[0], data[1], true, false})) return false;
+  }
+  if (!entryList->empty()) matchedHeadwordOut = groupFromSynonyms ? cleanWord(word) : entryList->front().headword.get();
+  return true;
+}
+
+bool Dictionary::lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
+                        LookupResult* outResult, const char* searchCache) {
+  const auto setResult = [outResult](LookupResult r) {
+    if (outResult) *outResult = r;
+  };
+  if (searchCache && loadSearch(searchCache, word, matchedHeadwordOut)) {
+    if (entryList->empty()) {
+      setResult(LookupResult::NotFound);
+      return false;
+    }
+  } else if (!search(word, matchedHeadwordOut, outResult)) {
+    return false;
+  }
+  DictEntryList& group = *entryList;
 
   // Found in the index — propagate the precise failure reason from readDefinition
   // (decompression / low memory / read error) so the caller can name it.
