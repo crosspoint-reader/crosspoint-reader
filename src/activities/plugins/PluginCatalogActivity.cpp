@@ -17,6 +17,7 @@
 #include <strings.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -161,6 +162,26 @@ std::string pluginNameFromManifestPath(const std::string& manifestPath) {
   const size_t parent = manifestPath.rfind('/', slash - 1);
   if (parent == std::string::npos) return "";
   return manifestPath.substr(parent + 1, slash - parent - 1);
+}
+
+std::string persistentNoticeId(JsonVariantConst notice) {
+  if (!notice["once"].is<bool>() || !notice["once"].as<bool>() || !notice["id"].is<const char*>()) return {};
+  const char* id = notice["id"].as<const char*>();
+  if (!id) return {};
+  constexpr size_t MAX_NOTICE_ID = 64;
+  for (size_t i = 0; i <= MAX_NOTICE_ID; ++i) {
+    const unsigned char c = static_cast<unsigned char>(id[i]);
+    if (!c) return i ? std::string(id, i) : std::string{};
+    if (c > 127 || (!std::isalnum(c) && c != '-' && c != '_' && c != '.')) return {};
+  }
+  return {};
+}
+
+std::string noticeMarkerPath(const std::string& manifestPath, const std::string& noticeId) {
+  if (noticeId.empty()) return {};
+  const std::string plugin = pluginNameFromManifestPath(manifestPath);
+  if (plugin.empty() || plugin.size() > 96) return {};
+  return "/.crosspoint/notice_" + md5Hex(plugin + "\n" + noticeId) + ".ok";
 }
 
 // book.downloaded plugin event, fired after a catalog download lands on SD.
@@ -323,6 +344,7 @@ bool PluginCatalogActivity::loadManifest() {
     entry.noticeMessage = notice["message"] | "";
     entry.noticeConfirm = notice["confirm"] | "";
     entry.noticeCancel = notice["cancel"] | "";
+    entry.noticeId = persistentNoticeId(notice);
     if (!entry.title.empty()) manifest.browseLists.push_back(std::move(entry));
   }
   manifest.fixedListCount = manifest.browseLists.size();
@@ -425,6 +447,7 @@ bool PluginCatalogActivity::loadBrowseListIndex(int& status) {
     entry.noticeMessage = notice["message"] | "";
     entry.noticeConfirm = notice["confirm"] | "";
     entry.noticeCancel = notice["cancel"] | "";
+    entry.noticeId = persistentNoticeId(notice);
     // An entry with only an id browses the shared browse url through {list_id}.
     const bool browsable = !entry.url.empty() || !entry.id.empty();
     if (!entry.title.empty() && browsable) manifest.browseLists.push_back(std::move(entry));
@@ -663,7 +686,8 @@ void PluginCatalogActivity::resetBrowse() {
 // picker, or leaves the catalog when this list is the only one.
 void PluginCatalogActivity::openList(const int index) {
   const auto& list = manifest.browseLists[index];
-  if (!list.hasNotice()) {
+  const std::string marker = noticeMarkerPath(manifestPath, list.noticeId);
+  if (!list.hasNotice() || (!marker.empty() && Storage.exists(marker.c_str()))) {
     currentList = index;
     startBrowse();
     return;
@@ -683,6 +707,10 @@ void PluginCatalogActivity::openList(const int index) {
       if (manifest.browseLists.size() == 1) exitCatalog();
       return;
     }
+    const std::string marker = noticeMarkerPath(manifestPath, manifest.browseLists[index].noticeId);
+    if (!marker.empty() &&
+        (!Storage.ensureDirectoryExists("/.crosspoint") || !Storage.writeFile(marker.c_str(), String("1"))))
+      LOG_ERR("PCAT", "Failed to persist browse-list notice: %s", marker.c_str());
     currentList = index;
     startBrowse();
   });
