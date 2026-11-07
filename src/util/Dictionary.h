@@ -138,12 +138,23 @@ class Dictionary {
   bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr,
                       bool append = false, bool* exceedsLimit = nullptr);
 
+  // Strip edge punctuation/symbols (see utf8IsWordChar). Case is preserved;
+  // lookup() decides separately whether to also try a folded key.
   static std::string cleanWord(const char* word);
 
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
 
  private:
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
+
+  // Comparator used to bisect/scan an index. lookup() picks which one to pass:
+  // diskOrderCmp (ASCII-insensitive with an exact-byte tiebreak, non-ASCII bytes compared raw
+  // — matches the .idx/.syn's actual on-disk order) for the exact-case
+  // attempt, or utf8CaseInsensitiveCmp (full Unicode fold) for the case-folded
+  // retry. Passed through explicitly rather than hardcoded so the same
+  // bisect/scan code serves both without duplicating it. Only the former
+  // matches the on-disk sort order.
+  using WordCmp = int (*)(const char*, const char*);
 
   // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
   // "/dictionaries/<folder>/<stem>" (14 fixed chars) and the longest suffix is
@@ -204,13 +215,13 @@ class Dictionary {
   // headword can be listed several times, and that run may start before the
   // last sample that is <= target. Returns 0 — scan source from the start —
   // when sampleCount is 0 or a sample is unreadable. Clobbers wordBuf.
-  uint32_t bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target);
+  uint32_t bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target, WordCmp cmp);
 
   // Every .idx entry whose headword matches target exactly. The .idx is
   // sorted, so the entries of one headword are adjacent and one scan collects
   // them all. *readError is set when the scan was cut short by an IO failure,
   // which is a read failure rather than a miss.
-  void locateAll(LookupSession& session, const char* target, DictEntryList& out, bool* readError);
+  void locateAll(LookupSession& session, const char* target, WordCmp cmp, DictEntryList& out, bool* readError);
 
   // Resolve an ordinal (the N-th .idx entry, 0-based) to its .dict location via
   // the .qidx samples. Leaves the resolved headword in wordBuf.
@@ -219,7 +230,13 @@ class Dictionary {
   // Scan every .syn/.sidx record for target, following each ordinal through
   // locateByOrdinal(). Every resolved entry is returned in dictionary order; a
   // failed synonym read is reported separately from a genuine miss.
-  bool locateSynonyms(LookupSession& session, const char* target, DictEntryList& out, bool* readError);
+  bool locateSynonyms(LookupSession& session, const char* target, WordCmp cmp, DictEntryList& out, bool* readError);
+
+  // The shared probe sequence lookup() runs once for the exact-case key and once
+  // (only if needed) for the case-folded key: exact headword, then synonyms, then
+  // English stem variants. OR's read failures into searchFailed.
+  void lookupKey(LookupSession& session, const std::string& key, WordCmp cmp, DictEntryList& group,
+                 std::string& matchedHeadwordOut, bool& groupFromSynonyms, bool& searchFailed);
 
   // One streaming pass over sourcePath writing a sampled-offset sidecar. Each
   // source entry is a NUL-terminated word followed by suffixBytes fixed bytes
@@ -234,6 +251,10 @@ class Dictionary {
   static bool sidecarIsStale(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic);
 
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
+
+  // Case-fold every codepoint of an already edge-stripped word (see
+  // utf8SimpleCaseFold). Case only — does not touch punctuation.
+  static std::string foldCase(const std::string& word);
 
   // Read a null-terminated word from an open file into buf (max bufSize-1
   // chars). Returns the number of characters read (excluding null), or -1 on
