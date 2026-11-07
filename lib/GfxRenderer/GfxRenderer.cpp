@@ -812,7 +812,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
 namespace {
 const char* resolveVisualText(const char* text, std::string& visualBuffer, const BidiUtils::BidiBaseDir baseDir) {
-  if (!text || *text == '\0') return text;
+  if (!text || *text == '\0' || baseDir == BidiUtils::BidiBaseDir::VISUAL) return text;
 
   if (baseDir != BidiUtils::BidiBaseDir::RTL) {
     // Byte-level scan: skip BiDi when no RTL script lead bytes are present.

@@ -46,7 +46,8 @@ entry_list = block((ROOT / "src/util/Dictionary.h").read_text(), "class DictEntr
 marker = next(line for line in (ROOT / "src/util/Dictionary.h").read_text().splitlines()
               if "DICTIONARY_PLAIN_HEADWORD_MARKER =" in line)
 selection = block(selector, "struct Selection {", True)
-plain_scratch = block(viewer, "struct DictionaryDefinitionActivity::PlainSelectionLine {", True)
+plain_scratch = block(viewer, "struct DictionaryDefinitionActivity::PlainSelectionLine {", True).replace(
+    "GfxRenderer::TextMeasureMode", "Renderer::TextMeasureMode")
 constants = viewer.split("namespace {", 1)[1].split("struct PlainLineLayout {", 1)[0]
 layout_helpers = "struct PlainLineLayout {" + viewer.split("struct PlainLineLayout {", 1)[1].split("}  // namespace", 1)[0]
 layout_helpers = layout_helpers.replace("GfxRenderer", "Renderer").replace(
@@ -84,7 +85,7 @@ harness = r'''
 #include <Memory.h>
 #include "activities/ActivityResult.h"
 #include "components/HeaderBackTapTarget.h"
-namespace BidiUtils { enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 }; }
+namespace BidiUtils { enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1, VISUAL = 2 }; }
 #define LOG_ERR(...) ((void)0)
 template<typename... Args> void logDebug(Args&&...) {}
 #define LOG_DBG(...) logDebug(__VA_ARGS__)
@@ -138,8 +139,18 @@ struct Renderer {
                       TextMeasureMode mode = TextMeasureMode::Layout) const {
     const auto* ptr = reinterpret_cast<const unsigned char*>(text);
     int width = 0;
-    while (*ptr) { utf8NextCodepoint(&ptr); ++width; }
-    return width * (style == EpdFontFamily::BOLD ? (mode == TextMeasureMode::Rendered ? 2 : 3) : 1);
+    int boundaryKern = 0;
+    uint32_t previous = 0;
+    while (*ptr) {
+      const uint32_t cp = utf8NextCodepoint(&ptr);
+      ++width;
+      // Simulated SD-font kerning between a separator and an RTL glyph.
+      if (style == EpdFontFamily::BOLD && mode == TextMeasureMode::Rendered &&
+          previous == ' ' && cp >= 0x590 && cp <= 0x8FF) boundaryKern += 2;
+      previous = cp;
+    }
+    return width * (style == EpdFontFamily::BOLD ? (mode == TextMeasureMode::Rendered ? 2 : 3) : 1) +
+           boundaryKern;
   }
   bool isSdCardFont(int) const { return true; }
   void ensureSdCardFontReady(int, const char* text, int styles) {
@@ -450,6 +461,35 @@ int main() {
     assert(both.positions == std::vector<int16_t>({0, 6, 11, 18}));
     assert(BidiUtils::applyBidiVisual("one   אבג  דהו    tail", rendered));
     assert(rendered == "one   והד  גבא    tail");
+
+    // A headword control marker inside a separator is invisible to drawBody.
+    DictionaryDefinitionActivity::PlainSelectionLine marked;
+    marked.text = std::string("one ") + DICTIONARY_PLAIN_HEADWORD_MARKER + "  אבג  דהו";
+    marked.layout(spacedRtl, 0, 0, false, {});
+    assert(marked.words == std::vector<std::string>({"one", "דהו", "אבג"}));
+    assert(marked.positions == std::vector<int16_t>({0, 6, 11}));
+
+    // Bold mixed BiDi text must use the complete rendered-prefix advances,
+    // including SD-font kerning across the preceding spaces.
+    spacedRtl.lookup->selectionPages.clear();
+    spacedRtl.content = {};
+    spacedRtl.bodyWidth = 30;
+    spacedRtl.content.text = std::string(1, DICTIONARY_PLAIN_HEADWORD_MARKER) + "one   אבג  דהו tail";
+    assert(spacedRtl.prepareDefinition(spacedRtl.content) && spacedRtl.buildPlainSelectionPages());
+    assert(spacedRtl.content.lines[0].bold && spacedRtl.content.lines[0].wraps);
+    const auto& boldMixed = *static_cast<const PageLine&>(*spacedRtl.lookup->selectionPages[0]->elements[0]).block;
+    assert(boldMixed.words == std::vector<std::string>({"one", "דהו", "אבג"}));
+    assert(boldMixed.positions == std::vector<int16_t>({0, 14, 26}));
+    const auto& font = spacedRtl.renderer;
+    const int beforeFirst = font.getTextAdvanceX(0, "one   והד", EpdFontFamily::BOLD, 0,
+        BidiUtils::BidiBaseDir::VISUAL, Renderer::TextMeasureMode::Rendered) -
+        font.getTextAdvanceX(0, "והד", EpdFontFamily::BOLD, 0,
+        BidiUtils::BidiBaseDir::VISUAL, Renderer::TextMeasureMode::Rendered);
+    const int beforeSecond = font.getTextAdvanceX(0, "one   והד  גבא", EpdFontFamily::BOLD, 0,
+        BidiUtils::BidiBaseDir::VISUAL, Renderer::TextMeasureMode::Rendered) -
+        font.getTextAdvanceX(0, "גבא", EpdFontFamily::BOLD, 0,
+        BidiUtils::BidiBaseDir::VISUAL, Renderer::TextMeasureMode::Rendered);
+    assert(boldMixed.positions[1] == beforeFirst && boldMixed.positions[2] == beforeSecond);
   }
   view.lookup->selectionPages.clear();
   HalMemory::available = 0;

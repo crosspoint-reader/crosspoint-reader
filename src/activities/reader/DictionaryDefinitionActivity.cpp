@@ -204,12 +204,51 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
           else if (index > 0)
             gapLeft = index - 1;  // leaving a reversed run
         }
-        x += gapLeft + 1 < ranges.size() ? owner.measureSpan(fontId, text.c_str() + ranges[gapLeft].end - offset,
-                                                             ranges[gapLeft + 1].start - ranges[gapLeft].end, family)
-                                         : owner.renderer.getSpaceWidth(fontId, family);
+        x += gapLeft + 1 < ranges.size()
+                 ? renderedPlainPrefixWidth(owner.renderer, fontId, text.c_str() + ranges[gapLeft].end - offset,
+                                            ranges[gapLeft + 1].start - ranges[gapLeft].end, family)
+                 : owner.renderer.getSpaceWidth(fontId, family);
       }
       positions.push_back(x);
       x += owner.renderer.getTextAdvanceX(fontId, words[index].c_str(), family);
+    }
+    if (reordered) {
+      // drawBody removes headword markers, then BiDi-shapes the entire line.
+      // Measure each visual prefix from that same shaped stream so kerning,
+      // ligatures, and space advances do not reset at selection-word edges.
+      std::string visible = text;
+      visible.erase(std::remove(visible.begin(), visible.end(), DICTIONARY_PLAIN_HEADWORD_MARKER), visible.end());
+      std::string rendered;
+      if (BidiUtils::applyBidiVisual(visible.c_str(), rendered)) {
+        int16_t renderedPositions[MAX_PLAIN_WORDS];
+        std::string visualWord;
+        std::string prefix;
+        size_t cursor = 0;
+        bool complete = true;
+        for (size_t n = 0; n < words.size(); ++n) {
+          if (!BidiUtils::applyBidiVisual(words[visualOrder[n]].c_str(), visualWord)) {
+            complete = false;
+            break;
+          }
+          const size_t start = rendered.find(visualWord, cursor);
+          if (start == std::string::npos) {
+            complete = false;
+            break;
+          }
+          prefix.assign(rendered.data(), start + visualWord.size());
+          const int throughWord =
+              owner.renderer.getTextAdvanceX(fontId, prefix.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
+                                             GfxRenderer::TextMeasureMode::Rendered);
+          const int wordWidth =
+              owner.renderer.getTextAdvanceX(fontId, visualWord.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
+                                             GfxRenderer::TextMeasureMode::Rendered);
+          renderedPositions[n] = static_cast<int16_t>(throughWord - wordWidth);
+          cursor = start + visualWord.size();
+        }
+        if (complete) {
+          for (size_t n = 0; n < words.size(); ++n) positions[n] = renderedPositions[n];
+        }
+      }
     }
     if (!reordered) {
       int gapIndex = 0;
