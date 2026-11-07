@@ -17,6 +17,7 @@
 #include <strings.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -161,6 +162,30 @@ std::string pluginNameFromManifestPath(const std::string& manifestPath) {
   const size_t parent = manifestPath.rfind('/', slash - 1);
   if (parent == std::string::npos) return "";
   return manifestPath.substr(parent + 1, slash - parent - 1);
+}
+
+std::string persistentNoticeId(JsonVariantConst notice) {
+  if (!notice["once"].is<bool>() || !notice["once"].as<bool>() || !notice["id"].is<const char*>()) return {};
+  const char* id = notice["id"].as<const char*>();
+  if (!id) return {};
+  constexpr size_t MAX_NOTICE_ID = 64;
+  for (size_t i = 0; i <= MAX_NOTICE_ID; ++i) {
+    const unsigned char c = static_cast<unsigned char>(id[i]);
+    if (!c) return i ? std::string(id, i) : std::string{};
+    if (c > 127 || (!std::isalnum(c) && c != '-' && c != '_' && c != '.')) return {};
+  }
+  return {};
+}
+
+std::string noticeMarkerDir(const std::string& pluginDir) {
+  if (pluginDir.empty()) return {};
+  return "/.crosspoint/notice_" + md5Hex(pluginDir);
+}
+
+std::string noticeMarkerPath(const std::string& manifestPath, const std::string& noticeId) {
+  if (noticeId.empty() || pluginNameFromManifestPath(manifestPath).empty()) return {};
+  const size_t slash = manifestPath.rfind('/');
+  return noticeMarkerDir(manifestPath.substr(0, slash)) + "/" + md5Hex(noticeId) + ".ok";
 }
 
 // book.downloaded plugin event, fired after a catalog download lands on SD.
@@ -323,6 +348,7 @@ bool PluginCatalogActivity::loadManifest() {
     entry.noticeMessage = notice["message"] | "";
     entry.noticeConfirm = notice["confirm"] | "";
     entry.noticeCancel = notice["cancel"] | "";
+    entry.noticeId = persistentNoticeId(notice);
     if (!entry.title.empty()) manifest.browseLists.push_back(std::move(entry));
   }
   manifest.fixedListCount = manifest.browseLists.size();
@@ -425,6 +451,7 @@ bool PluginCatalogActivity::loadBrowseListIndex(int& status) {
     entry.noticeMessage = notice["message"] | "";
     entry.noticeConfirm = notice["confirm"] | "";
     entry.noticeCancel = notice["cancel"] | "";
+    entry.noticeId = persistentNoticeId(notice);
     // An entry with only an id browses the shared browse url through {list_id}.
     const bool browsable = !entry.url.empty() || !entry.id.empty();
     if (!entry.title.empty() && browsable) manifest.browseLists.push_back(std::move(entry));
@@ -621,7 +648,12 @@ void PluginCatalogActivity::confirmUninstallPlugin(const int pickerIndex) {
     if (result.isCancelled) return;
     const bool removed = !Storage.exists(plugin.dir.c_str()) || Storage.removeDir(plugin.dir.c_str());
     if (!removed) LOG_ERR("PCAT", "Failed to recursively uninstall plugin: %s", plugin.dir.c_str());
-    if (removed) pickerReturnName = returnPluginName;
+    if (removed) {
+      const std::string markerDir = noticeMarkerDir(plugin.dir);
+      if (Storage.exists(markerDir.c_str()) && !Storage.removeDir(markerDir.c_str()))
+        LOG_ERR("PCAT", "Failed to clear plugin notices: %s", markerDir.c_str());
+      pickerReturnName = returnPluginName;
+    }
     enterPluginPicker();
   });
 }
@@ -663,7 +695,8 @@ void PluginCatalogActivity::resetBrowse() {
 // picker, or leaves the catalog when this list is the only one.
 void PluginCatalogActivity::openList(const int index) {
   const auto& list = manifest.browseLists[index];
-  if (!list.hasNotice()) {
+  const std::string marker = noticeMarkerPath(manifestPath, list.noticeId);
+  if (!list.hasNotice() || (!marker.empty() && Storage.exists(marker.c_str()))) {
     currentList = index;
     startBrowse();
     return;
@@ -682,6 +715,13 @@ void PluginCatalogActivity::openList(const int index) {
     if (result.isCancelled) {
       if (manifest.browseLists.size() == 1) exitCatalog();
       return;
+    }
+    const std::string marker = noticeMarkerPath(manifestPath, manifest.browseLists[index].noticeId);
+    if (!marker.empty()) {
+      const std::string markerDir = marker.substr(0, marker.rfind('/'));
+      if (!Storage.ensureDirectoryExists("/.crosspoint") || !Storage.ensureDirectoryExists(markerDir.c_str()) ||
+          !Storage.writeFile(marker.c_str(), String("1")))
+        LOG_ERR("PCAT", "Failed to persist browse-list notice: %s", marker.c_str());
     }
     currentList = index;
     startBrowse();
