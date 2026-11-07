@@ -721,14 +721,6 @@ int ClipSelectionActivity::textXOffset() const {
   return selectionGeometry::keepVisible(cursor.x, cursor.width, safe.x, safe.width);
 }
 
-void ClipSelectionActivity::prewarmWord(const int index) const {
-  if (index >= 0 && index < static_cast<int>(wordCount) && words[index].text) {
-    renderer.getFontCacheManager()->prewarmCache(
-        words[index].fontId, words[index].text,
-        static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[index].style) & 0x03)));
-  }
-}
-
 void ClipSelectionActivity::ditherGapBetween(const WordBox& a, const WordBox& b, const int offsetX,
                                              const int offset) const {
   if (a.row != b.row || a.pageOffset != b.pageOffset) return;
@@ -740,71 +732,6 @@ void ClipSelectionActivity::ditherGapBetween(const WordBox& a, const WordBox& b,
   }
 }
 
-void ClipSelectionActivity::clearGapBetween(const WordBox& a, const WordBox& b, const int offsetX,
-                                            const int offset) const {
-  if (a.row != b.row || a.pageOffset != b.pageOffset) return;
-  const int leftRight = std::min(a.x + a.width, b.x + b.width);
-  const int rightLeft = std::max(a.x, b.x);
-  if (leftRight < rightLeft) {
-    renderer.fillRect(leftRight + offsetX, a.y + offset, rightLeft - leftRight, a.height, false);
-    renderLineRegion(a, leftRight + offsetX, a.y + offset, rightLeft - leftRight, a.height, offsetX, offset);
-  }
-}
-
-void ClipSelectionActivity::renderLineRegion(const WordBox& word, const int x, const int y, const int width,
-                                             const int height, const int offsetX, const int offset) const {
-  const auto clip = renderer.getClipRect();
-  const int left = std::max(x, clip[0]);
-  const int top = std::max(y, clip[1]);
-  const int right = std::min(x + width, clip[0] + clip[2]);
-  const int bottom = std::min(y + height, clip[1] + clip[3]);
-  if (left >= right || top >= bottom) return;
-
-  const auto& line = static_cast<const PageLine&>(*pageAt(word.pageOffset).elements[word.lineElementIndex]);
-  renderer.setClipRect(left, top, right - left, bottom - top);
-  // TextBlock owns decorations and their continuity across word boundaries.
-  line.getBlock()->render(renderer, fontId, marginLeft + line.xPos + offsetX, marginTop + line.yPos + offset);
-  renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
-}
-
-void ClipSelectionActivity::drawWordClean(const int index, const int offsetX, const int offset) const {
-  if (index < 0 || index >= static_cast<int>(wordCount)) return;
-  const WordBox& word = words[index];
-  if (word.pageOffset != currentPageOffset) return;
-
-  prewarmWord(index);
-
-  renderer.fillRect(word.x + offsetX, word.y + offset, word.width, word.height, false);
-
-  if (index > 0) {
-    clearGapBetween(words[index - 1], word, offsetX, offset);
-  }
-  if (index + 1 < static_cast<int>(wordCount)) {
-    clearGapBetween(word, words[index + 1], offsetX, offset);
-  }
-
-  renderLineRegion(word, word.x + offsetX, word.y + offset, word.width, word.height, offsetX, offset);
-}
-
-void ClipSelectionActivity::drawWordHighlight(const int index, const int firstSelected, const int lastSelected,
-                                              const int offsetX, const int offset) const {
-  if (index < 0 || index >= static_cast<int>(wordCount)) return;
-  const WordBox& word = words[index];
-  if (word.pageOffset != currentPageOffset) return;
-
-  prewarmWord(index);
-
-  if (index > firstSelected) {
-    ditherGapBetween(words[index - 1], word, offsetX, offset);
-  }
-  if (index < lastSelected) {
-    ditherGapBetween(word, words[index + 1], offsetX, offset);
-  }
-
-  renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray);
-  renderLineRegion(word, word.x + offsetX, word.y + offset, word.width, word.height, offsetX, offset);
-}
-
 bool ClipSelectionActivity::renderIncremental() {
   if (actionPopup.isActive() || mappedInput.hasTouch()) return false;
   if (lastRenderedPageOffset < 0 || lastRenderedPageOffset != currentPageOffset) return false;
@@ -813,78 +740,90 @@ bool ClipSelectionActivity::renderIncremental() {
   if (offset != lastRenderedTextOffset || offsetX != lastRenderedTextXOffset) return false;
   if (lastRenderedSelected < 0 || lastRenderedSelected >= static_cast<int>(wordCount)) return false;
   if (selected < 0 || selected >= static_cast<int>(wordCount)) return false;
+  const bool startingRange = lastRenderedRangeStart < 0 && rangeStart == selected && selected == lastRenderedSelected;
+  if (rangeStart != lastRenderedRangeStart && !startingRange) return false;
+  if (selected == lastRenderedSelected && rangeStart == lastRenderedRangeStart) return true;
 
-  // Case 1: Moving cursor before range selection starts (rangeStart < 0)
-  if (rangeStart < 0 && lastRenderedRangeStart < 0) {
-    if (selected == lastRenderedSelected) return true;
+  const int firstOld =
+      lastRenderedRangeStart < 0 ? lastRenderedSelected : std::min(lastRenderedRangeStart, lastRenderedSelected);
+  const int lastOld =
+      lastRenderedRangeStart < 0 ? lastRenderedSelected : std::max(lastRenderedRangeStart, lastRenderedSelected);
+  const int firstNew = rangeStart < 0 ? selected : std::min(rangeStart, selected);
+  const int lastNew = rangeStart < 0 ? selected : std::max(rangeStart, selected);
+  if (words[firstOld].pageOffset != currentPageOffset || words[lastOld].pageOffset != currentPageOffset ||
+      words[firstNew].pageOffset != currentPageOffset || words[lastNew].pageOffset != currentPageOffset)
+    return false;
 
-    drawWordClean(lastRenderedSelected, offsetX, offset);
-    drawWordHighlight(selected, selected, selected, offsetX, offset);
-    const WordBox& cursor = words[selected];
-    renderer.drawRect(cursor.x + offsetX, cursor.y + offset, cursor.width, cursor.height, true);
-
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-
-    lastRenderedSelected = selected;
-    return true;
+  const auto& page = pageAt(currentPageOffset);
+  // Other elements can overlap the text. Let the full page painter restore them.
+  for (const auto& element : page.elements) {
+    if (element->getTag() != TAG_PageLine && element->getTag() != TAG_PageBorderBox) return false;
   }
 
-  // Case 2: Transition from rangeStart < 0 to rangeStart >= 0 (user just confirmed rangeStart)
-  if (rangeStart >= 0 && lastRenderedRangeStart < 0 && rangeStart == selected && selected == lastRenderedSelected) {
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE),
-                                              tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-
-    lastRenderedRangeStart = rangeStart;
-    return true;
-  }
-
-  // Case 3: Moving cursor to choose end word (rangeStart >= 0, expanding or shrinking selection)
-  if (rangeStart >= 0 && lastRenderedRangeStart == rangeStart) {
-    if (selected == lastRenderedSelected) return true;
-
-    const int firstOld = std::min(rangeStart, lastRenderedSelected);
-    const int lastOld = std::max(rangeStart, lastRenderedSelected);
-    const int firstNew = std::min(rangeStart, selected);
-    const int lastNew = std::max(rangeStart, selected);
-
-    if (words[firstOld].pageOffset != currentPageOffset || words[lastOld].pageOffset != currentPageOffset ||
-        words[firstNew].pageOffset != currentPageOffset || words[lastNew].pageOffset != currentPageOffset) {
-      return false;
+  const auto clip = renderer.getClipRect();
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  for (int rowFirst = 0; rowFirst < static_cast<int>(wordCount);) {
+    int rowLast = rowFirst;
+    while (rowLast + 1 < static_cast<int>(wordCount) && words[rowLast + 1].row == words[rowFirst].row &&
+           words[rowLast + 1].pageOffset == words[rowFirst].pageOffset)
+      ++rowLast;
+    if (words[rowFirst].pageOffset != currentPageOffset) {
+      rowFirst = rowLast + 1;
+      continue;
     }
-
-    for (int i = firstOld; i <= lastOld; ++i) {
-      if (i < firstNew || i > lastNew) {
-        drawWordClean(i, offsetX, offset);
+    int left = INT_MAX, top = INT_MAX, right = INT_MIN, bottom = INT_MIN;
+    for (int i = rowFirst; i <= rowLast; ++i) {
+      const bool wasSelected = i >= firstOld && i <= lastOld;
+      const bool isSelected = i >= firstNew && i <= lastNew;
+      if (selected == lastRenderedSelected || (i != selected && i != lastRenderedSelected && wasSelected == isSelected))
+        continue;
+      // Include adjacent words so both bordering gaps and their decorations are restored.
+      for (int j = std::max(rowFirst, i - 1); j <= std::min(rowLast, i + 1); ++j) {
+        const auto& word = words[j];
+        left = std::min(left, word.x + offsetX);
+        top = std::min(top, word.y + offset);
+        right = std::max(right, word.x + offsetX + word.width);
+        bottom = std::max(bottom, word.y + offset + word.height);
       }
     }
-
-    for (int i = firstNew; i <= lastNew; ++i) {
-      if (i < firstOld || i > lastOld) {
-        drawWordHighlight(i, firstNew, lastNew, offsetX, offset);
+    left = std::max({left, clip[0], safe.x});
+    top = std::max({top, clip[1], safe.y});
+    right = std::min({right, clip[0] + clip[2], safe.x + safe.width});
+    bottom = std::min({bottom, clip[1] + clip[3], safe.y + safe.height});
+    if (left < right && top < bottom) {
+      // Compressed or shifted lines can share a band; restore them through the full painter.
+      for (size_t i = 0; i < wordCount; ++i) {
+        const auto& word = words[i];
+        if (word.pageOffset == currentPageOffset && word.row != words[rowFirst].row && word.y + offset < bottom &&
+            word.y + offset + word.height > top)
+          return false;
       }
+      renderer.setClipRect(left, top, right - left, bottom - top);
+      renderer.fillRect(left, top, right - left, bottom - top, false);
+      for (const auto& element : page.elements) {
+        if (element->getTag() == TAG_PageBorderBox)
+          static_cast<const PageBorderBox&>(*element).renderBackground(renderer, marginLeft + offsetX,
+                                                                       marginTop + offset);
+      }
+      for (const auto& element : page.elements) {
+        if (element->getTag() == TAG_PageBorderBox)
+          element->render(renderer, fontId, marginLeft + offsetX, marginTop + offset);
+      }
+      const auto& line = static_cast<const PageLine&>(*page.elements[words[rowFirst].lineElementIndex]);
+      line.getBlock()->render(renderer, fontId, marginLeft + line.xPos + offsetX, marginTop + line.yPos + offset);
+      drawSelection();
+      renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
     }
-
-    if (lastRenderedSelected >= firstNew && lastRenderedSelected <= lastNew) {
-      drawWordHighlight(lastRenderedSelected, firstNew, lastNew, offsetX, offset);
-    }
-
-    const WordBox& cursor = words[selected];
-    renderer.drawRect(cursor.x + offsetX, cursor.y + offset, cursor.width, cursor.height, true);
-
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE),
-                                              tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-
-    lastRenderedSelected = selected;
-    return true;
+    rowFirst = rowLast + 1;
   }
-
-  return false;
+  const auto labels = mappedInput.mapLabels(
+      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : (isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE)), tr(STR_DIR_LEFT),
+      tr(STR_DIR_RIGHT));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  lastRenderedSelected = selected;
+  lastRenderedRangeStart = rangeStart;
+  return true;
 }
 
 void ClipSelectionActivity::drawSelection() const {

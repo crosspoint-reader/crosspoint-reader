@@ -28,10 +28,7 @@ def method(name, next_name, text=source):
     return text[start:text.index(next_name, signature)].rstrip()
 
 extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSelectionActivity::closestInRow")
-line_region = method("void ClipSelectionActivity::renderLineRegion", "void ClipSelectionActivity::drawWordClean")
-gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "void ClipSelectionActivity::renderLineRegion")
-clean_draw = method("void ClipSelectionActivity::drawWordClean", "void ClipSelectionActivity::drawWordHighlight")
-highlight_draw = method("void ClipSelectionActivity::drawWordHighlight", "bool ClipSelectionActivity::renderIncremental")
+gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "bool ClipSelectionActivity::renderIncremental")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
 word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
 word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
@@ -256,12 +253,7 @@ struct ClipSelectionActivity {
   bool touchDragSelecting = false;
   bool buildSelectedText(int first, int last, std::string& text) const;
   bool extractWords();
-  void drawWordClean(int, int, int) const;
-  void drawWordHighlight(int, int, int, int, int) const;
   void drawSelection() const;
-  void prewarmWord(int) const {}
-  void renderLineRegion(const WordBox&, int, int, int, int, int, int) const;
-  void clearGapBetween(const WordBox&, const WordBox&, int, int) const;
   void ditherGapBetween(const WordBox&, const WordBox&, int, int) const;
   int testOffsetX = 0, testOffsetY = 0;
   int textOffset() const { return testOffsetY; }
@@ -269,7 +261,7 @@ struct ClipSelectionActivity {
   Rect handleRect(int, bool) const { return {}; }
   Rect actionRect() const { return {}; }
 };
-""" + build_text + extract_words + gap_draw + line_region + clean_draw + highlight_draw + selection_draw + r"""
+""" + build_text + extract_words + gap_draw + selection_draw + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -341,17 +333,6 @@ int main() {
     decorated.rangeStart = 0;
     decorated.selected = 1;
     decorated.drawSelection();
-    assert(decorated.renderer.ink == originalInk);
-    decorated.drawWordClean(0, decorated.testOffsetX, decorated.testOffsetY);
-    assert(decorated.renderer.ink == originalInk);
-    decorated.drawWordHighlight(1, 0, 1, decorated.testOffsetX, decorated.testOffsetY);
-    assert(decorated.renderer.ink == originalInk);
-    // A redraw must respect its caller's clip and leave the clip unchanged.
-    decorated.renderer.setClipRect(decorated.words[0].x + decorated.testOffsetX + 2,
-                                    decorated.words[0].y + decorated.testOffsetY + 2, 8, 13);
-    const auto clip = decorated.renderer.getClipRect();
-    decorated.drawWordClean(0, decorated.testOffsetX, decorated.testOffsetY);
-    assert(decorated.renderer.getClipRect() == clip);
     assert(decorated.renderer.ink == originalInk);
   }
   // Returning from a definition releases the SD font caches before selection is rebuilt.
@@ -448,17 +429,11 @@ int main() {
     activity.rangeStart = 0;
     activity.selected = 1;
     activity.drawSelection();
-    activity.drawWordClean(0, 0, 0);  // Cursor leaves the old word.
-    activity.drawWordHighlight(1, 1, 1, 0, 0);
-    assert(activity.renderer.draws.size() == 2);
-    assert(activity.renderer.fills.size() == 4);
+    assert(activity.renderer.draws.empty());
+    assert(activity.renderer.fills.size() == 2);
     for (size_t i = 0; i < 2; ++i) {
-      const auto& draw = activity.renderer.draws[i];
-      const auto& fill = activity.renderer.fills[i + 2];
-      assert(draw.tracking == tracking);
-      assert(draw.width == 24 + 2 * tracking);
-      assert(fill.width == draw.width);
-      assert(fill.x == draw.x);
+      assert(activity.renderer.fills[i].width == activity.words[i].width);
+      assert(activity.renderer.fills[i].x == activity.words[i].x);
     }
     for (size_t i = 0; i < 2; ++i) {
       assert(activity.words[i].characterSpacing == tracking);
