@@ -6,6 +6,9 @@
 // (EPUB, XTC, or TXT). Does nothing for other file types.
 void clearBookCache(const std::string& path);
 
+// The book's cache directory (as Epub and Xtc name it), or "" for other files.
+std::string bookCachePath(const std::string& path);
+
 // Returns true if the directory name matches a book cache entry.
 bool isBookCacheDirectoryName(const char* name);
 

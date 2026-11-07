@@ -1214,6 +1214,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                  }
                                  section.reset();
                                }
+                               saveBookFont();
                                openReaderMenu();
                              });
       break;
@@ -1272,6 +1273,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           if (!saveProgress(backupSpine, backupPage, backupPageCount)) {
             LOG_ERR("ERS", "Failed to save progress before cache clear");
           }
+          resaveBookFont();
         }
       }
       onGoHome();
@@ -3089,9 +3091,12 @@ void EpubReaderActivity::applyReaderTextSettings() {
   // (Re)load or unload the selected SD-card font for the current family/size.
   // The reader otherwise only loads SD fonts on book open, so without this an
   // in-reader font change wouldn't take effect until re-opening the book.
-  // Locked because the render task can load or unload SD font variants too.
-  RenderLock lock;
-  sdFontSystem.ensureLoaded(renderer);
+  {
+    // Locked because the render task can load or unload SD font variants too.
+    RenderLock lock;
+    sdFontSystem.ensureLoaded(renderer);
+  }
+  saveBookFont();  // SD write outside the lock, as in TextSettingsActivity
 }
 
 // The More panel carries everything the classic list menu offers except the

@@ -18,6 +18,8 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "XtcReaderActivity.h"
+#include "util/BookCacheUtils.h"
+#include "util/BookFontFile.h"
 #include "util/PluginEvents.h"
 
 ReaderActivity::ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -73,7 +75,7 @@ void ReaderActivity::onEnter() {
     APP_STATE.saveToFile();
   }
 
-  sdFontSystem.ensureLoaded(renderer);
+  beginBookFont();
   applyInitialOrientation();
 
   if (!loadBook()) {
@@ -124,9 +126,86 @@ void ReaderActivity::onExit() {
 
   endOfBookOptions.reset();
   endOfBookOptionsReady.store(false, std::memory_order_release);
+
+  endBookFont();
 }
 
-void ReaderActivity::prepareForSleep() { flushReaderSession(); }
+ReaderActivity::~ReaderActivity() {
+  // Runs after the subclass freed the book (section, parser), and under the
+  // RenderLock ActivityManager holds while destroying a screen. The next
+  // screen's UI text falls back to the default SD font.
+  if (reloadDefaultFont) sdFontSystem.ensureLoaded(renderer);
+}
+
+void ReaderActivity::prepareForSleep() {
+  // The chip resets in deep sleep; the default font is loaded on wake anyway.
+  preparingSleep = true;
+  flushReaderSession();
+}
+
+void ReaderActivity::beginBookFont() {
+  savedBookFont = BookFont{};
+  if (FsHelpers::hasReflowableBookExtension(bookPath)) BookFontFile::load(bookCachePath(bookPath), savedBookFont);
+  const ReaderFont defaultFont = SETTINGS.readerFont();
+  uint8_t fields = savedBookFont.fields;
+  // A family removed from the card leaves the book on the default font (its
+  // spacing still applies); the file stays in case the family comes back (see
+  // bookFontWrite()).
+  const char* savedFamily = savedBookFont.font.sdFontFamilyName;
+  if (savedFamily[0] != '\0' && !sdFontSystem.registry().findFamily(savedFamily)) fields &= ~BookFontField::Font;
+  ReaderFont bookFont = defaultFont;
+  copyFields(bookFont, savedBookFont.font, fields);
+  SETTINGS.beginBookFont(bookFont);
+  // A failed load clears only the book's font: settings saves keep the default.
+  sdFontSystem.ensureLoaded(renderer);
+  // The book's family is on the card but did not load: use the default for
+  // this visit, as for a missing family, rather than the built-in font.
+  if ((differingFields(bookFont, defaultFont) & BookFontField::Font) && bookFont.sdFontFamilyName[0] != '\0' &&
+      sdFontSystem.resolveFontId(bookFont.sdFontFamilyName, bookFont.fontPointSize) == 0) {
+    copyFields(bookFont, defaultFont, BookFontField::Font);
+    SETTINGS.beginBookFont(bookFont);
+    sdFontSystem.ensureLoaded(renderer);
+  }
+  bookFontInUse = SETTINGS.readerFont();
+}
+
+void ReaderActivity::saveBookFont() {
+  if (!FsHelpers::hasReflowableBookExtension(bookPath)) return;
+  const ReaderFont current = SETTINGS.readerFont();
+  BookFont next;
+  switch (bookFontWrite(current, bookFontInUse, SETTINGS.defaultReaderFont(), savedBookFont, next)) {
+    case BookFontWrite::Save:
+      if (!BookFontFile::save(bookCachePath(bookPath), next)) return;  // tried again on the next save
+      savedBookFont = next;
+      rewriteBookFontFile = false;
+      break;
+    case BookFontWrite::Remove:
+      if (!BookFontFile::remove(bookCachePath(bookPath))) return;  // tried again on the next save
+      savedBookFont = next;
+      rewriteBookFontFile = false;
+      break;
+    case BookFontWrite::None:
+      break;
+  }
+  if (rewriteBookFontFile && BookFontFile::save(bookCachePath(bookPath), savedBookFont)) rewriteBookFontFile = false;
+  bookFontInUse = current;
+}
+
+void ReaderActivity::resaveBookFont() {
+  // Clearing the cache deleted the book's file. A failed write is tried again
+  // on the next save, at the latest when the book closes.
+  rewriteBookFontFile = savedBookFont.fields != 0;
+  saveBookFont();
+}
+
+// Runs last in onExit(). The default font is loaded again by the destructor,
+// after the book's memory is free, and not at all on the way to sleep.
+void ReaderActivity::endBookFont() {
+  saveBookFont();
+  reloadDefaultFont =
+      !preparingSleep && (differingFields(SETTINGS.readerFont(), SETTINGS.defaultReaderFont()) & BookFontField::Font);
+  SETTINGS.endBookFont();
+}
 
 void ReaderActivity::flushReaderSession() {
   if (!readerSession.isEmitWorthy() || !pluginevents::anySubscriber(pluginevents::Event::ReaderSession)) {
