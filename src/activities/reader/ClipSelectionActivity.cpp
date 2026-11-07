@@ -161,7 +161,9 @@ bool ClipSelectionActivity::extractWords() {
 
   for (size_t pageOffset = 0; pageOffset < pageCount(); ++pageOffset) {
     uint16_t pageWordIndex = 0;
-    for (const auto& element : pageAt(pageOffset).elements) {
+    const auto& elements = pageAt(pageOffset).elements;
+    for (size_t elementIndex = 0; elementIndex < elements.size(); ++elementIndex) {
+      const auto& element = elements[elementIndex];
       if (element->getTag() != TAG_PageLine) continue;
       const auto& line = static_cast<const PageLine&>(*element);
       const auto& block = line.getBlock();
@@ -211,6 +213,7 @@ bool ClipSelectionActivity::extractWords() {
         word.row = rowCount;
         word.pageOffset = static_cast<uint8_t>(pageOffset);
         word.pageWordIndex = pageWordIndex++;
+        word.lineElementIndex = static_cast<uint16_t>(elementIndex);
         word.startOffset = block->wordSourceRange(i).start;
         word.endOffset = block->wordSourceRange(i).end;
         word.text = text;
@@ -732,7 +735,8 @@ void ClipSelectionActivity::ditherGapBetween(const WordBox& a, const WordBox& b,
   const int leftRight = std::min(a.x + a.width, b.x + b.width);
   const int rightLeft = std::max(a.x, b.x);
   if (leftRight < rightLeft) {
-    renderer.fillRectDither(leftRight + offsetX, a.y + offset, rightLeft - leftRight, a.height, Color::LightGray);
+    renderer.fillRectDither(leftRight + offsetX, a.y + offset, rightLeft - leftRight, a.height, Color::LightGray,
+                            GfxRenderer::DitherMode::PreserveInk);
   }
 }
 
@@ -743,7 +747,24 @@ void ClipSelectionActivity::clearGapBetween(const WordBox& a, const WordBox& b, 
   const int rightLeft = std::max(a.x, b.x);
   if (leftRight < rightLeft) {
     renderer.fillRect(leftRight + offsetX, a.y + offset, rightLeft - leftRight, a.height, false);
+    renderLineRegion(a, leftRight + offsetX, a.y + offset, rightLeft - leftRight, a.height, offsetX, offset);
   }
+}
+
+void ClipSelectionActivity::renderLineRegion(const WordBox& word, const int x, const int y, const int width,
+                                             const int height, const int offsetX, const int offset) const {
+  const auto clip = renderer.getClipRect();
+  const int left = std::max(x, clip[0]);
+  const int top = std::max(y, clip[1]);
+  const int right = std::min(x + width, clip[0] + clip[2]);
+  const int bottom = std::min(y + height, clip[1] + clip[3]);
+  if (left >= right || top >= bottom) return;
+
+  const auto& line = static_cast<const PageLine&>(*pageAt(word.pageOffset).elements[word.lineElementIndex]);
+  renderer.setClipRect(left, top, right - left, bottom - top);
+  // TextBlock owns decorations and their continuity across word boundaries.
+  line.getBlock()->render(renderer, fontId, marginLeft + line.xPos + offsetX, marginTop + line.yPos + offset);
+  renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
 }
 
 void ClipSelectionActivity::drawWordClean(const int index, const int offsetX, const int offset) const {
@@ -762,8 +783,7 @@ void ClipSelectionActivity::drawWordClean(const int index, const int offsetX, co
     clearGapBetween(word, words[index + 1], offsetX, offset);
   }
 
-  renderer.drawText(word.fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
-                    BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
+  renderLineRegion(word, word.x + offsetX, word.y + offset, word.width, word.height, offsetX, offset);
 }
 
 void ClipSelectionActivity::drawWordHighlight(const int index, const int firstSelected, const int lastSelected,
@@ -782,8 +802,7 @@ void ClipSelectionActivity::drawWordHighlight(const int index, const int firstSe
   }
 
   renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray);
-  renderer.drawText(word.fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
-                    BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
+  renderLineRegion(word, word.x + offsetX, word.y + offset, word.width, word.height, offsetX, offset);
 }
 
 bool ClipSelectionActivity::renderIncremental() {
@@ -878,9 +897,8 @@ void ClipSelectionActivity::drawSelection() const {
     const WordBox& word = words[i];
     if (word.pageOffset != currentPageOffset) continue;
     if (previous) ditherGapBetween(*previous, word, offsetX, offset);
-    renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray);
-    renderer.drawText(word.fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
-                      BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
+    renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray,
+                            GfxRenderer::DitherMode::PreserveInk);
     previous = &word;
   }
   if (rangeStart >= 0 && mappedInput.hasTouch()) {

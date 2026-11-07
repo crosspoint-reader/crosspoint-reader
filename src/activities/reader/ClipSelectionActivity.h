@@ -55,7 +55,8 @@ class ClipSelectionActivity final : public Activity {
     uint8_t pageOffset = 0;
     int8_t characterSpacing = 0;
     uint16_t pageWordIndex = 0;
-    int fontId = 0;  // the word's font; headings and CSS font-size runs differ from the section font
+    uint16_t lineElementIndex = 0;  // source PageLine in the retained page
+    int fontId = 0;                 // the word's font; headings and CSS font-size runs differ from the section font
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
     const char* text = nullptr;
@@ -100,6 +101,7 @@ class ClipSelectionActivity final : public Activity {
   void ditherGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
   void clearGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
   void prewarmWord(int index) const;
+  void renderLineRegion(const WordBox& word, int x, int y, int width, int height, int offsetX, int offset) const;
 
   std::vector<std::unique_ptr<Page>> pages;
   std::span<const std::unique_ptr<Page>> borrowedPages;
