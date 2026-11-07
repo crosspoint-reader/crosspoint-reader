@@ -283,7 +283,8 @@ bool EpubReaderActivity::loadBook() {
   epub->setupCacheDir();
 
   HalFile f;
-  if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
+  // A document always opens like a new book, even if it was read as a book before.
+  if (!pluginDocument && Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[10];
     int dataSize = f.read(data, sizeof(data));
     if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
@@ -732,7 +733,7 @@ void EpubReaderActivity::loop() {
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
   clearEndOfBookOptionsIfNeeded();
 
-  if (SETTINGS.removeReadBooksFromRecents) {
+  if (SETTINGS.removeReadBooksFromRecents && !pluginDocument) {
     if (atEndOfBook && !recentsEntryRemoved) {
       recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath());
     } else if (!atEndOfBook && recentsEntryRemoved) {
@@ -742,7 +743,7 @@ void EpubReaderActivity::loop() {
   }
 
   if (atEndOfBook) {
-    pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
+    pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !pluginDocument && !isInReadFolder(epub->getPath());
   } else {
     pendingReadFolderMove = false;
   }
@@ -1256,7 +1257,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
-      onGoHome();
+      leaveReader();
       return;
     }
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
@@ -1274,7 +1275,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           }
         }
       }
-      onGoHome();
+      leaveReader();
       return;
     }
     case EpubReaderMenuActivity::MenuAction::SCREENSHOT: {
@@ -1320,7 +1321,7 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
     case CrossPointSettings::LP_MENU_FOOTNOTES:
       return ReaderUtils::BOOKMARK_HOLD_MS;
     case CrossPointSettings::LP_MENU_KOSYNC:
-      return KOREADER_STORE.hasCredentials() ? ReaderUtils::GO_HOME_MS : 0;
+      return (!pluginDocument && KOREADER_STORE.hasCredentials()) ? ReaderUtils::GO_HOME_MS : 0;
     case CrossPointSettings::LP_MENU_READER_MENU:
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
@@ -1329,6 +1330,9 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
 }
 
 bool EpubReaderActivity::launchKOReaderSync() {
+  // The sync screen saves progress and reopens the book as a normal one.
+  if (pluginDocument) return false;
+
   flushReaderSession();
 
   // Without a KOReader server the sync activity only brings the device online
@@ -1562,12 +1566,16 @@ void EpubReaderActivity::beginLoanTimeSync() {
       requestUpdate();
       return;
     }
-    APP_STATE.openEpubPath = bookPath;
-    APP_STATE.saveToFile();
     // Reboot straight back into this book with a clean heap (no-op on touch
     // boards, which fall through to the in-place relaunch below).
-    silentRestartToReader();
-    activityManager.goToReader(bookPath);
+    if (pluginDocument) {
+      silentRestartToDocument(bookPath.c_str());
+    } else {
+      APP_STATE.openEpubPath = bookPath;
+      APP_STATE.saveToFile();
+      silentRestartToReader();
+    }
+    activityManager.goToReader(bookPath, false, pluginDocument);
   });
 }
 
@@ -2049,6 +2057,7 @@ void EpubReaderActivity::clearDeferredReposition() {
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
+  if (pluginDocument) return true;  // a document keeps no position
   std::optional<uint32_t> offset;
   if (section && spineIndex == currentSpineIndex && currentPage >= 0 && currentPage < section->pageCount) {
     offset = (currentPage == section->currentPage && currentPageVisibleOffset.has_value())
@@ -3268,6 +3277,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 }
 
 void EpubReaderActivity::saveLinkStack() const {
+  if (pluginDocument) return;  // a document keeps no position
   // [depth] then depth x (spine u16 LE, page u16 LE)
   uint8_t data[1 + MAX_FOOTNOTE_DEPTH * 4];
   size_t size = 0;
@@ -3285,6 +3295,7 @@ void EpubReaderActivity::saveLinkStack() const {
 }
 
 void EpubReaderActivity::loadLinkStack() {
+  if (pluginDocument) return;  // a document always opens with Back going to its menu
   const std::string path = epub->getCachePath() + "/links.bin";
   if (!Storage.exists(path.c_str())) return;
   {

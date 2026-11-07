@@ -10,6 +10,9 @@
 void silentRestart();            // home screen
 void silentRestartToReader();    // currently-open EPUB (APP_STATE.openEpubPath)
 void silentRestartToSettings();  // settings screen
+// Reboots into a plugin document of path, carried in RTC memory so the user's
+// remembered book is untouched. Returns without rebooting if path is too long.
+void silentRestartToDocument(const char* path);
 // Reboot into the File Transfer > Join Network flow on a pristine heap, so the
 // WiFi + TLS working set has the contiguous RAM it needs on tight boards. A
 // no-op on touch boards (a soft reset would cycle their externally-powered

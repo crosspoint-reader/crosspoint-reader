@@ -26,6 +26,7 @@
 #include "components/icons/search32.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/PluginDocuments.h"
 
 namespace fui = freeink::ui;
 
@@ -126,7 +127,15 @@ void LibraryListActivity::onExit() {
 
 bool LibraryListActivity::rebuildIndex() {
   library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
+  const auto pluginDocuments = plugindocuments::collect();
+  const bool ok = library::buildLibraryIndex(
+      "/", stats, SETTINGS.libraryUseMetadata != 0,
+      pluginDocuments.empty() ? library::SkipFile{} : library::SkipFile{plugindocuments::isDocument, &pluginDocuments});
+  // A book read before a plugin claimed it as a document must leave Recents too.
+  // The index is closed here, so the persistence write cannot overlap its reader.
+  if (!pluginDocuments.empty() && RECENT_BOOKS.pruneMatching(plugindocuments::isDocument, &pluginDocuments)) {
+    RECENT_BOOKS.saveToFile();
+  }
   if (!ok) {
     LOG_ERR("LIB", "index build failed");
     return false;

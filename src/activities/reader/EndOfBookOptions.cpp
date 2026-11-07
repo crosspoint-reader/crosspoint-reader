@@ -30,12 +30,12 @@ std::string displayName(const std::string& filename) {
 
 EndOfBookOptions::EndOfBookOptions(GfxRenderer& renderer) : UiAppHost(renderer), renderer(renderer) {}
 
-void EndOfBookOptions::loadOnce(const std::string& currentBookPath) {
+void EndOfBookOptions::loadOnce(const std::string& currentBookPath, const bool suggest) {
   if (isLoaded.load(std::memory_order_acquire)) {
     return;
   }
   folder = FsHelpers::extractFolderPath(currentBookPath);
-  names = NextBookFinder::findNextBooks(currentBookPath, MAX_SUGGESTIONS);
+  if (suggest) names = NextBookFinder::findNextBooks(currentBookPath, MAX_SUGGESTIONS);
   selector.store(0, std::memory_order_relaxed);
   if (!names.empty()) {
     // One-time app setup on the render task, before the first render/route.

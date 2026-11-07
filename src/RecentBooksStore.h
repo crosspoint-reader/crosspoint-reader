@@ -3,6 +3,7 @@
 #include <PersistableStore.h>
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 struct RecentBook {
@@ -55,6 +56,10 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
   // Remove entries whose backing file is no longer on the SD card.
   // Returns true if any entry was removed. Does not persist — caller decides.
   bool pruneMissing();
+
+  // Remove entries whose path `match` accepts (same shape as library::SkipFile).
+  // Returns true if any entry was removed. Does not persist — caller decides.
+  bool pruneMatching(bool (*match)(const void* ctx, std::string_view path), const void* ctx);
 
   // Get the list of recent books (most recent first)
   const std::vector<RecentBook>& getBooks() const { return recentBooks; }
