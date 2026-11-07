@@ -30,6 +30,9 @@ class FontCacheManager {
     releaseCtx_ = ctx;
   }
   void releaseSdFontCaches();
+  // Drop only the SD fonts' advance tables (rebuilt on the next layout), for a
+  // glyph bitmap that a table elsewhere keeps from fitting (SdCardFont::setAdvanceReleaseHook).
+  void releaseSdFontAdvanceTables();
   void prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F, bool accumulate = true);
   void logStats(const char* label = "render");
   void resetStats();

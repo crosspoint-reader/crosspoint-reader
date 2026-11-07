@@ -1402,6 +1402,14 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
                   ESP.getMaxAllocHeap());
           bitmapReady = ensureArrayCapacity(s.miniBitmap, s.miniBitmapCapacity, totalBitmapSize);
         }
+        if (!bitmapReady && advanceReleaseHook_) {
+          // Another font's table can sit in the free block this one needs.
+          const uint32_t largestBefore = ESP.getMaxAllocHeap();
+          advanceReleaseHook_();
+          LOG_DBG("SDCF", "Retrying bitmap after every font's advance-cache release: maxAlloc=%u -> %u", largestBefore,
+                  ESP.getMaxAllocHeap());
+          bitmapReady = ensureArrayCapacity(s.miniBitmap, s.miniBitmapCapacity, totalBitmapSize);
+        }
         if (!bitmapReady) {
           LOG_ERR("SDCF", "Failed to reserve mini bitmap (%u bytes) for style %u", totalBitmapSize, styleIdx);
           return PREWARM_ARENA_TOO_LARGE;
