@@ -205,6 +205,18 @@ bool isLibrarySkipped(const std::string_view name) {
   return false;
 }
 
+std::string_view normalizeLibraryRootAliases(std::string_view path) {
+  // Ignore leading separators and "." components, but leave named components intact.
+  while (!path.empty()) {
+    const size_t slash = path.find('/');
+    const std::string_view name = path.substr(0, slash);
+    if (!name.empty() && name != ".") break;
+    if (slash == std::string_view::npos) return {};
+    path.remove_prefix(slash + 1);
+  }
+  return path;
+}
+
 std::string stemOf(const std::string& name) {
   const size_t dot = name.find_last_of('.');
   return (dot == std::string::npos || dot == 0) ? name : name.substr(0, dot);
@@ -1070,16 +1082,13 @@ const char* libraryIndexPath() { return INDEX_PATH; }
 
 bool isLibraryBookFile(const std::string_view path) {
   // Match the walk's exclusions in every path component. A lone "." names the folder itself.
+  const std::string_view relativePath = normalizeLibraryRootAliases(path);
   size_t start = 0;
-  bool atRoot = true;
-  while (start < path.size()) {
-    const size_t slash = path.find('/', start);
-    const std::string_view name = path.substr(start, slash - start);
+  while (start < relativePath.size()) {
+    const size_t slash = relativePath.find('/', start);
+    const std::string_view name = relativePath.substr(start, slash - start);
     if (name != "." && isHiddenOrSidecar(name)) return false;
-    if (!name.empty() && name != ".") {
-      if (atRoot && isLibrarySkipped(name)) return false;
-      atRoot = false;
-    }
+    if (start == 0 && isLibrarySkipped(name)) return false;
     if (slash == std::string_view::npos) break;
     start = slash + 1;
   }
@@ -1109,6 +1118,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   const uint32_t startMs = millis();
   uint32_t serviceUnits = 0;
   stats = BuildStats{};
+  if (rootPath[0] != '\0' && normalizeLibraryRootAliases(rootPath).empty()) rootPath = "/";
 
   Storage.mkdir(CACHE_DIR);
   if (!recoverInterruptedInstall()) return false;
