@@ -12,6 +12,7 @@ struct SyncCredentials {
   std::vector<Header> getCustomHeaders() const { return {}; }
   std::string getUsername() const { return "reader"; }
   std::string getMd5Password() const { return "key"; }
+  std::string getBasicAuthorization() const { return "Basic cmVhZGVyOnBhc3M="; }
   std::string getBaseUrl() const { return "https://sync.test"; }
 };
 inline SyncCredentials syncCredentials;
