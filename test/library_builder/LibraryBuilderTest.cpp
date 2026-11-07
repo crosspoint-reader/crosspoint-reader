@@ -212,6 +212,49 @@ TEST_F(LibraryBuilderTest, RootAliasesApplyTheSameResourceExclusions) {
   }
 }
 
+TEST_F(LibraryBuilderTest, SubRootScansSkipResourceFoldersAndTheirDescendants) {
+  for (const auto* name : {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay", "FoNtS"}) {
+    const std::string root = std::string("/") + name;
+    for (const auto* alias : {"", "/", "/./"}) {
+      for (const auto* suffix : {"", "/nested"}) {
+        const std::string scanRoot = std::string(alias) + root + suffix;
+        SCOPED_TRACE(scanRoot);
+        fake::reset();
+        fake::add(root + "/book.epub");
+        fake::add(root + "/nested/book.txt");
+        EXPECT_FALSE(isLibraryBookFile(scanRoot + "/book.epub"));
+
+        ASSERT_TRUE(buildLibraryIndex(scanRoot.c_str(), stats));
+
+        LibraryIndexFile index;
+        ASSERT_TRUE(index.open(INDEX));
+        EXPECT_EQ(index.bookCount(), 0u);
+        EXPECT_EQ(fake::directoryEntriesByPath[root + "/book.epub"], 0u);
+        EXPECT_EQ(fake::directoryEntriesByPath[root + "/nested"], 0u);
+        EXPECT_EQ(fake::directoryEntriesByPath[root + "/nested/book.txt"], 0u);
+      }
+    }
+  }
+}
+
+TEST_F(LibraryBuilderTest, SubRootScansKeepNestedAndSubstringResourceNames) {
+  for (const auto* scanRoot : {"/books", "/books/fonts", "/sleep-books", "/books-sleep"}) {
+    SCOPED_TRACE(scanRoot);
+    fake::reset();
+    const std::string bookPath = std::string(scanRoot) + "/sleep/book.epub";
+    fake::add(bookPath);
+    EXPECT_TRUE(isLibraryBookFile(bookPath));
+
+    ASSERT_TRUE(buildLibraryIndex(scanRoot, stats));
+
+    LibraryIndexFile index;
+    ASSERT_TRUE(index.open(INDEX));
+    ASSERT_EQ(index.bookCount(), 1u);
+    EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 0), bookPath);
+    EXPECT_GT(fake::directoryEntriesByPath[bookPath], 0u);
+  }
+}
+
 TEST_F(LibraryBuilderTest, XtcTitleAndAuthorComeFromTheFile) {
   fake::add("/Comics/one.xtc");
   fake::add("/Comics/two.xtch");

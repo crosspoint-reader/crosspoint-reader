@@ -196,15 +196,6 @@ bool isHiddenOrSidecar(const std::string_view name) {
   return false;
 }
 
-bool isLibrarySkipped(const std::string_view name) {
-  // Library-only exclusions: these directories must remain accessible in file managers.
-  constexpr std::string_view ROOTS[] = {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"};
-  for (const auto root : ROOTS) {
-    if (name.size() == root.size() && strncasecmp(name.data(), root.data(), root.size()) == 0) return true;
-  }
-  return false;
-}
-
 std::string_view normalizeLibraryRootAliases(std::string_view path) {
   // Ignore leading separators and "." components, but leave named components intact.
   while (!path.empty()) {
@@ -215,6 +206,17 @@ std::string_view normalizeLibraryRootAliases(std::string_view path) {
     path.remove_prefix(slash + 1);
   }
   return path;
+}
+
+bool isLibrarySkipped(const std::string_view path) {
+  // Library-only exclusions: these directories must remain accessible in file managers.
+  constexpr std::string_view ROOTS[] = {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"};
+  const std::string_view relativePath = normalizeLibraryRootAliases(path);
+  const std::string_view name = relativePath.substr(0, relativePath.find('/'));
+  for (const auto root : ROOTS) {
+    if (name.size() == root.size() && strncasecmp(name.data(), root.data(), root.size()) == 0) return true;
+  }
+  return false;
 }
 
 std::string stemOf(const std::string& name) {
@@ -462,6 +464,7 @@ struct DedupFrame {
 
 void walk(WalkState& st, const std::string& path, const int depth) {
   if (st.failed || depth > LIBRARY_MAX_DEPTH || st.books >= CLIX_MAX_RECORDS) return;
+  if (isLibrarySkipped(path)) return;
 
   const uint16_t dedupBase = st.activeDedupCount;
   const DedupFrame dedupFrame{st, dedupBase};
@@ -509,7 +512,6 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     const std::string name(st.nameBuf);
 
     if (isDir) {
-      if (path == "/" && isLibrarySkipped(name)) continue;
       const size_t resumePosition = dir.position();
       dir.close();
       walk(st, joinLibraryPath(path, name), depth + 1);
@@ -1083,12 +1085,12 @@ const char* libraryIndexPath() { return INDEX_PATH; }
 bool isLibraryBookFile(const std::string_view path) {
   // Match the walk's exclusions in every path component. A lone "." names the folder itself.
   const std::string_view relativePath = normalizeLibraryRootAliases(path);
+  if (isLibrarySkipped(relativePath)) return false;
   size_t start = 0;
   while (start < relativePath.size()) {
     const size_t slash = relativePath.find('/', start);
     const std::string_view name = relativePath.substr(start, slash - start);
     if (name != "." && isHiddenOrSidecar(name)) return false;
-    if (start == 0 && isLibrarySkipped(name)) return false;
     if (slash == std::string_view::npos) break;
     start = slash + 1;
   }
