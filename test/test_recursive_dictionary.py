@@ -590,6 +590,10 @@ int main() {
   assert(Dictionary::cleanWord(nullptr).empty());
   assert(Dictionary::cleanWord("").empty());
   assert(Dictionary::cleanWord("  “שָׁלוֹם!”  ") == "שלום");
+  assert(Dictionary::cleanWord("שָׁלוֹם!\u05B0") == "שלום");
+  assert(Dictionary::cleanWord("\u0591“שָׁלוֹם”\u05B0") == "שלום");
+  assert(Dictionary::cleanWord("\u05B0「שָׁלוֹם」\u0591") == "שלום");
+  assert(Dictionary::cleanWord("\u0591 !\u05B0").empty());
   assert(Dictionary::cleanWord("בְּרֵאשִׁ֖ית בָּרָ֣א") == "בראשית ברא");
   assert(Dictionary::cleanWord("שלום") == "שלום");
   assert(Dictionary::cleanWord("שָׁלוֹם ABC café e\u0301 日本語 😀") == "שלום abc café e\u0301 日本語 😀");
