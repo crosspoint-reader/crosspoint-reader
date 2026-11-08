@@ -451,7 +451,7 @@ int ClipSelectionActivity::selectedWordCount() const {
 const char* ClipSelectionActivity::confirmLabel() const {
   if (mode != Mode::Select) return isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE);
   return selectionAction::runsWithoutMenu(selectedWordCount(), lookupAvailable) && lookupAvailable ? tr(STR_LOOKUP)
-                                                                                                    : tr(STR_DONE);
+                                                                                                   : tr(STR_DONE);
 }
 
 // Look up / Clip modes confirm directly. Select mode: a single word looks up at once; longer selections pick
@@ -821,9 +821,8 @@ bool ClipSelectionActivity::renderIncremental() {
     drawSelection();
     renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
   }
-  const auto labels = mappedInput.mapLabels(
-      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(), tr(STR_DIR_LEFT),
-      tr(STR_DIR_RIGHT));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(),
+                                            tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   lastRenderedSelected = selected;
@@ -881,9 +880,8 @@ void ClipSelectionActivity::render(RenderLock&&) {
   if (wordCount != 0) drawSelection();
   renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
 
-  const auto labels = mappedInput.mapLabels(
-      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(), tr(STR_DIR_LEFT),
-      tr(STR_DIR_RIGHT));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(),
+                                            tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 
