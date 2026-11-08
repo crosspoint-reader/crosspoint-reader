@@ -193,9 +193,11 @@ bool LocalSendReceiveActivity::startReceiver() {
 }
 
 bool LocalSendReceiveActivity::tryStartReceiver() {
-  if (!receiver || leaveRequested || receiverStartAttempts >= MAX_RECEIVER_START_ATTEMPTS ||
-      WiFi.status() != WL_CONNECTED)
+  if (!receiver || leaveRequested || receiverStartAttempts >= MAX_RECEIVER_START_ATTEMPTS) return false;
+  if (WiFi.status() != WL_CONNECTED) {
+    restartOnReconnect = true;
     return false;
+  }
   const bool started = startReceiver();
   if (started) {
     receiverStartAttempts = 0;
