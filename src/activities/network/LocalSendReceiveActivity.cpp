@@ -193,7 +193,9 @@ bool LocalSendReceiveActivity::startReceiver() {
 }
 
 bool LocalSendReceiveActivity::tryStartReceiver() {
-  if (!receiver || leaveRequested || WiFi.status() != WL_CONNECTED) return false;
+  if (!receiver || leaveRequested || receiverStartAttempts >= MAX_RECEIVER_START_ATTEMPTS ||
+      WiFi.status() != WL_CONNECTED)
+    return false;
   const bool started = startReceiver();
   if (started) {
     receiverStartAttempts = 0;
@@ -396,10 +398,8 @@ void LocalSendReceiveActivity::handleFileAction(const FileAction action, const i
     startActivityForResult(std::move(viewer), [this](const ActivityResult&) {
       if (receiver && WiFi.status() == WL_CONNECTED)
         tryStartReceiver();
-      else {
-        receiverStartAttempts = 0;
+      else
         restartOnReconnect = true;
-      }
       requestUpdate();
     });
   } else if (FsHelpers::hasEpubExtension(path)) {
@@ -496,7 +496,6 @@ void LocalSendReceiveActivity::loop() {
   // Sender consent also keeps the listener responsive to additional peers.
   if (leaveRequested || !receiver) return;
   if (WiFi.status() != WL_CONNECTED) {
-    receiverStartAttempts = 0;
     restartOnReconnect = true;
     if (listening) {
       receiver->stop();
