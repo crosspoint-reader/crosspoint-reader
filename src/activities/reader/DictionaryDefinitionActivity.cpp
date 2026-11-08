@@ -115,6 +115,14 @@ PlainLineLayout getPlainLineLayout(const GfxRenderer& renderer, const int fontId
   return result;
 }
 
+// Shared origin for rendering and selection: measure the full prefix through
+// the word so kerning between its preceding separator and first glyph is kept.
+int renderedPlainWordOrigin(const GfxRenderer& renderer, const int fontId, const char* line, const size_t start,
+                            const size_t end, const EpdFontFamily::Style style) {
+  return renderedPlainPrefixWidth(renderer, fontId, line, end, style, 0) -
+         renderedPlainPrefixWidth(renderer, fontId, line + start, end - start, style, 0);
+}
+
 void drawJustifiedPlainLine(const GfxRenderer& renderer, const int fontId, const int x, const int y, char* text,
                             const bool bold, const PlainLineLayout& placement) {
   const auto style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
@@ -135,10 +143,7 @@ void drawJustifiedPlainLine(const GfxRenderer& renderer, const int fontId, const
     while (text[i] && !isWordSeparator(text[i])) ++i;
     const char suffix = text[i];
     text[i] = '\0';
-    // Measure through the word so the preceding space-to-glyph kerning
-    // contributes to the origin, just as it does for the whole line.
-    const int advance = renderedPlainPrefixWidth(renderer, fontId, text, i, style, 0) -
-                        renderedPlainPrefixWidth(renderer, fontId, text + start, i - start, style, 0);
+    const int advance = renderedPlainWordOrigin(renderer, fontId, text, start, i, style);
     renderer.drawText(fontId, x + advance + placement.justifyExtra * gapIndex / placement.gaps, y, text + start, true,
                       style);
     text[i] = suffix;
@@ -456,8 +461,12 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
               }
             }
           }
-          positions[n] = renderedPlainPrefixWidth(owner.renderer, fontId, bytes, start, family, paragraphLevel) +
-                         (placement.gaps > 0 ? placement.justifyExtra * gapIndex / placement.gaps : 0);
+          // Use the identical word-origin metric as the justified draw path.
+          const int advance =
+              placement.gaps > 0
+                  ? renderedPlainWordOrigin(owner.renderer, fontId, bytes, start, ranges[n].end - offset, family)
+                  : renderedPlainPrefixWidth(owner.renderer, fontId, bytes, start, family, paragraphLevel);
+          positions[n] = advance + (placement.gaps > 0 ? placement.justifyExtra * gapIndex / placement.gaps : 0);
         }
       }
     }

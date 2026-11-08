@@ -749,6 +749,27 @@ int main() {
     drawJustifiedPlainLine(kern, 0, 0, 0, line, true, placement);
     assert(kern.drawCalls.size() == 3);
     assert(kern.drawCalls[1].text == "zb" && kern.drawCalls[1].x == expectedZ);
+
+    // Force the source-to-visual mapping fallback with a line beyond MiniBidi's
+    // workspace limit. Selection must share the drawing origin (including the
+    // preceding space's kerning) and the same justification-gap offsets.
+    DictionaryDefinitionActivity owner;
+    std::string longLine(125, 'a');
+    longLine += " zb cc";
+    std::string unavailable;
+    assert(!BidiUtils::applyBidiVisual(longLine.c_str(), unavailable));
+    const auto longPlacement = getPlainLineLayout(kern, 0, longLine.c_str(), true, true, 350, 0);
+    assert(longPlacement.gaps == 2 && longPlacement.justifyExtra > 0);
+    DictionaryDefinitionActivity::PlainSelectionLine fallback;
+    fallback.text = longLine;
+    fallback.layout(owner, 0, 0, true, longPlacement, 0);
+    kern.drawCalls.clear();
+    drawJustifiedPlainLine(kern, 0, 0, 0, longLine.data(), true, longPlacement);
+    assert(fallback.words.size() == kern.drawCalls.size());
+    for (size_t i = 0; i < fallback.words.size(); ++i) {
+      assert(fallback.words[i] == kern.drawCalls[i].text);
+      assert(fallback.positions[i] == kern.drawCalls[i].x);
+    }
   }
   // Alignment offsets are part of the selectable PageLine, including later pages.
   for (const int alignment : {CrossPointSettings::CENTER_ALIGN, CrossPointSettings::RIGHT_ALIGN}) {

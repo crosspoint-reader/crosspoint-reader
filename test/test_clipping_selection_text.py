@@ -29,8 +29,12 @@ def method(name, next_name, text=source):
     return text[start:text.index(next_name, signature)].rstrip()
 
 extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSelectionActivity::closestInRow")
+closest_in_row = method("int ClipSelectionActivity::closestInRow", "int ClipSelectionActivity::wordAt")
+move_vertical = method("void ClipSelectionActivity::moveVertical", "void ClipSelectionActivity::selectIndex")
+select_index = method("void ClipSelectionActivity::selectIndex", "void ClipSelectionActivity::moveToPage")
 word_hit = method("int ClipSelectionActivity::wordAt", "int ClipSelectionActivity::dragWordAt")
 selected_contains = method("bool ClipSelectionActivity::selectionContains", "int ClipSelectionActivity::nextPageStartIndexForTouchDrag")
+endpoint_center = method("int ClipSelectionActivity::endpointFragmentCenter", "Rect ClipSelectionActivity::handleRect")
 handle_rect = method("Rect ClipSelectionActivity::handleRect", "int ClipSelectionActivity::selectionTop")
 gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "bool ClipSelectionActivity::renderIncremental")
 incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void ClipSelectionActivity::drawSelection")
@@ -342,6 +346,11 @@ struct ClipSelectionActivity {
   int lastRenderedTextOffset = 0, lastRenderedTextXOffset = 0;
   bool buildSelectedText(int first, int last, std::string& text) const;
   bool extractWords();
+  int closestInRow(uint16_t row, int centerX) const;
+  int endpointFragmentCenter(const WordBox&, bool start) const;
+  void moveVertical(int direction);
+  void selectIndex(int index);
+  void requestUpdate() const {}
   int wordAt(int x, int y) const;
   bool selectionContains(int x, int y) const;
   bool hasVisualFragments(const WordBox& word) const;
@@ -354,7 +363,7 @@ struct ClipSelectionActivity {
   Rect handleRect(int, bool) const;
   Rect actionRect() const { return {}; }
 };
-""" + build_text + extract_words + word_hit + selected_contains + handle_rect + gap_draw + incremental_draw + selection_draw + r"""
+""" + build_text + extract_words + closest_in_row + word_hit + selected_contains + move_vertical + select_index + endpoint_center + handle_rect + gap_draw + incremental_draw + selection_draw + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -569,6 +578,11 @@ int main() {
     assert(fragmented.extractWords() && fragmented.wordCount == 3);
     assert(fragmented.words[0].x == 0 && fragmented.words[0].width == 24);
     assert(fragmented.words[0].logicalStartX == 0 && fragmented.words[0].logicalEndX == 88);
+    assert(fragmented.endpointFragmentCenter(fragmented.words[0], true) == 12);
+    assert(fragmented.endpointFragmentCenter(fragmented.words[0], false) == 112);
+    // The drag offset must follow the handle's endpoint fragment, not word.x.
+    assert(fragmented.endpointFragmentCenter(fragmented.words[0], false) !=
+           fragmented.words[0].x + fragmented.words[0].width / 2);
     assert(fragmented.handleRect(0, true).x == 0);
     assert(fragmented.handleRect(0, false).x == 88);
     assert(fragmented.wordAt(8, 8) == 0 && fragmented.wordAt(90, 8) == 0);
@@ -592,6 +606,31 @@ int main() {
     assert(fragmented.renderer.draws[0].text == "abc" && fragmented.renderer.draws[0].x == 0);
     assert(fragmented.renderer.draws[1].text == "גבא" && fragmented.renderer.draws[1].x == 88);
     assert((fragmented.renderer.getClipRect() == std::array<int, 4>{0, 0, 1000, 1000}));
+    // Vertical navigation must find the closest fragment, not the first
+    // fragment's center, which would select the intervening word instead.
+    fragmented.words[0].row = fragmented.words[1].row = 1;
+    fragmented.words[2].row = 0;
+    fragmented.words[2].x = 92;
+    fragmented.words[2].width = 40;
+    fragmented.rowCount = 2;
+    fragmented.selected = 2;
+    fragmented.moveVertical(1);
+    assert(fragmented.selected == 0);
+  }
+  // A Latin word in an RTL paragraph is still selected from left to right.
+  {
+    ClipSelectionActivity rtlLatin;
+    auto page = std::make_unique<Page>();
+    auto line = std::make_unique<PageLine>();
+    line->block.style.isRtl = true;
+    line->block.text = "abc";
+    line->block.positions = {30};
+    page->elements.push_back(std::move(line));
+    rtlLatin.pages.push_back(std::move(page));
+    HalMemory::stats = {1024 * 1024, 1024 * 1024};
+    assert(rtlLatin.extractWords() && rtlLatin.wordCount == 1);
+    assert(rtlLatin.words[0].logicalStartX == 30);
+    assert(rtlLatin.words[0].logicalEndX == rtlLatin.words[0].x + rtlLatin.words[0].width);
   }
   // Compressed dictionary rows must not let a taller font selection box hit
   // or highlight the next line; widths use rendered rather than layout metrics.

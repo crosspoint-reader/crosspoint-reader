@@ -212,8 +212,10 @@ bool ClipSelectionActivity::extractWords() {
         word.x = static_cast<int16_t>(word.lineX + block->wordXpos(i));
         word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i));
         word.width = static_cast<int16_t>(width);
-        word.logicalStartX = word.x + (isRtl ? word.width : 0);
-        word.logicalEndX = word.x + (isRtl ? 0 : word.width);
+        // Paragraph direction does not override a Latin word's own direction.
+        const bool wordRtl = BidiUtils::detectParagraphLevel(text, isRtl ? 1 : 0) == 1;
+        word.logicalStartX = word.x + (wordRtl ? word.width : 0);
+        word.logicalEndX = word.x + (wordRtl ? 0 : word.width);
         word.height = static_cast<int16_t>(rowStep ? std::min<int>(renderer.getLineHeight(wordFont), rowStep)
                                                    : renderer.getLineHeight(wordFont));
         word.row = rowCount;
@@ -283,11 +285,14 @@ int ClipSelectionActivity::closestInRow(const uint16_t row, const int centerX) c
   int bestDistance = INT_MAX;
   for (int i = 0; i < static_cast<int>(wordCount); ++i) {
     if (words[i].row != row) continue;
-    const int distance = std::abs(words[i].x + words[i].width / 2 - centerX);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = i;
-    }
+    forEachVisualSpan(words[i], [&](const int sx, const int width) {
+      if (width <= 0) return;
+      const int distance = std::abs(sx + width / 2 - centerX);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = i;
+      }
+    });
   }
   return best;
 }
@@ -616,7 +621,7 @@ void ClipSelectionActivity::loop() {
           continue;
         selected = index;
         rangeStart = endpoint == 0 ? last : first;
-        dragOffsetX = words[index].x + words[index].width / 2 - touchX;
+        dragOffsetX = endpointFragmentCenter(words[index], endpoint == 0) - touchX;
         dragOffsetY = words[index].y + textOffset() + words[index].height / 2 - touchY;
         touchDragSelecting = true;
         touchDragHasMoved = false;
@@ -693,6 +698,21 @@ bool ClipSelectionActivity::handleButtons(const uint8_t buttons) {
     moveVertical(1);
   }
   return false;
+}
+
+int ClipSelectionActivity::endpointFragmentCenter(const WordBox& word, const bool start) const {
+  const int endpoint = start ? word.logicalStartX : word.logicalEndX;
+  int center = word.x + word.width / 2;
+  int bestDistance = INT_MAX;
+  forEachVisualSpan(word, [&](const int sx, const int width) {
+    if (width <= 0) return;
+    const int distance = endpoint < sx ? sx - endpoint : std::max(0, endpoint - (sx + width));
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      center = sx + width / 2;
+    }
+  });
+  return center;
 }
 
 Rect ClipSelectionActivity::handleRect(const int index, const bool start) const {

@@ -108,6 +108,7 @@ class ClipSelectionActivity final : public Activity {
   void confirmSelection(ClippingResult::Action action = ClippingResult::Action::Clip);
   void loopButtons();
   bool handleButtons(uint8_t buttons);
+  int endpointFragmentCenter(const WordBox& word, bool start) const;
   Rect handleRect(int index, bool start) const;
   Rect actionRect() const;
   int selectionTop() const;
