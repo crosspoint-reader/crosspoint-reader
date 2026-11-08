@@ -25,6 +25,11 @@ uint32_t toLowerLatinImpl(const uint32_t cp) {
     return cp + 1;
   }
 
+  // Latin Extended-B: Romanian comma-below Ș/ș (U+0218/0219) and Ț/ț (U+021A/021B).
+  if (cp == 0x0218 || cp == 0x021A) {
+    return cp + 1;
+  }
+
   switch (cp) {
     case 0x0178:      // Ÿ
       return 0x00FF;  // ÿ
@@ -74,6 +79,10 @@ bool isLatinLetter(const uint32_t cp) {
     case 0x0153:  // œ
     case 0x0178:  // Ÿ
     case 0x1E9E:  // ẞ
+    case 0x0218:  // Ș (Romanian, comma below)
+    case 0x0219:  // ș
+    case 0x021A:  // Ț
+    case 0x021B:  // ț
       return true;
     default:
       return false;
