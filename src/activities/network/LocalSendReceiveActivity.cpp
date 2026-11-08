@@ -372,7 +372,10 @@ void LocalSendReceiveActivity::handleFileAction(const FileAction action, const i
     if (receiver) receiver->stop();
     listening = false;
     startActivityForResult(std::move(viewer), [this](const ActivityResult&) {
-      if (receiver && WiFi.status() == WL_CONNECTED) startReceiver();
+      if (receiver && WiFi.status() == WL_CONNECTED)
+        startReceiver();
+      else
+        restartOnReconnect = true;
       requestUpdate();
     });
   } else if (FsHelpers::hasEpubExtension(path)) {
