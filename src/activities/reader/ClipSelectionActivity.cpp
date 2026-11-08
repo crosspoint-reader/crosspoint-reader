@@ -161,9 +161,7 @@ bool ClipSelectionActivity::extractWords() {
 
   for (size_t pageOffset = 0; pageOffset < pageCount(); ++pageOffset) {
     uint16_t pageWordIndex = 0;
-    const auto& elements = pageAt(pageOffset).elements;
-    for (size_t elementIndex = 0; elementIndex < elements.size(); ++elementIndex) {
-      const auto& element = elements[elementIndex];
+    for (const auto& element : pageAt(pageOffset).elements) {
       if (element->getTag() != TAG_PageLine) continue;
       const auto& line = static_cast<const PageLine&>(*element);
       const auto& block = line.getBlock();
@@ -209,16 +207,12 @@ bool ClipSelectionActivity::extractWords() {
         word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i));
         word.width = static_cast<int16_t>(width);
         word.height = static_cast<int16_t>(renderer.getLineHeight(wordFont));
-        word.fontId = wordFont;
         word.row = rowCount;
         word.pageOffset = static_cast<uint8_t>(pageOffset);
         word.pageWordIndex = pageWordIndex++;
-        word.lineElementIndex = static_cast<uint16_t>(elementIndex);
         word.startOffset = block->wordSourceRange(i).start;
         word.endOffset = block->wordSourceRange(i).end;
         word.text = text;
-        word.style = style;
-        word.characterSpacing = characterSpacing;
         word.paragraphStart = false;
         word.isRtl = isRtl;
         word.discretionaryHyphen = block->wordHasDiscretionaryHyphen(i);
@@ -755,69 +749,44 @@ bool ClipSelectionActivity::renderIncremental() {
     return false;
 
   const auto& page = pageAt(currentPageOffset);
-  // Other elements can overlap the text. Let the full page painter restore them.
-  if (!std::all_of(page.elements.begin(), page.elements.end(), [](const auto& element) {
-        return element->getTag() == TAG_PageLine || element->getTag() == TAG_PageBorderBox;
-      }))
+  // Cached images bypass the logical clip; their polarity restoration needs a full repaint.
+  if (std::any_of(page.elements.begin(), page.elements.end(),
+                  [](const auto& element) { return element->getTag() == TAG_PageImage; }))
     return false;
-  // Word boxes describe layout, not ink. Other lines need the full painter until ink bounds are available.
-  const auto* sourceLine = page.elements[words[selected].lineElementIndex].get();
-  if (std::any_of(page.elements.begin(), page.elements.end(), [sourceLine](const auto& element) {
-        return element->getTag() == TAG_PageLine && element.get() != sourceLine;
-      }))
-    return false;
-
-  const auto clip = renderer.getClipRect();
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  for (int rowFirst = 0; rowFirst < static_cast<int>(wordCount);) {
-    int rowLast = rowFirst;
-    while (rowLast + 1 < static_cast<int>(wordCount) && words[rowLast + 1].row == words[rowFirst].row &&
-           words[rowLast + 1].pageOffset == words[rowFirst].pageOffset)
-      ++rowLast;
-    if (words[rowFirst].pageOffset != currentPageOffset) {
-      rowFirst = rowLast + 1;
-      continue;
-    }
-    int left = INT_MAX, top = INT_MAX, right = INT_MIN, bottom = INT_MIN;
-    for (int i = rowFirst; i <= rowLast; ++i) {
+  int left = INT_MAX, top = INT_MAX, right = INT_MIN, bottom = INT_MIN;
+  if (selected != lastRenderedSelected) {
+    for (int i = 0; i < static_cast<int>(wordCount); ++i) {
+      const auto& word = words[i];
+      if (word.pageOffset != currentPageOffset) continue;
       const bool wasSelected = i >= firstOld && i <= lastOld;
       const bool isSelected = i >= firstNew && i <= lastNew;
-      if (selected == lastRenderedSelected || (i != selected && i != lastRenderedSelected && wasSelected == isSelected))
-        continue;
-      // Include adjacent words so both bordering gaps and their decorations are restored.
-      for (int j = std::max(rowFirst, i - 1); j <= std::min(rowLast, i + 1); ++j) {
-        const auto& word = words[j];
-        left = std::min(left, word.x + offsetX);
-        top = std::min(top, word.y + offset);
-        right = std::max(right, word.x + offsetX + word.width);
-        bottom = std::max(bottom, word.y + offset + word.height);
+      if (i != selected && i != lastRenderedSelected && wasSelected == isSelected) continue;
+      // Include the adjacent gaps; shrinking a range must remove their highlight too.
+      for (int j = std::max(0, i - 1); j <= std::min(static_cast<int>(wordCount) - 1, i + 1); ++j) {
+        const auto& neighbor = words[j];
+        if (neighbor.pageOffset != currentPageOffset || neighbor.row != word.row) continue;
+        left = std::min(left, neighbor.x + offsetX);
+        top = std::min(top, neighbor.y + offset);
+        right = std::max(right, neighbor.x + offsetX + neighbor.width);
+        bottom = std::max(bottom, neighbor.y + offset + neighbor.height);
       }
     }
-    left = std::max({left, clip[0], safe.x});
-    top = std::max({top, clip[1], safe.y});
-    right = std::min({right, clip[0] + clip[2], safe.x + safe.width});
-    bottom = std::min({bottom, clip[1] + clip[3], safe.y + safe.height});
-    if (left < right && top < bottom) {
-      const auto& line = static_cast<const PageLine&>(*page.elements[words[rowFirst].lineElementIndex]);
-      auto scope = renderer.getFontCacheManager()->createPrewarmScope();
-      line.getBlock()->render(renderer, fontId, marginLeft + line.xPos + offsetX, marginTop + line.yPos + offset);
-      scope.endScanAndPrewarm();
-      renderer.setClipRect(left, top, right - left, bottom - top);
-      renderer.fillRect(left, top, right - left, bottom - top, false);
-      for (const auto& element : page.elements) {
-        if (element->getTag() == TAG_PageBorderBox)
-          static_cast<const PageBorderBox&>(*element).renderBackground(renderer, marginLeft + offsetX,
-                                                                       marginTop + offset);
-      }
-      for (const auto& element : page.elements) {
-        if (element->getTag() == TAG_PageBorderBox)
-          element->render(renderer, fontId, marginLeft + offsetX, marginTop + offset);
-      }
-      line.getBlock()->render(renderer, fontId, marginLeft + line.xPos + offsetX, marginTop + line.yPos + offset);
-      drawSelection();
-      renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
-    }
-    rowFirst = rowLast + 1;
+  }
+  const auto clip = renderer.getClipRect();
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  left = std::max({left, clip[0], safe.x});
+  top = std::max({top, clip[1], safe.y});
+  right = std::min({right, clip[0] + clip[2], safe.x + safe.width});
+  bottom = std::min({bottom, clip[1] + clip[3], safe.y + safe.height});
+  if (left < right && top < bottom) {
+    renderer.setClipRect(left, top, right - left, bottom - top);
+    auto scope = renderer.getFontCacheManager()->createPrewarmScope();
+    page.render(renderer, fontId, marginLeft + offsetX, marginTop + offset);
+    scope.endScanAndPrewarm();
+    renderer.fillRect(left, top, right - left, bottom - top, false);
+    page.render(renderer, fontId, marginLeft + offsetX, marginTop + offset);
+    drawSelection();
+    renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
   }
   const auto labels = mappedInput.mapLabels(
       tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : (isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE)), tr(STR_DIR_LEFT),

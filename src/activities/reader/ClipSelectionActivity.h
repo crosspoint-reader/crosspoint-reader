@@ -53,14 +53,10 @@ class ClipSelectionActivity final : public Activity {
     int16_t height = 0;
     uint16_t row = 0;
     uint8_t pageOffset = 0;
-    int8_t characterSpacing = 0;
     uint16_t pageWordIndex = 0;
-    uint16_t lineElementIndex = 0;  // source PageLine in the retained page
-    int fontId = 0;                 // the word's font; headings and CSS font-size runs differ from the section font
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
     const char* text = nullptr;
-    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
     bool paragraphStart = false;
     bool isRtl = false;
     bool discretionaryHyphen = false;

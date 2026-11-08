@@ -448,7 +448,6 @@ int main() {
       assert(activity.renderer.fills[i].x == activity.words[i].x);
     }
     for (size_t i = 0; i < 2; ++i) {
-      assert(activity.words[i].characterSpacing == tracking);
       assert(activity.words[i].width == 24 + 2 * tracking);
     }
     EpubReaderActivity reader{activity.renderer};
