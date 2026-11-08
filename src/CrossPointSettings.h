@@ -177,8 +177,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SHORT_PWRBTN_COUNT
   };
 
-  // Long-press Confirm action while reading an EPUB. Persisted values are stable;
-  // SettingsList maps them to the device-specific option list shown to the user.
+  // Long-press action while reading an EPUB, for Confirm and for the page buttons in
+  // CUSTOM_ACTIONS mode. Persisted values are stable; SettingsList maps them to the
+  // device-specific option list shown to the user.
   enum LONG_PRESS_MENU_FUNCTION {
     LP_MENU_KOSYNC = 0,
     LP_MENU_DISABLED = 1,
@@ -198,6 +199,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     OFF = 0,
     CHAPTER_SKIP = 1,
     ORIENTATION_CHANGE = 2,
+    CUSTOM_ACTIONS = 3,
     LONG_PRESS_BUTTON_BEHAVIOR_COUNT
   };
 
@@ -352,6 +354,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
+  // Long-press page button functions (LONG_PRESS_MENU_FUNCTION values), used in CUSTOM_ACTIONS mode.
+  uint8_t longPressFrontNextFunction = LP_MENU_DISABLED;
+  uint8_t longPressFrontPrevFunction = LP_MENU_DISABLED;
+  uint8_t longPressSideNextFunction = LP_MENU_DISABLED;
+  uint8_t longPressSidePrevFunction = LP_MENU_DISABLED;
   // UI Theme
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation

@@ -26,10 +26,11 @@ stub = r"""
 struct HalGPIO {
   enum { BTN_BACK, BTN_CONFIRM, BTN_LEFT, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_POWER };
   int pressed = -1;
+  bool pressEdge = true, releaseEdge = true;
   bool touch = false;
   bool hasTouch() const { return touch; }
-  bool wasPressed(uint8_t b) const { return pressed == b; }
-  bool wasReleased(uint8_t b) const { return pressed == b; }
+  bool wasPressed(uint8_t b) const { return pressEdge && pressed == b; }
+  bool wasReleased(uint8_t b) const { return releaseEdge && pressed == b; }
   bool isPressed(uint8_t b) const { return pressed == b; }
 };
 """
@@ -50,7 +51,7 @@ class GfxRenderer {
 };
 struct CrossPointSettings {
   enum { PORTRAIT, LANDSCAPE_CW, INVERTED, LANDSCAPE_CCW, ORIENTATION_COUNT };
-  enum { OFF };
+  enum { OFF, CUSTOM_ACTIONS = 3 };
   enum SHORT_PWRBTN { PAGE_TURN };
   uint8_t orientation = PORTRAIT, longPressButtonBehavior = OFF, shortPwrBtn = 255;
   bool tiltPageTurn = false;
@@ -173,9 +174,18 @@ int main() {
                 case CrossPointSettings::PREV_PREV: prev = up || down; break;
                 default: break;
               }
-              const auto turn = detectPageTurn(input);
-              assert(turn.prev == (prev || physical == (swapNav ? HalGPIO::BTN_RIGHT : HalGPIO::BTN_LEFT)));
-              assert(turn.next == (next || physical == (swapNav ? HalGPIO::BTN_LEFT : HalGPIO::BTN_RIGHT)));
+              const bool frontButton = physical == HalGPIO::BTN_LEFT || physical == HalGPIO::BTN_RIGHT;
+              const auto source = (prev || next) ? PageTurnResult::Source::Side
+                                  : frontButton  ? PageTurnResult::Source::Front
+                                                 : PageTurnResult::Source::Other;
+              for (const uint8_t behavior : {CrossPointSettings::OFF, CrossPointSettings::CUSTOM_ACTIONS}) {
+                SETTINGS.longPressButtonBehavior = behavior;
+                const auto turn = detectPageTurn(input);
+                assert(turn.prev == (prev || physical == (swapNav ? HalGPIO::BTN_RIGHT : HalGPIO::BTN_LEFT)));
+                assert(turn.next == (next || physical == (swapNav ? HalGPIO::BTN_LEFT : HalGPIO::BTN_RIGHT)));
+                assert(turn.source == source);
+              }
+              SETTINGS.longPressButtonBehavior = CrossPointSettings::OFF;
               for (auto query : {&HalGPIO::wasPressed, &HalGPIO::wasReleased, &HalGPIO::isPressed}) {
                 assert(input.mapButton(Button::PageBack, query) == prev);
                 assert(input.mapButton(Button::PageForward, query) == next);
@@ -196,6 +206,28 @@ int main() {
     }
   }
   assert(checks == 3360);
+
+  // Custom long-press actions turn on release only; Off turns on press.
+  gpio.touch = false;
+  SETTINGS.frontButtonFollowOrientation = 0;
+  SETTINGS.sideButtonFollowOrientation = 0;
+  SETTINGS.sideButtonLayout = CrossPointSettings::PREV_NEXT;
+  renderer.orientation = GfxRenderer::Portrait;
+  for (const int physical : {static_cast<int>(HalGPIO::BTN_RIGHT), static_cast<int>(HalGPIO::BTN_DOWN)}) {
+    const auto source =
+        physical == HalGPIO::BTN_RIGHT ? PageTurnResult::Source::Front : PageTurnResult::Source::Side;
+    gpio.pressed = physical;
+    gpio.pressEdge = true;
+    gpio.releaseEdge = false;
+    SETTINGS.longPressButtonBehavior = CrossPointSettings::OFF;
+    assert(detectPageTurn(input).next);
+    SETTINGS.longPressButtonBehavior = CrossPointSettings::CUSTOM_ACTIONS;
+    assert(!detectPageTurn(input).next);
+    gpio.pressEdge = false;
+    gpio.releaseEdge = true;
+    const auto turn = detectPageTurn(input);
+    assert(turn.next && !turn.prev && turn.source == source);
+  }
 }
 """
 with tempfile.TemporaryDirectory() as directory:
@@ -205,4 +237,5 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run(["c++", "-std=c++20", "-Wall", "-Wextra", "-Werror", "-I" + directory,
                     "-I" + str(ROOT / "src"), "-I" + str(ROOT / "freeink-sdk/libs/ui/FreeInkUI/include"), str(tmp / "orientation.cpp"), "-o", str(tmp / "orientation")], check=True)
     subprocess.run([str(tmp / "orientation")], check=True)
-print("Passed: front/side page turns, 3,360 button mappings, legacy settings, and all 16 rotation previews")
+print("Passed: front/side page turns and sources, custom release timing, 3,360 button mappings, "
+      "legacy settings, and all 16 rotation previews")

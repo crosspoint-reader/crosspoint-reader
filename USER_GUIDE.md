@@ -315,10 +315,12 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 - **Orient Front Buttons**: Make front-button directions follow the reading orientation. Available on devices without touch.
 - **Orient Side Buttons**: Available on all supported devices with side page buttons, including touch and button-only devices. Reverse the reader's selected **Side Button Layout** in both landscape modes when enabled. Normal portrait always keeps the selected layout, and upside-down portrait always reverses it, whether this option is on or off. Layouts that give both buttons the same action, or disable them, are unchanged. This option is off by default, including when upgrading from a version without it. Existing saved choices are preserved.
 
-- **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skips to the next/previous chapter:
+- **Long-Press Button Behavior**: Sets what holding a page turn button (about 0.7 seconds) does while reading:
   
-  - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
-  - "Page Scroll" - Long-pressing scrolls a page up/down
+  - "Off" (default) - Holding does nothing special; pages turn on press
+  - "Chapter Skip" - Holding skips to the next/previous chapter
+  - "Orientation Change" - Holding rotates the reading orientation
+  - "Custom" - Each page button gets its own action while reading an EPUB, chosen in **Long-Press Front Next**, **Long-Press Front Previous**, **Long-Press Side Next**, and **Long-Press Side Previous**. The choices are "CrossPoint Sync", "Bookmark", "Dictionary", "Create Clipping", "Links and Footnotes", "Reader Menu" (devices with a Home button only), and "Disabled" (the default). Next and Previous follow each button's current page direction, so remapping and orientation settings apply. The action runs when you release the button; a short press still turns the page, and a button set to "Disabled" turns the page even when held. In other book formats, Custom works like "Off", except that pages turn on release.
 - **Long-press Menu**: Selects the function bound to holding the menu button (Confirm) while reading an EPUB. **Cycles through the available functions** each time the setting is selected — additional functions may be added in future releases, so this is not a binary on/off toggle. A short press of Confirm always opens the reader menu as normal:
   - "Bookmark" (default) - Hold Confirm (~0.4 second) to drop a bookmark at the current page.
   - "CrossPoint Sync" - Hold Confirm (~1 second) to launch KOReader sync directly.

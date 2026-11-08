@@ -880,37 +880,8 @@ void EpubReaderActivity::loop() {
   const bool confirmLongPressed = !endOfBookMenuOpen && confirmHoldMs != 0 &&
                                   mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, confirmHoldMs);
   const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
-  if (confirmLongPressed) {
-    switch (SETTINGS.longPressMenuFunction) {
-      case CrossPointSettings::LP_MENU_BOOKMARK:
-        addBookmark();
-        showBookmarkMessage = true;
-        bookmarkMessageTime = millis();
-        requestUpdate();
-        break;
-      case CrossPointSettings::LP_MENU_KOSYNC:
-        if (launchKOReaderSync()) {
-          return;
-        }
-        break;
-      case CrossPointSettings::LP_MENU_DICTIONARY:
-        openDictionaryWordSelect();
-        return;
-      case CrossPointSettings::LP_MENU_CREATE_CLIPPING:
-        startClipSelection();
-        return;
-      case CrossPointSettings::LP_MENU_FOOTNOTES:
-        if (footnoteDepth > 0) {
-          restoreSavedPosition();
-        } else {
-          openFootnoteSelect(false);
-        }
-        return;
-      case CrossPointSettings::LP_MENU_READER_MENU:
-      case CrossPointSettings::LP_MENU_DISABLED:
-      default:
-        break;
-    }
+  if (confirmLongPressed && runLongPressFunction(SETTINGS.longPressMenuFunction)) {
+    return;
   }
 
   if (!endOfBookMenuOpen) {
@@ -1018,7 +989,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
+  auto [prevTriggered, nextTriggered, fromTilt, source] = ReaderUtils::detectPageTurn(mappedInput);
   prevTriggered = prevTriggered || touch.prev;
   nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
@@ -1054,6 +1025,23 @@ void EpubReaderActivity::loop() {
     if (touch.prev || touch.next) haptic_feedback::touchAction(true);
     requestUpdate();
     return;
+  }
+
+  using PageTurnSource = ReaderUtils::PageTurnResult::Source;
+  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CUSTOM_ACTIONS && source != PageTurnSource::Other) {
+    const bool side = source == PageTurnSource::Side;
+    const uint8_t function = nextTriggered
+                                 ? (side ? SETTINGS.longPressSideNextFunction : SETTINGS.longPressFrontNextFunction)
+                                 : (side ? SETTINGS.longPressSidePrevFunction : SETTINGS.longPressFrontPrevFunction);
+    // Disabled, or Reader Menu on a board without a Home key (shown there as Disabled), keeps a page turn.
+    const bool disabled = function == CrossPointSettings::LP_MENU_DISABLED ||
+                          (function == CrossPointSettings::LP_MENU_READER_MENU && !BoardConfig::hasHomeKey());
+    if (!disabled) {
+      automaticPageTurnActive = false;
+      pendingManualTurn = 0;
+      runLongPressFunction(function);
+      return;
+    }
   }
 
   if (!section) {
@@ -1350,6 +1338,43 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
       return 0;
+  }
+}
+
+bool EpubReaderActivity::runLongPressFunction(const uint8_t function) {
+  switch (function) {
+    case CrossPointSettings::LP_MENU_BOOKMARK:
+      addBookmark();
+      showBookmarkMessage = true;
+      bookmarkMessageTime = millis();
+      requestUpdate();
+      return false;
+    case CrossPointSettings::LP_MENU_KOSYNC:
+      return launchKOReaderSync();
+    case CrossPointSettings::LP_MENU_DICTIONARY:
+      openDictionaryWordSelect();
+      return true;
+    case CrossPointSettings::LP_MENU_CREATE_CLIPPING:
+      startClipSelection();
+      return true;
+    case CrossPointSettings::LP_MENU_FOOTNOTES:
+      if (footnoteDepth > 0) {
+        restoreSavedPosition();
+      } else {
+        openFootnoteSelect(false);
+      }
+      return true;
+    // Only page buttons reach Reader Menu; confirmLongPressThreshold() never arms Confirm for it.
+    case CrossPointSettings::LP_MENU_READER_MENU:
+      if (usesToolbarMenu() && section) {
+        openOverlay(Overlay::Toolbar);
+      } else {
+        openReaderMenu();
+      }
+      return true;
+    case CrossPointSettings::LP_MENU_DISABLED:
+    default:
+      return false;
   }
 }
 

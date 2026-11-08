@@ -61,6 +61,12 @@ bool showOnDevice(const SettingInfo& setting) {
       SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
     return false;
   }
+  const bool longPressPageFunction =
+      setting.nameId == StrId::STR_LONG_PRESS_FRONT_NEXT || setting.nameId == StrId::STR_LONG_PRESS_FRONT_PREV ||
+      setting.nameId == StrId::STR_LONG_PRESS_SIDE_NEXT || setting.nameId == StrId::STR_LONG_PRESS_SIDE_PREV;
+  if (longPressPageFunction && SETTINGS.longPressButtonBehavior != CrossPointSettings::CUSTOM_ACTIONS) {
+    return false;
+  }
   return true;
 }
 

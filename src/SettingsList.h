@@ -175,8 +175,7 @@ inline std::vector<StrId> buildLongPressMenuValues() {
   return values;
 }
 
-inline uint8_t longPressMenuDisplayValue() {
-  const uint8_t raw = SETTINGS.longPressMenuFunction;
+inline uint8_t longPressFunctionDisplayValue(const uint8_t raw) {
   if (raw <= CrossPointSettings::LP_MENU_DICTIONARY) return raw;
   if (raw == CrossPointSettings::LP_MENU_READER_MENU) {
     return BoardConfig::hasHomeKey() ? CrossPointSettings::LP_MENU_READER_MENU : CrossPointSettings::LP_MENU_DISABLED;
@@ -185,17 +184,23 @@ inline uint8_t longPressMenuDisplayValue() {
   return CrossPointSettings::LP_MENU_DISABLED;
 }
 
-inline void setLongPressMenuFromDisplayValue(const uint8_t displayValue) {
-  if (displayValue <= CrossPointSettings::LP_MENU_DICTIONARY) {
-    SETTINGS.longPressMenuFunction = displayValue;
-  } else {
-    SETTINGS.longPressMenuFunction = BoardConfig::hasHomeKey() ? displayValue : displayValue + 1;
-  }
+inline uint8_t longPressFunctionFromDisplayValue(const uint8_t displayValue) {
+  if (displayValue <= CrossPointSettings::LP_MENU_DICTIONARY) return displayValue;
+  return BoardConfig::hasHomeKey() ? displayValue : displayValue + 1;
+}
+
+// Picker for a field holding a LONG_PRESS_MENU_FUNCTION value.
+inline SettingInfo buildLongPressFunctionSetting(const StrId nameId, uint8_t CrossPointSettings::* field,
+                                                 const char* key) {
+  return SettingInfo::DynamicEnum(
+      nameId, buildLongPressMenuValues(), [field]() { return longPressFunctionDisplayValue(SETTINGS.*field); },
+      [field](const uint8_t displayValue) { SETTINGS.*field = longPressFunctionFromDisplayValue(displayValue); }, key,
+      StrId::STR_CAT_CONTROLS);
 }
 
 inline SettingInfo buildLongPressMenuSetting() {
-  return SettingInfo::DynamicEnum(StrId::STR_LONG_PRESS_MENU, buildLongPressMenuValues(), longPressMenuDisplayValue,
-                                  setLongPressMenuFromDisplayValue, "longPressMenuFunction", StrId::STR_CAT_CONTROLS);
+  return buildLongPressFunctionSetting(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
+                                       "longPressMenuFunction");
 }
 
 struct ShortPowerButtonOption {

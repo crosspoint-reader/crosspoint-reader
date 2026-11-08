@@ -105,9 +105,13 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
   }
-  // The displayed option list varies by board, so this setting uses a dynamic
-  // display-index mapping and is skipped by the generic persistence loop.
+  // The displayed option list varies by board, so these settings use a dynamic
+  // display-index mapping and are skipped by the generic persistence loop.
   doc["longPressMenuFunction"] = longPressMenuFunction;
+  doc["longPressFrontNextFunction"] = longPressFrontNextFunction;
+  doc["longPressFrontPrevFunction"] = longPressFrontPrevFunction;
+  doc["longPressSideNextFunction"] = longPressSideNextFunction;
+  doc["longPressSidePrevFunction"] = longPressSidePrevFunction;
   doc["shortPwrBtn"] = shortPwrBtn;
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
@@ -263,8 +267,15 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   fontFamily = NOTOSANS;
   // These controls use board-specific display-index mappings and are skipped by
   // the generic settings loop. Persisted action IDs remain stable across boards.
-  longPressMenuFunction = clamp(doc["longPressMenuFunction"] | (uint8_t)LP_MENU_DISABLED,
-                                (uint8_t)LONG_PRESS_MENU_FUNCTION_COUNT, (uint8_t)LP_MENU_DISABLED);
+  const auto loadLongPressFunction = [&](const char* key) {
+    return clamp(doc[key] | (uint8_t)LP_MENU_DISABLED, (uint8_t)LONG_PRESS_MENU_FUNCTION_COUNT,
+                 (uint8_t)LP_MENU_DISABLED);
+  };
+  longPressMenuFunction = loadLongPressFunction("longPressMenuFunction");
+  longPressFrontNextFunction = loadLongPressFunction("longPressFrontNextFunction");
+  longPressFrontPrevFunction = loadLongPressFunction("longPressFrontPrevFunction");
+  longPressSideNextFunction = loadLongPressFunction("longPressSideNextFunction");
+  longPressSidePrevFunction = loadLongPressFunction("longPressSidePrevFunction");
   shortPwrBtn = clamp(doc["shortPwrBtn"] | (uint8_t)IGNORE, (uint8_t)SHORT_PWRBTN_COUNT, (uint8_t)IGNORE);
   if (BoardConfig::hasHomeKey() && doc["homeButtonLongPressAction"].isNull() &&
       !doc["longPressMenuFunction"].isNull()) {

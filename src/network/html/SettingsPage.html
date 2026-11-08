@@ -228,11 +228,20 @@
         pwrBtnFootnoteBackRow.style.display = 'none';
       }
     }
+    // Page-button long-press functions only apply to the Custom (3) long-press behavior.
+    const customLongPress = getControlValue('longPressButtonBehavior') === 3;
+    for (const key of ['longPressFrontNextFunction', 'longPressFrontPrevFunction',
+                       'longPressSideNextFunction', 'longPressSidePrevFunction']) {
+      const row = document.getElementById('row-setting-' + key);
+      if (row) {
+        row.style.display = customLongPress ? '' : 'none';
+      }
+    }
   }
 
   function handleSettingChanged(key) {
     syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'quickResumeSleepScreen');
-    if (key === 'shortPwrBtn') {
+    if (key === 'shortPwrBtn' || key === 'longPressButtonBehavior') {
       updateSettingsVisibility();
     }
     markChanged();

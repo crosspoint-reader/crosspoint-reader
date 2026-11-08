@@ -58,30 +58,46 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
 }
 
 struct PageTurnResult {
+  // Physical page button behind the turn; Other covers tilt, Power and Home.
+  enum class Source : uint8_t { Other, Front, Side };
   bool prev;
   bool next;
   bool fromTilt;
+  Source source;
 };
 
 inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
+  using Source = PageTurnResult::Source;
   const bool usePress = SETTINGS.longPressButtonBehavior == SETTINGS.OFF;
+  // Custom long-press actions can open another screen, so they act on release:
+  // a button still held there would drive that screen's list navigation.
+  const bool releaseOnly = SETTINGS.longPressButtonBehavior == SETTINGS.CUSTOM_ACTIONS;
   const bool tiltNext = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedForward();
   const bool tiltPrev = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedBack();
   const bool swapFront = input.isNavDirectionSwapped();
   const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
   const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
-  const auto pageButtonTriggered = [&](const MappedInputManager::Button button) {
-    if (usePress) return input.wasPressed(button);
-    return input.wasLongPressed(button, SKIP_HOLD_MS) || input.wasReleased(button);
+  Source source = Source::Other;
+  const auto pageButtonTriggered = [&](const MappedInputManager::Button button, const Source buttonSource) {
+    bool triggered;
+    if (usePress) {
+      triggered = input.wasPressed(button);
+    } else if (releaseOnly) {
+      triggered = input.wasReleased(button);
+    } else {
+      triggered = input.wasLongPressed(button, SKIP_HOLD_MS) || input.wasReleased(button);
+    }
+    if (triggered) source = buttonSource;
+    return triggered;
   };
-  const bool prev =
-      tiltPrev || (pageButtonTriggered(MappedInputManager::Button::PageBack) || pageButtonTriggered(prevButton));
+  const bool prev = tiltPrev || (pageButtonTriggered(MappedInputManager::Button::PageBack, Source::Side) ||
+                                 pageButtonTriggered(prevButton, Source::Front));
   const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
                          input.wasReleased(MappedInputManager::Button::Power);
   const bool next = input.homeButtonAction() == HomeButtonAction::NextPage || tiltNext ||
-                    pageButtonTriggered(MappedInputManager::Button::PageForward) || powerTurn ||
-                    pageButtonTriggered(nextButton);
-  return {prev, next, tiltPrev || tiltNext};
+                    pageButtonTriggered(MappedInputManager::Button::PageForward, Source::Side) || powerTurn ||
+                    pageButtonTriggered(nextButton, Source::Front);
+  return {prev, next, tiltPrev || tiltNext, source};
 }
 
 struct TouchPageTurn {
