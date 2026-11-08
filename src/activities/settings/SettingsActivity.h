@@ -203,6 +203,7 @@ class SettingsActivity final : public UiListActivity {
   void toggleSelectedSetting();
   void openSleepTimeoutPicker();
   void applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr);
+  void openQuickLockSleepTimeoutPicker();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
   static std::string settingValueText(const SettingInfo& setting);
 

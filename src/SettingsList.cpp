@@ -185,6 +185,11 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
     emit(SettingInfo::Toggle(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
                              "doubleClickPwrLight", StrId::STR_CAT_CONTROLS));
   emit(buildShortPowerButtonSetting());
+  if (CrossPointSettings::quickLockAvailable())
+    emit(SettingInfo::Enum(StrId::STR_POWER_BUTTON_CHORD, &CrossPointSettings::powerChordAction,
+                           {StrId::STR_SCREENSHOT_BUTTON, StrId::STR_QUICK_LOCK, StrId::STR_NEXT_PAGE,
+                            StrId::STR_PREV_PAGE, StrId::STR_DISABLED},
+                           "powerChordAction", StrId::STR_CAT_CONTROLS));
   // Always persisted; isHiddenOnDevice() hides it when the IMU probe fails.
   emit(SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
                          {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED}, "tiltPageTurn",
@@ -205,6 +210,11 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
       StrId::STR_TIME_TO_SLEEP, &CrossPointSettings::sleepTimeoutMinutes,
       {CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES, CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1},
       "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM));
+  if (CrossPointSettings::quickLockAvailable())
+    emit(SettingInfo::Value(StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT, &CrossPointSettings::quickLockSleepTimeoutMinutes,
+                            {CrossPointSettings::MIN_QUICK_LOCK_SLEEP_TIMEOUT_MINUTES,
+                             CrossPointSettings::MAX_QUICK_LOCK_SLEEP_TIMEOUT_MINUTES, 1},
+                            "quickLockSleepTimeoutMinutes", StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
                            StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_LIBRARY_USE_METADATA, &CrossPointSettings::libraryUseMetadata,

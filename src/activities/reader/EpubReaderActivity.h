@@ -262,6 +262,7 @@ class EpubReaderActivity final : public ReaderActivity {
   bool skipPages(int amount) override;
   bool remoteShortcut(bool readerMenu) override;
   bool isAtEndOfBook() const override;
+  bool drawsLockIndicator() const override;
   void onReturnFromEndOfBook() override;
 
   bool skipLoopDelay() override;

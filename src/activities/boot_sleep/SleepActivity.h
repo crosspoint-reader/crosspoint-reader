@@ -11,6 +11,8 @@ class SleepActivity final : public Activity {
   explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool fromTimeout = false)
       : Activity("Sleep", renderer, mappedInput), fromTimeout(fromTimeout) {}
   void onEnter() override;
+  // Each sleep screen decides whether to show the lock (drawWakeLockBadge()).
+  bool drawsLockIndicator() const override { return true; }
 
  private:
   void renderDefaultSleepScreen() const;

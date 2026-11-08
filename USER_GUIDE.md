@@ -6,6 +6,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
   - [1. Hardware Overview](#1-hardware-overview)
     - [Button Layout](#button-layout)
     - [Taking a Screenshot](#taking-a-screenshot)
+    - [Locking the Controls](#locking-the-controls)
     - [Control Center and Frontlight](#control-center-and-frontlight)
   - [2. Power \& Startup](#2-power--startup)
     - [Power On / Off](#power-on--off)
@@ -68,9 +69,24 @@ Button layout can be customized in the **[Controls Settings](#363-controls)**.
 
 ### Taking a Screenshot
 
-When the Power button and the lower side button (Side Down) are pressed at the same time, it will take a screenshot and save it in the folder `screenshots/`.
+When the Power button and the lower side button (Side Down) are pressed at the same time, it will take a screenshot and save it in the folder `screenshots/`. This is the default action of the **Power + Down** setting in the **[Controls Settings](#363-controls)**.
 
 Alternatively, while reading a book, press the **Confirm** button to open the reader menu and select **Take screenshot**.
+
+### Locking the Controls
+
+**Lock Controls** ignores all buttons, touches and tilt page turns, so you can hand the device to someone, e.g., a child looking at a picture book, without pages turning or the book closing. To lock, set **Short Power Button Click** or **Power + Down** in the **[Controls Settings](#363-controls)** to "Lock Controls", then press Power or Power + Down. A short press of Power never unlocks; **Power + Down** always unlocks, whatever it is set to.
+
+While the controls are locked:
+
+- In an EPUB book with a status bar, a lock icon shows in the status bar. Other screens show a lock in the bottom-left corner, as do the "Dark", "Light", "None" and "Quick Resume" sleep screens.
+- Holding Power still puts the device to sleep. After any sleep it wakes up locked.
+- A connected Bluetooth page turner still turns pages. Its other buttons are ignored.
+- **Time to Sleep** does not apply. The device goes to sleep after **Sleep Timeout When Locked** (**Settings → Display**) without a Bluetooth page turn.
+- A slide switch takes effect once the controls are unlocked.
+- An [Auto Page Turn](#auto-page-turn) that is running keeps turning pages.
+
+Lock Controls, **Power + Down** and **Sleep Timeout When Locked** are not available on the Paper Mono, because it cannot detect Power and Down held together.
 
 ### Control Center and Frontlight
 
@@ -206,7 +222,7 @@ Books cannot be removed from your device through Calibre. Use the web interface 
 
 ### 3.6 Settings
 
-Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **Library**, and **Connectivity**. System contains language, keyboard layouts, hidden-file visibility, Clock (where available), firmware updates, and About. Library contains Use Book Metadata, Clear Read Books from Recent List, and Move Finished Books to Read Folder. Time to Sleep is under Display; Clear Reading Cache is under Reader. Connectivity contains Wi-Fi, Bluetooth Page Turner, CrossPoint Sync, OPDS, and the Plugins toggle. The options below describe these settings.
+Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **Library**, and **Connectivity**. System contains language, keyboard layouts, hidden-file visibility, Clock (where available), firmware updates, and About. Library contains Use Book Metadata, Clear Read Books from Recent List, and Move Finished Books to Read Folder. Time to Sleep and Sleep Timeout When Locked are under Display; Clear Reading Cache is under Reader. Connectivity contains Wi-Fi, Bluetooth Page Turner, CrossPoint Sync, OPDS, and the Plugins toggle. The options below describe these settings.
 
 #### 3.6.1 Display
 
@@ -232,7 +248,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
   - "Inverted" - The image will be inverted as in white & black and will be displayed without grayscale conversion
 
-- **Quick Resume on Timeout**: Whether to enable the "Quick Resume" sleep screen when the device goes to sleep due to inactivity (Display > Time to Sleep). This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book. This overwrites the Sleep Screen Cover Mode when enabled.
+- **Quick Resume on Timeout**: Whether to enable the "Quick Resume" sleep screen when the device goes to sleep due to inactivity (Display > Time to Sleep or Sleep Timeout When Locked). This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book. This overwrites the Sleep Screen Cover Mode when enabled.
 
 - **Status Bar**: Configure the status bar displayed while reading:
   
@@ -333,11 +349,15 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
   - "Links and Footnotes" - A short press in reading mode opens link selection. If the page has only one link, it opens directly. After following a link, a short press returns to the previous location.
   - "Refresh" - A short press triggers a manual full-screen refresh, useful for clearing ghosting
+  - "Lock Controls" - A short press locks the controls; **Power + Down** unlocks them (see [Locking the Controls](#locking-the-controls))
+- **Power + Down**: The effect of pressing Power and Side Down together: "Take screenshot" (default), "Lock Controls", "Next Page", "Previous Page" or "Disabled". While the controls are locked, it always unlocks them.
 - **Quick return from links**: Controls whether a short press of the power button acts as Back after following a link or footnote.
 
 #### 3.6.4 System
 
 - **Time to Sleep** (**Settings → Display**): Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
+
+- **Sleep Timeout When Locked** (**Settings → Display**): How long the device stays awake with locked controls before it goes to sleep, counted from the lock or the last Bluetooth page turn; 1 to 30 minutes or Never, 5 minutes by default.
 
 - **Wi-Fi Networks**: Connect to Wi-Fi networks for file transfers and firmware updates.
 

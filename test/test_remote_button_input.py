@@ -128,7 +128,7 @@ struct ActivityManager {
   bool isForegroundReader() const { return foregroundReader; }
   bool remoteClick(RemoteButton button) { return mappedInput.injectRemoteClick(button); }
   void requestUpdate() {}
-  bool remoteTurn(bool forward, bool chapter);
+  bool remoteTurn(bool forward, bool chapter, bool pageOnly = false);
 };
 """ + remote_turn + r"""
 void checkRouting(MappedInputManager& input) {
@@ -141,6 +141,8 @@ void checkRouting(MappedInputManager& input) {
     manager.currentActivity->menu = true;
     for (bool forward : {true, false}) {
       input.update();
+      assert(!manager.remoteTurn(forward, false, true));
+      assert(!input.hasRemoteClick());
       assert(manager.remoteTurn(forward, false));
       assert(input.wasPressed(forward ? MappedInputManager::Button::NavNext
                                      : MappedInputManager::Button::NavPrevious));

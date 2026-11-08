@@ -20,6 +20,7 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   uint32_t sleepOverlayLcgState = 0;
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
+  bool lastSleepLocked = false;  // Quick Lock was on: the next sleep wake is locked again
   bool showBootScreen = true;
 
   static const char* getFilePath() { return "/.crosspoint/state.json"; }

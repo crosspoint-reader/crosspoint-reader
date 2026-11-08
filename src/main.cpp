@@ -26,6 +26,7 @@
 #include <esp_wifi.h>
 #include <time.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdarg>
 #include <cstring>
@@ -47,6 +48,7 @@
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
+#include "util/ButtonShortcutController.h"
 #include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
 #include "util/SlideSwitch.h"
@@ -79,6 +81,17 @@ constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 300;
 // A wake hold must never become an in-app power-button action.  Boot may continue
 // while the button is held; swallow the one release that ends that wake gesture.
 static bool wakePowerReleasePending = false;
+ButtonShortcutController buttonShortcutController;
+static_assert(CrossPointSettings::CHORD_SCREENSHOT ==
+              static_cast<uint8_t>(ButtonShortcutController::ChordAction::Screenshot));
+static_assert(CrossPointSettings::CHORD_QUICK_LOCK ==
+              static_cast<uint8_t>(ButtonShortcutController::ChordAction::QuickLock));
+static_assert(CrossPointSettings::CHORD_NEXT_PAGE ==
+              static_cast<uint8_t>(ButtonShortcutController::ChordAction::NextPage));
+static_assert(CrossPointSettings::CHORD_PREVIOUS_PAGE ==
+              static_cast<uint8_t>(ButtonShortcutController::ChordAction::PreviousPage));
+static_assert(CrossPointSettings::CHORD_DISABLED ==
+              static_cast<uint8_t>(ButtonShortcutController::ChordAction::Disabled));
 
 // Fonts
 EpdFont notosans14RegularFont(&notosans_14_regular);
@@ -131,6 +144,7 @@ constexpr uint32_t SILENT_REBOOT_TARGET_SETTINGS = 2;
 constexpr uint32_t SILENT_REBOOT_TARGET_JOIN_NETWORK = 3;
 constexpr uint32_t SILENT_REBOOT_TARGET_MAX = SILENT_REBOOT_TARGET_JOIN_NETWORK;
 constexpr uint32_t SILENT_REBOOT_LIGHT_ON = 1U << 0;
+constexpr uint32_t SILENT_REBOOT_QUICK_LOCK = 1U << 1;  // a heap-defrag restart keeps Quick Lock on
 
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
@@ -157,7 +171,8 @@ static bool deepSleepInProgress = false;
 // settings. Cleared with the magic in setup().
 static void armSilentReboot(const uint32_t target) {
   silentRebootTarget = target;
-  silentRebootPayload = Frontlight.isOn() ? SILENT_REBOOT_LIGHT_ON : 0;
+  silentRebootPayload = (Frontlight.isOn() ? SILENT_REBOOT_LIGHT_ON : 0) |
+                        (buttonShortcutController.isQuickLocked() ? SILENT_REBOOT_QUICK_LOCK : 0);
   silentRebootMagic = SILENT_REBOOT_MAGIC;
 }
 
@@ -293,27 +308,36 @@ bool releaseCaches() {
 }
 
 bool deliver(const bleturner::Action action) {
+  // While locked a remote only turns pages: clicks and menus would open over the page or wait for the unlock.
+  const bool locked = buttonShortcutController.isQuickLocked();
+  bool turned = false;
   switch (action) {
     case bleturner::Action::NextPage:
-      return activityManager.remoteTurn(true, false);
+      turned = activityManager.remoteTurn(true, false, locked);
+      break;
     case bleturner::Action::PrevPage:
-      return activityManager.remoteTurn(false, false);
+      turned = activityManager.remoteTurn(false, false, locked);
+      break;
     case bleturner::Action::NextChapter:
-      return activityManager.remoteTurn(true, true);
+      turned = activityManager.remoteTurn(true, true, locked);
+      break;
     case bleturner::Action::PrevChapter:
-      return activityManager.remoteTurn(false, true);
+      turned = activityManager.remoteTurn(false, true, locked);
+      break;
     case bleturner::Action::Confirm:
-      return activityManager.remoteClick(RemoteButton::Confirm);
+      return !locked && activityManager.remoteClick(RemoteButton::Confirm);
     case bleturner::Action::Back:
-      return activityManager.remoteClick(RemoteButton::Back);
+      return !locked && activityManager.remoteClick(RemoteButton::Back);
     case bleturner::Action::ReaderMenu:
-      return activityManager.remoteShortcut(true);
+      return !locked && activityManager.remoteShortcut(true);
     case bleturner::Action::SaveQuote:
-      return activityManager.remoteShortcut(false);
+      return !locked && activityManager.remoteShortcut(false);
     case bleturner::Action::None:
       return false;
   }
-  return false;
+  // A page turn restarts Sleep Timeout When Locked.
+  if (turned) buttonShortcutController.noteActivity(millis());
+  return turned;
 }
 
 bool yieldForRadio() { return true; }        // the reader keeps no parser alive between pages
@@ -432,12 +456,21 @@ static void deliverSleepPluginEvents(const bool allowNetwork) {
 // Charge strip along the bottom of the retained sleep screen.
 static void drawSleepChargeStrip(const bool charging, const uint16_t percent) {
   RenderLock lock;
-  const int h = renderer.getLineHeight(SMALL_FONT_ID) + 12;
+  const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  // While locked, the strip covers the sleep screen's lock badge and shows the lock itself.
+  const bool locked = buttonShortcutController.isQuickLocked();
+  int h = lineHeight + 12;
+  if (locked) h = std::max(h, renderer.getScreenHeight() - BaseTheme::lockBadgeTop(renderer));
   const int y = renderer.getScreenHeight() - h;
+  const int textY = y + (h - lineHeight) / 2;
   renderer.fillRect(0, y, renderer.getScreenWidth(), h, false);
   char text[48];
   snprintf(text, sizeof(text), "%s  %u%%", charging ? tr(STR_CHARGING) : tr(STR_CHARGED), percent);
-  renderer.drawCenteredText(SMALL_FONT_ID, y + 6, text);
+  renderer.drawCenteredText(SMALL_FONT_ID, textY, text);
+  if (locked) {
+    const int textX = (renderer.getScreenWidth() - renderer.getTextWidth(SMALL_FONT_ID, text)) / 2;
+    BaseTheme::drawLockIcon(renderer, textX - BaseTheme::lockIconWidth - 6, textY + 5);
+  }
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
@@ -464,10 +497,20 @@ static bool holdSleepWhileUsbPowered() {
 }
 #endif
 
+static void renderQuickLockState(const bool locked) {
+  // A reader repaints with the lock in its status bar; other screens get the badge over the current frame.
+  if (locked && !activityManager.foregroundDrawsLockIndicator()) {
+    activityManager.drawLockBadge();
+  } else {
+    activityManager.requestUpdateAndWait();
+  }
+}
+
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
+  APP_STATE.lastSleepLocked = buttonShortcutController.isQuickLocked();
 
   // Sleep may end in a power-off (battery death, latch); persist the clock
   // floor now so a later cold boot resumes from it.
@@ -589,6 +632,7 @@ void setup() {
   const uint32_t snapshotTarget =
       (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_MAX) ? silentRebootTarget : 0;
   const bool silentRebootLightOn = isSilentReboot && (silentRebootPayload & SILENT_REBOOT_LIGHT_ON) != 0;
+  const bool silentRebootQuickLock = isSilentReboot && (silentRebootPayload & SILENT_REBOOT_QUICK_LOCK) != 0;
   silentRebootMagic = 0;
   silentRebootTarget = 0;
   silentRebootPayload = 0;
@@ -647,6 +691,11 @@ void setup() {
   APP_STATE.loadFromFile();
   const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
   const bool isPersistedSleepWake = isSleepWake && !APP_STATE.showBootScreen;
+  // A silent restart carries the lock in its payload; a sleep wake reads it from the SD card, as RTC memory does
+  // not survive boards whose sleep is a power-off.
+  const bool restoreQuickLock =
+      CrossPointSettings::quickLockAvailable() && !recoveryFirmwareMode &&
+      (isSilentReboot ? silentRebootQuickLock : isPersistedSleepWake && APP_STATE.lastSleepLocked);
 
   if (recoveryFirmwareMode) {
     LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)",
@@ -694,20 +743,24 @@ void setup() {
   // light off unless Restore Light on Wake is enabled; silent maintenance
   // reboots replay the live state captured at restart, so they neither go dark
   // nor light up against the user's wake preference. A slide switch bound to
-  // the light decides it from its position instead.
+  // the light decides it from its position instead, except on a locked wake:
+  // the switch waits for the unlock, so the light stays as it slept.
   const bool restoreLightOn = isSilentReboot ? silentRebootLightOn
                               : slideSwitchOwnsLight()
-                                  ? gpio.isToggleSwitchOn()
+                                  ? (restoreQuickLock ? SETTINGS.frontlightOn != 0 : gpio.isToggleSwitchOn())
                                   : (SETTINGS.frontlightOn != 0 && SETTINGS.frontlightRestoreOnWake != 0);
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
 
+  const bool allowShortPowerWake = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP ||
+                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK ||
+                                   restoreQuickLock;
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      // With Short Power Button Press = Sleep, a single click wakes on any
-      // device; otherwise the button must still be held (ghost-wake debounce).
+      // A single click wakes when Short Power Button Click is Sleep or Lock
+      // Controls, or the device slept locked; otherwise the button must still
+      // be held (ghost-wake debounce).
       // Picco: plugging in USB pulses the wake line; power on, as stock does.
-      if (!wakeHoldVerified && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP &&
-          !(FREEINK_DEVICE_PICCO && gpio.isUsbConnected())) {
+      if (!wakeHoldVerified && !allowShortPowerWake && !(FREEINK_DEVICE_PICCO && gpio.isUsbConnected())) {
         LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");
         Storage.prepareForDeepSleep();
         powerManager.startDeepSleep(gpio);
@@ -741,9 +794,12 @@ void setup() {
 
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
+  // Before the first paint, so it shows the lock.
+  if (restoreQuickLock) buttonShortcutController.lock(millis());
+
   // Apply a switch moved during sleep before the first paint, so the wake
   // screen does not draw in the old night mode and then repaint.
-  handleSlideSwitch();
+  if (!restoreQuickLock) handleSlideSwitch();
 
   // Resolve the single boot-presentation decision. Skipping the splash also
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see
@@ -765,10 +821,11 @@ void setup() {
       // panel keeps showing the pre-reboot popup until that first paint lands.
       break;
     case BootResume::SplashlessWake:
-      // One-shot flag: re-arm the splash for the next ordinary boot. Save
+      // One-shot flags: re-arm the splash and clear the saved lock for the next ordinary boot. Save
       // before any painting so a hang in the blocking paint path can't strand
       // us in a splashless-with-no-frame loop on the next boot.
       APP_STATE.showBootScreen = true;
+      APP_STATE.lastSleepLocked = false;
       APP_STATE.saveToFile();
       if (Storage.exists(SLEEP_FRAME_FILE) && loadSleepFrameBuffer()) {
         if (gpio.deviceIsX3()) {
@@ -846,12 +903,78 @@ void setup() {
   allowSleepAt = millis() + 2000;
 }
 
-void loop() {
+static void idleDelay(const unsigned long lastActivityTime) {
+  if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS && !pageturner::holdsCpu.load()) {
+    // If we've been inactive for a while, increase the delay to save power
+    powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
+    // Sleep in short slices and wake the poll as soon as a button contact closes.
+    // InputManager commits a press only when two consecutive polls agree, so a
+    // press shorter than one 50 ms sleep could land in a single sample and be lost.
+    const unsigned long idleStart = millis();
+    while (millis() - idleStart < 50) {
+      delay(10);
+      if (gpio.rawInputActive()) break;
+    }
+  } else {
+    // Short delay to prevent tight loop while still being responsive
+    delay(10);
+  }
+}
+
+// The shared tail of loop(), locked or not: the screen's own loop and the idle delay.
+static void runActivities(const unsigned long loopStartTime, const unsigned long lastActivityTime) {
   static unsigned long maxLoopDuration = 0;
+
+  // Refresh the battery icon when USB is plugged or unplugged.
+  // Placed after sleep guards so we never queue a render that won't be processed.
+  // Not while reading: there a repaint is a full page re-render (visible
+  // flash, the AA pass re-running, and a frontlight dip under the refresh
+  // load); the reader's status bar picks the charging state up on the next
+  // page turn instead.
+  if (gpio.wasUsbStateChanged() && !activityManager.isReaderActivity()) {
+    activityManager.requestUpdate();
+  }
+
+  const unsigned long activityStartTime = millis();
+  activityManager.loop();
+  const unsigned long activityDuration = millis() - activityStartTime;
+
+  const unsigned long loopDuration = millis() - loopStartTime;
+  if (loopDuration > maxLoopDuration) {
+    maxLoopDuration = loopDuration;
+    if (maxLoopDuration > 50) {
+      LOG_DBG("LOOP", "New max loop duration: %lu ms (activity: %lu ms)", maxLoopDuration, activityDuration);
+    }
+  }
+
+  bool skipLoopDelay = false;
+  {
+    RenderLock lock(RenderLock::Mode::Try);
+    if (!lock.ownsLock()) {
+      // Let rendering advance without treating lock contention as idle.
+      delay(10);
+      return;
+    }
+    skipLoopDelay = activityManager.skipLoopDelay();
+  }
+
+  // Add delay at the end of the loop to prevent tight spinning
+  // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
+  // Otherwise, use longer delay to save power
+  if (skipLoopDelay) {
+    powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
+    yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
+  } else {
+    idleDelay(lastActivityTime);
+  }
+}
+
+void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
-  gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
+  gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP ||
+                                                 SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK);
   mappedInputManager.update();
 
   // Bluetooth page turner, before the USB drive's early return: a card handed to USB stops the radio
@@ -886,7 +1009,8 @@ void loop() {
   }
 
   // After the exclusive-storage return: it saves settings to the SD card.
-  handleSlideSwitch();
+  // While locked the switch waits; its position applies on unlock.
+  if (!buttonShortcutController.isQuickLocked()) handleSlideSwitch();
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
   // Under the render lock, so a step never overlaps the themes' gauge reads.
@@ -944,28 +1068,78 @@ void loop() {
     return;
   }
 
-  static bool screenshotButtonsReleased = true;
-  static bool screenshotComboActive = false;
-  if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
-    screenshotComboActive = true;
-    if (screenshotButtonsReleased) {
-      screenshotButtonsReleased = false;
-      {
-        RenderLock lock;
-        ScreenshotUtil::takeScreenshot(renderer);
-      }
+  const bool x4ProDoubleClickPwrLight = BoardConfig::isX4Pro() && SETTINGS.doubleClickPwrLight;
+  // With the X4 Pro light double-click, a short press locks below, after the double-click handling.
+  const bool quickLockOnShortPower = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK &&
+                                     CrossPointSettings::quickLockAvailable() && !x4ProDoubleClickPwrLight;
+  const auto shortcutResult =
+      buttonShortcutController.update(millis(), gpio.isPressed(HalGPIO::BTN_POWER), gpio.isPressed(HalGPIO::BTN_DOWN),
+                                      gpio.wasReleased(HalGPIO::BTN_POWER), quickLockOnShortPower,
+                                      static_cast<ButtonShortcutController::ChordAction>(SETTINGS.powerChordAction));
+
+  switch (shortcutResult.event) {
+    case ButtonShortcutController::Event::Screenshot: {
+      RenderLock lock;
+      ScreenshotUtil::takeScreenshot(renderer);
+      break;
     }
+    case ButtonShortcutController::Event::NextPage:
+      activityManager.remoteTurn(true, false);
+      break;
+    case ButtonShortcutController::Event::PreviousPage:
+      activityManager.remoteTurn(false, false);
+      break;
+    case ButtonShortcutController::Event::QuickLockChanged:
+      LOG_DBG("MAIN", "Quick button lock %s", buttonShortcutController.isQuickLocked() ? "enabled" : "disabled");
+      renderQuickLockState(buttonShortcutController.isQuickLocked());
+      break;
+    case ButtonShortcutController::Event::None:
+      break;
+  }
+  // Before any screen reads input, so the screen also gets none in the pass that locks.
+  mappedInputManager.setInputLocked(buttonShortcutController.isQuickLocked());
+
+  if (shortcutResult.consumeInput) {
+    halTiltSensor.clearPendingEvents();
+  }
+
+  // Swallow the entire chord cycle so normal long-power handling cannot race a
+  // deliberately held Power + Down shortcut.
+  if (buttonShortcutController.isChordActive()) {
     return;
   }
-  if (screenshotComboActive) {
-    if (gpio.isPressed(HalGPIO::BTN_POWER)) return;
-    if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
-      screenshotButtonsReleased = true;
-      screenshotComboActive = false;
+
+  // A hold that woke the device must be released before it can count as a new
+  // in-app long press. Otherwise a user who keeps holding after wake would put
+  // the device straight back to sleep once allowSleepAt expires.
+  static bool powerReleasedSinceWake = false;
+  if (!gpio.isPressed(HalGPIO::BTN_POWER)) powerReleasedSinceWake = true;
+
+  if (buttonShortcutController.isQuickLocked()) {
+    halTiltSensor.clearPendingEvents();
+    // A Power click from before the lock must not sleep or lock again after the unlock.
+    lastX4ProPowerClickAt = 0;
+
+    // Long Power remains the safety path to deep sleep while locked.
+    if (powerReleasedSinceWake && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
+        gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
+      enterDeepSleep();
       return;
     }
-    screenshotButtonsReleased = true;
-    screenshotComboActive = false;
+
+    const unsigned long quickLockTimeoutMs = SETTINGS.getQuickLockSleepTimeoutMs();
+    if (buttonShortcutController.shouldQuickLockSleep(millis(), quickLockTimeoutMs)) {
+      LOG_DBG("SLP", "Quick Lock auto-sleep triggered after %lu ms", quickLockTimeoutMs);
+      enterDeepSleep(true);
+      return;
+    }
+
+    // The screen keeps running; MappedInputManager hands it no input.
+    runActivities(loopStartTime, lastActivityTime);
+    return;
+  }
+  if (shortcutResult.consumeInput) {
+    return;
   }
 
   // Consume the second X4 Pro power-button release so it does not also run a
@@ -973,8 +1147,6 @@ void loop() {
   if (handleX4ProFrontlightDoubleClick()) {
     return;
   }
-
-  const bool x4ProDoubleClickPwrLight = BoardConfig::isX4Pro() && SETTINGS.doubleClickPwrLight;
 
 #if FREEINK_CAP_TOUCH
   // A single X4 Pro power click becomes Confirm only after the frontlight
@@ -1006,6 +1178,20 @@ void loop() {
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK && x4ProDoubleClickPwrLight) {
+    const bool clickWindowPassed =
+        lastX4ProPowerClickAt != 0 && millis() - lastX4ProPowerClickAt > X4PRO_POWER_DOUBLE_CLICK_MS;
+    // Too long for a double-click candidate, too short to sleep: locks at once, as PWR_CONFIRM confirms.
+    const bool longClick = mappedInputManager.wasReleased(MappedInputManager::Button::Power) &&
+                           gpio.getPowerButtonHeldTime() > X4PRO_POWER_CLICK_MAX_HOLD_MS &&
+                           gpio.getPowerButtonHeldTime() <= SETTINGS.getPowerButtonDuration();
+    if (clickWindowPassed || longClick) {
+      lastX4ProPowerClickAt = 0;
+      buttonShortcutController.lock(millis());
+      renderQuickLockState(true);
+      return;
+    }
+  }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
@@ -1014,12 +1200,6 @@ void loop() {
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }
-
-  // A hold that woke the device must be released before it can count as a new
-  // in-app long press. Otherwise a user who keeps holding after wake would put
-  // the device straight back to sleep once allowSleepAt expires.
-  static bool powerReleasedSinceWake = false;
-  if (!gpio.isPressed(HalGPIO::BTN_POWER)) powerReleasedSinceWake = true;
 
   // On X4 Pro with SLEEP, a press still within the click window is a
   // double-click candidate — let it be released and evaluated above instead
@@ -1030,10 +1210,6 @@ void loop() {
 
   if (!x4ProAwaitingClickWindow && powerReleasedSinceWake && millis() >= allowSleepAt &&
       gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
-    // If the screenshot combination is potentially being pressed, don't sleep
-    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
-      return;
-    }
     LOG_DBG("MAIN", "Power button held %lums, sleeping", gpio.getPowerButtonHeldTime());
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
@@ -1066,60 +1242,5 @@ void loop() {
     }
   }
 
-  // Refresh the battery icon when USB is plugged or unplugged.
-  // Placed after sleep guards so we never queue a render that won't be processed.
-  // Not while reading: there a repaint is a full page re-render (visible
-  // flash, the AA pass re-running, and a frontlight dip under the refresh
-  // load); the reader's status bar picks the charging state up on the next
-  // page turn instead.
-  if (gpio.wasUsbStateChanged() && !activityManager.isReaderActivity()) {
-    activityManager.requestUpdate();
-  }
-
-  const unsigned long activityStartTime = millis();
-  activityManager.loop();
-  const unsigned long activityDuration = millis() - activityStartTime;
-
-  const unsigned long loopDuration = millis() - loopStartTime;
-  if (loopDuration > maxLoopDuration) {
-    maxLoopDuration = loopDuration;
-    if (maxLoopDuration > 50) {
-      LOG_DBG("LOOP", "New max loop duration: %lu ms (activity: %lu ms)", maxLoopDuration, activityDuration);
-    }
-  }
-
-  bool skipLoopDelay = false;
-  {
-    RenderLock lock(RenderLock::Mode::Try);
-    if (!lock.ownsLock()) {
-      // Let rendering advance without treating lock contention as idle.
-      delay(10);
-      return;
-    }
-    skipLoopDelay = activityManager.skipLoopDelay();
-  }
-
-  // Add delay at the end of the loop to prevent tight spinning
-  // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
-  // Otherwise, use longer delay to save power
-  if (skipLoopDelay) {
-    powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
-    yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
-  } else {
-    if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS && !pageturner::holdsCpu.load()) {
-      // If we've been inactive for a while, increase the delay to save power
-      powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
-      // Sleep in short slices and wake the poll as soon as a button contact closes.
-      // InputManager commits a press only when two consecutive polls agree, so a
-      // press shorter than one 50 ms sleep could land in a single sample and be lost.
-      const unsigned long idleStart = millis();
-      while (millis() - idleStart < 50) {
-        delay(10);
-        if (gpio.rawInputActive()) break;
-      }
-    } else {
-      // Short delay to prevent tight loop while still being responsive
-      delay(10);
-    }
-  }
+  runActivities(loopStartTime, lastActivityTime);
 }
