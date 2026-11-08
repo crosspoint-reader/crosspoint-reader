@@ -831,6 +831,9 @@ void EpubReaderActivity::loop() {
       break;
   }
 
+  // A custom long-press action fires on the release, so the release frame must reach the page-button handling below.
+  const bool customPageRelease = ReaderUtils::customLongPressReleased(mappedInput);
+
   if (automaticPageTurnActive) {
     const bool touchStopsAutoTurn = ReaderUtils::isTouchMenuGesture(renderer, mappedInput);
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
@@ -846,12 +849,12 @@ void EpubReaderActivity::loop() {
       return;
     }
 
-    if (RenderLock::peek()) {
+    if (RenderLock::peek() && !customPageRelease) {
       lastPageTurnTime = millis();
       return;
     }
 
-    if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
+    if (!customPageRelease && (millis() - lastPageTurnTime) >= pageTurnDuration) {
       const bool succeeded = pageTurn(true);
       notePageTurn(true, succeeded);
       requestUpdate();
@@ -974,7 +977,7 @@ void EpubReaderActivity::loop() {
 
   constexpr unsigned long kMinManualTurnGapMs = 200;
   const bool turnGuardActive = RenderLock::peek() || (millis() - lastPageTurnTime) < kMinManualTurnGapMs;
-  if (pendingManualTurn != 0 && !turnGuardActive) {
+  if (pendingManualTurn != 0 && !turnGuardActive && !customPageRelease) {
     if (!section) {
       pendingManualTurn = 0;
       return;
@@ -1040,6 +1043,10 @@ void EpubReaderActivity::loop() {
   if (longPress && customAction) {
     automaticPageTurnActive = false;
     pendingManualTurn = 0;
+    // Let a render in progress finish first: it may be building the section the action reads.
+    // Some actions take this lock themselves, so unlock before running the action.
+    RenderLock waitForRender;
+    waitForRender.unlock();
     runLongPressFunction(customFunction);
     return;
   }

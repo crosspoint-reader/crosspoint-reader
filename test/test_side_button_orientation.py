@@ -82,6 +82,8 @@ bool migrate(bool missing, uint8_t savedSide) {
 bool MappedInputManager::wasPressed(Button b) const { return mapButton(b, &HalGPIO::wasPressed); }
 bool MappedInputManager::wasReleased(Button b) const { return mapButton(b, &HalGPIO::wasReleased); }
 bool MappedInputManager::wasLongPressed(Button, unsigned long) const { return false; }
+unsigned long heldTimeMs = 0;
+unsigned long MappedInputManager::getHeldTime() const { return heldTimeMs; }
 struct {
   bool wasTiltedForward() const { return false; }
   bool wasTiltedBack() const { return false; }
@@ -242,6 +244,28 @@ int main() {
   assert(customLongPressFunction(true, PageTurnResult::Source::Side) == 12);
   assert(customLongPressFunction(false, PageTurnResult::Source::Side) == 13);
   assert(customLongPressFunction(true, PageTurnResult::Source::Other) == CrossPointSettings::LP_MENU_DISABLED);
+
+  // Only a held page-button release counts as a Custom long press, and only in Custom mode.
+  gpio.pressEdge = false;
+  gpio.releaseEdge = true;
+  for (const int physical : {static_cast<int>(HalGPIO::BTN_LEFT), static_cast<int>(HalGPIO::BTN_RIGHT),
+                             static_cast<int>(HalGPIO::BTN_UP), static_cast<int>(HalGPIO::BTN_DOWN)}) {
+    gpio.pressed = physical;
+    SETTINGS.longPressButtonBehavior = CrossPointSettings::CUSTOM_ACTIONS;
+    heldTimeMs = SKIP_HOLD_MS;
+    assert(customLongPressReleased(input));
+    heldTimeMs = SKIP_HOLD_MS - 1;
+    assert(!customLongPressReleased(input));
+    heldTimeMs = SKIP_HOLD_MS;
+    SETTINGS.longPressButtonBehavior = CrossPointSettings::OFF;
+    assert(!customLongPressReleased(input));
+  }
+  SETTINGS.longPressButtonBehavior = CrossPointSettings::CUSTOM_ACTIONS;
+  gpio.pressed = HalGPIO::BTN_CONFIRM;
+  assert(!customLongPressReleased(input));
+  gpio.pressed = HalGPIO::BTN_RIGHT;
+  gpio.releaseEdge = false;
+  assert(!customLongPressReleased(input));
 }
 """
 with tempfile.TemporaryDirectory() as directory:
@@ -251,6 +275,6 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run(["c++", "-std=c++20", "-Wall", "-Wextra", "-Werror", "-I" + directory,
                     "-I" + str(ROOT / "src"), "-I" + str(ROOT / "freeink-sdk/libs/ui/FreeInkUI/include"), str(tmp / "orientation.cpp"), "-o", str(tmp / "orientation")], check=True)
     subprocess.run([str(tmp / "orientation")], check=True)
-print("Passed: front/side page turns and sources, custom release timing and per-button functions, "
+print("Passed: front/side page turns and sources, custom release timing, release detection and per-button functions, "
       "3,360 button mappings, "
       "legacy settings, and all 16 rotation previews")

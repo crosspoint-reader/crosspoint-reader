@@ -108,6 +108,17 @@ inline uint8_t customLongPressFunction(const bool next, const PageTurnResult::So
   return next ? SETTINGS.longPressFrontNextFunction : SETTINGS.longPressFrontPrevFunction;
 }
 
+// True on the release that ends a page-button hold in CUSTOM_ACTIONS mode.
+inline bool customLongPressReleased(const MappedInputManager& input) {
+  if (SETTINGS.longPressButtonBehavior != SETTINGS.CUSTOM_ACTIONS) return false;
+  const bool released = input.wasReleased(MappedInputManager::Button::Left) ||
+                        input.wasReleased(MappedInputManager::Button::Right) ||
+                        input.wasReleased(MappedInputManager::Button::PageBack) ||
+                        input.wasReleased(MappedInputManager::Button::PageForward);
+  // getHeldTime() can drop a pending touch hold, so read it only for a page-button release.
+  return released && input.getHeldTime() >= SKIP_HOLD_MS;
+}
+
 struct TouchPageTurn {
   bool prev;
   bool next;
