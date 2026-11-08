@@ -24,9 +24,9 @@ namespace {
 constexpr uint16_t PORT = 53317;
 // Bound incomplete HTTP requests so one stalled sender cannot monopolize the listener.
 constexpr uint32_t HEADER_TIMEOUT_MS = 3000;
-constexpr uint32_t HEADER_IDLE_TIMEOUT_MS = 1200;
+constexpr uint32_t HEADER_IDLE_TIMEOUT_MS = 2500;
 constexpr uint32_t METADATA_TIMEOUT_MS = 6000;
-constexpr uint32_t METADATA_IDLE_TIMEOUT_MS = 2500;
+constexpr uint32_t METADATA_IDLE_TIMEOUT_MS = 5000;
 constexpr const char* GROUP = "224.0.0.167";
 void randomId(char out[33]) {
   uint8_t bytes[16];

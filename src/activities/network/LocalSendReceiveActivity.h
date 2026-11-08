@@ -32,6 +32,7 @@ class LocalSendReceiveActivity final : public UiListActivity {
   bool leaveRequested = false;
   FileAction pendingFileAction = FileAction::None;
   int pendingFileEntry = -1;
+  int deleteConfirmationEntry = -1;
   char allowedFolders[MAX_FOLDERS][96]{};
   int folderCount = 0;
   char destination[96] = "/Books/LocalSend";

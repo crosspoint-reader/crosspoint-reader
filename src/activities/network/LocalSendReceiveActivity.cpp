@@ -259,6 +259,12 @@ void LocalSendReceiveActivity::recordCompleted() {
   {
     RenderLock lock(*this);
     if (sessionCount == MAX_SESSION_FILES) {
+      // The oldest entry drops off the list; keep a suspended delete prompt
+      // pointed at the same file, never at a different received file.
+      if (deleteConfirmationEntry == 0)
+        deleteConfirmationEntry = -1;
+      else if (deleteConfirmationEntry > 0)
+        --deleteConfirmationEntry;
       for (int i = 1; i < sessionCount; ++i) std::memcpy(sessionNames[i - 1], sessionNames[i], sizeof(sessionNames[0]));
       --sessionCount;
     }
@@ -278,9 +284,11 @@ void LocalSendReceiveActivity::showFileError(const char* message) {
 
 void LocalSendReceiveActivity::confirmDeleteFile(const int entry) {
   if (entry < 0 || entry >= sessionCount) return;
+  deleteConfirmationEntry = entry;
   const char* actions[] = {tr(STR_CANCEL), tr(STR_DELETE)};
   consentPopup = false;
   popup.showMessage("Delete received file?", sessionNames[entry], actions, 2, 0, [this, entry](int choice) {
+    deleteConfirmationEntry = -1;
     if (choice == 1) {
       pendingFileEntry = entry;
       pendingFileAction = FileAction::ConfirmDelete;
@@ -426,9 +434,14 @@ bool LocalSendReceiveActivity::handleCustomInput() {
     return true;
   }
   popup.handleInput(mappedInput, [this] { requestUpdate(); });
-  if (!popup.isActive() && consentPopup) {
-    if (receiver && receiver->pendingOffer()) receiver->decide(false);
-    consentPopup = false;
+  if (!popup.isActive()) {
+    if (consentPopup) {
+      if (receiver && receiver->pendingOffer()) receiver->decide(false);
+      consentPopup = false;
+    } else {
+      // An ordinary delete confirmation was dismissed rather than interrupted by consent.
+      deleteConfirmationEntry = -1;
+    }
   }
   return true;
 }
@@ -474,6 +487,14 @@ void LocalSendReceiveActivity::loop() {
   } else if (receiver->pendingOffer() && !consentPopup) {
     if (popup.isActive()) popup.dismiss();
     showConsent();
+  }
+  // Consent temporarily replaces a delete confirmation. Restore it only after
+  // the offer ends and there is no active transfer that would block deletion.
+  if (deleteConfirmationEntry >= 0 && !consentPopup && !popup.isActive() && !receiver->pendingOffer() &&
+      !receiver->hasActiveBatch()) {
+    const int entry = deleteConfirmationEntry;
+    deleteConfirmationEntry = -1;
+    confirmDeleteFile(entry);
   }
 }
 
