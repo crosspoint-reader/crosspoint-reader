@@ -53,22 +53,25 @@ bool isWordSeparator(const char c) {
 }
 
 int renderedPlainPrefixWidth(const GfxRenderer& renderer, const int fontId, const char* text, size_t len,
-                             const EpdFontFamily::Style style) {
+                             const EpdFontFamily::Style style, const int paragraphLevel = -1) {
   char visible[MAX_LINE_BYTES + 1];
   size_t count = 0;
   for (size_t i = 0; i < std::min(len, MAX_LINE_BYTES); ++i) {
     if (text[i] != DICTIONARY_PLAIN_HEADWORD_MARKER) visible[count++] = text[i];
   }
   visible[count] = '\0';
-  return renderer.getTextAdvanceX(fontId, visible, style, 0, BidiUtils::BidiBaseDir::AUTO,
-                                  GfxRenderer::TextMeasureMode::Rendered);
+  return renderer.getTextAdvanceX(
+      fontId, visible, style, 0,
+      paragraphLevel < 0 ? BidiUtils::BidiBaseDir::AUTO : static_cast<BidiUtils::BidiBaseDir>(paragraphLevel),
+      GfxRenderer::TextMeasureMode::Rendered);
 }
 
 PlainLineLayout getPlainLineLayout(const GfxRenderer& renderer, const int fontId, const char* text, const bool bold,
                                    const bool wraps, const int width, const int paragraphLevel = -1) {
   PlainLineLayout result;
   const auto style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
-  const int remaining = std::max(0, width - renderedPlainPrefixWidth(renderer, fontId, text, strlen(text), style));
+  const int remaining =
+      std::max(0, width - renderedPlainPrefixWidth(renderer, fontId, text, strlen(text), style, paragraphLevel));
   switch (SETTINGS.paragraphAlignment) {
     case CrossPointSettings::CENTER_ALIGN:
       result.xOffset = remaining / 2;
@@ -130,9 +133,12 @@ void drawJustifiedPlainLine(const GfxRenderer& renderer, const int fontId, const
     afterSpace = false;
     const size_t start = i;
     while (text[i] && !isWordSeparator(text[i])) ++i;
-    const int advance = renderedPlainPrefixWidth(renderer, fontId, text, start, style);
     const char suffix = text[i];
     text[i] = '\0';
+    // Measure through the word so the preceding space-to-glyph kerning
+    // contributes to the origin, just as it does for the whole line.
+    const int advance = renderedPlainPrefixWidth(renderer, fontId, text, i, style, 0) -
+                        renderedPlainPrefixWidth(renderer, fontId, text + start, i - start, style, 0);
     renderer.drawText(fontId, x + advance + placement.justifyExtra * gapIndex / placement.gaps, y, text + start, true,
                       style);
     text[i] = suffix;
@@ -244,7 +250,7 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
       }
 
       std::string rendered;
-      if (BidiUtils::applyBidiVisual(visible.c_str(), rendered, -1, &visualSources)) {
+      if (BidiUtils::applyBidiVisual(visible.c_str(), rendered, paragraphLevel, &visualSources)) {
         std::fill_n(starts.begin(), words.size(), UINT16_MAX);
         std::fill_n(ends.begin(), words.size(), 0);
         const auto* ptr = reinterpret_cast<const unsigned char*>(rendered.c_str());
@@ -293,32 +299,118 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
           renderedPositions[n] = static_cast<int16_t>(throughWord - wordWidth);
         }
         if (complete) {
-          for (size_t n = 0; n < words.size(); ++n) positions[n] = renderedPositions[n];
-          // A logical word may occupy several separated visual runs. Keep all
-          // runs for the selection overlay and redraw, not a bounding box.
+          // Match the exact extra gap advances used by drawJustifiedPlainLine.
+          const auto justifyAt = [&](const size_t byteEnd) {
+            if (!placement.gaps) return 0;
+            int gap = 0;
+            bool seenWord = false, afterSpace = false, inWord = false;
+            for (size_t j = 0; j < byteEnd; ++j) {
+              if (isWordSeparator(rendered[j])) {
+                if (seenWord) afterSpace = true;
+                inWord = false;
+              } else {
+                if (!inWord && afterSpace) ++gap;
+                inWord = seenWord = true;
+                afterSpace = false;
+              }
+            }
+            if (afterSpace && byteEnd < rendered.size() && !isWordSeparator(rendered[byteEnd])) ++gap;
+            return placement.justifyExtra * gap / placement.gaps;
+          };
+          for (size_t n = 0; n < words.size(); ++n) {
+            const size_t index = reordered ? visualOrder[n] : n;
+            positions[n] = renderedPositions[n] + justifyAt(starts[index]);
+          }
+
+          // The visual source map identifies the actual first/last logical
+          // glyphs even when they are not in the first visual fragment.
+          const auto glyphRect = [&](const size_t ordinal) {
+            const auto* cursor = reinterpret_cast<const unsigned char*>(rendered.c_str());
+            const auto* begin = cursor;
+            for (size_t cp = 0; cp < ordinal && *cursor; ++cp) utf8NextCodepoint(&cursor);
+            const size_t glyphStart = cursor - begin;
+            if (*cursor) utf8NextCodepoint(&cursor);
+            const size_t glyphEnd = cursor - begin;
+            prefix.assign(rendered.data(), glyphEnd);
+            visualWord.assign(rendered.data() + glyphStart, glyphEnd - glyphStart);
+            const int through =
+                owner.renderer.getTextAdvanceX(fontId, prefix.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
+                                               GfxRenderer::TextMeasureMode::Rendered);
+            const int glyphWidth =
+                owner.renderer.getTextAdvanceX(fontId, visualWord.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
+                                               GfxRenderer::TextMeasureMode::Rendered);
+            const int extra = justifyAt(glyphStart);
+            return std::pair<int16_t, int16_t>{static_cast<int16_t>(through - glyphWidth + extra),
+                                               static_cast<int16_t>(through + extra)};
+          };
+          const auto visualOrdinal = [&](const size_t source, const size_t word) {
+            size_t nearest = visualSources.size();
+            size_t distance = SIZE_MAX;
+            for (size_t cp = 0; cp < visualSources.size(); ++cp) {
+              if (visualSources[cp] >= sourceCount || sourceWord[visualSources[cp]] != word) continue;
+              const size_t difference =
+                  visualSources[cp] > source ? visualSources[cp] - source : source - visualSources[cp];
+              if (difference < distance) {
+                nearest = cp;
+                distance = difference;
+              }
+            }
+            return nearest;
+          };
           for (const auto& run : visualRuns) {
             const size_t count = std::count_if(visualRuns.begin(), visualRuns.end(),
                                                [&](const VisualRun& item) { return item.word == run.word; });
-            if (count < 2) continue;
             const size_t visualIndex =
                 reordered ? static_cast<size_t>(std::find(visualOrder.begin(), visualOrder.end(), run.word) -
                                                 visualOrder.begin())
                           : run.word;
             if (visualIndex >= words.size()) continue;
-            prefix.assign(rendered.data(), run.end);
             visualWord.assign(rendered.data() + run.start, run.end - run.start);
+            const std::string runText = visualWord;
+            std::string isolated;
+            const bool hasIsolated = BidiUtils::applyBidiVisual(words[run.word].c_str(), isolated, paragraphLevel);
+            const bool containsRtl = std::any_of(words[run.word].begin(), words[run.word].end(),
+                                                 [](unsigned char c) { return c >= 0xD6 && c <= 0xDB; });
+            if (count == 1 && !containsRtl && (!hasIsolated || isolated == visualWord)) continue;
+
+            prefix.assign(rendered.data(), run.end);
             const int through =
                 owner.renderer.getTextAdvanceX(fontId, prefix.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
                                                GfxRenderer::TextMeasureMode::Rendered);
             const int width =
                 owner.renderer.getTextAdvanceX(fontId, visualWord.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
                                                GfxRenderer::TextMeasureMode::Rendered);
-            const int16_t startX = static_cast<int16_t>(through - width);
+            const int16_t startX = static_cast<int16_t>(through - width + justifyAt(run.start));
+
+            size_t firstSource = SIZE_MAX, lastSource = 0;
+            for (size_t cp = 0; cp < sourceCount; ++cp) {
+              if (sourceWord[cp] != run.word) continue;
+              firstSource = std::min(firstSource, cp);
+              lastSource = cp;
+            }
+            if (firstSource == SIZE_MAX) continue;
+            const size_t firstGlyph = visualOrdinal(firstSource, run.word);
+            const size_t nextGlyph = visualOrdinal(std::min(firstSource + 1, lastSource), run.word);
+            const size_t lastGlyph = visualOrdinal(lastSource, run.word);
+            const size_t previousGlyph =
+                visualOrdinal(lastSource > firstSource ? lastSource - 1 : lastSource, run.word);
+            if (firstGlyph == visualSources.size() || lastGlyph == visualSources.size()) continue;
+            const auto firstRect = glyphRect(firstGlyph);
+            const auto lastRect = glyphRect(lastGlyph);
+            // A shaped ligature or one-glyph RTL word has no adjacent visual
+            // source glyph to infer its direction from.
+            const bool firstReversed =
+                firstGlyph == nextGlyph ? (containsRtl || paragraphLevel == 1) : firstGlyph > nextGlyph;
+            const bool lastReversed =
+                previousGlyph == lastGlyph ? (containsRtl || paragraphLevel == 1) : previousGlyph > lastGlyph;
+            const int16_t logicalStart = firstReversed ? firstRect.second : firstRect.first;
+            const int16_t logicalEnd = lastReversed ? lastRect.first : lastRect.second;
             if (std::none_of(fragments.begin(), fragments.end(), [&](const TextBlock::VisualFragment& fragment) {
                   return fragment.wordIndex == visualIndex;
                 }))
               positions[visualIndex] = startX;
-            fragments.push_back({static_cast<uint16_t>(visualIndex), startX, static_cast<int16_t>(width), visualWord});
+            fragments.push_back({static_cast<uint16_t>(visualIndex), startX, static_cast<int16_t>(width), runText,
+                                 logicalStart, logicalEnd});
           }
           visualPositionsApplied = true;
         }
@@ -346,7 +438,7 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
             }
             x += gapLeft + 1 < ranges.size()
                      ? renderedPlainPrefixWidth(owner.renderer, fontId, bytes + ranges[gapLeft].end - offset,
-                                                ranges[gapLeft + 1].start - ranges[gapLeft].end, family)
+                                                ranges[gapLeft + 1].start - ranges[gapLeft].end, family, paragraphLevel)
                      : owner.renderer.getSpaceWidth(fontId, family);
           }
           positions[n] = x;
@@ -364,7 +456,7 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
               }
             }
           }
-          positions[n] = renderedPlainPrefixWidth(owner.renderer, fontId, bytes, start, family) +
+          positions[n] = renderedPlainPrefixWidth(owner.renderer, fontId, bytes, start, family, paragraphLevel) +
                          (placement.gaps > 0 ? placement.justifyExtra * gapIndex / placement.gaps : 0);
         }
       }
@@ -381,11 +473,12 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
     }
   }
 
-  std::unique_ptr<TextBlock> pack() {
+  std::unique_ptr<TextBlock> pack(const uint16_t rowStep) {
     auto block =
         makeUniqueNoThrow<TextBlock>(words, positions, styles, std::vector<uint8_t>{}, std::vector<uint16_t>{}, style,
                                      std::vector<std::string>{}, std::vector<TextBlock::LinkSpan>{}, ranges);
     if (block && !block->setVisualFragments(std::move(fragments))) return nullptr;
+    if (block) block->setSelectionRowStep(rowStep);
     return block;
   }
 };
@@ -821,7 +914,7 @@ bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
       const size_t lineBytes = length * (sizeof(TextBlock::SourceRange) + 12) + sizeof(TextBlock) + 1024;
       if (heap.freeBytes < lineBytes + HEAP_HEADROOM || heap.largestBlockBytes < lineBytes) return false;
       scratch->layout(*this, fontId, line.start, line.bold, placement, line.paragraphRtl ? 1 : 0);
-      auto block = scratch->pack();
+      auto block = scratch->pack(static_cast<uint16_t>(lineHeight));
       if (!block || !block->valid()) {
         LOG_ERR("DICT", "OOM: selection line (%u byte budget)", static_cast<unsigned>(lineBytes));
         return false;
@@ -996,18 +1089,20 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
       // fault SD glyphs in one-by-one before the batch prewarm completes.
       *std::remove(buf, buf + len, DICTIONARY_PLAIN_HEADWORD_MARKER) = '\0';
       renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, buf, true,
-                        lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+                        lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR,
+                        lines[i].paragraphRtl ? BidiUtils::BidiBaseDir::RTL : BidiUtils::BidiBaseDir::LTR);
       continue;
     }
     const auto placement = getPlainLineLayout(renderer, fontId, buf, lines[i].bold, lines[i].wraps, lineWidth,
                                               lines[i].paragraphRtl ? 1 : 0);
     const int y = startY + (i - firstLine) * lineHeight;
+    const auto direction = lines[i].paragraphRtl ? BidiUtils::BidiBaseDir::RTL : BidiUtils::BidiBaseDir::LTR;
     if (placement.gaps > 0)
       drawJustifiedPlainLine(renderer, fontId, x, y, buf, lines[i].bold, placement);
     else {
       *std::remove(buf, buf + len, DICTIONARY_PLAIN_HEADWORD_MARKER) = '\0';
       renderer.drawText(fontId, x + placement.xOffset, y, buf, true,
-                        lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+                        lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR, direction);
     }
   }
 }

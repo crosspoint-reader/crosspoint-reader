@@ -193,7 +193,12 @@ bool ClipSelectionActivity::extractWords() {
 
         const auto style = static_cast<EpdFontFamily::Style>(block->wordStyle(i) & ~EpdFontFamily::UNDERLINE);
         const int wordFont = TextBlock::renderFontId(renderer, block->wordFontId(i, fontId), fontId);
-        int width = renderer.getTextAdvanceX(wordFont, text, style, characterSpacing);
+        const uint16_t rowStep = block->getSelectionRowStep();
+        int width = rowStep
+                        ? renderer.getTextAdvanceX(wordFont, text, style, characterSpacing,
+                                                   isRtl ? BidiUtils::BidiBaseDir::RTL : BidiUtils::BidiBaseDir::LTR,
+                                                   GfxRenderer::TextMeasureMode::Rendered)
+                        : renderer.getTextAdvanceX(wordFont, text, style, characterSpacing);
         if (width <= 0) continue;
         if (i + 1 < block->wordCount() && block->wordXpos(i + 1) > block->wordXpos(i)) {
           width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i)));
@@ -207,7 +212,10 @@ bool ClipSelectionActivity::extractWords() {
         word.x = static_cast<int16_t>(word.lineX + block->wordXpos(i));
         word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i));
         word.width = static_cast<int16_t>(width);
-        word.height = static_cast<int16_t>(renderer.getLineHeight(wordFont));
+        word.logicalStartX = word.x + (isRtl ? word.width : 0);
+        word.logicalEndX = word.x + (isRtl ? 0 : word.width);
+        word.height = static_cast<int16_t>(rowStep ? std::min<int>(renderer.getLineHeight(wordFont), rowStep)
+                                                   : renderer.getLineHeight(wordFont));
         word.row = rowCount;
         word.pageOffset = static_cast<uint8_t>(pageOffset);
         word.pageWordIndex = pageWordIndex++;
@@ -221,6 +229,8 @@ bool ClipSelectionActivity::extractWords() {
             if (fragment.wordIndex != i) continue;
             word.x = static_cast<int16_t>(word.lineX + fragment.x);
             word.width = fragment.width;
+            word.logicalStartX = static_cast<int16_t>(word.lineX + fragment.logicalStartX);
+            word.logicalEndX = static_cast<int16_t>(word.lineX + fragment.logicalEndX);
             break;
           }
         }
@@ -290,7 +300,8 @@ int ClipSelectionActivity::wordAt(const int x, int y) const {
   for (int i = 0; i < static_cast<int>(wordCount); ++i) {
     const WordBox& word = words[i];
     if (word.pageOffset != currentPageOffset) continue;
-    if (y < word.y - SLOP || y >= word.y + word.height + SLOP) continue;
+    const int verticalSlop = word.sourceBlock && word.sourceBlock->getSelectionRowStep() ? 0 : SLOP;
+    if (y < word.y - verticalSlop || y >= word.y + word.height + verticalSlop) continue;
     forEachVisualSpan(word, [&](const int sx, const int width) {
       if (width <= 0) return;
       const int distance = x < sx ? sx - x : std::max(0, x - (sx + width - 1));
@@ -360,9 +371,14 @@ bool ClipSelectionActivity::isWithinCurrentPageEndDwellSlop(const int x, const i
   if (selected + 1 < static_cast<int>(wordCount) && words[selected + 1].pageOffset == currentPageOffset) return false;
   const WordBox& word = words[selected];
   const int wordY = word.y + textOffset();
-  return word.pageOffset == currentPageOffset && x >= word.x - TOUCH_PAGE_END_DWELL_SLOP_PX &&
-         x < word.x + word.width + TOUCH_PAGE_END_DWELL_SLOP_PX && y >= wordY - TOUCH_PAGE_END_DWELL_SLOP_PX &&
-         y < wordY + word.height + TOUCH_PAGE_END_DWELL_SLOP_PX;
+  if (word.pageOffset != currentPageOffset || y < wordY - TOUCH_PAGE_END_DWELL_SLOP_PX ||
+      y >= wordY + word.height + TOUCH_PAGE_END_DWELL_SLOP_PX)
+    return false;
+  bool nearWord = false;
+  forEachVisualSpan(word, [&](const int sx, const int width) {
+    if (x >= sx - TOUCH_PAGE_END_DWELL_SLOP_PX && x < sx + width + TOUCH_PAGE_END_DWELL_SLOP_PX) nearWord = true;
+  });
+  return nearWord;
 }
 
 void ClipSelectionActivity::moveVertical(const int direction) {
@@ -684,7 +700,7 @@ Rect ClipSelectionActivity::handleRect(const int index, const bool start) const 
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int size = std::max(24, UITheme::getInstance().getMetrics().verticalSpacing * 2);
   const bool left = start != word.isRtl;
-  const int edge = left ? word.x : word.x + word.width;
+  const int edge = start ? word.logicalStartX : word.logicalEndX;
   return Rect{std::clamp(edge - (left ? size : 0), safe.x, safe.x + safe.width - size),
               std::clamp(word.y + textOffset() + word.height, safe.y, safe.y + safe.height - size), size, size};
 }

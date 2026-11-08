@@ -258,6 +258,26 @@ TEST_F(ChapterHtmlSlimParserTest, StopDuringFinalFlushDoesNotEmitAnotherPage) {
   EXPECT_EQ(pages, 1u);
 }
 
+TEST(TextBlockVisualFragments, RealRendererPreservesDisjointVisualWordsOnRepaint) {
+  GfxRenderer renderer;
+  const std::vector<std::string> words = {"abcאבג", "דהו", "tail"};
+  const std::vector<int16_t> positions = {0, 32, 144};
+  const std::vector<EpdFontFamily::Style> styles(words.size(), EpdFontFamily::REGULAR);
+  TextBlock block(words, positions, styles, {}, {});
+  ASSERT_TRUE(block.valid());
+  ASSERT_TRUE(block.setVisualFragments({{0, 0, 24, "abc", 0, 88}, {0, 88, 48, "גבא", 0, 88}}));
+  block.render(renderer, 0, 11, 5);
+  ASSERT_EQ(renderer.textDraws.size(), 4u);
+  EXPECT_EQ(renderer.textDraws[0].x, 11);
+  EXPECT_EQ(renderer.textDraws[0].text, "abc");
+  EXPECT_EQ(renderer.textDraws[0].direction, BidiUtils::BidiBaseDir::VISUAL);
+  EXPECT_EQ(renderer.textDraws[1].x, 99);
+  EXPECT_EQ(renderer.textDraws[1].text, "גבא");
+  EXPECT_EQ(renderer.textDraws[1].direction, BidiUtils::BidiBaseDir::VISUAL);
+  EXPECT_EQ(renderer.textDraws[2].x, 43);
+  EXPECT_EQ(renderer.textDraws[3].x, 155);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, RubySurvivesPartialParagraphExtraction) {
   ParsedText text;
   text.addWord("a", EpdFontFamily::REGULAR);

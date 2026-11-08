@@ -31,6 +31,7 @@ def method(name, next_name, text=source):
 extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSelectionActivity::closestInRow")
 word_hit = method("int ClipSelectionActivity::wordAt", "int ClipSelectionActivity::dragWordAt")
 selected_contains = method("bool ClipSelectionActivity::selectionContains", "int ClipSelectionActivity::nextPageStartIndexForTouchDrag")
+handle_rect = method("Rect ClipSelectionActivity::handleRect", "int ClipSelectionActivity::selectionTop")
 gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "bool ClipSelectionActivity::renderIncremental")
 incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void ClipSelectionActivity::drawSelection")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
@@ -61,7 +62,7 @@ harness = r"""
 #include "clippings/ClippingText.h"
 #include "ClippingStore.h"
 #include <Epub/ReaderRenderSpec.h>
-namespace BidiUtils { enum class BidiBaseDir : int8_t { AUTO = -1, LTR = 0, RTL = 1 }; }
+namespace BidiUtils { enum class BidiBaseDir : int8_t { AUTO = -1, LTR = 0, RTL = 1, VISUAL = 2 }; }
 struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4, STRIKETHROUGH = 8 }; };
 constexpr int TAG_PageLine = 1, TAG_PageImage = 2;
 struct Rect { int x = 0, y = 0, width = 0, height = 0; };
@@ -76,7 +77,10 @@ struct Block {
   struct Style { bool isRtl = false; int8_t characterSpacing = 0; } style;
   struct Range { uint32_t start = 0, end = 3; } range;
   using SourceRange = Range;
-  struct VisualFragment { uint16_t wordIndex; int16_t x, width; std::string text; };
+  struct VisualFragment { uint16_t wordIndex; int16_t x, width; std::string text;
+                          int16_t logicalStartX = 0, logicalEndX = 0; };
+  uint16_t rowStep = 0;
+  uint16_t getSelectionRowStep() const { return rowStep; }
   std::vector<VisualFragment> fragments;
   const std::vector<VisualFragment>* getVisualFragments() const { return fragments.empty() ? nullptr : &fragments; }
   const char* text = "one";
@@ -139,7 +143,8 @@ struct FontCache {
 struct Renderer {
   enum RenderMode { BW };
   enum class DitherMode { Replace, PreserveInk };
-  struct Draw { int x, width, tracking; };
+  enum class TextMeasureMode { Layout, Rendered };
+  struct Draw { int x, width, tracking; std::string text{}; };
   mutable std::vector<Draw> draws;
   mutable std::vector<Draw> fills;
   mutable std::set<std::pair<int, int>> ink;
@@ -163,6 +168,7 @@ struct Renderer {
       for (int px = x; px <= endX; ++px)
         if (px >= clip[0] && px < clip[2] && py >= clip[1] && py < clip[3]) ink.emplace(px, py);
   }
+  bool simulateRenderedMetricMismatch = false;
   bool sdFont = false;
   mutable size_t coldMeasurements = 0;
   std::set<std::pair<uint8_t, uint32_t>> advances;
@@ -173,7 +179,9 @@ struct Renderer {
   void getOrientedViewableTRBL(int* top, int* right, int* bottom, int* left) const {
     *top = *right = *bottom = *left = 0;
   }
-  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style style, int8_t tracking = 0) const {
+  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style style, int8_t tracking = 0,
+                      BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO,
+                      TextMeasureMode measure = TextMeasureMode::Layout) const {
     if (sdFont) {
       const uint8_t* p = reinterpret_cast<const uint8_t*>(text);
       while (const uint32_t cp = utf8NextCodepoint(&p)) {
@@ -181,7 +189,8 @@ struct Renderer {
       }
     }
     const int length = std::char_traits<char>::length(text);
-    return length * 8 + (length - 1) * tracking;
+    return length * (simulateRenderedMetricMismatch && measure == TextMeasureMode::Rendered ? 6 : 8) +
+           (length - 1) * tracking;
   }
   void ensureSdCardFontReady(int, const char*, uint8_t) {}
   void ensureSdCardFontReady(int, const char* const* segments, const size_t* lengths, size_t count,
@@ -204,7 +213,7 @@ struct Renderer {
   void drawText(int font, int x, int y, const char* text, bool, EpdFontFamily::Style style,
                 BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const {
     if (!clippingText::hasVisibleText(text)) return;
-    draws.push_back({x, getTextAdvanceX(font, text, style, tracking), tracking});
+    draws.push_back({x, getTextAdvanceX(font, text, style, tracking), tracking, text});
     for (int i = 0; text[i]; ++i)
       for (int py = y + 2; py < y + 10; ++py) drawPixel(x + i * (8 + tracking) + 1, py, true);
   }
@@ -233,8 +242,16 @@ void Block::render(const Renderer& renderer, int font, int x, int y) const {
   if (renderer.cache.scanning) return;
   // The source line owns decorations, including continuous ink across word gaps.
   for (uint16_t i = 0; i < wordCount(); ++i) {
-    renderer.drawText(font, x + wordXpos(i), y, wordText(i), true, wordStyle(i),
-                       BidiUtils::BidiBaseDir::AUTO, style.characterSpacing);
+    bool hasFragments = false;
+    for (const auto& fragment : fragments) {
+      if (fragment.wordIndex != i) continue;
+      hasFragments = true;
+      renderer.drawText(font, x + fragment.x, y, fragment.text.c_str(), true, wordStyle(i),
+                        BidiUtils::BidiBaseDir::VISUAL, style.characterSpacing);
+    }
+    if (!hasFragments)
+      renderer.drawText(font, x + wordXpos(i), y, wordText(i), true, wordStyle(i),
+                        BidiUtils::BidiBaseDir::AUTO, style.characterSpacing);
     const int right = x + wordXpos(i) + renderer.getTextAdvanceX(font, wordText(i), wordStyle(i), style.characterSpacing);
     for (const auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH}) {
       if (!(wordStyle(i) & decoration)) continue;
@@ -255,6 +272,8 @@ enum { STR_BACK, STR_SELECT, STR_LOOKUP, STR_DONE, STR_DIR_LEFT, STR_DIR_RIGHT }
 struct Theme {
   static Theme& getInstance() { static Theme theme; return theme; }
   Rect getScreenSafeArea(const Renderer&, bool, bool) const { return {0,0,1000,1000}; }
+  struct Metrics { int verticalSpacing = 4; };
+  Metrics getMetrics() const { return {}; }
   int hints = 0;
   int confirmLabel = -1;
   void drawButtonHints(Renderer&, int, int confirm, int, int) { ++hints; confirmLabel = confirm; }
@@ -332,10 +351,10 @@ struct ClipSelectionActivity {
   int testOffsetX = 0, testOffsetY = 0;
   int textOffset() const { return testOffsetY; }
   int textXOffset() const { return testOffsetX; }
-  Rect handleRect(int, bool) const { return {}; }
+  Rect handleRect(int, bool) const;
   Rect actionRect() const { return {}; }
 };
-""" + build_text + extract_words + word_hit + selected_contains + gap_draw + incremental_draw + selection_draw + r"""
+""" + build_text + extract_words + word_hit + selected_contains + handle_rect + gap_draw + incremental_draw + selection_draw + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -542,13 +561,16 @@ int main() {
     auto line = std::make_unique<PageLine>();
     line->block.packedText = std::string("abcאבג") + '\0' + "דהו" + '\0' + "tail" + '\0';
     line->block.positions = {0, 32, 144};
-    line->block.fragments = {{0, 0, 24, "abc"}, {0, 88, 48, "גבא"}};
+    line->block.fragments = {{0, 0, 24, "abc", 0, 88}, {0, 88, 48, "גבא", 0, 88}};
     page->elements.push_back(std::move(line));
     fragmented.pages.push_back(std::move(page));
     fragmented.borrowedPages = fragmented.pages;
     HalMemory::stats = {1024 * 1024, 1024 * 1024};
     assert(fragmented.extractWords() && fragmented.wordCount == 3);
     assert(fragmented.words[0].x == 0 && fragmented.words[0].width == 24);
+    assert(fragmented.words[0].logicalStartX == 0 && fragmented.words[0].logicalEndX == 88);
+    assert(fragmented.handleRect(0, true).x == 0);
+    assert(fragmented.handleRect(0, false).x == 88);
     assert(fragmented.wordAt(8, 8) == 0 && fragmented.wordAt(90, 8) == 0);
     assert(fragmented.wordAt(48, 8) == 1);
     fragmented.selected = 0;
@@ -566,7 +588,36 @@ int main() {
     fragmented.selected = 1;
     assert(fragmented.renderIncremental());
     assert(fragmented.pages[0]->renderCalls == 2);
+    assert(fragmented.renderer.draws.size() == 4);
+    assert(fragmented.renderer.draws[0].text == "abc" && fragmented.renderer.draws[0].x == 0);
+    assert(fragmented.renderer.draws[1].text == "גבא" && fragmented.renderer.draws[1].x == 88);
     assert((fragmented.renderer.getClipRect() == std::array<int, 4>{0, 0, 1000, 1000}));
+  }
+  // Compressed dictionary rows must not let a taller font selection box hit
+  // or highlight the next line; widths use rendered rather than layout metrics.
+  {
+    ClipSelectionActivity rows;
+    rows.mode = ClipSelectionActivity::Mode::DefinitionLookup;
+    rows.renderer.simulateRenderedMetricMismatch = true;
+    auto page = std::make_unique<Page>();
+    for (int n = 0; n < 2; ++n) {
+      auto line = std::make_unique<PageLine>();
+      line->yPos = n * 8;
+      line->block.text = n ? "two" : "one";
+      line->block.rowStep = 8;
+      page->elements.push_back(std::move(line));
+    }
+    rows.pages.push_back(std::move(page));
+    rows.borrowedPages = rows.pages;
+    HalMemory::stats = {1024 * 1024, 1024 * 1024};
+    assert(rows.extractWords() && rows.wordCount == 2);
+    assert(rows.words[0].height == 8 && rows.words[1].y == 8);
+    assert(rows.words[0].width == 18);  // 3 rendered glyphs x 6, not layout's 3 x 8
+    assert(rows.wordAt(1, 7) == 0 && rows.wordAt(1, 8) == 1);
+    rows.rangeStart = rows.selected = 0;
+    assert(rows.selectionContains(1, 7) && !rows.selectionContains(1, 8));
+    rows.drawSelection();
+    for (const auto& ink : rows.renderer.ink) assert(ink.second < 8);
   }
   HalMemory::stats = {5908, 3444};  // Physical X3 crash workload.
   assert(selectionLowMemory(0, 0));

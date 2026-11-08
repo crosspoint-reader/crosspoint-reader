@@ -49,6 +49,8 @@ class ClipSelectionActivity final : public Activity {
   struct WordBox {
     int16_t x = 0;
     int16_t lineX = 0;
+    int16_t logicalStartX = 0;
+    int16_t logicalEndX = 0;
     int16_t y = 0;
     int16_t width = 0;
     int16_t height = 0;

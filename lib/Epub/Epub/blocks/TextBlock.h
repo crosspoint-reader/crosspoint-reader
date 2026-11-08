@@ -61,6 +61,9 @@ class TextBlock final : public Block {
     int16_t x;
     int16_t width;
     std::string text;
+    // Visual edges of the first and last source glyph, not the fragment bounds.
+    int16_t logicalStartX = 0;
+    int16_t logicalEndX = 0;
   };
 
  private:
@@ -91,6 +94,8 @@ class TextBlock final : public Block {
   // immediately; cached TextBlocks therefore keep the same compact format.
   std::vector<LinkSpan> linkSpans;
   std::unique_ptr<std::vector<VisualFragment>> visualFragments;
+  // Nonzero only for lightweight dictionary selection lines (not serialized).
+  uint16_t selectionRowStep = 0;
 
   TextBlock() = default;  // deserialize() fills the fields directly
   static size_t arenaSize(uint16_t wordCount, bool hasFocus, uint16_t textBytes);
@@ -155,6 +160,8 @@ class TextBlock final : public Block {
   std::vector<LinkSpan> takeLinkSpans() { return std::move(linkSpans); }
   bool setVisualFragments(std::vector<VisualFragment>&& fragments);
   const std::vector<VisualFragment>* getVisualFragments() const { return visualFragments.get(); }
+  void setSelectionRowStep(const uint16_t step) { selectionRowStep = step; }
+  uint16_t getSelectionRowStep() const { return selectionRowStep; }
 
   void render(const GfxRenderer& renderer, int fontId, int x, int y) const;
   BlockType getType() override { return TEXT_BLOCK; }

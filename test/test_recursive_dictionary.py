@@ -109,7 +109,11 @@ struct BlockStyle { bool isRtl = false; };
 struct TextBlock {
   struct SourceRange { uint32_t start, end; };
   struct LinkSpan {};
-  struct VisualFragment { uint16_t wordIndex; int16_t x, width; std::string text; };
+  struct VisualFragment { uint16_t wordIndex; int16_t x, width; std::string text;
+                          int16_t logicalStartX = 0, logicalEndX = 0; };
+  uint16_t selectionRowStep = 0;
+  void setSelectionRowStep(uint16_t step) { selectionRowStep = step; }
+  uint16_t getSelectionRowStep() const { return selectionRowStep; }
   std::vector<VisualFragment> visualFragments;
   bool setVisualFragments(std::vector<VisualFragment>&& spans) {
     visualFragments = std::move(spans);
@@ -169,7 +173,8 @@ struct Renderer {
       ++width;
       // Simulated SD-font kerning between a separator and an RTL glyph.
       if (style == EpdFontFamily::BOLD && mode == TextMeasureMode::Rendered &&
-          previous == ' ' && ((cp >= 0x590 && cp <= 0x8FF) || (cp >= 0xFB50 && cp <= 0xFEFF)))
+          previous == ' ' && (cp == 'z' || (cp >= 0x590 && cp <= 0x8FF) ||
+                                  (cp >= 0xFB50 && cp <= 0xFEFF)))
         boundaryKern += 2;
       previous = cp;
     }
@@ -184,11 +189,15 @@ struct Renderer {
     preparedStyles = styles;
   }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 1; }
-  int getLineHeight(int, float) const { return 10; }
-  struct DrawCall { int x, y; std::string text; EpdFontFamily::Style style; };
+  int getLineHeight(int, float compression) const {
+    return compression < 1.0f ? 8 : (compression > 1.4f ? 14 : 10);
+  }
+  struct DrawCall { int x, y; std::string text; EpdFontFamily::Style style;
+                    BidiUtils::BidiBaseDir direction; };
   mutable std::vector<DrawCall> drawCalls;
-  void drawText(int, int x, int y, const char* text, bool, EpdFontFamily::Style style) const {
-    drawCalls.push_back({x, y, text, style});
+  void drawText(int, int x, int y, const char* text, bool, EpdFontFamily::Style style,
+                BidiUtils::BidiBaseDir dir = BidiUtils::BidiBaseDir::AUTO) const {
+    drawCalls.push_back({x, y, text, style, dir});
   }
 };
 struct CrossPointSettings {
@@ -198,7 +207,8 @@ struct Settings {
   bool touchReaderControls = true;
   int paragraphAlignment = CrossPointSettings::JUSTIFIED;
   bool extraParagraphSpacing = false;
-  float getReaderLineCompression() const { return 1.2f; }
+  float lineCompression = 1.2f;
+  float getReaderLineCompression() const { return lineCompression; }
   int getReaderFontId() const { return 0; }
 } SETTINGS;
 ''' + layout_helpers + r'''
@@ -572,6 +582,13 @@ int main() {
     assert(BidiUtils::applyBidiVisual(sameOrder.text.c_str(), sameOrderVisual, -1, &sameOrderSources));
     assert(sameOrderVisual == "one (123)גבא tail");
     assert(sameOrderSources[4] == 11);  // mirrored ')' precedes the Hebrew letters in visual order
+    assert(sameOrder.fragments.size() == 1);
+    assert(sameOrder.fragments[0].wordIndex == 1);
+    assert(sameOrder.fragments[0].text == "(123)גבא");
+    DictionaryDefinitionActivity::PlainSelectionLine mappedJustify;
+    mappedJustify.text = sameOrder.text;
+    mappedJustify.layout(spacedRtl, 0, 0, false, {0, 4, 2});
+    assert(mappedJustify.positions == std::vector<int16_t>({0, 6, 17}));
 
     // A mixed-script logical word may occupy disjoint visual intervals.
     DictionaryDefinitionActivity::PlainSelectionLine fragmented;
@@ -582,18 +599,32 @@ int main() {
     std::string fragmentedVisual;
     assert(BidiUtils::applyBidiVisual(fragmented.text.c_str(), fragmentedVisual));
     assert(fragmentedVisual == "abcוהד גבא tail");
-    assert(fragmented.fragments.size() == 2);
-    assert(fragmented.fragments[0].wordIndex == 0 && fragmented.fragments[0].x == 0 &&
-           fragmented.fragments[0].width == 3 && fragmented.fragments[0].text == "abc");
-    assert(fragmented.fragments[1].wordIndex == 0 && fragmented.fragments[1].x == 7 &&
-           fragmented.fragments[1].width == 3 && fragmented.fragments[1].text == "גבא");
+    std::vector<TextBlock::VisualFragment> firstWordFragments;
+    for (const auto& span : fragmented.fragments)
+      if (span.wordIndex == 0) firstWordFragments.push_back(span);
+    assert(firstWordFragments.size() == 2);
+    assert(firstWordFragments[0].x == 0 && firstWordFragments[0].width == 3 &&
+           firstWordFragments[0].text == "abc");
+    assert(firstWordFragments[1].x == 7 && firstWordFragments[1].width == 3 &&
+           firstWordFragments[1].text == "גבא");
+    assert(firstWordFragments[0].logicalStartX == 0);
+    assert(firstWordFragments[0].logicalEndX == 7);
     // The intervening Hebrew word must NOT be inside either highlight interval.
     const auto fragmentContains = [&](const int x) {
-      for (const auto& span : fragmented.fragments)
+      for (const auto& span : firstWordFragments)
         if (x >= span.x && x < span.x + span.width) return true;
       return false;
     };
     assert(fragmentContains(1) && fragmentContains(8) && !fragmentContains(4));
+
+    // A single RTL glyph and a shaped ligature still have logical start and
+    // end edges, even though both endpoints map to the same visual glyph.
+    DictionaryDefinitionActivity::PlainSelectionLine rtlSingle;
+    rtlSingle.text = "א";
+    rtlSingle.layout(spacedRtl, 0, 0, false, {}, 1);
+    assert(rtlSingle.fragments.size() == 1);
+    assert(rtlSingle.fragments[0].logicalStartX == 1);
+    assert(rtlSingle.fragments[0].logicalEndX == 0);
 
     // If the BiDi workspace limit is exceeded, fall back to the original
     // source-order positions rather than leaving a line with zero coordinates.
@@ -702,6 +733,23 @@ int main() {
       assert(drawing.drawCalls[i].style == EpdFontFamily::BOLD);
     }
   }
+  // The origin of a justified word includes the kerning introduced by its
+  // preceding space, not just the measured prefix ending before the word.
+  {
+    SETTINGS.paragraphAlignment = CrossPointSettings::JUSTIFIED;
+    Renderer kern;
+    char line[] = "aa zb cc";
+    const auto placement = getPlainLineLayout(kern, 0, line, true, true, 25, 0);
+    assert(placement.gaps == 2 && placement.justifyExtra > 0);
+    const int throughWord = renderedPlainPrefixWidth(kern, 0, "aa zb", 5, EpdFontFamily::BOLD, 0);
+    const int justWord = renderedPlainPrefixWidth(kern, 0, "zb", 2, EpdFontFamily::BOLD, 0);
+    const int expectedZ = throughWord - justWord + placement.justifyExtra / placement.gaps;
+    const int oldPrefix = renderedPlainPrefixWidth(kern, 0, "aa ", 3, EpdFontFamily::BOLD, 0);
+    assert(expectedZ > oldPrefix + placement.justifyExtra / placement.gaps);
+    drawJustifiedPlainLine(kern, 0, 0, 0, line, true, placement);
+    assert(kern.drawCalls.size() == 3);
+    assert(kern.drawCalls[1].text == "zb" && kern.drawCalls[1].x == expectedZ);
+  }
   // Alignment offsets are part of the selectable PageLine, including later pages.
   for (const int alignment : {CrossPointSettings::CENTER_ALIGN, CrossPointSettings::RIGHT_ALIGN}) {
     SETTINGS.paragraphAlignment = alignment;
@@ -757,9 +805,40 @@ int main() {
         assert(static_cast<const PageLine&>(*firstPage[0]).x == 1);
         assert(static_cast<const PageLine&>(*firstPage[1]).x == 5);
         assert(static_cast<const PageLine&>(*nextPage[0]).x == 0);
+        inherited.renderer.drawCalls.clear();
+        inherited.drawBody(0, 0, 100, 0);
+        assert(inherited.renderer.drawCalls.size() == 2);
+        for (const auto& drawn : inherited.renderer.drawCalls)
+          assert(drawn.direction == BidiUtils::BidiBaseDir::RTL);
+        inherited.renderer.drawCalls.clear();
+        inherited.drawBody(0, 0, 100, 1);
+        assert(inherited.renderer.drawCalls.size() == 1);
+        assert(inherited.renderer.drawCalls[0].direction == BidiUtils::BidiBaseDir::LTR);
       }
     }
   }
+  // Line compression changes both page breaks and the line y coordinates in
+  // the selection page and the actual rendered definition.
+  for (const auto& [compression, step] :
+       std::array<std::pair<float, int>, 3>{{{0.8f, 8}, {1.2f, 10}, {1.6f, 14}}}) {
+    SETTINGS.lineCompression = compression;
+    DictionaryDefinitionActivity dense;
+    dense.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+    dense.bodyHeight = 29;
+    dense.content.text = "one\ntwo\nthree\nfour";
+    assert(dense.prepareDefinition(dense.content) && dense.buildPlainSelectionPages());
+    assert(dense.content.linesPerPage == 29 / step);
+    const auto& firstRows = dense.lookup->selectionPages[0]->elements;
+    assert(firstRows.size() >= 2);
+    assert(static_cast<const PageLine&>(*firstRows[0]).y == 0);
+    assert(static_cast<const PageLine&>(*firstRows[1]).y == step);
+    dense.renderer.drawCalls.clear();
+    dense.drawBody(0, 0, 100, 0);
+    assert(dense.renderer.drawCalls.size() == firstRows.size());
+    assert(dense.renderer.drawCalls[0].y == 100);
+    assert(dense.renderer.drawCalls[1].y == 100 + step);
+  }
+  SETTINGS.lineCompression = 1.2f;
   // The scan pass must record full visible lines without asking for rendered
   // glyph widths; those are only safe once the SD font has been prewarmed.
   {
