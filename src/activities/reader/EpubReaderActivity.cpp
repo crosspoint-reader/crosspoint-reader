@@ -826,6 +826,7 @@ void EpubReaderActivity::loop() {
     case HomeButtonAction::Dictionary:
     case HomeButtonAction::Footnotes:
     case HomeButtonAction::CreateClipping:
+    case HomeButtonAction::SelectText:
       automaticPageTurnActive = false;
       break;
     default:
@@ -897,6 +898,9 @@ void EpubReaderActivity::loop() {
       case CrossPointSettings::LP_MENU_DICTIONARY:
         openDictionaryWordSelect();
         return;
+      case CrossPointSettings::LP_MENU_SELECT_TEXT:
+        startClipSelection(-1, -1, ClipSelectionActivity::Mode::Select);
+        return;
       case CrossPointSettings::LP_MENU_CREATE_CLIPPING:
         startClipSelection();
         return;
@@ -929,6 +933,9 @@ void EpubReaderActivity::loop() {
         return;
       case HomeButtonAction::Dictionary:
         if (!showDictionaryMessage) openDictionaryWordSelect();
+        return;
+      case HomeButtonAction::SelectText:
+        startClipSelection(-1, -1, ClipSelectionActivity::Mode::Select);
         return;
       case HomeButtonAction::CreateClipping:
         startClipSelection();
@@ -1347,6 +1354,7 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
     case CrossPointSettings::LP_MENU_BOOKMARK:
     case CrossPointSettings::LP_MENU_DICTIONARY:
     case CrossPointSettings::LP_MENU_CREATE_CLIPPING:
+    case CrossPointSettings::LP_MENU_SELECT_TEXT:
     case CrossPointSettings::LP_MENU_FOOTNOTES:
       return ReaderUtils::BOOKMARK_HOLD_MS;
     case CrossPointSettings::LP_MENU_KOSYNC:
