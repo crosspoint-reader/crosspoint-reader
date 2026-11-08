@@ -756,9 +756,16 @@ bool ClipSelectionActivity::renderIncremental() {
 
   const auto& page = pageAt(currentPageOffset);
   // Other elements can overlap the text. Let the full page painter restore them.
-  for (const auto& element : page.elements) {
-    if (element->getTag() != TAG_PageLine && element->getTag() != TAG_PageBorderBox) return false;
-  }
+  if (!std::all_of(page.elements.begin(), page.elements.end(), [](const auto& element) {
+        return element->getTag() == TAG_PageLine || element->getTag() == TAG_PageBorderBox;
+      }))
+    return false;
+  // Word boxes describe layout, not ink. Other lines need the full painter until ink bounds are available.
+  const auto* sourceLine = page.elements[words[selected].lineElementIndex].get();
+  if (std::any_of(page.elements.begin(), page.elements.end(), [sourceLine](const auto& element) {
+        return element->getTag() == TAG_PageLine && element.get() != sourceLine;
+      }))
+    return false;
 
   const auto clip = renderer.getClipRect();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
@@ -791,13 +798,10 @@ bool ClipSelectionActivity::renderIncremental() {
     right = std::min({right, clip[0] + clip[2], safe.x + safe.width});
     bottom = std::min({bottom, clip[1] + clip[3], safe.y + safe.height});
     if (left < right && top < bottom) {
-      // Compressed or shifted lines can share a band; restore them through the full painter.
-      for (size_t i = 0; i < wordCount; ++i) {
-        const auto& word = words[i];
-        if (word.pageOffset == currentPageOffset && word.row != words[rowFirst].row && word.y + offset < bottom &&
-            word.y + offset + word.height > top)
-          return false;
-      }
+      const auto& line = static_cast<const PageLine&>(*page.elements[words[rowFirst].lineElementIndex]);
+      auto scope = renderer.getFontCacheManager()->createPrewarmScope();
+      line.getBlock()->render(renderer, fontId, marginLeft + line.xPos + offsetX, marginTop + line.yPos + offset);
+      scope.endScanAndPrewarm();
       renderer.setClipRect(left, top, right - left, bottom - top);
       renderer.fillRect(left, top, right - left, bottom - top, false);
       for (const auto& element : page.elements) {
@@ -809,7 +813,6 @@ bool ClipSelectionActivity::renderIncremental() {
         if (element->getTag() == TAG_PageBorderBox)
           element->render(renderer, fontId, marginLeft + offsetX, marginTop + offset);
       }
-      const auto& line = static_cast<const PageLine&>(*page.elements[words[rowFirst].lineElementIndex]);
       line.getBlock()->render(renderer, fontId, marginLeft + line.xPos + offsetX, marginTop + line.yPos + offset);
       drawSelection();
       renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);

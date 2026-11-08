@@ -178,6 +178,10 @@ struct Renderer {
                       DitherMode mode = DitherMode::Replace) const {
     fills.push_back({x, width, 0});
     if (mode == DitherMode::Replace) clearInk(x, y, width, height);
+    for (int py = y; py < y + height; ++py)
+      for (int px = x; px < x + width; ++px)
+        if (px % 2 == 0 && py % 2 == 0 && px >= clip[0] && px < clip[2] && py >= clip[1] && py < clip[3])
+          ink.emplace(px, py);
   }
   void drawRect(int, int, int, int, bool) const {}
   void drawPixel(int, int, bool) const {}
@@ -333,7 +337,15 @@ int main() {
     decorated.rangeStart = 0;
     decorated.selected = 1;
     decorated.drawSelection();
-    assert(decorated.renderer.ink == originalInk);
+    auto expectedInk = originalInk;
+    const int x = decorated.words[0].x + decorated.testOffsetX;
+    const int y = decorated.words[0].y + decorated.testOffsetY;
+    const int right = decorated.words[1].x + decorated.testOffsetX + decorated.words[1].width;
+    for (int py = y; py < y + decorated.words[0].height; ++py)
+      for (int px = x; px < right; ++px)
+        if (px % 2 == 0 && py % 2 == 0) expectedInk.emplace(px, py);
+    assert(expectedInk.size() > originalInk.size());
+    assert(decorated.renderer.ink == expectedInk);
   }
   // Returning from a definition releases the SD font caches before selection is rebuilt.
   for (const bool rtl : {false, true}) {
