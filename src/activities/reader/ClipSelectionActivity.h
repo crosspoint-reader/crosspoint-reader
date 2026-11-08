@@ -17,7 +17,7 @@
 
 class ClipSelectionActivity final : public Activity {
  public:
-  enum class Mode : uint8_t { Clip, Lookup, DefinitionLookup };
+  enum class Mode : uint8_t { Clip, Lookup, DefinitionLookup, Select };
 
   struct Selection {
     uint16_t firstPage = 0;

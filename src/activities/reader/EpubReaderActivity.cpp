@@ -1321,7 +1321,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           progressChangeResultHandler);
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::SELECT_TEXT:
+    case EpubReaderMenuActivity::MenuAction::SELECT_TEXT: {
+      startClipSelection(-1, -1, ClipSelectionActivity::Mode::Select);
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SAVE_CLIPPING: {
       startClipSelection();
       break;

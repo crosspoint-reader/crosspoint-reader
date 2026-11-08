@@ -449,15 +449,20 @@ int ClipSelectionActivity::selectedWordCount() const {
 }
 
 const char* ClipSelectionActivity::confirmLabel() const {
-  const bool direct =
-      mode == Mode::DefinitionLookup || selectionAction::runsWithoutMenu(selectedWordCount(), lookupAvailable);
-  return direct && lookupAvailable ? tr(STR_LOOKUP) : tr(STR_DONE);
+  if (mode != Mode::Select) return isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE);
+  return selectionAction::runsWithoutMenu(selectedWordCount(), lookupAvailable) && lookupAvailable ? tr(STR_LOOKUP)
+                                                                                                    : tr(STR_DONE);
 }
 
-// First press anchors. Then a single word looks up at once; longer selections pick Look up / Clip from a menu.
+// Look up / Clip modes confirm directly. Select mode: a single word looks up at once; longer selections pick
+// Look up / Clip from a menu.
 void ClipSelectionActivity::confirmWithButtons() {
-  if (rangeStart < 0 || mode == Mode::DefinitionLookup) {
-    confirmSelection(ClippingResult::Action::Lookup);
+  if (mode != Mode::Select) {
+    confirmSelection(isLookup() ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
+    return;
+  }
+  if (rangeStart < 0) {
+    confirmSelection(lookupAvailable ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
     return;
   }
   const int count = selectedWordCount();
@@ -817,7 +822,7 @@ bool ClipSelectionActivity::renderIncremental() {
     renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
   }
   const auto labels = mappedInput.mapLabels(
-      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : (isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE)), tr(STR_DIR_LEFT),
+      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(), tr(STR_DIR_LEFT),
       tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -877,7 +882,7 @@ void ClipSelectionActivity::render(RenderLock&&) {
   renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
 
   const auto labels = mappedInput.mapLabels(
-      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : (isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE)), tr(STR_DIR_LEFT),
+      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(), tr(STR_DIR_LEFT),
       tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
