@@ -565,11 +565,13 @@ class Dictionary {
   bool hasSyn = false;
   bool htmlDefinitions = false;
   unsigned searches = 0;
+  std::string searchedWord;
   std::unique_ptr<DictEntryList> entryList = std::make_unique<DictEntryList>();
   bool isOpen() const { return true; }
   bool openSession(LookupSession&) { return true; }
-  void locateAll(LookupSession&, const char*, DictEntryList&, bool* readError) {
+  void locateAll(LookupSession&, const char* word, DictEntryList&, bool* readError) {
     ++searches;
+    searchedWord = word;
     if (readError) *readError = false;
   }
   bool locateSynonyms(LookupSession&, const char*, DictEntryList&, bool*) {
@@ -585,6 +587,23 @@ class Dictionary {
 int main() {
   Dictionary dictionary;
   std::string definition = "unchanged", headword = "unchanged";
+  assert(Dictionary::cleanWord(nullptr).empty());
+  assert(Dictionary::cleanWord("").empty());
+  assert(Dictionary::cleanWord("  “שָׁלוֹם!”  ") == "שלום");
+  assert(Dictionary::cleanWord("בְּרֵאשִׁ֖ית בָּרָ֣א") == "בראשית ברא");
+  assert(Dictionary::cleanWord("שלום") == "שלום");
+  assert(Dictionary::cleanWord("שָׁלוֹם ABC café e\u0301 日本語 😀") == "שלום abc café e\u0301 日本語 😀");
+  assert(Dictionary::cleanWord("א־ב׀ג׃ד׆ה׳ו״ז") == "א־ב׀ג׃ד׆ה׳ו״ז");
+  assert(Dictionary::cleanWord("\u0591\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7").empty());
+  for (uint32_t cp = 0x0591; cp <= 0x05BD; ++cp) {
+    std::string pointed = "א";
+    utf8AppendCodepoint(cp, pointed);
+    pointed += "ב";
+    assert(Dictionary::cleanWord(pointed.c_str()) == "אב");
+  }
+  auto hebrewResult = Dictionary::LookupResult::Found;
+  assert(!dictionary.lookup("שָׁלוֹם", definition, headword, &hebrewResult));
+  assert(hebrewResult == Dictionary::LookupResult::NotFound && dictionary.searchedWord == "שלום");
   for (const char* suffix : {"ing", "ed", "ies"}) {
     const std::string phrase = std::string(4096 - std::strlen(suffix), 'a') + suffix;
     auto result = Dictionary::LookupResult::Found;
