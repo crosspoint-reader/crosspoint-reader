@@ -10,6 +10,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -77,11 +78,12 @@ PlainLineLayout getPlainLineLayout(const GfxRenderer& renderer, const int fontId
       break;
     case CrossPointSettings::JUSTIFIED:
     case CrossPointSettings::BOOK_STYLE: {
-      if (!wraps || remaining == 0) break;
+      if (remaining == 0) break;
       if (BidiUtils::detectParagraphLevel(text) == 1) {
         result.xOffset = remaining;
         break;
       }
+      if (!wraps) break;
       bool inWord = false;
       bool seenWord = false;
       bool afterSpace = false;
@@ -151,6 +153,11 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
   std::vector<uint16_t> visualSources;
   std::vector<std::string> visualWords;
   std::vector<TextBlock::SourceRange> visualRanges;
+  // Selection scratch lives on the heap, not the loop task's limited stack.
+  std::array<uint16_t, MAX_LINE_BYTES> sourceWord;
+  std::array<uint16_t, MAX_PLAIN_WORDS> starts;
+  std::array<uint16_t, MAX_PLAIN_WORDS> ends;
+  std::array<int16_t, MAX_PLAIN_WORDS> renderedPositions;
   BlockStyle style;
 
   void layout(const DictionaryDefinitionActivity& owner, const int fontId, const uint32_t offset, const bool bold,
@@ -197,31 +204,7 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
     }
     style.isRtl = BidiUtils::detectParagraphLevel(bytes) == 1;
     const bool reordered = BidiUtils::computeVisualWordOrder(words, style.isRtl, visualOrder);
-    int x = 0;
-    for (size_t n = 0; n < words.size(); ++n) {
-      const size_t index = reordered ? visualOrder[n] : n;
-      if (n > 0) {
-        const size_t previous = reordered ? visualOrder[n - 1] : n - 1;
-        const size_t left = std::min(previous, index);
-        const size_t right = std::max(previous, index);
-        // Reordering can split an RTL run from the preceding LTR word. Keep the
-        // actual separator width at that visual boundary, not a single space.
-        size_t gapLeft = left;
-        if (right != left + 1 && reordered) {
-          if (n + 1 < words.size() && static_cast<size_t>(visualOrder[n + 1]) + 1 == index &&
-              previous + 1 < ranges.size())
-            gapLeft = previous;  // entering a reversed run
-          else if (index > 0)
-            gapLeft = index - 1;  // leaving a reversed run
-        }
-        x += gapLeft + 1 < ranges.size()
-                 ? renderedPlainPrefixWidth(owner.renderer, fontId, text.c_str() + ranges[gapLeft].end - offset,
-                                            ranges[gapLeft + 1].start - ranges[gapLeft].end, family)
-                 : owner.renderer.getSpaceWidth(fontId, family);
-      }
-      positions.push_back(x);
-      x += owner.renderer.getTextAdvanceX(fontId, words[index].c_str(), family);
-    }
+    positions.resize(words.size());
     // Word anchors may remain in logical order even when the glyphs inside
     // those words change visual position. Match drawText's BiDi detection.
     const bool useVisualPositions =
@@ -233,7 +216,6 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
       // punctuation and Lam-Alef glyphs that cannot match isolated tokens.
       std::string visible;
       visible.reserve(text.size());
-      uint16_t sourceWord[MAX_LINE_BYTES];
       size_t sourceCount = 0;
       size_t currentWord = 0;
       for (size_t raw = 0; raw < length;) {
@@ -254,10 +236,8 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
 
       std::string rendered;
       if (BidiUtils::applyBidiVisual(visible.c_str(), rendered, -1, &visualSources)) {
-        uint16_t starts[MAX_PLAIN_WORDS];
-        uint16_t ends[MAX_PLAIN_WORDS];
-        std::fill_n(starts, words.size(), UINT16_MAX);
-        std::fill_n(ends, words.size(), 0);
+        std::fill_n(starts.begin(), words.size(), UINT16_MAX);
+        std::fill_n(ends.begin(), words.size(), 0);
         const auto* ptr = reinterpret_cast<const unsigned char*>(rendered.c_str());
         const auto* visualBegin = ptr;
         for (size_t cp = 0; cp < visualSources.size() && *ptr; ++cp) {
@@ -270,7 +250,6 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
           ends[index] = static_cast<uint16_t>(ptr - visualBegin);
         }
 
-        int16_t renderedPositions[MAX_PLAIN_WORDS];
         std::string prefix;
         std::string visualWord;
         bool complete = true;
@@ -305,20 +284,49 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
         }
       }
     }
-    if (!reordered && !visualPositionsApplied) {
-      int gapIndex = 0;
-      for (size_t n = 0; n < ranges.size(); ++n) {
-        const size_t start = ranges[n].start - offset;
-        if (placement.gaps > 0 && n > 0) {
-          for (size_t j = ranges[n - 1].end - offset; j < start; ++j) {
-            if (isWordSeparator(bytes[j]) && bytes[j] != DICTIONARY_PLAIN_HEADWORD_MARKER) {
-              ++gapIndex;
-              break;
+    // Only calculate fallback positions when whole-line mapping is unavailable.
+    // Normal LTR lines use rendered prefixes; reordered lines retain the prior
+    // approximate visual-gap layout when the BiDi workspace cannot map them.
+    if (!visualPositionsApplied) {
+      if (reordered) {
+        int x = 0;
+        for (size_t n = 0; n < words.size(); ++n) {
+          const size_t index = visualOrder[n];
+          if (n > 0) {
+            const size_t previous = visualOrder[n - 1];
+            const size_t left = std::min(previous, index);
+            const size_t right = std::max(previous, index);
+            size_t gapLeft = left;
+            if (right != left + 1) {
+              if (n + 1 < words.size() && static_cast<size_t>(visualOrder[n + 1]) + 1 == index &&
+                  previous + 1 < ranges.size())
+                gapLeft = previous;  // entering a reversed run
+              else if (index > 0)
+                gapLeft = index - 1;  // leaving a reversed run
+            }
+            x += gapLeft + 1 < ranges.size()
+                     ? renderedPlainPrefixWidth(owner.renderer, fontId, bytes + ranges[gapLeft].end - offset,
+                                                ranges[gapLeft + 1].start - ranges[gapLeft].end, family)
+                     : owner.renderer.getSpaceWidth(fontId, family);
+          }
+          positions[n] = x;
+          x += owner.renderer.getTextAdvanceX(fontId, words[index].c_str(), family);
+        }
+      } else {
+        int gapIndex = 0;
+        for (size_t n = 0; n < ranges.size(); ++n) {
+          const size_t start = ranges[n].start - offset;
+          if (placement.gaps > 0 && n > 0) {
+            for (size_t j = ranges[n - 1].end - offset; j < start; ++j) {
+              if (isWordSeparator(bytes[j]) && bytes[j] != DICTIONARY_PLAIN_HEADWORD_MARKER) {
+                ++gapIndex;
+                break;
+              }
             }
           }
+          positions[n] = renderedPlainPrefixWidth(owner.renderer, fontId, bytes, start, family) +
+                         (placement.gaps > 0 ? placement.justifyExtra * gapIndex / placement.gaps : 0);
         }
-        positions[n] = renderedPlainPrefixWidth(owner.renderer, fontId, bytes, start, family) +
-                       (placement.gaps > 0 ? placement.justifyExtra * gapIndex / placement.gaps : 0);
       }
     }
     if (reordered) {
@@ -709,6 +717,7 @@ bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
   const int lineHeight = renderer.getLineHeight(fontId, SETTINGS.getReaderLineCompression());
   const int lineWidth = bodyArea().width;
   const int pageCount = std::min<int>(SELECTION_PAGE_WINDOW, content.totalPages - content.selectionPage);
+  // The fixed arrays are included in sizeof; visualSources still reserves heap storage.
   const size_t scratchBytes =
       sizeof(PlainSelectionLine) + MAX_LINE_BYTES + 1 + MAX_LINE_BYTES * sizeof(uint16_t) +
       MAX_PLAIN_WORDS * (2 * sizeof(std::string) + sizeof(int16_t) + sizeof(EpdFontFamily::Style) +
@@ -924,6 +933,14 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
                                               std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES));
     memcpy(buf, definition.c_str() + lines[i].start, len);
     buf[len] = '\0';
+    if (renderer.isFontCacheScanning()) {
+      // The scan pass only records glyphs. Rendered width measurements can
+      // fault SD glyphs in one-by-one before the batch prewarm completes.
+      *std::remove(buf, buf + len, DICTIONARY_PLAIN_HEADWORD_MARKER) = '\0';
+      renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, buf, true,
+                        lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+      continue;
+    }
     const auto placement = getPlainLineLayout(renderer, fontId, buf, lines[i].bold, lines[i].wraps, lineWidth);
     const int y = startY + (i - firstLine) * lineHeight;
     if (placement.gaps > 0)

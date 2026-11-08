@@ -35,6 +35,7 @@ methods = "\n".join(block(viewer, signature) for signature in (
     "bool DictionaryDefinitionActivity::restoreCurrentDefinition",
     "void DictionaryDefinitionActivity::navigateDefinition",
     "bool DictionaryDefinitionActivity::buildPlainSelectionPages",
+    "void DictionaryDefinitionActivity::drawBody",
     "void DictionaryDefinitionActivity::startSelection",
 ))
 structs = "\n".join(block(header, f"struct {name} {{", True) for name in (
@@ -122,9 +123,13 @@ struct PageLine : PageElement {
   int x, y;
   PageLine(std::unique_ptr<TextBlock> block, int x, int y) : block(std::move(block)), x(x), y(y) {}
 };
-struct Page { std::vector<std::unique_ptr<PageElement>> elements; };
+struct Page {
+  std::vector<std::unique_ptr<PageElement>> elements;
+  template<typename R> void render(R&, int, int, int) const {}
+};
 struct FontCacheManager {
   bool released = false;
+  bool scanning = false;
   void releaseSdFontCaches() { released = true; }
 };
 struct Renderer {
@@ -133,12 +138,17 @@ struct Renderer {
   size_t prepareCalls = 0;
   int preparedStyles = 0;
   FontCacheManager* getFontCacheManager() { return &cache; }
+  bool isFontCacheScanning() const { return cache.scanning; }
+  mutable size_t scannedRenderedMeasurements = 0;
+  mutable size_t layoutMeasurements = 0;
   enum class TextMeasureMode { Layout, Rendered };
   mutable size_t visualRenderCalls = 0;
   int getTextAdvanceX(int, const char* text, EpdFontFamily::Style style, int8_t = 0,
                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const {
     if (baseDir == BidiUtils::BidiBaseDir::VISUAL && mode == TextMeasureMode::Rendered) ++visualRenderCalls;
+    if (cache.scanning && mode == TextMeasureMode::Rendered) ++scannedRenderedMeasurements;
+    if (mode == TextMeasureMode::Layout) ++layoutMeasurements;
     std::string visual;
     if (baseDir != BidiUtils::BidiBaseDir::VISUAL && BidiUtils::applyBidiVisual(text, visual))
       text = visual.c_str();
@@ -290,6 +300,7 @@ struct DictionaryDefinitionActivity {
   void navigateDefinition(bool);
   bool restoreCurrentDefinition(bool);
   bool buildPlainSelectionPages();
+  void drawBody(int fontId, int x, int startY, int currentPage) const;
   void startSelection(int x = -1, int y = -1);
 };
 ''' + methods + r'''
@@ -529,7 +540,9 @@ int main() {
     // those actual rendered positions, not isolated punctuation measurement.
     DictionaryDefinitionActivity::PlainSelectionLine punctuation;
     punctuation.text = "one אבג, 123 tail";
+    const size_t beforeLayoutMeasurements = spacedRtl.renderer.layoutMeasurements;
     punctuation.layout(spacedRtl, 0, 0, false, {});
+    assert(spacedRtl.renderer.layoutMeasurements == beforeLayoutMeasurements);
     std::string punctuationVisual;
     assert(BidiUtils::applyBidiVisual(punctuation.text.c_str(), punctuationVisual));
     assert(punctuationVisual == "one 123 ,גבא tail");
@@ -551,6 +564,16 @@ int main() {
     assert(BidiUtils::applyBidiVisual(sameOrder.text.c_str(), sameOrderVisual, -1, &sameOrderSources));
     assert(sameOrderVisual == "one (123)גבא tail");
     assert(sameOrderSources[4] == 11);  // mirrored ')' precedes the Hebrew letters in visual order
+
+    // If the BiDi workspace limit is exceeded, fall back to the original
+    // source-order positions rather than leaving a line with zero coordinates.
+    DictionaryDefinitionActivity::PlainSelectionLine bidiFallback;
+    bidiFallback.text = std::string(124, 'x') + " אבג דהו";
+    std::string unavailableVisual;
+    assert(!BidiUtils::applyBidiVisual(bidiFallback.text.c_str(), unavailableVisual));
+    bidiFallback.layout(spacedRtl, 0, 0, false, {});
+    assert(bidiFallback.words == std::vector<std::string>({std::string(124, 'x'), "אבג", "דהו"}));
+    assert(bidiFallback.positions == std::vector<int16_t>({0, 125, 129}));
   }
   view.lookup->selectionPages.clear();
   HalMemory::available = 0;
@@ -667,6 +690,40 @@ int main() {
       assert(firstX == 2 && secondX == 1 && thirdX == 4);
     else
       assert(firstX == 5 && secondX == 2 && thirdX == 8);
+  }
+  // Justified Hebrew paragraphs anchor both wrapped and final lines to the right.
+  for (const int alignment : {CrossPointSettings::JUSTIFIED, CrossPointSettings::BOOK_STYLE}) {
+    SETTINGS.paragraphAlignment = alignment;
+    DictionaryDefinitionActivity rtlFinal;
+    rtlFinal.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+    rtlFinal.bodyWidth = 8;
+    rtlFinal.content.text = "אחד שני שלוש";
+    assert(rtlFinal.prepareDefinition(rtlFinal.content) && rtlFinal.buildPlainSelectionPages());
+    assert(rtlFinal.content.lines.size() == 2);
+    assert(rtlFinal.content.lines[0].wraps && !rtlFinal.content.lines[1].wraps);
+    const auto& page = rtlFinal.lookup->selectionPages[0]->elements;
+    assert(page.size() == 2);
+    assert(static_cast<const PageLine&>(*page[0]).x == 1);
+    assert(static_cast<const PageLine&>(*page[1]).x == 4);
+  }
+  // The scan pass must record full visible lines without asking for rendered
+  // glyph widths; those are only safe once the SD font has been prewarmed.
+  {
+    DictionaryDefinitionActivity scanView;
+    scanView.bodyWidth = 12;
+    scanView.content.text = "alpha beta gamma delta";
+    assert(scanView.prepareDefinition(scanView.content));
+    assert(scanView.content.lines[0].wraps);
+    scanView.renderer.cache.scanning = true;
+    scanView.drawBody(0, 0, 0, 0);
+    assert(scanView.renderer.scannedRenderedMeasurements == 0);
+    assert(!scanView.renderer.drawCalls.empty());
+    assert(scanView.renderer.drawCalls[0].text == "alpha beta");
+    const size_t scannedCalls = scanView.renderer.drawCalls.size();
+    scanView.renderer.cache.scanning = false;
+    scanView.drawBody(0, 0, 0, 0);
+    assert(scanView.renderer.drawCalls.size() > scannedCalls);
+    assert(scanView.renderer.drawCalls[scannedCalls].text == "alpha");
   }
   SETTINGS.paragraphAlignment = CrossPointSettings::JUSTIFIED;
   SETTINGS.extraParagraphSpacing = true;
