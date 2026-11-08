@@ -750,9 +750,7 @@ bool ClipSelectionActivity::renderIncremental() {
 
   const auto& page = pageAt(currentPageOffset);
   // Cached images bypass the logical clip; their polarity restoration needs a full repaint.
-  if (std::any_of(page.elements.begin(), page.elements.end(),
-                  [](const auto& element) { return element->getTag() == TAG_PageImage; }))
-    return false;
+  if (selected != lastRenderedSelected && page.hasImages()) return false;
   int left = INT_MAX, top = INT_MAX, right = INT_MIN, bottom = INT_MIN;
   if (selected != lastRenderedSelected) {
     for (int i = 0; i < static_cast<int>(wordCount); ++i) {
