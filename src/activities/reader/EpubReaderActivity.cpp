@@ -1009,7 +1009,14 @@ void EpubReaderActivity::loop() {
 
   const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
   const bool longPress = !fromTilt && heldMs >= ReaderUtils::SKIP_HOLD_MS;
-  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
+  const bool customActions = SETTINGS.longPressButtonBehavior == SETTINGS.CUSTOM_ACTIONS;
+  const uint8_t customFunction = customActions ? ReaderUtils::customLongPressFunction(nextTriggered, source)
+                                               : static_cast<uint8_t>(CrossPointSettings::LP_MENU_DISABLED);
+  const bool chapterSkip = customActions ? customFunction == CrossPointSettings::LP_PAGE_CHAPTER_SKIP
+                                         : SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP;
+  const bool orientationChange = customActions ? customFunction == CrossPointSettings::LP_PAGE_ORIENTATION_CHANGE
+                                               : SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE;
+  if (longPress && chapterSkip) {
     const bool succeeded = skipPages(nextTriggered ? 1 : -1);
     notePageTurn(false, succeeded);
     if (succeeded && (touch.prev || touch.next)) haptic_feedback::touchAction(true);
@@ -1017,7 +1024,7 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE) {
+  if (longPress && orientationChange) {
     const uint8_t newOrientation =
         nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
                       : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
@@ -1027,21 +1034,14 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  using PageTurnSource = ReaderUtils::PageTurnResult::Source;
-  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CUSTOM_ACTIONS && source != PageTurnSource::Other) {
-    const bool side = source == PageTurnSource::Side;
-    const uint8_t function = nextTriggered
-                                 ? (side ? SETTINGS.longPressSideNextFunction : SETTINGS.longPressFrontNextFunction)
-                                 : (side ? SETTINGS.longPressSidePrevFunction : SETTINGS.longPressFrontPrevFunction);
-    // Disabled, or Reader Menu on a board without a Home key (shown there as Disabled), keeps a page turn.
-    const bool disabled = function == CrossPointSettings::LP_MENU_DISABLED ||
-                          (function == CrossPointSettings::LP_MENU_READER_MENU && !BoardConfig::hasHomeKey());
-    if (!disabled) {
-      automaticPageTurnActive = false;
-      pendingManualTurn = 0;
-      runLongPressFunction(function);
-      return;
-    }
+  // Disabled, or Reader Menu on a board without a Home key (shown there as Disabled), keeps a page turn.
+  const bool customAction = customFunction != CrossPointSettings::LP_MENU_DISABLED &&
+                            (customFunction != CrossPointSettings::LP_MENU_READER_MENU || BoardConfig::hasHomeKey());
+  if (longPress && customAction) {
+    automaticPageTurnActive = false;
+    pendingManualTurn = 0;
+    runLongPressFunction(customFunction);
+    return;
   }
 
   if (!section) {

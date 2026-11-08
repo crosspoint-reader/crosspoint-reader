@@ -180,13 +180,13 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                           StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION, StrId::STR_LONG_PRESS_BEHAVIOR_CUSTOM},
                          "longPressButtonBehavior", StrId::STR_CAT_CONTROLS));
   emit(buildLongPressFunctionSetting(StrId::STR_LONG_PRESS_FRONT_NEXT, &CrossPointSettings::longPressFrontNextFunction,
-                                     "longPressFrontNextFunction"));
+                                     "longPressFrontNextFunction", true));
   emit(buildLongPressFunctionSetting(StrId::STR_LONG_PRESS_FRONT_PREV, &CrossPointSettings::longPressFrontPrevFunction,
-                                     "longPressFrontPrevFunction"));
+                                     "longPressFrontPrevFunction", true));
   emit(buildLongPressFunctionSetting(StrId::STR_LONG_PRESS_SIDE_NEXT, &CrossPointSettings::longPressSideNextFunction,
-                                     "longPressSideNextFunction"));
+                                     "longPressSideNextFunction", true));
   emit(buildLongPressFunctionSetting(StrId::STR_LONG_PRESS_SIDE_PREV, &CrossPointSettings::longPressSidePrevFunction,
-                                     "longPressSidePrevFunction"));
+                                     "longPressSidePrevFunction", true));
   emit(buildLongPressMenuSetting());
   // Double-click power frontlight shortcut only exists on the X4 Pro.
   if (BoardConfig::isX4Pro())

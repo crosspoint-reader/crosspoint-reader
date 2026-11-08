@@ -267,15 +267,14 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   fontFamily = NOTOSANS;
   // These controls use board-specific display-index mappings and are skipped by
   // the generic settings loop. Persisted action IDs remain stable across boards.
-  const auto loadLongPressFunction = [&](const char* key) {
-    return clamp(doc[key] | (uint8_t)LP_MENU_DISABLED, (uint8_t)LONG_PRESS_MENU_FUNCTION_COUNT,
-                 (uint8_t)LP_MENU_DISABLED);
+  const auto loadLongPressFunction = [&](const char* key, const uint8_t count) {
+    return clamp(doc[key] | (uint8_t)LP_MENU_DISABLED, count, (uint8_t)LP_MENU_DISABLED);
   };
-  longPressMenuFunction = loadLongPressFunction("longPressMenuFunction");
-  longPressFrontNextFunction = loadLongPressFunction("longPressFrontNextFunction");
-  longPressFrontPrevFunction = loadLongPressFunction("longPressFrontPrevFunction");
-  longPressSideNextFunction = loadLongPressFunction("longPressSideNextFunction");
-  longPressSidePrevFunction = loadLongPressFunction("longPressSidePrevFunction");
+  longPressMenuFunction = loadLongPressFunction("longPressMenuFunction", LONG_PRESS_MENU_FUNCTION_COUNT);
+  longPressFrontNextFunction = loadLongPressFunction("longPressFrontNextFunction", LONG_PRESS_PAGE_FUNCTION_COUNT);
+  longPressFrontPrevFunction = loadLongPressFunction("longPressFrontPrevFunction", LONG_PRESS_PAGE_FUNCTION_COUNT);
+  longPressSideNextFunction = loadLongPressFunction("longPressSideNextFunction", LONG_PRESS_PAGE_FUNCTION_COUNT);
+  longPressSidePrevFunction = loadLongPressFunction("longPressSidePrevFunction", LONG_PRESS_PAGE_FUNCTION_COUNT);
   shortPwrBtn = clamp(doc["shortPwrBtn"] | (uint8_t)IGNORE, (uint8_t)SHORT_PWRBTN_COUNT, (uint8_t)IGNORE);
   if (BoardConfig::hasHomeKey() && doc["homeButtonLongPressAction"].isNull() &&
       !doc["longPressMenuFunction"].isNull()) {

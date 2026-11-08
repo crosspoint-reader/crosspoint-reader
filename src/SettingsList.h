@@ -165,13 +165,19 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
   return s;
 }
 
-inline std::vector<StrId> buildLongPressMenuValues() {
+// Page buttons also get the directional Chapter Skip and Orientation Change.
+inline std::vector<StrId> buildLongPressMenuValues(const bool pageButton) {
   std::vector<StrId> values = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
                                StrId::STR_DICTIONARY};
-  values.reserve(CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT);
+  values.reserve(pageButton ? CrossPointSettings::LONG_PRESS_PAGE_FUNCTION_COUNT
+                            : CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT);
   if (BoardConfig::hasHomeKey()) values.push_back(StrId::STR_READER_MENU);
   values.push_back(StrId::STR_SAVE_CLIPPING);
   values.push_back(StrId::STR_FOOTNOTES);
+  if (pageButton) {
+    values.push_back(StrId::STR_LONG_PRESS_BEHAVIOR_SKIP);
+    values.push_back(StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION);
+  }
   return values;
 }
 
@@ -180,7 +186,7 @@ inline uint8_t longPressFunctionDisplayValue(const uint8_t raw) {
   if (raw == CrossPointSettings::LP_MENU_READER_MENU) {
     return BoardConfig::hasHomeKey() ? CrossPointSettings::LP_MENU_READER_MENU : CrossPointSettings::LP_MENU_DISABLED;
   }
-  if (raw < CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT) return BoardConfig::hasHomeKey() ? raw : raw - 1;
+  if (raw < CrossPointSettings::LONG_PRESS_PAGE_FUNCTION_COUNT) return BoardConfig::hasHomeKey() ? raw : raw - 1;
   return CrossPointSettings::LP_MENU_DISABLED;
 }
 
@@ -191,16 +197,17 @@ inline uint8_t longPressFunctionFromDisplayValue(const uint8_t displayValue) {
 
 // Picker for a field holding a LONG_PRESS_MENU_FUNCTION value.
 inline SettingInfo buildLongPressFunctionSetting(const StrId nameId, uint8_t CrossPointSettings::* field,
-                                                 const char* key) {
+                                                 const char* key, const bool pageButton) {
   return SettingInfo::DynamicEnum(
-      nameId, buildLongPressMenuValues(), [field]() { return longPressFunctionDisplayValue(SETTINGS.*field); },
+      nameId, buildLongPressMenuValues(pageButton),
+      [field]() { return longPressFunctionDisplayValue(SETTINGS.*field); },
       [field](const uint8_t displayValue) { SETTINGS.*field = longPressFunctionFromDisplayValue(displayValue); }, key,
       StrId::STR_CAT_CONTROLS);
 }
 
 inline SettingInfo buildLongPressMenuSetting() {
   return buildLongPressFunctionSetting(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
-                                       "longPressMenuFunction");
+                                       "longPressMenuFunction", false);
 }
 
 struct ShortPowerButtonOption {

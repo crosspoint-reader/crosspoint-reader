@@ -52,6 +52,9 @@ class GfxRenderer {
 struct CrossPointSettings {
   enum { PORTRAIT, LANDSCAPE_CW, INVERTED, LANDSCAPE_CCW, ORIENTATION_COUNT };
   enum { OFF, CUSTOM_ACTIONS = 3 };
+  enum { LP_MENU_DISABLED = 1 };
+  uint8_t longPressFrontNextFunction = LP_MENU_DISABLED, longPressFrontPrevFunction = LP_MENU_DISABLED;
+  uint8_t longPressSideNextFunction = LP_MENU_DISABLED, longPressSidePrevFunction = LP_MENU_DISABLED;
   enum SHORT_PWRBTN { PAGE_TURN };
   uint8_t orientation = PORTRAIT, longPressButtonBehavior = OFF, shortPwrBtn = 255;
   bool tiltPageTurn = false;
@@ -228,6 +231,17 @@ int main() {
     const auto turn = detectPageTurn(input);
     assert(turn.next && !turn.prev && turn.source == source);
   }
+
+  // Each physical page button reads its own Custom function.
+  SETTINGS.longPressFrontNextFunction = 10;
+  SETTINGS.longPressFrontPrevFunction = 11;
+  SETTINGS.longPressSideNextFunction = 12;
+  SETTINGS.longPressSidePrevFunction = 13;
+  assert(customLongPressFunction(true, PageTurnResult::Source::Front) == 10);
+  assert(customLongPressFunction(false, PageTurnResult::Source::Front) == 11);
+  assert(customLongPressFunction(true, PageTurnResult::Source::Side) == 12);
+  assert(customLongPressFunction(false, PageTurnResult::Source::Side) == 13);
+  assert(customLongPressFunction(true, PageTurnResult::Source::Other) == CrossPointSettings::LP_MENU_DISABLED);
 }
 """
 with tempfile.TemporaryDirectory() as directory:
@@ -237,5 +251,6 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run(["c++", "-std=c++20", "-Wall", "-Wextra", "-Werror", "-I" + directory,
                     "-I" + str(ROOT / "src"), "-I" + str(ROOT / "freeink-sdk/libs/ui/FreeInkUI/include"), str(tmp / "orientation.cpp"), "-o", str(tmp / "orientation")], check=True)
     subprocess.run([str(tmp / "orientation")], check=True)
-print("Passed: front/side page turns and sources, custom release timing, 3,360 button mappings, "
+print("Passed: front/side page turns and sources, custom release timing and per-button functions, "
+      "3,360 button mappings, "
       "legacy settings, and all 16 rotation previews")

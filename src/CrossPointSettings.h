@@ -177,7 +177,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SHORT_PWRBTN_COUNT
   };
 
-  // Long-press action while reading an EPUB, for Confirm and for the page buttons in
+  // Long-press action while reading, for Confirm and for the page buttons in
   // CUSTOM_ACTIONS mode. Persisted values are stable; SettingsList maps them to the
   // device-specific option list shown to the user.
   enum LONG_PRESS_MENU_FUNCTION {
@@ -188,8 +188,15 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_READER_MENU = 4,
     LP_MENU_CREATE_CLIPPING = 5,
     LP_MENU_FOOTNOTES = 6,
-    LONG_PRESS_MENU_FUNCTION_COUNT
+    LONG_PRESS_MENU_FUNCTION_COUNT,
+    // Page buttons only: act in the held button's direction.
+    LP_PAGE_CHAPTER_SKIP = 7,
+    LP_PAGE_ORIENTATION_CHANGE = 8,
+    LONG_PRESS_PAGE_FUNCTION_COUNT
   };
+  // A new Confirm function must not renumber the saved page-button values; the
+  // page pickers also expect these values right after the Confirm functions.
+  static_assert(LONG_PRESS_MENU_FUNCTION_COUNT == LP_PAGE_CHAPTER_SKIP);
 
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };

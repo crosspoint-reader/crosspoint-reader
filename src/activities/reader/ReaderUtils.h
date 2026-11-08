@@ -100,6 +100,14 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   return {prev, next, tiltPrev || tiltNext, source};
 }
 
+// CUSTOM_ACTIONS function of the page button behind a turn; Disabled for other sources.
+inline uint8_t customLongPressFunction(const bool next, const PageTurnResult::Source source) {
+  using Source = PageTurnResult::Source;
+  if (source == Source::Other) return CrossPointSettings::LP_MENU_DISABLED;
+  if (source == Source::Side) return next ? SETTINGS.longPressSideNextFunction : SETTINGS.longPressSidePrevFunction;
+  return next ? SETTINGS.longPressFrontNextFunction : SETTINGS.longPressFrontPrevFunction;
+}
+
 struct TouchPageTurn {
   bool prev;
   bool next;
