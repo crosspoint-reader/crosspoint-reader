@@ -22,6 +22,11 @@
 
 namespace {
 constexpr uint16_t PORT = 53317;
+// Bound incomplete HTTP requests so one stalled sender cannot monopolize the listener.
+constexpr uint32_t HEADER_TIMEOUT_MS = 3000;
+constexpr uint32_t HEADER_IDLE_TIMEOUT_MS = 1200;
+constexpr uint32_t METADATA_TIMEOUT_MS = 6000;
+constexpr uint32_t METADATA_IDLE_TIMEOUT_MS = 2500;
 constexpr const char* GROUP = "224.0.0.167";
 void randomId(char out[33]) {
   uint8_t bytes[16];
@@ -226,7 +231,9 @@ void LocalSendReceiver::serve(NetworkClient& client) {
   }
   size_t length = 0;
   while (length < 2048) {
-    if (!receive(client, header.get() + length, 1, started, 10000)) {
+    if (!receive(client, header.get() + length, 1, started, HEADER_TIMEOUT_MS, HEADER_IDLE_TIMEOUT_MS)) {
+      LOG_ERR("LSEND", "Incomplete HTTP header from %s: %u bytes in %lu ms", client.remoteIP().toString().c_str(),
+              unsigned(length), static_cast<unsigned long>(millis() - started));
       reply(client, 408);
       return;
     }
@@ -251,6 +258,13 @@ void LocalSendReceiver::serve(NetworkClient& client) {
   }
   const uint32_t peer = uint32_t(client.remoteIP());
   if (session.expired(millis())) session.reset();
+  // Preserve the original sender's pending connection while answering info queries.
+  // A second transfer/cancellation must not replace the waiting sender's session.
+  if (pendingOffer() && request.route != localsend::Route::Info && request.route != localsend::Route::Register) {
+    LOG_INF("LSEND", "HTTP request busy while consent pending: route=%u", unsigned(request.route));
+    reply(client, 409, "{\"message\":\"Another transfer is awaiting acceptance\"}");
+    return;
+  }
   if (request.route == localsend::Route::Upload) {
     const int result = upload(client, request);
     LOG_INF("LSEND", "Upload completed: HTTP %d (chunked=%u)", result, unsigned(request.chunked));
@@ -268,7 +282,11 @@ void LocalSendReceiver::serve(NetworkClient& client) {
     reply(client, 500);
     return;
   }
-  if (request.length && !receive(client, body.get(), request.length, started, 10000)) {
+  if (request.length &&
+      !receive(client, body.get(), request.length, started, METADATA_TIMEOUT_MS, METADATA_IDLE_TIMEOUT_MS)) {
+    LOG_ERR("LSEND", "Incomplete HTTP metadata from %s: route=%u bytes=%u after %lu ms",
+            client.remoteIP().toString().c_str(), unsigned(request.route), unsigned(request.length),
+            static_cast<unsigned long>(millis() - started));
     reply(client, 408);
     return;
   }
@@ -602,14 +620,18 @@ void LocalSendReceiver::decide(bool accept) {
 }
 void LocalSendReceiver::poll() {
   pollConsent();
-  if (pendingOffer()) return;
+  // A pending sender stays connected; still accept info and registration requests.
   if (!listener || WiFi.status() != WL_CONNECTED) return;
   if (session.expired(millis())) session.reset();
   discovery();
   if (millis() - lastAnnouncement >= 10000) announce(true);
   auto client = listener.accept();
   if (!client) return;
+  const bool consentAlreadyPending = pendingOffer() != nullptr;
+  LOG_INF("LSEND", "HTTP TCP accepted from %s (consent pending=%u)", client.remoteIP().toString().c_str(),
+          unsigned(consentAlreadyPending));
   serve(client);
-  if (!pendingOffer()) client.stop();
+  // The first Prepare keeps its client alive; secondary clients must always close.
+  if (consentAlreadyPending || !pendingOffer()) client.stop();
 }
 #endif

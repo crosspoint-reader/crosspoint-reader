@@ -16,7 +16,7 @@ class LocalSendReceiveActivity final : public UiListActivity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  bool skipLoopDelay() override { return listening && (!popup.isActive() || (receiver && receiver->hasActiveBatch())); }
+  bool skipLoopDelay() override { return listening; }
   bool preventAutoSleep() override { return listening; }
 
  private:

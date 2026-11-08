@@ -182,6 +182,10 @@ bool LocalSendReceiveActivity::startReceiver() {
   const size_t modelLen = board_tag::boardNameLen();
   if (modelLen == 0 || modelLen >= sizeof(model)) return false;
   std::memcpy(model, board_tag::boardName(), modelLen);
+#if FREEINK_DEVICE_X3 || FREEINK_DEVICE_X4
+  // The X3/X4 firmware tag is shared; the LocalSend alias uses detected hardware.
+  if (gpio.deviceIsX3()) std::snprintf(model, sizeof(model), "x3");
+#endif
   listening = receiver->setAdvertisedId(deviceId[0] ? deviceId : model) && receiver->setDestination(destination) &&
               receiver->begin(&cancelled, this);
   seenSequence = 0;
@@ -448,7 +452,9 @@ void LocalSendReceiveActivity::loop() {
     handleFileAction(action, entry);
     return;
   }
-  if (leaveRequested || !listening || !receiver || (popup.isActive() && !receiver->hasActiveBatch())) return;
+  // Keep accepting requests while a file-details or delete-confirmation popup is open.
+  // Sender consent also keeps the listener responsive to additional peers.
+  if (leaveRequested || !listening || !receiver) return;
   if (WiFi.status() != WL_CONNECTED) {
     receiver->stop();
     listening = false;
@@ -461,7 +467,14 @@ void LocalSendReceiveActivity::loop() {
     return;
   }
   recordCompleted();
-  if (receiver->pendingOffer() && !popup.isActive()) showConsent();
+  if (consentPopup && !receiver->pendingOffer()) {
+    popup.dismiss();
+    consentPopup = false;
+    requestUpdate();
+  } else if (receiver->pendingOffer() && !consentPopup) {
+    if (popup.isActive()) popup.dismiss();
+    showConsent();
+  }
 }
 
 int LocalSendReceiveActivity::listCount() const { return 1 + sessionCount; }
