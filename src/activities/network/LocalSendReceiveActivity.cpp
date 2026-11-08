@@ -467,24 +467,28 @@ void LocalSendReceiveActivity::loop() {
   }
   // Keep accepting requests while a file-details or delete-confirmation popup is open.
   // Sender consent also keeps the listener responsive to additional peers.
-  if (leaveRequested || !listening || !receiver) return;
-  if (WiFi.status() != WL_CONNECTED) {
-    receiver->stop();
-    listening = false;
-    requestUpdate();
-    return;
+  if (leaveRequested || !receiver) return;
+  if (listening) {
+    if (WiFi.status() != WL_CONNECTED) {
+      receiver->stop();
+      listening = false;
+      requestUpdate();
+    } else {
+      receiver->poll();
+      if (leaveRequested) {
+        finish();
+        return;
+      }
+      recordCompleted();
+    }
   }
-  receiver->poll();
-  if (leaveRequested) {
-    finish();
-    return;
-  }
-  recordCompleted();
+  // A stopped receiver must still release its consent popup and restore a
+  // suspended delete confirmation.
   if (consentPopup && !receiver->pendingOffer()) {
     popup.dismiss();
     consentPopup = false;
     requestUpdate();
-  } else if (receiver->pendingOffer() && !consentPopup) {
+  } else if (listening && receiver->pendingOffer() && !consentPopup) {
     if (popup.isActive()) popup.dismiss();
     showConsent();
   }
