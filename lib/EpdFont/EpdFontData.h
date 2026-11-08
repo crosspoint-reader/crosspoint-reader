@@ -1,5 +1,6 @@
 // From
 // https://github.com/vroland/epdiy/blob/c61e9e923ce2418150d54f88cea5d196cdc40c54/src/epd_internals.h
+// The EPDiy font layouts use LGPLv3. See licenses/borrowed-code.txt.
 
 #pragma once
 #include <cstdint>

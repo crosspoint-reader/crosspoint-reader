@@ -712,11 +712,28 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       renderer.drawCenteredText(UI_10_FONT_ID, continueY, tr(STR_CONTINUE_READING), !bookSelected);
     }
   } else {
-    // No book to continue reading
-    const int y =
-        bookY + (bookHeight - renderer.getLineHeight(UI_12_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-    renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK));
-    renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), tr(STR_START_READING));
+    // No book to continue reading. Keep each line inside the empty cover frame: a longer translation
+    // (e.g. Russian "Нет открытой книги") steps down one font size; wrapping is only the last resort.
+    const int textWidth = std::max(1, bookWidth - 16);
+    const auto fitFont = [&](const char* text, const int preferred, const int smaller) {
+      return renderer.getTextWidth(preferred, text) <= textWidth ? preferred : smaller;
+    };
+    const int titleFont = fitFont(tr(STR_NO_OPEN_BOOK), UI_12_FONT_ID, UI_10_FONT_ID);
+    const int hintFont = fitFont(tr(STR_START_READING), UI_10_FONT_ID, SMALL_FONT_ID);
+    const auto title = renderer.wrappedText(titleFont, tr(STR_NO_OPEN_BOOK), textWidth, 3);
+    const auto hint = renderer.wrappedText(hintFont, tr(STR_START_READING), textWidth, 3);
+    const int titleLine = renderer.getLineHeight(titleFont);
+    const int hintLine = renderer.getLineHeight(hintFont);
+    int y = bookY +
+            (bookHeight - static_cast<int>(title.size()) * titleLine - static_cast<int>(hint.size()) * hintLine) / 2;
+    for (const auto& line : title) {
+      renderer.drawCenteredText(titleFont, y, line.c_str());
+      y += titleLine;
+    }
+    for (const auto& line : hint) {
+      renderer.drawCenteredText(hintFont, y, line.c_str());
+      y += hintLine;
+    }
   }
 }
 

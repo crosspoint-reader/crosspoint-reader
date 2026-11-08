@@ -79,6 +79,7 @@ class PluginCatalogActivity final : public CatalogActivity {
       std::string title, url, body;
       std::string id;  // fills {list_id}, so lists can share one browse url
       std::string noticeTitle, noticeMessage, noticeConfirm, noticeCancel;
+      std::string noticeId;  // nonempty only for valid notice.id with notice.once=true
       bool hasNotice() const { return !noticeMessage.empty(); }
     };
     std::vector<BrowseList> browseLists;
@@ -229,6 +230,7 @@ class PluginCatalogActivity final : public CatalogActivity {
   // Read installed versions once per page, outside the render path.
   void computeInstallStatus();
   bool parseXmlList();
+  bool parseUpdateFirstBrowseResponse(size_t pageOffset);
   bool parseBrowseResponse();
   void activateItem(int itemIndex);  // XML list: navigate into a folder, else show details/download
   bool loadItemDetails(int itemIndex, ItemDetails& details);

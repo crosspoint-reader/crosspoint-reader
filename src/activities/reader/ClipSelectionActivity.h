@@ -36,6 +36,9 @@ class ClipSelectionActivity final : public Activity {
                         std::span<const std::unique_ptr<Page>> borrowedPages, int marginLeft, int marginTop,
                         Selection selection, int initialX = -1, int initialY = -1);
 
+  // Restore a previous selection (page offsets relative to the first page) on enter.
+  void setInitialSelection(const Selection& selection) { initialSelection = selection; }
+
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
@@ -44,22 +47,16 @@ class ClipSelectionActivity final : public Activity {
 
  private:
   struct WordBox {
-    static constexpr uint16_t NO_DISPLAY = UINT16_MAX;
-
     int16_t x = 0;
     int16_t y = 0;
     int16_t width = 0;
     int16_t height = 0;
     uint16_t row = 0;
     uint8_t pageOffset = 0;
-    int8_t characterSpacing = 0;
     uint16_t pageWordIndex = 0;
-    uint16_t display = NO_DISPLAY;  // index into displayForms
-    int fontId = 0;                 // the word's font; headings and CSS font-size runs differ from the section font
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
-    const char* text = nullptr;  // logical text, for clipping and lookup
-    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+    const char* text = nullptr;
     bool paragraphStart = false;
     bool isRtl = false;
     bool discretionaryHyphen = false;
@@ -68,8 +65,6 @@ class ClipSelectionActivity final : public Activity {
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
 
   bool extractWords();
-  uint16_t storeDisplayForm(const char* display);
-  GfxRenderer::LaidOutText laidOut(const WordBox& word) const;
   size_t pageCount() const { return borrowedPages.empty() ? pages.size() : borrowedPages.size(); }
   const Page& pageAt(size_t index) const { return *(borrowedPages.empty() ? pages[index] : borrowedPages[index]); }
   bool isLookup() const { return mode != Mode::Clip; }
@@ -97,11 +92,7 @@ class ClipSelectionActivity final : public Activity {
   bool buildSelectedText(int first, int last, std::string& text) const;
   void drawSelection() const;
   bool renderIncremental();
-  void drawWordHighlight(int index, int firstSelected, int lastSelected, int offsetX, int offset) const;
-  void drawWordClean(int index, int offsetX, int offset) const;
   void ditherGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
-  void clearGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
-  void prewarmWord(int index) const;
 
   std::vector<std::unique_ptr<Page>> pages;
   std::span<const std::unique_ptr<Page>> borrowedPages;
@@ -121,11 +112,6 @@ class ClipSelectionActivity final : public Activity {
   int lineHeight = 0;
   std::unique_ptr<WordBox[]> words;
   size_t wordCount = 0;
-  // TextBlock::displayForm() of the words that have one (what layout
-  // measured), indexed by WordBox::display. Allocated only when a word has
-  // one, so pages without complex scripts pay nothing per word.
-  std::unique_ptr<const char*[]> displayForms;
-  uint16_t displayFormCount = 0;
   int selected = 0;
   int rangeStart = -1;
   uint8_t currentPageOffset = 0;

@@ -191,6 +191,12 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   };
   forEachBaseSetting(visit);
 
+  // Keep landscape swapping opt-in when loading older settings.
+  if (doc["sideButtonFollowOrientation"].isNull()) {
+    sideButtonFollowOrientation = 0;
+    needsResave = true;
+  }
+
   // Plugin System did not exist in older settings files. Preserve the behavior
   // of users who already have SD plugins installed, while keeping the new
   // default disabled on clean installs.

@@ -5,6 +5,7 @@
 
 // ═══════════════════════════════════════════════════════════════════
 // EPUB Utilities — ported from EPUB Optimizer Pro
+// MIT. Original code by zgredex. See licenses/borrowed-code.txt.
 // ═══════════════════════════════════════════════════════════════════
 
 /** Defensive CSS injected into every XHTML <head> — prevents e-ink overflow. */

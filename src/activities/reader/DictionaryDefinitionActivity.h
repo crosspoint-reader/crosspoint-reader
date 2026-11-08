@@ -94,6 +94,7 @@ class DictionaryDefinitionActivity final : public Activity {
   bool prepareDefinition(Definition& next, bool forcePlain = false);
   bool layoutHtmlPages(Definition& next);
   bool wrapText(Definition& next);
+  bool prepareFont(std::string& definition, int fontId);
   bool reserveLines(Definition& next, size_t count);
   int measureSpan(int fontId, const char* text, size_t len, EpdFontFamily::Style family = EpdFontFamily::REGULAR) const;
   void drawBody(int fontId, int x, int startY, int currentPage) const;
