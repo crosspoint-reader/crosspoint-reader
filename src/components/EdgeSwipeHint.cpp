@@ -48,7 +48,7 @@ void drawEdgeSwipeHint(const GfxRenderer& renderer, edge_swipe::Edge edge, int s
       }
     }
   }
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  renderer.displayWindow(x, y, w, h);
   renderer.copyBufferToRegion(x, y, w, h, underlay, sizeof(underlay));
 #else
   (void)renderer;

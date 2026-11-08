@@ -261,9 +261,10 @@ class GfxRenderer {
       HalDisplay::GrayscaleMode mode = HalDisplay::GrayscaleMode::Overlay) const;
   // Compatibility queries for Overlay mode.
   bool supportsAsyncGrayscaleBase() const;
-  // EXPERIMENTAL: Windowed update - display only a rectangular region
   // Repaint a B/W rectangle over retained gray pixels; false means the caller must use its normal paint.
   bool displayRetainedGrayscaleOverlay(int x, int y, int width, int height, bool restore = false) const;
+  // Blocking fast update in logical coordinates; may refresh the full frame when required.
+  void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
