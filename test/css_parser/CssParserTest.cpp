@@ -703,3 +703,31 @@ TEST_F(CssParserTest, CollectsFontFacesAndFontFamilies) {
   EXPECT_EQ(loaded[1].href, faces[1].href);
   EXPECT_TRUE(loaded[1].bold && loaded[1].italic);
 }
+
+TEST_F(CssParserTest, RejectsFontFacePathsExceedingCacheLimit) {
+  const std::string baseDir = "OEBPS/Styles/";
+  for (const size_t pathLength : {255u, 256u}) {
+    SCOPED_TRACE(pathLength);
+    CssParser writer(cachePath());
+    const std::string url = std::string(pathLength - baseDir.size() - 4, 'a') + ".otf";
+    ASSERT_EQ(loadCss(writer,
+                      "@font-face { font-family: Long; src: url(" + url +
+                          "); }\n"
+                          "@font-face { font-family: Short; src: url(short.otf); }\n",
+                      baseDir),
+              CssParser::ParseResult::Complete);
+
+    const auto& faces = writer.fontFaces();
+    ASSERT_EQ(faces.size(), pathLength == 255u ? 2u : 1u);
+    if (pathLength == 255u) EXPECT_EQ(faces.front().href, baseDir + url);
+    EXPECT_EQ(faces.back().href, baseDir + "short.otf");
+
+    ASSERT_TRUE(writer.saveFontFaces());
+    std::vector<CssFontFace> loaded;
+    ASSERT_TRUE(CssParser::loadFontFaces(cachePath(), loaded));
+    ASSERT_EQ(loaded.size(), faces.size());
+    for (size_t i = 0; i < faces.size(); ++i) {
+      EXPECT_EQ(loaded[i].href, faces[i].href);
+    }
+  }
+}
