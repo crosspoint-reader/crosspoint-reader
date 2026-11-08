@@ -134,9 +134,11 @@ struct Renderer {
   int preparedStyles = 0;
   FontCacheManager* getFontCacheManager() { return &cache; }
   enum class TextMeasureMode { Layout, Rendered };
+  mutable size_t visualRenderCalls = 0;
   int getTextAdvanceX(int, const char* text, EpdFontFamily::Style style, int8_t = 0,
                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const {
+    if (baseDir == BidiUtils::BidiBaseDir::VISUAL && mode == TextMeasureMode::Rendered) ++visualRenderCalls;
     std::string visual;
     if (baseDir != BidiUtils::BidiBaseDir::VISUAL && BidiUtils::applyBidiVisual(text, visual))
       text = visual.c_str();
@@ -149,7 +151,8 @@ struct Renderer {
       ++width;
       // Simulated SD-font kerning between a separator and an RTL glyph.
       if (style == EpdFontFamily::BOLD && mode == TextMeasureMode::Rendered &&
-          previous == ' ' && cp >= 0x590 && cp <= 0x8FF) boundaryKern += 2;
+          previous == ' ' && ((cp >= 0x590 && cp <= 0x8FF) || (cp >= 0xFB50 && cp <= 0xFEFF)))
+        boundaryKern += 2;
       previous = cp;
     }
     return width * (style == EpdFontFamily::BOLD ? (mode == TextMeasureMode::Rendered ? 2 : 3) : 1) +
@@ -494,14 +497,32 @@ int main() {
         BidiUtils::BidiBaseDir::VISUAL, Renderer::TextMeasureMode::Rendered);
     assert(boldMixed.positions[1] == beforeFirst && boldMixed.positions[2] == beforeSecond);
 
-    // Removing the headword marker between Lam and Alef must leave one
-    // selectable token and its original byte range, matching the ligature.
+    // Reordering must preserve the marker-joined Lam-Alef as one selectable
+    // word and map its shaped glyph back to the original source byte range.
     DictionaryDefinitionActivity::PlainSelectionLine joinedArabic;
-    joinedArabic.text = std::string("one ") + "ل" + DICTIONARY_PLAIN_HEADWORD_MARKER + "ا tail";
+    joinedArabic.text = std::string("one بيت ل") + DICTIONARY_PLAIN_HEADWORD_MARKER + "ا tail";
     joinedArabic.layout(spacedRtl, 0, 0, false, {});
-    assert(joinedArabic.words == std::vector<std::string>({"one", "لا", "tail"}));
-    assert(joinedArabic.ranges[1].start == 4 && joinedArabic.ranges[1].end == 9);
-    assert(joinedArabic.positions == std::vector<int16_t>({0, 4, 6}));
+    assert(joinedArabic.words == std::vector<std::string>({"one", "لا", "بيت", "tail"}));
+    assert(joinedArabic.ranges[1].start == 11 && joinedArabic.ranges[1].end == 16);
+    assert(joinedArabic.ranges[1].start > joinedArabic.ranges[2].start);
+    assert(joinedArabic.positions == std::vector<int16_t>({0, 4, 6, 10}));
+    std::string joinedVisual;
+    std::vector<uint16_t> joinedSources;
+    assert(BidiUtils::applyBidiVisual("one بيت لا tail", joinedVisual, -1, &joinedSources));
+    bool mappedLigature = false;
+    auto* cursor = reinterpret_cast<const unsigned char*>(joinedVisual.c_str());
+    for (size_t cpIndex = 0; *cursor; ++cpIndex) {
+      const uint32_t cp = utf8NextCodepoint(&cursor);
+      if (cp == 0xFEFB || cp == 0xFEFC) {
+        assert(joinedSources[cpIndex] == 8 || joinedSources[cpIndex] == 9);
+        mappedLigature = true;
+      }
+    }
+    assert(mappedLigature);
+    // Simulated bold SD kerning at the Arabic glyph boundary distinguishes
+    // visual-prefix measurement from the old independent-word fallback.
+    joinedArabic.layout(spacedRtl, 0, 0, true, {});
+    assert(joinedArabic.positions == std::vector<int16_t>({0, 10, 16, 24}));
 
     // The comma follows the RTL run's whole-line visual order, while the
     // numeric run moves ahead of the Hebrew word. Selectable x values follow
@@ -514,6 +535,22 @@ int main() {
     assert(punctuationVisual == "one 123 ,גבא tail");
     assert(punctuation.words == std::vector<std::string>({"one", "123", "אבג,", "tail"}));
     assert(punctuation.positions == std::vector<int16_t>({0, 4, 8, 13}));
+    // Token anchors can stay in source order even when the glyphs within a
+    // token move: '(' leads the visual token although it came after Hebrew.
+    DictionaryDefinitionActivity::PlainSelectionLine sameOrder;
+    sameOrder.text = "one אבג(123) tail";
+    std::vector<uint16_t> unchangedOrder;
+    spacedRtl.renderer.visualRenderCalls = 0;
+    sameOrder.layout(spacedRtl, 0, 0, false, {});
+    assert(!BidiUtils::computeVisualWordOrder(sameOrder.words, false, unchangedOrder));
+    assert(sameOrder.words == std::vector<std::string>({"one", "אבג(123)", "tail"}));
+    assert(sameOrder.positions == std::vector<int16_t>({0, 4, 13}));
+    assert(spacedRtl.renderer.visualRenderCalls > 0);
+    std::string sameOrderVisual;
+    std::vector<uint16_t> sameOrderSources;
+    assert(BidiUtils::applyBidiVisual(sameOrder.text.c_str(), sameOrderVisual, -1, &sameOrderSources));
+    assert(sameOrderVisual == "one (123)גבא tail");
+    assert(sameOrderSources[4] == 11);  // mirrored ')' precedes the Hebrew letters in visual order
   }
   view.lookup->selectionPages.clear();
   HalMemory::available = 0;
@@ -554,6 +591,29 @@ int main() {
     for (size_t i = 0; i < selectedLine.positions.size(); ++i) {
       assert(markedJustified.renderer.drawCalls[i].text == selectedLine.words[i]);
       assert(markedJustified.renderer.drawCalls[i].x == selectedLine.positions[i]);
+    }
+
+    // An embedded marker cannot split a shaped/ligature-capable drawable word.
+    markedJustified.renderer.drawCalls.clear();
+    markedJustified.lookup->selectionPages.clear();
+    markedJustified.content = {};
+    markedJustified.bodyWidth = 12;
+    markedJustified.content.text = std::string("f") + DICTIONARY_PLAIN_HEADWORD_MARKER + "i xy end more";
+    assert(markedJustified.prepareDefinition(markedJustified.content) &&
+           markedJustified.buildPlainSelectionPages());
+    assert(markedJustified.content.lines[0].wraps);
+    const auto& joinedLine =
+        *static_cast<const PageLine&>(*markedJustified.lookup->selectionPages[0]->elements[0]).block;
+    assert(joinedLine.words == std::vector<std::string>({"fi", "xy", "end"}));
+    std::string joinedText = markedJustified.content.text.substr(
+        markedJustified.content.lines[0].start, markedJustified.content.lines[0].len);
+    const auto joinedPlacement = getPlainLineLayout(markedJustified.renderer, 0, joinedText.c_str(), false, true, 12);
+    assert(joinedPlacement.gaps == 2);
+    drawJustifiedPlainLine(markedJustified.renderer, 0, 0, 0, joinedText.data(), false, joinedPlacement);
+    assert(markedJustified.renderer.drawCalls.size() == joinedLine.positions.size());
+    for (size_t i = 0; i < joinedLine.positions.size(); ++i) {
+      assert(markedJustified.renderer.drawCalls[i].text == joinedLine.words[i]);
+      assert(markedJustified.renderer.drawCalls[i].x == joinedLine.positions[i]);
     }
     // An RTL run after five digits must use full-line bidi rendering, not logical-order justification.
     char mixedRtl[] = "one 123456אבג 123456דהו tail";

@@ -113,6 +113,8 @@ PlainLineLayout getPlainLineLayout(const GfxRenderer& renderer, const int fontId
 void drawJustifiedPlainLine(const GfxRenderer& renderer, const int fontId, const int x, const int y, char* text,
                             const bool bold, const PlainLineLayout& placement) {
   const auto style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+  // Shape complete drawable words, including letters joined across a marker.
+  *std::remove(text, text + strlen(text), DICTIONARY_PLAIN_HEADWORD_MARKER) = '\0';
   int gapIndex = 0;
   bool hasWord = false;
   bool afterSpace = false;
@@ -220,7 +222,12 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
       positions.push_back(x);
       x += owner.renderer.getTextAdvanceX(fontId, words[index].c_str(), family);
     }
-    if (reordered) {
+    // Word anchors may remain in logical order even when the glyphs inside
+    // those words change visual position. Match drawText's BiDi detection.
+    const bool useVisualPositions =
+        reordered || std::any_of(text.begin(), text.end(), [](unsigned char c) { return c >= 0xD6 && c <= 0xDB; });
+    bool visualPositionsApplied = false;
+    if (useVisualPositions) {
       // Keep source-word ownership through marker removal. The whole-line BiDi
       // pass supplies the visual position of each emitted codepoint, including
       // punctuation and Lam-Alef glyphs that cannot match isolated tokens.
@@ -268,13 +275,22 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
         std::string visualWord;
         bool complete = true;
         for (size_t n = 0; n < words.size(); ++n) {
-          const size_t index = visualOrder[n];
+          const size_t index = reordered ? visualOrder[n] : n;
           if (starts[index] == UINT16_MAX || ends[index] <= starts[index]) {
             complete = false;
             break;
           }
-          prefix.assign(rendered.data(), ends[index]);
-          visualWord.assign(rendered.data() + starts[index], ends[index] - starts[index]);
+          // A word can have disjoint visual spans even when word anchors
+          // remain in source order. Its first visual glyph gives its x origin;
+          // measuring the whole bounding span would include other words.
+          size_t visualEnd = ends[index];
+          if (!reordered) {
+            auto* cursor = reinterpret_cast<const unsigned char*>(rendered.data() + starts[index]);
+            utf8NextCodepoint(&cursor);
+            visualEnd = cursor - reinterpret_cast<const unsigned char*>(rendered.data());
+          }
+          prefix.assign(rendered.data(), visualEnd);
+          visualWord.assign(rendered.data() + starts[index], visualEnd - starts[index]);
           const int throughWord =
               owner.renderer.getTextAdvanceX(fontId, prefix.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
                                              GfxRenderer::TextMeasureMode::Rendered);
@@ -285,10 +301,11 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
         }
         if (complete) {
           for (size_t n = 0; n < words.size(); ++n) positions[n] = renderedPositions[n];
+          visualPositionsApplied = true;
         }
       }
     }
-    if (!reordered) {
+    if (!reordered && !visualPositionsApplied) {
       int gapIndex = 0;
       for (size_t n = 0; n < ranges.size(); ++n) {
         const size_t start = ranges[n].start - offset;
