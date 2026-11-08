@@ -27,6 +27,7 @@ inline int failSeek = -1;
 inline std::string readFailurePath;
 inline std::string seekFailurePath;
 inline size_t failAllocationBytes = 0;
+inline unsigned skipMatchingAllocations = 0;
 inline unsigned plainLoads = 0;
 inline unsigned groupedLoads = 0;
 inline int failRename = -1;
@@ -64,6 +65,7 @@ inline void reset() {
   readFailurePath.clear();
   seekFailurePath.clear();
   failAllocationBytes = 0;
+  skipMatchingAllocations = 0;
   plainLoads = 0;
   groupedLoads = 0;
   failRename = -1;

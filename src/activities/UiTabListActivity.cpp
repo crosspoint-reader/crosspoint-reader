@@ -63,7 +63,7 @@ int UiTabListActivity::ringPos() const {
 
 void UiTabListActivity::tabActionTrampoline(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<UiTabListActivity*>(user);
-  if (event.value < 0 || event.value >= self->tabCount()) return;
+  if (event.value < 0 || event.value >= self->tabCount() || !self->tabEnabled(event.value)) return;
   self->onTabAction(event.value);
 }
 
@@ -130,6 +130,7 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
     tabs[i].label = tabLabel(i);
     tabs[i].value = static_cast<int16_t>(i);
     tabs[i].selected = activeTab() == i;
+    tabs[i].enabled = tabEnabled(i);
     tabs[i].indicator = tabIndicator(i);
   }
   fui::TabBarProps tabProps;

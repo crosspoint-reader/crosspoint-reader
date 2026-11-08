@@ -6,6 +6,7 @@ add_executable(LibraryBuilderTest
   ${REPO_ROOT}/lib/LibraryIndex/LibraryText.cpp
   ${REPO_ROOT}/lib/I18n/LanguageTag.cpp
   ${REPO_ROOT}/lib/Utf8/Utf8.cpp
+  ${REPO_ROOT}/lib/Utf8/LanguageCode.cpp
 )
 target_include_directories(LibraryBuilderTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/stubs

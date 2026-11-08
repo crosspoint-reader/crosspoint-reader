@@ -1,6 +1,7 @@
 add_executable(LanguageTagTest
   LanguageTagTest.cpp
   ${REPO_ROOT}/lib/I18n/LanguageTag.cpp
+  ${REPO_ROOT}/lib/Utf8/LanguageCode.cpp
 )
 
 target_include_directories(LanguageTagTest PRIVATE ${REPO_ROOT}/lib/Utf8)

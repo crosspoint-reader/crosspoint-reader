@@ -398,11 +398,15 @@ void LibraryListActivity::clearGroupCache() {
 // Keep the tab state when temporarily closing the index for a book or dialog.
 void LibraryListActivity::syncIndexState() {
   clearGroupCache();
-  degraded = index.isOpen() && index.ranksDegraded();
+  groupTabAvailable = index.hasGroups();
+  degraded = index.isOpen() && index.ranksDegraded() && !groupTabAvailable;
   if (index.isOpen() && index.dedupDegraded()) LOG_ERR("LIB", "index was built without duplicate detection");
   if (index.isOpen() && index.groupsDegraded()) LOG_ERR("LIB", "index was built without its group table");
-  groupTabAvailable = index.hasGroups();
   groupTabKind = index.groupKind();
+  if (!tabEnabled(activeTabIndex)) {
+    activeTabIndex = GROUP_TAB;
+    sortOrder = orderForTab(activeTabIndex, descendingTabs);
+  }
 }
 
 void LibraryListActivity::resetAfterRebuild() {
@@ -550,7 +554,10 @@ void LibraryListActivity::openSearch() {
 
 void LibraryListActivity::stepTab(const int direction) {
   const int slots = tabCount();
-  const int next = (activeTab() + (direction > 0 ? 1 : slots - 1)) % slots;
+  int next = activeTab();
+  do {
+    next = (next + (direction > 0 ? 1 : slots - 1)) % slots;
+  } while (!tabEnabled(next));
   selectTab(next, false);
 }
 
@@ -563,7 +570,7 @@ void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) 
 #if FREEINK_CAP_TOUCH
   closeSwipeDelete();
 #endif
-  if (index < 0 || index >= tabCount()) return;
+  if (index < 0 || index >= tabCount() || !tabEnabled(index)) return;
   if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
   sortOrder = orderForTab(index, descendingTabs);
   // The filter and the overlap rows hold positions in the old order, so they
@@ -584,6 +591,10 @@ void LibraryListActivity::toggleSortDirection() { selectTab(activeTab(), true); 
 int LibraryListActivity::tabCount() const { return groupTabAvailable ? TAB_SLOTS : TAB_SLOTS - 1; }
 
 int LibraryListActivity::activeTab() const { return activeTabIndex; }
+
+bool LibraryListActivity::tabEnabled(const int tab) const {
+  return tab != AUTHOR_TAB || !groupTabAvailable || !index.ranksDegraded();
+}
 
 const char* LibraryListActivity::tabLabel(const int index) const {
   if (index == TITLE_TAB) return tr(STR_LIBRARY_TAB_TITLE);
@@ -625,7 +636,10 @@ int LibraryListActivity::rowFor(const int entry) const {
   return row;
 }
 
-bool LibraryListActivity::groupable() const { return !degraded && !isRecentSort(sortOrder) && bookRowCount() > 0; }
+bool LibraryListActivity::groupable() const {
+  const bool ordered = isGroupSort(sortOrder) ? groupTabAvailable : !index.ranksDegraded();
+  return ordered && !isRecentSort(sortOrder) && bookRowCount() > 0;
+}
 
 // Return the row's group and optional series position.
 // For ungrouped books return false and set bookCount to the size of the ungrouped block.

@@ -1018,6 +1018,61 @@ TEST_F(LibraryBuilderTest, CommonGroupPrefixesSortLexicallyBeforeSeriesPosition)
   }
 }
 
+TEST_F(LibraryBuilderTest, GroupTitlesUseFullFoldedTextAfterMatchingPrefixes) {
+  for (const size_t prefixLength : {12u, 24u, 96u, 180u}) {
+    for (const GroupKind kind : {GroupKind::Series, GroupKind::Publisher}) {
+      SCOPED_TRACE(prefixLength);
+      SCOPED_TRACE(static_cast<int>(kind));
+      fake::reset();
+      bookMetadata.clear();
+      const std::string prefix(prefixLength, 'X');
+      const std::vector<std::string> suffixes{"Zulu", "Beta", "Alpha", "Alpha", "Earlier"};
+      for (unsigned i = 0; i < suffixes.size(); i++) {
+        const std::string path = "/" + numbered("", i) + ".epub";
+        fake::add(path);
+        bookMetadata[path].title = prefix + suffixes[i];
+        bookMetadata[path].series = "Same series";
+        bookMetadata[path].publisher = "Same publisher";
+        bookMetadata[path].seriesIndex = i == 4 ? 2.0f : 1.0f;
+      }
+      ASSERT_TRUE(buildLibraryIndex("/", stats, true, kind));
+      LibraryIndexFile index;
+      ASSERT_TRUE(index.open(INDEX));
+      const std::vector<std::string> expected =
+          kind == GroupKind::Series
+              ? std::vector<std::string>{"/0002.epub", "/0003.epub", "/0001.epub", "/0000.epub", "/0004.epub"}
+              : std::vector<std::string>{"/0002.epub", "/0003.epub", "/0001.epub", "/0004.epub", "/0000.epub"};
+      EXPECT_EQ(shelfOrder(index), expected);
+      if (kind == GroupKind::Series) {
+        // Series position takes priority over the title.
+        EXPECT_EQ(pathAt(index, SortOrder::GroupAsc, 4), "/0004.epub");
+      }
+    }
+  }
+}
+
+TEST_F(LibraryBuilderTest, AuthorAllocationFailureKeepsTheGroupOrderAvailable) {
+  // Fail either spelling scratch or the author keys, after the title keys succeeded.
+  for (const bool failAuthorKeys : {false, true}) {
+    fake::reset();
+    fake::add("/a.epub");
+    fake::add("/b.epub");
+    bookMetadata["/a.epub"].series = "Dune";
+    bookMetadata["/b.epub"].series = "Dune";
+    bookMetadata["/a.epub"].author = "Zed";
+    bookMetadata["/b.epub"].author = "Able";
+    fake::failAllocationBytes = failAuthorKeys ? 2 * 14 : 16 * 134;
+    fake::skipMatchingAllocations = failAuthorKeys ? 1 : 0;
+    ASSERT_TRUE(buildLibraryIndex("/", stats, true, GroupKind::Series));
+    EXPECT_TRUE(stats.ranksDegraded);
+    LibraryIndexFile index;
+    ASSERT_TRUE(index.open(INDEX));
+    EXPECT_TRUE(index.hasGroups());
+    EXPECT_FALSE(index.groupsDegraded());
+    if (failAuthorKeys) EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, 0), "/a.epub");
+  }
+}
+
 TEST_F(LibraryBuilderTest, UngroupedBuildsUseCachedMetadataAndNoGroupStage) {
   ASSERT_TRUE(buildLibraryIndex("/", stats, true, GroupKind::None));
   EXPECT_EQ(fake::plainLoads, 2u);
@@ -1070,6 +1125,11 @@ TEST_F(LibraryBuilderTest, GroupAllocationFailureIsExplicitAndCanBeRetried) {
     ASSERT_TRUE(index.readRecord(0, record));
     ASSERT_TRUE(index.readSourceGroup(record, sourceGroup));
     EXPECT_TRUE(matchesQuery(fold(sourceGroup), "dune"));
+    std::string searchAuthor;
+    std::string searchGroup;
+    ASSERT_TRUE(index.readSearchFields(record, searchAuthor, searchGroup));
+    EXPECT_EQ(searchGroup, sourceGroup);
+    EXPECT_TRUE(matchesQuery(fold(searchGroup), "dune"));
   }
   fake::failAllocationBytes = 0;
   fake::parses = 0;

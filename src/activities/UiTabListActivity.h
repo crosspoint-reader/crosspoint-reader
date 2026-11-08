@@ -33,6 +33,7 @@ class UiTabListActivity : public UiListActivity {
   virtual int tabCount() const = 0;
   virtual int activeTab() const = 0;
   virtual const char* tabLabel(int index) const = 0;
+  virtual bool tabEnabled(int) const { return true; }
   virtual freeink::ui::TabIndicator tabIndicator(int) const { return freeink::ui::TabIndicator::None; }
   // Touch tap on a tab pill (bounds already checked).
   virtual void onTabAction(int index) = 0;

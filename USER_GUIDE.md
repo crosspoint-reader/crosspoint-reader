@@ -139,7 +139,7 @@ The optional tab shows a book count beside each group heading. Groups sort A-Z b
 - **Publisher** and **Subject** use the first non-blank metadata value in the EPUB file. Books are sorted by title in each group. See [Choosing the Subject Sent to the Device](#choosing-the-subject-sent-to-the-device) to choose the subject in Calibre.
 - **Language** uses the first non-blank language value. It shows a native name (e.g. *Français*) when available or the uppercase language code when not. Tags such as `en`, `EN`, `en-US`, and `eng` all count as the same language. Placeholder codes (`und`, `mul`, `zxx`, `mis`) appear under **Unknown language**. Books are sorted by title within each group. Search matches both the stored language code and the displayed name.
 
-Changing **Group Library By** rebuilds the index the next time the Library opens and reads the books' metadata again. Use **Refresh library** to pick up added or removed books and metadata changes. On a touch device, tap the refresh icon in the Library header. On any device, hold a book in **Recent** and choose **Refresh library** from the options menu.
+Changing **Group Library By** rebuilds the index the next time the Library opens. Choosing **None** reuses the indexed metadata; choosing a grouping field reads the books' metadata again. Use **Refresh library** to pick up added or removed books and metadata changes. On a touch device, tap the refresh icon in the Library header. On any device, hold a book in **Recent** and choose **Refresh library** from the options menu.
 
 On a button-only device:
 

@@ -722,9 +722,9 @@ enum class GroupBuildResult : uint8_t { Complete, OutOfMemory, IoError };
 // While runs are being refined, groupOrderOf[begin] holds the end of the run
 // that starts at `begin` and other slots are unused. The final pass replaces
 // those run ends with record ordinals.
-GroupBuildResult buildGroupOrder(HalFile& groupStage, const uint16_t* order, const uint16_t n, uint16_t* groupOrderOf,
-                                 uint16_t* groupIdOf, uint16_t* groupPositionOf, uint16_t& groupCount,
-                                 uint16_t& groupedCount) {
+GroupBuildResult buildGroupOrder(HalFile& stage, HalFile& groupStage, const uint16_t* order, const uint16_t n,
+                                 uint16_t* groupOrderOf, uint16_t* groupIdOf, uint16_t* groupPositionOf,
+                                 uint16_t& groupCount, uint16_t& groupedCount) {
   groupCount = 0;
   groupedCount = 0;
   if (n == 0) return GroupBuildResult::Complete;
@@ -732,7 +732,7 @@ GroupBuildResult buildGroupOrder(HalFile& groupStage, const uint16_t* order, con
   // reuse heap scratch for full names (it exceeds the task stack budget)
   struct GroupScratch {
     StagedGroup staged;
-    char firstFolded[sizeof(StagedGroup::data)];
+    char firstFolded[STAGE_NAME_BYTES];
   };
   auto scratch = makeUniqueNoThrow<GroupScratch>();
   auto keys = makeUniqueNoThrow<GroupSortKey[]>(n);
@@ -760,7 +760,7 @@ GroupBuildResult buildGroupOrder(HalFile& groupStage, const uint16_t* order, con
   for (uint16_t i = 0; i < n; i++) {
     if (!readGroup(i)) return GroupBuildResult::IoError;
     GroupSortKey& key = keys[i];
-    // breaks ties by title
+    // Prefix title order; full-title ties are refined below.
     key.ordinal = i;
     key.position = scratch->staged.position;
     groupIdOf[i] = CLIX_GROUP_NONE;
@@ -828,16 +828,68 @@ GroupBuildResult buildGroupOrder(HalFile& groupStage, const uint16_t* order, con
     if (!refined) break;
   }
 
+  // Refine title order within each group/position using the same keys and run scratch.
+  const auto sortTitles = [&](const uint16_t begin, const uint16_t end) {
+    for (uint16_t first = begin; first < end;) {
+      uint16_t next = first + 1;
+      while (next < end && keys[first].position == keys[next].position) next++;
+      groupOrderOf[first] = next;
+      first = next;
+    }
+    for (size_t offset = 0; offset < STAGE_NAME_BYTES; offset += GROUP_KEY_NAME_BYTES) {
+      bool refined = false;
+      for (uint16_t first = begin; first < end;) {
+        const uint16_t next = groupOrderOf[first];
+        if (next - first > 1 && (offset == 0 || keys[first].key[GROUP_KEY_NAME_BYTES - 1] != '\0')) {
+          for (uint16_t k = first; k < next; k++) {
+            serviceBuilder(serviceUnits);
+            const uint64_t at = static_cast<uint64_t>(order[keys[k].ordinal]) * STAGE_STRIDE;
+            uint8_t len = 0;
+            if (!stage.seekSet(at + offsetof(StagedEntry, titleLen)) || stage.read(&len, 1) != 1) return false;
+            const bool filename = len == 0;
+            if (filename && (!stage.seekSet(at + offsetof(StagedEntry, record) + offsetof(ClixRecord, nameLen)) ||
+                             stage.read(&len, 1) != 1))
+              return false;
+            if (!stage.seekSet(at + (filename ? offsetof(StagedEntry, name) : offsetof(StagedEntry, title))) ||
+                stage.read(scratch->firstFolded, len) != len)
+              return false;
+            std::string_view title(scratch->firstFolded, len);
+            if (filename) {
+              const size_t dot = title.find_last_of('.');
+              if (dot != std::string_view::npos && dot != 0) title = title.substr(0, dot);
+            }
+            const auto folded = foldInto(title, std::span<char>(scratch->firstFolded, sizeof(scratch->firstFolded)));
+            setChunk(keys[k], folded, offset);
+          }
+          std::sort(keys.get() + first, keys.get() + next, groupKeyLess);
+          partitionRuns(first, next);
+          refined = true;
+        }
+        first = next;
+      }
+      if (!refined) break;
+    }
+    return true;
+  };
+
   // each remaining run is one group
   // reading `end` before the inner loop keeps it ahead of the overwrites
   for (uint16_t begin = 0; begin < groupedCount;) {
     const uint16_t end = groupOrderOf[begin];
+    if (!sortTitles(begin, end)) {
+      LOG_ERR("LIBIDX", "group title stage read failed");
+      return GroupBuildResult::IoError;
+    }
     for (uint16_t k = begin; k < end; k++) {
       groupIdOf[keys[k].ordinal] = groupCount;
       groupOrderOf[k] = keys[k].ordinal;
     }
     groupCount++;
     begin = end;
+  }
+  if (!sortTitles(groupedCount, n)) {
+    LOG_ERR("LIBIDX", "ungrouped title stage read failed");
+    return GroupBuildResult::IoError;
   }
   for (uint16_t k = groupedCount; k < n; k++) {
     groupOrderOf[k] = keys[k].ordinal;
@@ -879,8 +931,8 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       groupIdOf = makeUniqueNoThrow<uint16_t[]>(n);
       if (positioned) groupPositionOf = makeUniqueNoThrow<uint16_t[]>(n);
       if (groupOrderOf && groupIdOf && (!positioned || groupPositionOf)) {
-        result = buildGroupOrder(groupStage, order, n, groupOrderOf.get(), groupIdOf.get(), groupPositionOf.get(),
-                                 groupCount, groupedCount);
+        result = buildGroupOrder(stage, groupStage, order, n, groupOrderOf.get(), groupIdOf.get(),
+                                 groupPositionOf.get(), groupCount, groupedCount);
       }
     }
     if (result == GroupBuildResult::IoError) return false;

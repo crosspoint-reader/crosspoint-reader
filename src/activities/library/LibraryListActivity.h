@@ -49,6 +49,7 @@ class LibraryListActivity final : public UiTabListActivity {
   int tabCount() const override;
   int activeTab() const override;
   const char* tabLabel(int index) const override;
+  bool tabEnabled(int index) const override;
   freeink::ui::TabIndicator tabIndicator(int index) const override;
   void onTabAction(int index) override;
   void stepTab(int direction) override;
