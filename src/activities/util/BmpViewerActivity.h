@@ -13,6 +13,8 @@ class BmpViewerActivity final : public Activity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  // The refresh after absolute gray is a full one from the B/W base, so a lock badge would drop the grays.
+  bool drawsLockIndicator() const override { return showsAbsoluteGray; }
 
  private:
   void loadSiblingImages();
@@ -24,4 +26,5 @@ class BmpViewerActivity final : public Activity {
   std::string filePath;
   std::vector<std::string> siblingImages;
   int currentImageIndex = -1;
+  bool showsAbsoluteGray = false;
 };

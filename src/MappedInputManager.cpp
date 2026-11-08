@@ -404,6 +404,8 @@ void MappedInputManager::setInputLocked(const bool locked) {
     resetHomeButtonInput();
     suppressedReleaseButtons = 0;
   }
+  // A finger that rests on the screen through the unlock must not tap on lift.
+  if (!locked && inputLocked) gpio.suppressTouchContact();
   inputLocked = locked;
 }
 

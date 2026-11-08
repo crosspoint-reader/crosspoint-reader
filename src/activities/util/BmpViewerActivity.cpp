@@ -156,11 +156,13 @@ bool BmpViewerActivity::renderImage() {
   renderer.clearScreen();
   if (!drawImage()) ready = false;
   renderer.cleanupGrayscaleWithFrameBuffer();
+  showsAbsoluteGray = absolute && ready;
   return ready;
 }
 
 void BmpViewerActivity::onEnter() {
   Activity::onEnter();
+  showsAbsoluteGray = false;
 
   if (siblingImages.empty() && !filePath.empty()) {
     loadSiblingImages();

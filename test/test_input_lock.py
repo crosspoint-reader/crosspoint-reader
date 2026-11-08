@@ -36,9 +36,9 @@ unsigned long millis();
 struct HalGPIO {
   enum { BTN_BACK, BTN_CONFIRM, BTN_LEFT, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_POWER };
   uint8_t buttons = 0;
-  bool touch = false, homeKey = false, homeTap = false, pagePress = false, swipe = false;
+  bool touch = false, homeKey = false, homeTap = false, pagePress = false, swipe = false, suppressed = false;
   float sx = 0, sy = 0, ex = 0, ey = 0;
-  void update() {}
+  void update() { suppressed = suppressed && (touch || swipe); }
   bool hasTouch() const { return true; }
   bool wasPressed(uint8_t b) const { return buttons & (1u << b); }
   bool wasReleased(uint8_t b) const { return buttons & (1u << b); }
@@ -54,15 +54,16 @@ struct HalGPIO {
   bool wasHomeKeyTapped() const { return homeTap; }
   bool wasHomeKeyLongPressed() const { return false; }
   bool wasHomeKeyPressed() const { return homeTap; }
-  bool at(float& x, float& y) const { x = 0.5f; y = 0.5f; return touch; }
+  bool at(float& x, float& y) const { x = 0.5f; y = 0.5f; return touch && !suppressed; }
   bool wasTouchTap(float& x, float& y) const { return at(x, y); }
   bool wasTouchDown(float& x, float& y) const { return at(x, y); }
   bool isTouchTapCandidate(float& x, float& y, unsigned long& heldMs) const { heldMs = 500; return at(x, y); }
   bool wasTouchLongPress(float& x, float& y) const { return at(x, y); }
   bool isTouchHeldAt(float& x, float& y) const { return at(x, y); }
-  bool wasTouchReleased() const { return touch; }
-  void suppressTouchContact() {}
-  bool wasSwipe(float& a, float& b, float& c, float& d) const { a = sx; b = sy; c = ex; d = ey; return swipe; }
+  bool wasTouchReleased() const { return touch && !suppressed; }
+  // Like the SDK latch: ignores the rest of the current contact and clears once it ends.
+  void suppressTouchContact() { suppressed = touch || swipe; }
+  bool wasSwipe(float& a, float& b, float& c, float& d) const { a = sx; b = sy; c = ex; d = ey; return swipe && !suppressed; }
 };
 """,
     "BoardConfig.h": "#pragma once\nnamespace BoardConfig { inline bool isX4Pro() { return false; } }\n",
@@ -233,6 +234,27 @@ int main() {
   input.update();
   if (input.consumeSuppressedRelease()) {
     std::printf("a release after the unlock was swallowed for a long press from before the lock\n");
+    ++failures;
+  }
+
+  // A touch that began while locked stays ignored after the unlock until the finger lifts.
+  gpio = HalGPIO{};
+  gpio.touch = true;
+  input.setInputLocked(true);
+  input.update();
+  input.setInputLocked(false);
+  input.update();
+  int tx, ty;
+  if (input.wasScreenTapped(tx, ty)) {
+    std::printf("a touch from while locked was reported after the unlock\n");
+    ++failures;
+  }
+  gpio.touch = false;
+  input.update();
+  gpio.touch = true;
+  input.update();
+  if (!input.wasScreenTapped(tx, ty)) {
+    std::printf("a new touch after the unlock was ignored\n");
     ++failures;
   }
   return failures == 0 ? 0 : 1;

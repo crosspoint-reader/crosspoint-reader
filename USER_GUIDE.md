@@ -75,7 +75,7 @@ Alternatively, while reading a book, press the **Confirm** button to open the re
 
 ### Locking the Controls
 
-**Lock Controls** ignores all buttons, touches and tilt page turns, so you can hand the device to someone, e.g., a child looking at a picture book, without pages turning or the book closing. To lock, set **Short Power Button Click** or **Power + Down** in the **[Controls Settings](#363-controls)** to "Lock Controls", then press Power or Power + Down. A short press of Power never unlocks; **Power + Down** always unlocks, whatever it is set to.
+**Lock Controls** ignores all buttons, touches and tilt page turns, so you can hand the device to someone, e.g., a child looking at a picture book, without pages turning or the book closing. To lock with a short press of Power, set **Short Power Button Click** in the **[Controls Settings](#363-controls)** to "Lock Controls"; to lock with Power + Down, set **Power + Down** to it. A short press of Power never unlocks; **Power + Down** always unlocks, whatever it is set to.
 
 While the controls are locked:
 

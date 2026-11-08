@@ -795,7 +795,11 @@ void setup() {
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
   // Before the first paint, so it shows the lock.
-  if (restoreQuickLock) buttonShortcutController.lock(millis());
+  if (restoreQuickLock) {
+    buttonShortcutController.lock(millis());
+    // Also keeps a held Back from routing the wake to Home.
+    mappedInputManager.setInputLocked(true);
+  }
 
   // Apply a switch moved during sleep before the first paint, so the wake
   // screen does not draw in the old night mode and then repaint.
@@ -1127,6 +1131,8 @@ void loop() {
       return;
     }
 
+    // Work such as a file transfer holds off this timeout like the normal one.
+    if (activityManager.preventAutoSleep()) buttonShortcutController.noteActivity(millis());
     const unsigned long quickLockTimeoutMs = SETTINGS.getQuickLockSleepTimeoutMs();
     if (buttonShortcutController.shouldQuickLockSleep(millis(), quickLockTimeoutMs)) {
       LOG_DBG("SLP", "Quick Lock auto-sleep triggered after %lu ms", quickLockTimeoutMs);

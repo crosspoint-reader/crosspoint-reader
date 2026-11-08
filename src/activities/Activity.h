@@ -50,7 +50,7 @@ class Activity {
   virtual bool requiresExclusiveStorageLoop() const { return false; }
   virtual bool isReaderActivity() const { return false; }
   virtual bool acceptsRemoteInput() const { return false; }
-  // True when the activity shows the Quick Lock state itself; otherwise the badge goes over its frames.
+  // True when the activity shows the Quick Lock state itself or must not get the corner badge over its frames.
   virtual bool drawsLockIndicator() const { return false; }
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
