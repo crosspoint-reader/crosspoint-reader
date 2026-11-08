@@ -55,6 +55,13 @@ class TextBlock final : public Block {
     int16_t width;
     int16_t topLift;
   };
+  // Optional, dictionary-only visual pieces of a logical word split by BiDi.
+  struct VisualFragment {
+    uint16_t wordIndex;
+    int16_t x;
+    int16_t width;
+    std::string text;
+  };
 
  private:
   BlockStyle blockStyle;
@@ -83,6 +90,7 @@ class TextBlock final : public Block {
   // Layout-only metadata. ChapterHtmlSlimParser moves it into Page::links
   // immediately; cached TextBlocks therefore keep the same compact format.
   std::vector<LinkSpan> linkSpans;
+  std::unique_ptr<std::vector<VisualFragment>> visualFragments;
 
   TextBlock() = default;  // deserialize() fills the fields directly
   static size_t arenaSize(uint16_t wordCount, bool hasFocus, uint16_t textBytes);
@@ -145,6 +153,8 @@ class TextBlock final : public Block {
   int getRubyShift(int ascender) const { return hasRuby() ? (ascender / 2) : 0; }
   const std::vector<std::string>& getRubyTexts() const { return rubyTexts; }
   std::vector<LinkSpan> takeLinkSpans() { return std::move(linkSpans); }
+  bool setVisualFragments(std::vector<VisualFragment>&& fragments);
+  const std::vector<VisualFragment>* getVisualFragments() const { return visualFragments.get(); }
 
   void render(const GfxRenderer& renderer, int fontId, int x, int y) const;
   BlockType getType() override { return TEXT_BLOCK; }

@@ -48,6 +48,7 @@ class ClipSelectionActivity final : public Activity {
  private:
   struct WordBox {
     int16_t x = 0;
+    int16_t lineX = 0;
     int16_t y = 0;
     int16_t width = 0;
     int16_t height = 0;
@@ -59,11 +60,35 @@ class ClipSelectionActivity final : public Activity {
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
     const char* text = nullptr;
+    const TextBlock* sourceBlock = nullptr;
+    uint16_t sourceWord = 0;
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
     bool paragraphStart = false;
     bool isRtl = false;
     bool discretionaryHyphen = false;
   };
+
+  // A dictionary word can have disjoint positions after whole-line BiDi.
+  // Normal EPUB words take the single-rectangle path with no extra allocation.
+  template <typename Visitor>
+  void forEachVisualSpan(const WordBox& word, Visitor&& visit) const {
+    if (word.sourceBlock) {
+      const auto* fragments = word.sourceBlock->getVisualFragments();
+      if (fragments) {
+        bool found = false;
+        const int baseX = word.lineX;
+        for (const auto& fragment : *fragments) {
+          if (fragment.wordIndex != word.sourceWord) continue;
+          found = true;
+          visit(baseX + fragment.x, fragment.width, fragment.text.c_str());
+        }
+        if (found) return;
+      }
+    }
+    visit(word.x, word.width, word.text);
+  }
+
+  bool hasVisualFragments(const WordBox& word) const;
 
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
 
@@ -97,6 +122,7 @@ class ClipSelectionActivity final : public Activity {
   bool renderIncremental();
   void drawWordHighlight(int index, int firstSelected, int lastSelected, int offsetX, int offset) const;
   void drawWordClean(int index, int offsetX, int offset) const;
+  void drawWordCursor(const WordBox& word, int offsetX, int offset) const;
   void ditherGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
   void clearGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
   void prewarmWord(int index) const;

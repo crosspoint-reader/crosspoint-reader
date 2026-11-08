@@ -203,7 +203,8 @@ bool ClipSelectionActivity::extractWords() {
 
         WordBox& word = isRtl ? words[lineStart + (rtlWordCount < remaining ? rtlWordCount : rtlWordCount % remaining)]
                               : words[wordCount++];
-        word.x = static_cast<int16_t>(marginLeft + line.xPos + block->wordXpos(i));
+        word.lineX = static_cast<int16_t>(marginLeft + line.xPos);
+        word.x = static_cast<int16_t>(word.lineX + block->wordXpos(i));
         word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i));
         word.width = static_cast<int16_t>(width);
         word.height = static_cast<int16_t>(renderer.getLineHeight(wordFont));
@@ -214,6 +215,17 @@ bool ClipSelectionActivity::extractWords() {
         word.startOffset = block->wordSourceRange(i).start;
         word.endOffset = block->wordSourceRange(i).end;
         word.text = text;
+        word.sourceBlock = block;
+        word.sourceWord = i;
+        if (hasVisualFragments(word)) {
+          const auto* fragments = block->getVisualFragments();
+          for (const auto& fragment : *fragments) {
+            if (fragment.wordIndex != i) continue;
+            word.x = static_cast<int16_t>(marginLeft + line.xPos + fragment.x);
+            word.width = fragment.width;
+            break;
+          }
+        }
         word.style = style;
         word.characterSpacing = characterSpacing;
         word.paragraphStart = false;
@@ -253,6 +265,14 @@ bool ClipSelectionActivity::extractWords() {
   return true;
 }
 
+bool ClipSelectionActivity::hasVisualFragments(const WordBox& word) const {
+  if (!word.sourceBlock) return false;
+  const auto* fragments = word.sourceBlock->getVisualFragments();
+  return fragments && std::any_of(fragments->begin(), fragments->end(), [&](const TextBlock::VisualFragment& fragment) {
+           return fragment.wordIndex == word.sourceWord;
+         });
+}
+
 int ClipSelectionActivity::closestInRow(const uint16_t row, const int centerX) const {
   int best = -1;
   int bestDistance = INT_MAX;
@@ -270,14 +290,23 @@ int ClipSelectionActivity::closestInRow(const uint16_t row, const int centerX) c
 int ClipSelectionActivity::wordAt(const int x, int y) const {
   y -= textOffset();
   constexpr int SLOP = 4;
+  int nearest = -1;
+  int nearestDistance = SLOP + 1;
   for (int i = 0; i < static_cast<int>(wordCount); ++i) {
     const WordBox& word = words[i];
     if (word.pageOffset != currentPageOffset) continue;
-    if (x >= word.x - SLOP && x < word.x + word.width + SLOP && y >= word.y - SLOP && y < word.y + word.height + SLOP) {
-      return i;
-    }
+    if (y < word.y - SLOP || y >= word.y + word.height + SLOP) continue;
+    forEachVisualSpan(word, [&](const int sx, const int width, const char*) {
+      if (width <= 0) return;
+      const int distance = x < sx ? sx - x : std::max(0, x - (sx + width - 1));
+      if (distance < nearestDistance) {
+        nearest = i;
+        nearestDistance = distance;
+      }
+    });
+    if (nearestDistance == 0) break;  // Exact glyph interval beats adjacent hit slop.
   }
-  return -1;
+  return nearest;
 }
 
 int ClipSelectionActivity::dragWordAt(const int x, int y) const {
@@ -287,11 +316,13 @@ int ClipSelectionActivity::dragWordAt(const int x, int y) const {
   for (int i = 0; i < static_cast<int>(wordCount); ++i) {
     const WordBox& word = words[i];
     if (word.pageOffset != currentPageOffset) continue;
-    const Rect candidate{word.x, word.y, word.width, word.height};
-    if (best < 0 || selectionGeometry::nearerWord(candidate, nearest, x, y)) {
-      nearest = candidate;
-      best = i;
-    }
+    forEachVisualSpan(word, [&](const int sx, const int width, const char*) {
+      const Rect candidate{sx, word.y, width, word.height};
+      if (best < 0 || selectionGeometry::nearerWord(candidate, nearest, x, y)) {
+        nearest = candidate;
+        best = i;
+      }
+    });
   }
   return best;
 }
@@ -302,13 +333,16 @@ bool ClipSelectionActivity::selectionContains(const int x, const int y) const {
   for (int i = std::min(rangeStart, selected); i <= std::max(rangeStart, selected); ++i) {
     const WordBox& word = words[i];
     if (word.pageOffset != currentPageOffset) continue;
-    int left = word.x;
-    int right = word.x + word.width;
-    if (previous && previous->row == word.row) {
-      left = std::min(left, static_cast<int>(previous->x));
-      right = std::max(right, previous->x + previous->width);
+    bool contains = false;
+    forEachVisualSpan(word, [&](const int sx, const int width, const char*) {
+      if (selectionGeometry::contains(Rect{sx, word.y + offset, width, word.height}, x, y)) contains = true;
+    });
+    if (contains) return true;
+    if (previous && previous->row == word.row && !hasVisualFragments(word) && !hasVisualFragments(*previous)) {
+      const int left = std::min(static_cast<int>(word.x), static_cast<int>(previous->x));
+      const int right = std::max(word.x + word.width, previous->x + previous->width);
+      if (selectionGeometry::contains(Rect{left, word.y + offset, right - left, word.height}, x, y)) return true;
     }
-    if (selectionGeometry::contains(Rect{left, word.y + offset, right - left, word.height}, x, y)) return true;
     previous = &word;
   }
   return false;
@@ -719,16 +753,22 @@ int ClipSelectionActivity::textXOffset() const {
 }
 
 void ClipSelectionActivity::prewarmWord(const int index) const {
-  if (index >= 0 && index < static_cast<int>(wordCount) && words[index].text) {
-    renderer.getFontCacheManager()->prewarmCache(
-        words[index].fontId, words[index].text,
-        static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[index].style) & 0x03)));
+  if (index < 0 || index >= static_cast<int>(wordCount) || !words[index].text) return;
+  const WordBox& word = words[index];
+  const uint8_t mask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(word.style) & 0x03));
+  if (hasVisualFragments(word)) {
+    for (const auto& fragment : *word.sourceBlock->getVisualFragments()) {
+      if (fragment.wordIndex == word.sourceWord)
+        renderer.getFontCacheManager()->prewarmCache(word.fontId, fragment.text.c_str(), mask);
+    }
+  } else {
+    renderer.getFontCacheManager()->prewarmCache(word.fontId, word.text, mask);
   }
 }
 
 void ClipSelectionActivity::ditherGapBetween(const WordBox& a, const WordBox& b, const int offsetX,
                                              const int offset) const {
-  if (a.row != b.row || a.pageOffset != b.pageOffset) return;
+  if (a.row != b.row || a.pageOffset != b.pageOffset || hasVisualFragments(a) || hasVisualFragments(b)) return;
   const int leftRight = std::min(a.x + a.width, b.x + b.width);
   const int rightLeft = std::max(a.x, b.x);
   if (leftRight < rightLeft) {
@@ -738,7 +778,7 @@ void ClipSelectionActivity::ditherGapBetween(const WordBox& a, const WordBox& b,
 
 void ClipSelectionActivity::clearGapBetween(const WordBox& a, const WordBox& b, const int offsetX,
                                             const int offset) const {
-  if (a.row != b.row || a.pageOffset != b.pageOffset) return;
+  if (a.row != b.row || a.pageOffset != b.pageOffset || hasVisualFragments(a) || hasVisualFragments(b)) return;
   const int leftRight = std::min(a.x + a.width, b.x + b.width);
   const int rightLeft = std::max(a.x, b.x);
   if (leftRight < rightLeft) {
@@ -753,7 +793,9 @@ void ClipSelectionActivity::drawWordClean(const int index, const int offsetX, co
 
   prewarmWord(index);
 
-  renderer.fillRect(word.x + offsetX, word.y + offset, word.width, word.height, false);
+  forEachVisualSpan(word, [&](const int sx, const int width, const char*) {
+    renderer.fillRect(sx + offsetX, word.y + offset, width, word.height, false);
+  });
 
   if (index > 0) {
     clearGapBetween(words[index - 1], word, offsetX, offset);
@@ -762,8 +804,17 @@ void ClipSelectionActivity::drawWordClean(const int index, const int offsetX, co
     clearGapBetween(word, words[index + 1], offsetX, offset);
   }
 
-  renderer.drawText(word.fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
-                    BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
+  const auto direction = hasVisualFragments(word) ? BidiUtils::BidiBaseDir::VISUAL : BidiUtils::BidiBaseDir::AUTO;
+  forEachVisualSpan(word, [&](const int sx, const int, const char* text) {
+    renderer.drawText(word.fontId, sx + offsetX, word.y + offset, text, true, word.style, direction,
+                      word.characterSpacing);
+  });
+}
+
+void ClipSelectionActivity::drawWordCursor(const WordBox& word, const int offsetX, const int offset) const {
+  forEachVisualSpan(word, [&](const int sx, const int width, const char*) {
+    renderer.drawRect(sx + offsetX, word.y + offset, width, word.height, true);
+  });
 }
 
 void ClipSelectionActivity::drawWordHighlight(const int index, const int firstSelected, const int lastSelected,
@@ -781,9 +832,12 @@ void ClipSelectionActivity::drawWordHighlight(const int index, const int firstSe
     ditherGapBetween(word, words[index + 1], offsetX, offset);
   }
 
-  renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray);
-  renderer.drawText(word.fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
-                    BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
+  const auto direction = hasVisualFragments(word) ? BidiUtils::BidiBaseDir::VISUAL : BidiUtils::BidiBaseDir::AUTO;
+  forEachVisualSpan(word, [&](const int sx, const int width, const char* text) {
+    renderer.fillRectDither(sx + offsetX, word.y + offset, width, word.height, Color::LightGray);
+    renderer.drawText(word.fontId, sx + offsetX, word.y + offset, text, true, word.style, direction,
+                      word.characterSpacing);
+  });
 }
 
 bool ClipSelectionActivity::renderIncremental() {
@@ -802,7 +856,7 @@ bool ClipSelectionActivity::renderIncremental() {
     drawWordClean(lastRenderedSelected, offsetX, offset);
     drawWordHighlight(selected, selected, selected, offsetX, offset);
     const WordBox& cursor = words[selected];
-    renderer.drawRect(cursor.x + offsetX, cursor.y + offset, cursor.width, cursor.height, true);
+    drawWordCursor(cursor, offsetX, offset);
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -854,7 +908,7 @@ bool ClipSelectionActivity::renderIncremental() {
     }
 
     const WordBox& cursor = words[selected];
-    renderer.drawRect(cursor.x + offsetX, cursor.y + offset, cursor.width, cursor.height, true);
+    drawWordCursor(cursor, offsetX, offset);
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE),
                                               tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
@@ -878,9 +932,12 @@ void ClipSelectionActivity::drawSelection() const {
     const WordBox& word = words[i];
     if (word.pageOffset != currentPageOffset) continue;
     if (previous) ditherGapBetween(*previous, word, offsetX, offset);
-    renderer.fillRectDither(word.x + offsetX, word.y + offset, word.width, word.height, Color::LightGray);
-    renderer.drawText(word.fontId, word.x + offsetX, word.y + offset, word.text, true, word.style,
-                      BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
+    const auto direction = hasVisualFragments(word) ? BidiUtils::BidiBaseDir::VISUAL : BidiUtils::BidiBaseDir::AUTO;
+    forEachVisualSpan(word, [&](const int sx, const int width, const char* text) {
+      renderer.fillRectDither(sx + offsetX, word.y + offset, width, word.height, Color::LightGray);
+      renderer.drawText(word.fontId, sx + offsetX, word.y + offset, text, true, word.style, direction,
+                        word.characterSpacing);
+    });
     previous = &word;
   }
   if (rangeStart >= 0 && mappedInput.hasTouch()) {
@@ -891,7 +948,7 @@ void ClipSelectionActivity::drawSelection() const {
     if (!touchDragSelecting) GUI.drawSelectionActions(renderer, actionRect(), actionCount(), firstAction());
   } else {
     const WordBox& cursor = words[selected];
-    renderer.drawRect(cursor.x + offsetX, cursor.y + offset, cursor.width, cursor.height, true);
+    drawWordCursor(cursor, offsetX, offset);
   }
 }
 

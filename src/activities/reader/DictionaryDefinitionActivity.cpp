@@ -65,7 +65,7 @@ int renderedPlainPrefixWidth(const GfxRenderer& renderer, const int fontId, cons
 }
 
 PlainLineLayout getPlainLineLayout(const GfxRenderer& renderer, const int fontId, const char* text, const bool bold,
-                                   const bool wraps, const int width) {
+                                   const bool wraps, const int width, const int paragraphLevel = -1) {
   PlainLineLayout result;
   const auto style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
   const int remaining = std::max(0, width - renderedPlainPrefixWidth(renderer, fontId, text, strlen(text), style));
@@ -79,7 +79,7 @@ PlainLineLayout getPlainLineLayout(const GfxRenderer& renderer, const int fontId
     case CrossPointSettings::JUSTIFIED:
     case CrossPointSettings::BOOK_STYLE: {
       if (remaining == 0) break;
-      if (BidiUtils::detectParagraphLevel(text) == 1) {
+      if ((paragraphLevel < 0 ? BidiUtils::detectParagraphLevel(text) : paragraphLevel) == 1) {
         result.xOffset = remaining;
         break;
       }
@@ -153,6 +153,13 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
   std::vector<uint16_t> visualSources;
   std::vector<std::string> visualWords;
   std::vector<TextBlock::SourceRange> visualRanges;
+  struct VisualRun {
+    uint16_t word;
+    uint16_t start;
+    uint16_t end;
+  };
+  std::vector<VisualRun> visualRuns;
+  std::vector<TextBlock::VisualFragment> fragments;
   // Selection scratch lives on the heap, not the loop task's limited stack.
   std::array<uint16_t, MAX_LINE_BYTES> sourceWord;
   std::array<uint16_t, MAX_PLAIN_WORDS> starts;
@@ -161,7 +168,7 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
   BlockStyle style;
 
   void layout(const DictionaryDefinitionActivity& owner, const int fontId, const uint32_t offset, const bool bold,
-              const PlainLineLayout& placement) {
+              const PlainLineLayout& placement, const int paragraphLevel = -1) {
     const auto family = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
     const char* bytes = text.c_str();
     const size_t length = text.size();
@@ -169,6 +176,8 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
     positions.clear();
     styles.clear();
     ranges.clear();
+    fragments.clear();
+    visualRuns.clear();
     size_t i = 0;
     while (i < length) {
       // The headword label marker is a control byte, not text: it must not
@@ -202,7 +211,7 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
       styles.push_back(family);
       ranges.push_back({static_cast<uint32_t>(offset + start), static_cast<uint32_t>(offset + i)});
     }
-    style.isRtl = BidiUtils::detectParagraphLevel(bytes) == 1;
+    style.isRtl = (paragraphLevel < 0 ? BidiUtils::detectParagraphLevel(bytes) : paragraphLevel) == 1;
     const bool reordered = BidiUtils::computeVisualWordOrder(words, style.isRtl, visualOrder);
     positions.resize(words.size());
     // Word anchors may remain in logical order even when the glyphs inside
@@ -246,8 +255,13 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
           const uint16_t source = visualSources[cp];
           if (source >= sourceCount || sourceWord[source] >= words.size()) continue;
           const size_t index = sourceWord[source];
+          const uint16_t end = static_cast<uint16_t>(ptr - visualBegin);
           starts[index] = std::min(starts[index], start);
-          ends[index] = static_cast<uint16_t>(ptr - visualBegin);
+          ends[index] = end;
+          if (!visualRuns.empty() && visualRuns.back().word == index && visualRuns.back().end == start)
+            visualRuns.back().end = end;
+          else
+            visualRuns.push_back({static_cast<uint16_t>(index), start, end});
         }
 
         std::string prefix;
@@ -280,6 +294,32 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
         }
         if (complete) {
           for (size_t n = 0; n < words.size(); ++n) positions[n] = renderedPositions[n];
+          // A logical word may occupy several separated visual runs. Keep all
+          // runs for the selection overlay and redraw, not a bounding box.
+          for (const auto& run : visualRuns) {
+            const size_t count = std::count_if(visualRuns.begin(), visualRuns.end(),
+                                               [&](const VisualRun& item) { return item.word == run.word; });
+            if (count < 2) continue;
+            const size_t visualIndex =
+                reordered ? static_cast<size_t>(std::find(visualOrder.begin(), visualOrder.end(), run.word) -
+                                                visualOrder.begin())
+                          : run.word;
+            if (visualIndex >= words.size()) continue;
+            prefix.assign(rendered.data(), run.end);
+            visualWord.assign(rendered.data() + run.start, run.end - run.start);
+            const int through =
+                owner.renderer.getTextAdvanceX(fontId, prefix.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
+                                               GfxRenderer::TextMeasureMode::Rendered);
+            const int width =
+                owner.renderer.getTextAdvanceX(fontId, visualWord.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
+                                               GfxRenderer::TextMeasureMode::Rendered);
+            const int16_t startX = static_cast<int16_t>(through - width);
+            if (std::none_of(fragments.begin(), fragments.end(), [&](const TextBlock::VisualFragment& fragment) {
+                  return fragment.wordIndex == visualIndex;
+                }))
+              positions[visualIndex] = startX;
+            fragments.push_back({static_cast<uint16_t>(visualIndex), startX, static_cast<int16_t>(width), visualWord});
+          }
           visualPositionsApplied = true;
         }
       }
@@ -341,9 +381,12 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
     }
   }
 
-  std::unique_ptr<TextBlock> pack() const {
-    return makeUniqueNoThrow<TextBlock>(words, positions, styles, std::vector<uint8_t>{}, std::vector<uint16_t>{},
-                                        style, std::vector<std::string>{}, std::vector<TextBlock::LinkSpan>{}, ranges);
+  std::unique_ptr<TextBlock> pack() {
+    auto block =
+        makeUniqueNoThrow<TextBlock>(words, positions, styles, std::vector<uint8_t>{}, std::vector<uint16_t>{}, style,
+                                     std::vector<std::string>{}, std::vector<TextBlock::LinkSpan>{}, ranges);
+    if (block && !block->setVisualFragments(std::move(fragments))) return nullptr;
+    return block;
   }
 };
 
@@ -492,6 +535,18 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
 
   const char* text = definition.c_str();
   const uint32_t n = static_cast<uint32_t>(definition.size());
+  // Determine direction once per paragraph, before splitting into wrapped lines.
+  // Temporarily terminate at the newline so the next paragraph cannot affect it.
+  const auto paragraphDirection = [&](const uint32_t start) {
+    const size_t end = definition.find('\n', start);
+    const size_t stop = end == std::string::npos ? definition.size() : end;
+    const char saved = definition[stop];
+    definition[stop] = '\0';
+    const bool isRtl = BidiUtils::detectParagraphLevel(definition.c_str() + start) == 1;
+    definition[stop] = saved;
+    return isRtl;
+  };
+  bool paragraphRtl = paragraphDirection(0);
   uint32_t lineStart = 0;
   uint32_t lineEnd = 0;  // one past the last token byte on the current line
   int lineWidth = 0;
@@ -499,7 +554,7 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
 
   const auto flushLine = [&](uint32_t nextStart, bool wraps) {
     if (lines.size() == lines.capacity() && !reserveLines(next, lines.capacity() * 2)) return false;
-    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), lineBold, wraps});
+    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), lineBold, wraps, paragraphRtl});
     lineStart = nextStart;
     lineEnd = nextStart;
     lineWidth = 0;
@@ -530,9 +585,10 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
         if (pos > firstDigit && pos + 1 < n && (text[pos] == '.' || text[pos] == ')') &&
             isWordSeparator(text[pos + 1])) {
           if (lines.size() == lines.capacity() && !reserveLines(next, lines.capacity() * 2)) return false;
-          lines.push_back({i + 1, 0, false, false});
+          lines.push_back({i + 1, 0, false, false, false});
         }
       }
+      paragraphRtl = paragraphDirection(i + 1);
       i++;
       continue;
     }
@@ -719,7 +775,8 @@ bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
   const int pageCount = std::min<int>(SELECTION_PAGE_WINDOW, content.totalPages - content.selectionPage);
   // The fixed arrays are included in sizeof; visualSources still reserves heap storage.
   const size_t scratchBytes =
-      sizeof(PlainSelectionLine) + MAX_LINE_BYTES + 1 + MAX_LINE_BYTES * sizeof(uint16_t) +
+      sizeof(PlainSelectionLine) + MAX_LINE_BYTES + 1 +
+      MAX_LINE_BYTES * (sizeof(uint16_t) + sizeof(PlainSelectionLine::VisualRun)) +
       MAX_PLAIN_WORDS * (2 * sizeof(std::string) + sizeof(int16_t) + sizeof(EpdFontFamily::Style) +
                          2 * sizeof(TextBlock::SourceRange) + sizeof(uint16_t) + 4);
   auto heap = HalMemory::getDefaultHeap();
@@ -738,6 +795,7 @@ bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
   scratch->visualSources.reserve(MAX_LINE_BYTES);
   scratch->visualWords.reserve(MAX_PLAIN_WORDS);
   scratch->visualRanges.reserve(MAX_PLAIN_WORDS);
+  scratch->visualRuns.reserve(MAX_LINE_BYTES);
   lookup->selectionPages.reserve(SELECTION_PAGE_WINDOW);
   for (int p = 0; p < pageCount; ++p) {
     auto page = makeUniqueNoThrow<Page>();
@@ -757,12 +815,12 @@ bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
       const size_t length =
           utf8SafeTruncateBuffer(content.text.c_str() + line.start, std::min<size_t>(line.len, MAX_LINE_BYTES));
       scratch->text.assign(content.text.c_str() + line.start, length);
-      const auto placement =
-          getPlainLineLayout(renderer, fontId, scratch->text.c_str(), line.bold, line.wraps, lineWidth);
+      const auto placement = getPlainLineLayout(renderer, fontId, scratch->text.c_str(), line.bold, line.wraps,
+                                                lineWidth, line.paragraphRtl ? 1 : 0);
       heap = HalMemory::getDefaultHeap();
       const size_t lineBytes = length * (sizeof(TextBlock::SourceRange) + 12) + sizeof(TextBlock) + 1024;
       if (heap.freeBytes < lineBytes + HEAP_HEADROOM || heap.largestBlockBytes < lineBytes) return false;
-      scratch->layout(*this, fontId, line.start, line.bold, placement);
+      scratch->layout(*this, fontId, line.start, line.bold, placement, line.paragraphRtl ? 1 : 0);
       auto block = scratch->pack();
       if (!block || !block->valid()) {
         LOG_ERR("DICT", "OOM: selection line (%u byte budget)", static_cast<unsigned>(lineBytes));
@@ -941,7 +999,8 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
                         lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
       continue;
     }
-    const auto placement = getPlainLineLayout(renderer, fontId, buf, lines[i].bold, lines[i].wraps, lineWidth);
+    const auto placement = getPlainLineLayout(renderer, fontId, buf, lines[i].bold, lines[i].wraps, lineWidth,
+                                              lines[i].paragraphRtl ? 1 : 0);
     const int y = startY + (i - firstLine) * lineHeight;
     if (placement.gaps > 0)
       drawJustifiedPlainLine(renderer, fontId, x, y, buf, lines[i].bold, placement);

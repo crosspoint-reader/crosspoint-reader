@@ -73,6 +73,7 @@ harness = r'''
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -108,6 +109,13 @@ struct BlockStyle { bool isRtl = false; };
 struct TextBlock {
   struct SourceRange { uint32_t start, end; };
   struct LinkSpan {};
+  struct VisualFragment { uint16_t wordIndex; int16_t x, width; std::string text; };
+  std::vector<VisualFragment> visualFragments;
+  bool setVisualFragments(std::vector<VisualFragment>&& spans) {
+    visualFragments = std::move(spans);
+    return true;
+  }
+  const std::vector<VisualFragment>* getVisualFragments() const { return &visualFragments; }
   std::vector<std::string> words;
   std::vector<int16_t> positions;
   std::vector<SourceRange> ranges;
@@ -565,6 +573,28 @@ int main() {
     assert(sameOrderVisual == "one (123)גבא tail");
     assert(sameOrderSources[4] == 11);  // mirrored ')' precedes the Hebrew letters in visual order
 
+    // A mixed-script logical word may occupy disjoint visual intervals.
+    DictionaryDefinitionActivity::PlainSelectionLine fragmented;
+    fragmented.text = "abcאבג דהו tail";
+    fragmented.layout(spacedRtl, 0, 0, false, {});
+    assert(fragmented.words == std::vector<std::string>({"abcאבג", "דהו", "tail"}));
+    assert(fragmented.positions == std::vector<int16_t>({0, 3, 11}));
+    std::string fragmentedVisual;
+    assert(BidiUtils::applyBidiVisual(fragmented.text.c_str(), fragmentedVisual));
+    assert(fragmentedVisual == "abcוהד גבא tail");
+    assert(fragmented.fragments.size() == 2);
+    assert(fragmented.fragments[0].wordIndex == 0 && fragmented.fragments[0].x == 0 &&
+           fragmented.fragments[0].width == 3 && fragmented.fragments[0].text == "abc");
+    assert(fragmented.fragments[1].wordIndex == 0 && fragmented.fragments[1].x == 7 &&
+           fragmented.fragments[1].width == 3 && fragmented.fragments[1].text == "גבא");
+    // The intervening Hebrew word must NOT be inside either highlight interval.
+    const auto fragmentContains = [&](const int x) {
+      for (const auto& span : fragmented.fragments)
+        if (x >= span.x && x < span.x + span.width) return true;
+      return false;
+    };
+    assert(fragmentContains(1) && fragmentContains(8) && !fragmentContains(4));
+
     // If the BiDi workspace limit is exceeded, fall back to the original
     // source-order positions rather than leaving a line with zero coordinates.
     DictionaryDefinitionActivity::PlainSelectionLine bidiFallback;
@@ -705,6 +735,30 @@ int main() {
     assert(page.size() == 2);
     assert(static_cast<const PageLine&>(*page[0]).x == 1);
     assert(static_cast<const PageLine&>(*page[1]).x == 4);
+  }
+  // Direction belongs to the paragraph: a numeric or Latin-only final line
+  // remains right-anchored, and the next independent paragraph resets to LTR.
+  for (const int alignment : {CrossPointSettings::JUSTIFIED, CrossPointSettings::BOOK_STYLE}) {
+    SETTINGS.paragraphAlignment = alignment;
+    for (const char* lead : {"אבג דהו", "ابج دهو"}) {
+      for (const char* ending : {"123", "abc"}) {
+        DictionaryDefinitionActivity inherited;
+        inherited.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+        inherited.bodyWidth = 8;
+        inherited.content.text = std::string(lead) + " " + ending + "\nabc def";
+        assert(inherited.prepareDefinition(inherited.content) && inherited.buildPlainSelectionPages());
+        assert(inherited.content.lines.size() == 3);
+        assert(inherited.content.lines[0].wraps && inherited.content.lines[0].paragraphRtl);
+        assert(!inherited.content.lines[1].wraps && inherited.content.lines[1].paragraphRtl);
+        assert(!inherited.content.lines[2].wraps && !inherited.content.lines[2].paragraphRtl);
+        const auto& firstPage = inherited.lookup->selectionPages[0]->elements;
+        const auto& nextPage = inherited.lookup->selectionPages[1]->elements;
+        assert(firstPage.size() == 2 && nextPage.size() == 1);
+        assert(static_cast<const PageLine&>(*firstPage[0]).x == 1);
+        assert(static_cast<const PageLine&>(*firstPage[1]).x == 5);
+        assert(static_cast<const PageLine&>(*nextPage[0]).x == 0);
+      }
+    }
   }
   // The scan pass must record full visible lines without asking for rendered
   // glyph widths; those are only safe once the SD font has been prewarmed.
