@@ -146,6 +146,7 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
   std::vector<EpdFontFamily::Style> styles;
   std::vector<TextBlock::SourceRange> ranges;
   std::vector<uint16_t> visualOrder;
+  std::vector<uint16_t> visualSources;
   std::vector<std::string> visualWords;
   std::vector<TextBlock::SourceRange> visualRanges;
   BlockStyle style;
@@ -171,8 +172,13 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
       auto* ptr = reinterpret_cast<const unsigned char*>(bytes + i);
       uint32_t previous = utf8NextCodepoint(&ptr);
       i = ptr - reinterpret_cast<const unsigned char*>(bytes);
-      while (i < length && bytes[i] != ' ' && bytes[i] != '\t' && bytes[i] != '\r' &&
-             bytes[i] != DICTIONARY_PLAIN_HEADWORD_MARKER) {
+      while (i < length && bytes[i] != ' ' && bytes[i] != '\t' && bytes[i] != '\r') {
+        // Drawing removes markers before shaping; do not split a word (or
+        // a Lam-Alef ligature) at a marker in the source.
+        if (bytes[i] == DICTIONARY_PLAIN_HEADWORD_MARKER) {
+          ++i;
+          continue;
+        }
         ptr = reinterpret_cast<const unsigned char*>(bytes + i);
         const uint32_t cp = utf8NextCodepoint(&ptr);
         if (!utf8IsHangul(previous) && !utf8IsHangul(cp) && (utf8IsCjkBreakable(previous) || utf8IsCjkBreakable(cp)) &&
@@ -182,6 +188,8 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
         i = ptr - reinterpret_cast<const unsigned char*>(bytes);
       }
       words.emplace_back(bytes + start, i - start);
+      auto& word = words.back();
+      word.erase(std::remove(word.begin(), word.end(), DICTIONARY_PLAIN_HEADWORD_MARKER), word.end());
       styles.push_back(family);
       ranges.push_back({static_cast<uint32_t>(offset + start), static_cast<uint32_t>(offset + i)});
     }
@@ -213,29 +221,60 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
       x += owner.renderer.getTextAdvanceX(fontId, words[index].c_str(), family);
     }
     if (reordered) {
-      // drawBody removes headword markers, then BiDi-shapes the entire line.
-      // Measure each visual prefix from that same shaped stream so kerning,
-      // ligatures, and space advances do not reset at selection-word edges.
-      std::string visible = text;
-      visible.erase(std::remove(visible.begin(), visible.end(), DICTIONARY_PLAIN_HEADWORD_MARKER), visible.end());
+      // Keep source-word ownership through marker removal. The whole-line BiDi
+      // pass supplies the visual position of each emitted codepoint, including
+      // punctuation and Lam-Alef glyphs that cannot match isolated tokens.
+      std::string visible;
+      visible.reserve(text.size());
+      uint16_t sourceWord[MAX_LINE_BYTES];
+      size_t sourceCount = 0;
+      size_t currentWord = 0;
+      for (size_t raw = 0; raw < length;) {
+        if (bytes[raw] == DICTIONARY_PLAIN_HEADWORD_MARKER) {
+          ++raw;
+          continue;
+        }
+        const size_t start = raw;
+        auto* ptr = reinterpret_cast<const unsigned char*>(bytes + raw);
+        utf8NextCodepoint(&ptr);
+        raw = ptr - reinterpret_cast<const unsigned char*>(bytes);
+        visible.append(bytes + start, raw - start);
+        while (currentWord < ranges.size() && ranges[currentWord].end <= offset + start) ++currentWord;
+        sourceWord[sourceCount++] = currentWord < ranges.size() && ranges[currentWord].start <= offset + start
+                                        ? static_cast<uint16_t>(currentWord)
+                                        : UINT16_MAX;
+      }
+
       std::string rendered;
-      if (BidiUtils::applyBidiVisual(visible.c_str(), rendered)) {
+      if (BidiUtils::applyBidiVisual(visible.c_str(), rendered, -1, &visualSources)) {
+        uint16_t starts[MAX_PLAIN_WORDS];
+        uint16_t ends[MAX_PLAIN_WORDS];
+        std::fill_n(starts, words.size(), UINT16_MAX);
+        std::fill_n(ends, words.size(), 0);
+        const auto* ptr = reinterpret_cast<const unsigned char*>(rendered.c_str());
+        const auto* visualBegin = ptr;
+        for (size_t cp = 0; cp < visualSources.size() && *ptr; ++cp) {
+          const uint16_t start = static_cast<uint16_t>(ptr - visualBegin);
+          utf8NextCodepoint(&ptr);
+          const uint16_t source = visualSources[cp];
+          if (source >= sourceCount || sourceWord[source] >= words.size()) continue;
+          const size_t index = sourceWord[source];
+          starts[index] = std::min(starts[index], start);
+          ends[index] = static_cast<uint16_t>(ptr - visualBegin);
+        }
+
         int16_t renderedPositions[MAX_PLAIN_WORDS];
-        std::string visualWord;
         std::string prefix;
-        size_t cursor = 0;
+        std::string visualWord;
         bool complete = true;
         for (size_t n = 0; n < words.size(); ++n) {
-          if (!BidiUtils::applyBidiVisual(words[visualOrder[n]].c_str(), visualWord)) {
+          const size_t index = visualOrder[n];
+          if (starts[index] == UINT16_MAX || ends[index] <= starts[index]) {
             complete = false;
             break;
           }
-          const size_t start = rendered.find(visualWord, cursor);
-          if (start == std::string::npos) {
-            complete = false;
-            break;
-          }
-          prefix.assign(rendered.data(), start + visualWord.size());
+          prefix.assign(rendered.data(), ends[index]);
+          visualWord.assign(rendered.data() + starts[index], ends[index] - starts[index]);
           const int throughWord =
               owner.renderer.getTextAdvanceX(fontId, prefix.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
                                              GfxRenderer::TextMeasureMode::Rendered);
@@ -243,7 +282,6 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
               owner.renderer.getTextAdvanceX(fontId, visualWord.c_str(), family, 0, BidiUtils::BidiBaseDir::VISUAL,
                                              GfxRenderer::TextMeasureMode::Rendered);
           renderedPositions[n] = static_cast<int16_t>(throughWord - wordWidth);
-          cursor = start + visualWord.size();
         }
         if (complete) {
           for (size_t n = 0; n < words.size(); ++n) positions[n] = renderedPositions[n];
@@ -655,7 +693,7 @@ bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
   const int lineWidth = bodyArea().width;
   const int pageCount = std::min<int>(SELECTION_PAGE_WINDOW, content.totalPages - content.selectionPage);
   const size_t scratchBytes =
-      sizeof(PlainSelectionLine) + MAX_LINE_BYTES + 1 +
+      sizeof(PlainSelectionLine) + MAX_LINE_BYTES + 1 + MAX_LINE_BYTES * sizeof(uint16_t) +
       MAX_PLAIN_WORDS * (2 * sizeof(std::string) + sizeof(int16_t) + sizeof(EpdFontFamily::Style) +
                          2 * sizeof(TextBlock::SourceRange) + sizeof(uint16_t) + 4);
   auto heap = HalMemory::getDefaultHeap();
@@ -671,6 +709,7 @@ bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
   scratch->styles.reserve(MAX_PLAIN_WORDS);
   scratch->ranges.reserve(MAX_PLAIN_WORDS);
   scratch->visualOrder.reserve(MAX_PLAIN_WORDS);
+  scratch->visualSources.reserve(MAX_LINE_BYTES);
   scratch->visualWords.reserve(MAX_PLAIN_WORDS);
   scratch->visualRanges.reserve(MAX_PLAIN_WORDS);
   lookup->selectionPages.reserve(SELECTION_PAGE_WINDOW);

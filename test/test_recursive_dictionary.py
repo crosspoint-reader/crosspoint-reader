@@ -135,8 +135,11 @@ struct Renderer {
   FontCacheManager* getFontCacheManager() { return &cache; }
   enum class TextMeasureMode { Layout, Rendered };
   int getTextAdvanceX(int, const char* text, EpdFontFamily::Style style, int8_t = 0,
-                      BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO,
+                      BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const {
+    std::string visual;
+    if (baseDir != BidiUtils::BidiBaseDir::VISUAL && BidiUtils::applyBidiVisual(text, visual))
+      text = visual.c_str();
     const auto* ptr = reinterpret_cast<const unsigned char*>(text);
     int width = 0;
     int boundaryKern = 0;
@@ -490,6 +493,27 @@ int main() {
         font.getTextAdvanceX(0, "גבא", EpdFontFamily::BOLD, 0,
         BidiUtils::BidiBaseDir::VISUAL, Renderer::TextMeasureMode::Rendered);
     assert(boldMixed.positions[1] == beforeFirst && boldMixed.positions[2] == beforeSecond);
+
+    // Removing the headword marker between Lam and Alef must leave one
+    // selectable token and its original byte range, matching the ligature.
+    DictionaryDefinitionActivity::PlainSelectionLine joinedArabic;
+    joinedArabic.text = std::string("one ") + "ل" + DICTIONARY_PLAIN_HEADWORD_MARKER + "ا tail";
+    joinedArabic.layout(spacedRtl, 0, 0, false, {});
+    assert(joinedArabic.words == std::vector<std::string>({"one", "لا", "tail"}));
+    assert(joinedArabic.ranges[1].start == 4 && joinedArabic.ranges[1].end == 9);
+    assert(joinedArabic.positions == std::vector<int16_t>({0, 4, 6}));
+
+    // The comma follows the RTL run's whole-line visual order, while the
+    // numeric run moves ahead of the Hebrew word. Selectable x values follow
+    // those actual rendered positions, not isolated punctuation measurement.
+    DictionaryDefinitionActivity::PlainSelectionLine punctuation;
+    punctuation.text = "one אבג, 123 tail";
+    punctuation.layout(spacedRtl, 0, 0, false, {});
+    std::string punctuationVisual;
+    assert(BidiUtils::applyBidiVisual(punctuation.text.c_str(), punctuationVisual));
+    assert(punctuationVisual == "one 123 ,גבא tail");
+    assert(punctuation.words == std::vector<std::string>({"one", "123", "אבג,", "tail"}));
+    assert(punctuation.positions == std::vector<int16_t>({0, 4, 8, 13}));
   }
   view.lookup->selectionPages.clear();
   HalMemory::available = 0;
@@ -508,6 +532,29 @@ int main() {
     assert(drawing.drawCalls[1].text == "two" && drawing.drawCalls[1].x == 12);
     assert(drawing.drawCalls[2].text == "three" && drawing.drawCalls[2].x == 20);
     for (const auto& call : drawing.drawCalls) assert(call.y == 7 && call.style == EpdFontFamily::REGULAR);
+
+    // A marker between LTR words is not a drawable glyph or an extra
+    // justification gap. The selectable positions must match the draw calls.
+    DictionaryDefinitionActivity markedJustified;
+    markedJustified.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+    markedJustified.bodyWidth = 16;
+    markedJustified.content.text = std::string("one ") + DICTIONARY_PLAIN_HEADWORD_MARKER + " two three four";
+    assert(markedJustified.prepareDefinition(markedJustified.content) &&
+           markedJustified.buildPlainSelectionPages());
+    assert(markedJustified.content.lines[0].wraps);
+    const auto& selectedLine =
+        *static_cast<const PageLine&>(*markedJustified.lookup->selectionPages[0]->elements[0]).block;
+    assert(selectedLine.words == std::vector<std::string>({"one", "two", "three"}));
+    const auto& span = markedJustified.content.lines[0];
+    std::string markedText = markedJustified.content.text.substr(span.start, span.len);
+    const auto markedPlacement = getPlainLineLayout(markedJustified.renderer, 0, markedText.c_str(), false, true, 16);
+    assert(markedPlacement.gaps == 2);
+    drawJustifiedPlainLine(markedJustified.renderer, 0, 0, 0, markedText.data(), false, markedPlacement);
+    assert(markedJustified.renderer.drawCalls.size() == selectedLine.positions.size());
+    for (size_t i = 0; i < selectedLine.positions.size(); ++i) {
+      assert(markedJustified.renderer.drawCalls[i].text == selectedLine.words[i]);
+      assert(markedJustified.renderer.drawCalls[i].x == selectedLine.positions[i]);
+    }
     // An RTL run after five digits must use full-line bidi rendering, not logical-order justification.
     char mixedRtl[] = "one 123456אבג 123456דהו tail";
     assert(getPlainLineLayout(drawing, 0, mixedRtl, false, true, 60).gaps == 0);
