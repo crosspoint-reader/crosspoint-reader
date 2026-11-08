@@ -54,38 +54,33 @@ class ClipSelectionActivity final : public Activity {
     int16_t height = 0;
     uint16_t row = 0;
     uint8_t pageOffset = 0;
-    int8_t characterSpacing = 0;
     uint16_t pageWordIndex = 0;
-    int fontId = 0;  // the word's font; headings and CSS font-size runs differ from the section font
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
     const char* text = nullptr;
     const TextBlock* sourceBlock = nullptr;
     uint16_t sourceWord = 0;
-    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
     bool paragraphStart = false;
     bool isRtl = false;
     bool discretionaryHyphen = false;
   };
 
-  // A dictionary word can have disjoint positions after whole-line BiDi.
-  // Normal EPUB words take the single-rectangle path with no extra allocation.
+  // Dictionary selections can retain multiple visual runs for one source word.
+  // Other page blocks keep the existing single-rectangle representation.
   template <typename Visitor>
   void forEachVisualSpan(const WordBox& word, Visitor&& visit) const {
     if (word.sourceBlock) {
-      const auto* fragments = word.sourceBlock->getVisualFragments();
-      if (fragments) {
+      if (const auto* fragments = word.sourceBlock->getVisualFragments()) {
         bool found = false;
-        const int baseX = word.lineX;
         for (const auto& fragment : *fragments) {
           if (fragment.wordIndex != word.sourceWord) continue;
           found = true;
-          visit(baseX + fragment.x, fragment.width, fragment.text.c_str());
+          visit(word.lineX + fragment.x, fragment.width);
         }
         if (found) return;
       }
     }
-    visit(word.x, word.width, word.text);
+    visit(word.x, word.width);
   }
 
   bool hasVisualFragments(const WordBox& word) const;
@@ -120,12 +115,7 @@ class ClipSelectionActivity final : public Activity {
   bool buildSelectedText(int first, int last, std::string& text) const;
   void drawSelection() const;
   bool renderIncremental();
-  void drawWordHighlight(int index, int firstSelected, int lastSelected, int offsetX, int offset) const;
-  void drawWordClean(int index, int offsetX, int offset) const;
-  void drawWordCursor(const WordBox& word, int offsetX, int offset) const;
   void ditherGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
-  void clearGapBetween(const WordBox& a, const WordBox& b, int offsetX, int offset) const;
-  void prewarmWord(int index) const;
 
   std::vector<std::unique_ptr<Page>> pages;
   std::span<const std::unique_ptr<Page>> borrowedPages;
