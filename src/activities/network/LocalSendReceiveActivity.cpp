@@ -468,12 +468,23 @@ void LocalSendReceiveActivity::loop() {
   // Keep accepting requests while a file-details or delete-confirmation popup is open.
   // Sender consent also keeps the listener responsive to additional peers.
   if (leaveRequested || !receiver) return;
-  if (listening) {
-    if (WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED) {
+    restartOnReconnect = true;
+    if (listening) {
       receiver->stop();
       listening = false;
       requestUpdate();
-    } else {
+    }
+  } else {
+    if (restartOnReconnect) {
+      // Restart once when Wi-Fi returns; don't retry a failed bind on every UI loop.
+      restartOnReconnect = false;
+      if (!listening && startReceiver()) {
+        std::snprintf(ipAddress, sizeof(ipAddress), "%s:53317", WiFi.localIP().toString().c_str());
+        requestUpdate();
+      }
+    }
+    if (listening) {
       receiver->poll();
       if (leaveRequested) {
         finish();

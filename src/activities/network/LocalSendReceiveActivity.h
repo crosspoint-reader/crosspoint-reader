@@ -29,6 +29,7 @@ class LocalSendReceiveActivity final : public UiListActivity {
   bool consentPopup = false;
   bool confirmHeld = false;
   bool listening = false;
+  bool restartOnReconnect = false;
   bool leaveRequested = false;
   FileAction pendingFileAction = FileAction::None;
   int pendingFileEntry = -1;
