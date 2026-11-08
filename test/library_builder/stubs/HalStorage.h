@@ -37,6 +37,8 @@ inline std::string failClosePath;
 inline std::string failWritePath;
 inline unsigned parses = 0;
 inline unsigned reads = 0;
+inline std::map<std::string, unsigned> readsByPath;
+inline std::map<std::string, size_t> readBytesByPath;
 inline unsigned seeks = 0;
 inline unsigned delays = 0;
 inline std::map<std::string, unsigned> writesByPath;
@@ -75,6 +77,8 @@ inline void reset() {
   failWritePath.clear();
   parses = 0;
   reads = 0;
+  readsByPath.clear();
+  readBytesByPath.clear();
   seeks = 0;
   delays = 0;
   writesByPath.clear();
@@ -85,6 +89,8 @@ inline void reset() {
 
 inline void resetIoCounters() {
   reads = 0;
+  readsByPath.clear();
+  readBytesByPath.clear();
   seeks = 0;
   delays = 0;
 }
@@ -181,6 +187,8 @@ class HalFile {
   }
   int read(void* out, size_t size) {
     fake::reads++;
+    fake::readsByPath[path]++;
+    fake::readBytesByPath[path] += size;
     if (size == 0) return 0;
     if (!node || ((fake::readFailurePath.empty() || path == fake::readFailurePath) && fake::fail(fake::failRead)))
       return -1;

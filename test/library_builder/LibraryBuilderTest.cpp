@@ -1051,6 +1051,51 @@ TEST_F(LibraryBuilderTest, GroupTitlesUseFullFoldedTextAfterMatchingPrefixes) {
   }
 }
 
+TEST_F(LibraryBuilderTest, TitleRefinementReadsOnlyTheNeededPrefix) {
+  for (const bool filename : {false, true}) {
+    const auto measure = [&](const size_t prefixLength) {
+      fake::reset();
+      bookMetadata.clear();
+      const std::string prefix(prefixLength, 'X');
+      for (const char* suffix : {"Alpha", "Zulu"}) {
+        const std::string path = "/" + prefix + suffix + ".epub";
+        fake::add(path);
+        bookMetadata[path].title = filename ? "" : prefix + suffix;
+        bookMetadata[path].series = "Dune";
+      }
+      EXPECT_TRUE(buildLibraryIndex("/", stats, true, GroupKind::Series));
+      return std::pair{fake::readsByPath[STAGE], fake::readBytesByPath[STAGE]};
+    };
+    const auto shortTitle = measure(12);
+    const auto longTitle = measure(180);
+    // Fourteen extra chunks per book; no repeated length reads.
+    EXPECT_LE(longTitle.first - shortTitle.first, 2u * 14u);
+    // Prefix reads grow with the chunk, instead of rereading all 185 bytes every pass.
+    EXPECT_LT(longTitle.second - shortTitle.second, 2u * 14u * 150u);
+  }
+}
+
+TEST_F(LibraryBuilderTest, PrefixReadsPreserveUnicodeWhitespaceAndFilenameStems) {
+  for (const bool filename : {false, true}) {
+    fake::reset();
+    bookMetadata.clear();
+    const std::vector<std::string> titles{"Cafe\xcc\x81      XXXXXXXXXXXXX Zulu", "Café XXXXXXXXXXXXX Alpha",
+                                          "Café XXXXXXXXXXXXX Beta"};
+    std::vector<std::string> paths;
+    for (size_t i = 0; i < titles.size(); i++) {
+      const std::string path = filename ? "/" + titles[i] + ".epub" : "/" + numbered("", i) + ".epub";
+      fake::add(path);
+      paths.push_back(path);
+      bookMetadata[path].title = filename ? "" : titles[i];
+      bookMetadata[path].series = "Dune";
+    }
+    ASSERT_TRUE(buildLibraryIndex("/", stats, true, GroupKind::Series));
+    LibraryIndexFile index;
+    ASSERT_TRUE(index.open(INDEX));
+    EXPECT_EQ(shelfOrder(index), (std::vector<std::string>{paths[1], paths[2], paths[0]}));
+  }
+}
+
 TEST_F(LibraryBuilderTest, AuthorAllocationFailureKeepsTheGroupOrderAvailable) {
   // Fail either spelling scratch or the author keys, after the title keys succeeded.
   for (const bool failAuthorKeys : {false, true}) {

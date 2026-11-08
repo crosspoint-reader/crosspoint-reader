@@ -731,7 +731,10 @@ GroupBuildResult buildGroupOrder(HalFile& stage, HalFile& groupStage, const uint
 
   // reuse heap scratch for full names (it exceeds the task stack budget)
   struct GroupScratch {
-    StagedGroup staged;
+    union {
+      StagedGroup staged;
+      char title[STAGE_NAME_BYTES];
+    };
     char firstFolded[STAGE_NAME_BYTES];
   };
   auto scratch = makeUniqueNoThrow<GroupScratch>();
@@ -844,21 +847,42 @@ GroupBuildResult buildGroupOrder(HalFile& stage, HalFile& groupStage, const uint
           for (uint16_t k = first; k < next; k++) {
             serviceBuilder(serviceUnits);
             const uint64_t at = static_cast<uint64_t>(order[keys[k].ordinal]) * STAGE_STRIDE;
-            uint8_t len = 0;
-            if (!stage.seekSet(at + offsetof(StagedEntry, titleLen)) || stage.read(&len, 1) != 1) return false;
-            const bool filename = len == 0;
-            if (filename && (!stage.seekSet(at + offsetof(StagedEntry, record) + offsetof(ClixRecord, nameLen)) ||
-                             stage.read(&len, 1) != 1))
-              return false;
-            if (!stage.seekSet(at + (filename ? offsetof(StagedEntry, name) : offsetof(StagedEntry, title))) ||
-                stage.read(scratch->firstFolded, len) != len)
-              return false;
-            std::string_view title(scratch->firstFolded, len);
-            if (filename) {
-              const size_t dot = title.find_last_of('.');
-              if (dot != std::string_view::npos && dot != 0) title = title.substr(0, dot);
+            // IDs are assigned after this run is sorted; until then cache source + length here.
+            uint16_t& source = groupIdOf[keys[k].ordinal];
+            constexpr uint16_t FILENAME_SOURCE = 0x100;
+            size_t loaded = 0;
+            if (source == CLIX_GROUP_NONE) {
+              uint8_t len = 0;
+              if (!stage.seekSet(at + offsetof(StagedEntry, titleLen)) || stage.read(&len, 1) != 1) return false;
+              source = len;
+              if (len == 0) {
+                if (!stage.seekSet(at + offsetof(ClixRecord, nameLen)) || stage.read(&len, 1) != 1 ||
+                    !stage.seekSet(at + offsetof(StagedEntry, name)) || stage.read(scratch->title, len) != len)
+                  return false;
+                const std::string_view name(scratch->title, len);
+                const size_t dot = name.find_last_of('.');
+                if (dot != std::string_view::npos && dot != 0) len = static_cast<uint8_t>(dot);
+                source = FILENAME_SOURCE | len;
+                loaded = len;
+              }
             }
-            const auto folded = foldInto(title, std::span<char>(scratch->firstFolded, sizeof(scratch->firstFolded)));
+            const size_t len = source & 0xff;
+            const uint64_t textAt =
+                at + ((source & FILENAME_SOURCE) ? offsetof(StagedEntry, name) : offsetof(StagedEntry, title));
+            const size_t needed = offset + GROUP_KEY_NAME_BYTES;
+            if (loaded == 0) {
+              loaded = std::min(len, needed);
+              if (!stage.seekSet(textAt) || stage.read(scratch->title, loaded) != static_cast<int>(loaded))
+                return false;
+            }
+            auto folded = foldInto(std::string_view(scratch->title, loaded),
+                                   std::span<char>(scratch->firstFolded, sizeof(scratch->firstFolded)));
+            // Whitespace, accents and partial UTF-8 sequences can shorten the prefix.
+            if (folded.size() < needed && loaded < len) {
+              if (stage.read(scratch->title + loaded, len - loaded) != static_cast<int>(len - loaded)) return false;
+              folded = foldInto(std::string_view(scratch->title, len),
+                                std::span<char>(scratch->firstFolded, sizeof(scratch->firstFolded)));
+            }
             setChunk(keys[k], folded, offset);
           }
           std::sort(keys.get() + first, keys.get() + next, groupKeyLess);
@@ -892,6 +916,7 @@ GroupBuildResult buildGroupOrder(HalFile& stage, HalFile& groupStage, const uint
     return GroupBuildResult::IoError;
   }
   for (uint16_t k = groupedCount; k < n; k++) {
+    groupIdOf[keys[k].ordinal] = CLIX_GROUP_NONE;
     groupOrderOf[k] = keys[k].ordinal;
   }
   return GroupBuildResult::Complete;
