@@ -192,6 +192,21 @@ bool LocalSendReceiveActivity::startReceiver() {
   return listening;
 }
 
+bool LocalSendReceiveActivity::tryStartReceiver() {
+  if (!receiver || leaveRequested || WiFi.status() != WL_CONNECTED) return false;
+  const bool started = startReceiver();
+  if (started) {
+    receiverStartAttempts = 0;
+    restartOnReconnect = false;
+    std::snprintf(ipAddress, sizeof(ipAddress), "%s:53317", WiFi.localIP().toString().c_str());
+  } else {
+    if (receiverStartAttempts < MAX_RECEIVER_START_ATTEMPTS) ++receiverStartAttempts;
+    lastReceiverStartMs = millis();
+    restartOnReconnect = receiverStartAttempts < MAX_RECEIVER_START_ATTEMPTS;
+  }
+  return started;
+}
+
 void LocalSendReceiveActivity::onEnter() {
   UiListActivity::onEnter();
   if (!loadDefinition()) {
@@ -236,7 +251,12 @@ void LocalSendReceiveActivity::initializeReceiver() {
   }
   // Render a usable Receive screen before advertising the network listener.
   requestUpdateAndWait();
-  if (receiver) startReceiver();
+  if (receiver) {
+    if (WiFi.status() == WL_CONNECTED)
+      tryStartReceiver();
+    else
+      restartOnReconnect = true;
+  }
   requestUpdate();
 }
 
@@ -247,6 +267,8 @@ void LocalSendReceiveActivity::onExit() {
     receiver.reset();
   }
   listening = false;
+  restartOnReconnect = false;
+  receiverStartAttempts = 0;
   UiListActivity::onExit();
 }
 
@@ -373,9 +395,11 @@ void LocalSendReceiveActivity::handleFileAction(const FileAction action, const i
     listening = false;
     startActivityForResult(std::move(viewer), [this](const ActivityResult&) {
       if (receiver && WiFi.status() == WL_CONNECTED)
-        startReceiver();
-      else
+        tryStartReceiver();
+      else {
+        receiverStartAttempts = 0;
         restartOnReconnect = true;
+      }
       requestUpdate();
     });
   } else if (FsHelpers::hasEpubExtension(path)) {
@@ -472,6 +496,7 @@ void LocalSendReceiveActivity::loop() {
   // Sender consent also keeps the listener responsive to additional peers.
   if (leaveRequested || !receiver) return;
   if (WiFi.status() != WL_CONNECTED) {
+    receiverStartAttempts = 0;
     restartOnReconnect = true;
     if (listening) {
       receiver->stop();
@@ -479,13 +504,9 @@ void LocalSendReceiveActivity::loop() {
       requestUpdate();
     }
   } else {
-    if (restartOnReconnect) {
-      // Restart once when Wi-Fi returns; don't retry a failed bind on every UI loop.
-      restartOnReconnect = false;
-      if (!listening && startReceiver()) {
-        std::snprintf(ipAddress, sizeof(ipAddress), "%s:53317", WiFi.localIP().toString().c_str());
-        requestUpdate();
-      }
+    if (restartOnReconnect && !listening && receiverStartAttempts < MAX_RECEIVER_START_ATTEMPTS &&
+        (receiverStartAttempts == 0 || millis() - lastReceiverStartMs >= RECEIVER_RETRY_DELAY_MS)) {
+      if (tryStartReceiver()) requestUpdate();
     }
     if (listening) {
       receiver->poll();
