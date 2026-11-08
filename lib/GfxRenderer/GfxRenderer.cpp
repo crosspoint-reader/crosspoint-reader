@@ -187,7 +187,9 @@ void GfxRenderer::begin() {
   // measurements in the same layout pass return 0-width advances.
   auto& memoryManager = freeink::MemoryManager::instance();
   memoryManager.registerSink({"gfx.renderGlyphCache", 50, [this](size_t) -> size_t {
-                                if (!fontCacheManager_ || fontCacheManager_->isScanning()) return 0;
+                                if (!fontCacheManager_ || fontCacheManager_->isScanning() ||
+                                    fontCacheManager_->isLocked())
+                                  return 0;
                                 const size_t before = freeink::MemoryManager::instance().freeBytes();
                                 fontCacheManager_->clearCache();
                                 const size_t after = freeink::MemoryManager::instance().freeBytes();

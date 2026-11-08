@@ -57,6 +57,8 @@ class TtfEpdFont {
   // Style roles for source slots.
   enum Style : uint8_t { Regular = 0, Bold = 1, Italic = 2, BoldItalic = 3 };
 
+  static constexpr uint8_t NUM_GLYPH_SLOTS = 3;
+
   // Configure a source file for a style role BEFORE calling load(). Regular is
   // required; the rest are optional and upgrade their style to a real design.
   // Resident: bytes borrowed. Streamed: read source borrowed.
@@ -65,7 +67,7 @@ class TtfEpdFont {
 
   // Build the family at the given reader point size from the configured sources.
   // Returns false if the regular source is missing or unparseable.
-  bool load(uint16_t pointSize, bool twoBit = true, size_t glyphCacheBytes = 32 * 1024, uint16_t maxGlyphs = 768);
+  bool load(uint16_t pointSize, bool twoBit = true, size_t glyphCacheBytes = 256 * 1024, uint16_t maxGlyphs = 1024);
 
   // Initialize as a sized variant of an existing (master) font family. Borrows
   // the master font's sources and FreeType faces (no re-parsing of font files
@@ -75,11 +77,19 @@ class TtfEpdFont {
 
   EpdFontFamily family() const;
 
-  // Per-scope reset (mirrors SdCardFont::clearCache): drop every face's cached
-  // page glyphs but KEEP the allocations (byte arena + vector capacity), so a
-  // page turn re-faults into buffers already sized to the book and stops touching
-  // the allocator once converged. Driven by FontCacheManager::clearCache() /
-  // PrewarmScope, symmetrically with the SD fonts.
+  // Multi-slot page management for instantaneous forward/backward turns.
+  bool activatePage(int spineIndex, int pageNumber);
+  void prepareTargetPage(int spineIndex, int pageNumber, bool lookahead);
+  void restoreActiveSlot();
+  void clearTargetSlot();
+  uint8_t activeSlot() const { return activeSlot_; }
+  uint8_t targetSlot() const { return targetSlot_; }
+  bool isEvictionLocked() const { return evictionLocked_; }
+
+  // Per-scope reset (mirrors SdCardFont::clearCache): drop the targeted face's
+  // cached page glyphs but KEEP the allocations (byte arena + vector capacity),
+  // so a page turn re-faults into buffers already sized to the book and stops
+  // touching the allocator once converged.
   void clearCache();
 
   // Heap-critical teardown (mirrors SdCardFont::releaseResidentCaches): free
@@ -106,14 +116,36 @@ class TtfEpdFont {
     unsigned long fileSize = 0;
   };
 
-  struct Face {
-    TtfEpdFont* owner = nullptr;
-    freeink::font::FtFont ftStorage_;
-    freeink::font::FtFont* ft = &ftStorage_;
+  struct GlyphSlot {
     freeink::font::PsramVector<uint8_t> bmp;
     size_t used = 0;
     size_t cap = 0;
     uint16_t maxGlyphs = 0;
+    freeink::font::PsramVector<EpdGlyph> glyphs;
+    freeink::font::PsramVector<uint32_t> cps;
+    freeink::font::PsramVector<uint16_t> slot;
+
+    void flush() {
+      glyphs.clear();
+      cps.clear();
+      slot.clear();
+      used = 0;
+    }
+
+    void release() {
+      flush();
+      freeink::font::PsramVector<uint8_t>().swap(bmp);
+      freeink::font::PsramVector<EpdGlyph>().swap(glyphs);
+      freeink::font::PsramVector<uint32_t>().swap(cps);
+      freeink::font::PsramVector<uint16_t>().swap(slot);
+    }
+  };
+
+  struct Face {
+    TtfEpdFont* owner = nullptr;
+    freeink::font::FtFont ftStorage_;
+    freeink::font::FtFont* ft = &ftStorage_;
+    GlyphSlot slots[NUM_GLYPH_SLOTS];
     bool twoBit = true;
     uint16_t sizePx = 0;
     uint8_t srcIndex = 0;      // which Source this face initializes from
@@ -130,9 +162,6 @@ class TtfEpdFont {
     uint32_t ligGid[5] = {0, 0, 0, 0, 0};
     EpdLigaturePair ligPairs[5] = {};
     uint8_t ligPairCount = 0;
-    freeink::font::PsramVector<EpdGlyph> glyphs;
-    freeink::font::PsramVector<uint32_t> cps;
-    freeink::font::PsramVector<uint16_t> slot;
     // Kern pair cache ((left<<32)|right → 4.4 value), sorted by key. Kerning
     // resolves through FtFont (legacy 'kern' table, then the GPOS 'kern'
     // feature) once per pair, then serves from here — getKerning runs for
@@ -155,6 +184,8 @@ class TtfEpdFont {
   const EpdGlyph* faultGlyph(Face& f, uint32_t codepoint);
   int8_t faultKern(Face& f, uint32_t leftCp, uint32_t rightCp);
   static void flushFace(Face& f);
+  bool reclaimInactiveSlot();
+  void resetSlots();
 
   struct FaceLock {
     FaceLock(TtfEpdFont* font, const size_t idx) : font_(font), idx_(idx) {
@@ -172,8 +203,18 @@ class TtfEpdFont {
     size_t idx_;
   };
 
+  struct SlotMeta {
+    int spineIndex = -1;
+    int pageNumber = -1;
+    uint32_t lastUse = 0;
+  };
+
   Source sources_[4];                    // indexed by Style role
   Face faces_[4];                        // 0=regular 1=bold 2=italic 3=bold-italic
+  SlotMeta slotMeta_[NUM_GLYPH_SLOTS];   // tags per slot (Prev / Current / Next)
+  uint8_t activeSlot_ = 0;               // slot currently displayed / active
+  uint8_t targetSlot_ = 0;               // slot being prewarmed / targeted
+  uint32_t slotClock_ = 0;               // LRU usage counter
   TtfEpdFont* master_ = nullptr;         // if non-null, this is a variant borrowing master's FT faces
   uint8_t faceLocks_[4] = {0, 0, 0, 0};  // face in use by glyph fault (prevents FT_Face deinit)
   uint32_t size26_6_ = 0;                // exact 26.6 ppem (pt @150DPI), no whole-pixel rounding

@@ -124,8 +124,10 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
     f.ft = &f.ftStorage_;
     f.twoBit = twoBit;
     f.sizePx = sizePx;
-    f.cap = glyphCacheBytes;
-    f.maxGlyphs = maxGlyphs;
+    for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+      f.slots[s].cap = glyphCacheBytes;
+      f.slots[s].maxGlyphs = maxGlyphs;
+    }
     f.inited = false;
     f.ready = false;
     f.initFailures = 0;
@@ -137,6 +139,7 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
     f.ligPairCount = 0;                  // re-resolved in initFace; stale pairs must not leak
     for (uint32_t& g : f.ligGid) g = 0;  // across a reload with new sources
   }
+  resetSlots();
   initFace(faces_[0]);  // regular eagerly: validates the font + gives metrics
   if (!faces_[0].ready) return false;
   for (int i = 1; i < 4; ++i) setupFace(faces_[i]);  // handlers + placeholder metrics (regular's)
@@ -165,8 +168,10 @@ bool TtfEpdFont::loadVariantOf(TtfEpdFont& master, const uint16_t pointSize, con
     f.wantItalic = mf.wantItalic;
     f.twoBit = twoBit;
     f.sizePx = sizePx;
-    f.cap = glyphCacheBytes;
-    f.maxGlyphs = maxGlyphs;
+    for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+      f.slots[s].cap = glyphCacheBytes;
+      f.slots[s].maxGlyphs = maxGlyphs;
+    }
     f.inited = false;
     f.ready = false;
     f.initFailures = 0;
@@ -174,6 +179,7 @@ bool TtfEpdFont::loadVariantOf(TtfEpdFont& master, const uint16_t pointSize, con
     f.ligPairCount = 0;
     for (uint32_t& g : f.ligGid) g = 0;
   }
+  resetSlots();
   initFace(faces_[0]);
   if (!faces_[0].ready) return false;
   for (int i = 1; i < 4; ++i) setupFace(faces_[i]);
@@ -321,21 +327,110 @@ void TtfEpdFont::setupFace(Face& f) {
 }
 
 void TtfEpdFont::flushFace(Face& f) {
-  f.glyphs.clear();
-  f.cps.clear();
-  f.slot.clear();
+  for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+    f.slots[s].flush();
+  }
   f.kernKeys.clear();
   f.kernVals.clear();
-  f.used = 0;
+}
+
+bool TtfEpdFont::activatePage(const int spineIndex, const int pageNumber) {
+  if (spineIndex < 0 || pageNumber < 0) return false;
+  for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+    if (slotMeta_[s].spineIndex == spineIndex && slotMeta_[s].pageNumber == pageNumber) {
+      activeSlot_ = s;
+      targetSlot_ = s;
+      slotMeta_[s].lastUse = ++slotClock_;
+      return true;
+    }
+  }
+  return false;
+}
+
+void TtfEpdFont::prepareTargetPage(const int spineIndex, const int pageNumber, const bool lookahead) {
+  if (spineIndex < 0 || pageNumber < 0) return;
+  for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+    if (slotMeta_[s].spineIndex == spineIndex && slotMeta_[s].pageNumber == pageNumber) {
+      targetSlot_ = s;
+      slotMeta_[s].lastUse = ++slotClock_;
+      if (!lookahead) activeSlot_ = s;
+      return;
+    }
+  }
+  uint8_t victim = 0;
+  uint32_t minUse = UINT32_MAX;
+  for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+    if (lookahead && s == activeSlot_) continue;
+    if (slotMeta_[s].spineIndex == -1) {
+      victim = s;
+      break;
+    }
+    if (slotMeta_[s].lastUse < minUse) {
+      minUse = slotMeta_[s].lastUse;
+      victim = s;
+    }
+  }
+  for (Face& f : faces_) {
+    f.slots[victim].flush();
+  }
+  slotMeta_[victim].spineIndex = spineIndex;
+  slotMeta_[victim].pageNumber = pageNumber;
+  slotMeta_[victim].lastUse = ++slotClock_;
+  targetSlot_ = victim;
+  if (!lookahead) activeSlot_ = victim;
+}
+
+void TtfEpdFont::restoreActiveSlot() { targetSlot_ = activeSlot_; }
+
+void TtfEpdFont::clearTargetSlot() {
+  for (Face& f : faces_) {
+    if (f.inited) f.slots[targetSlot_].flush();
+  }
+}
+
+bool TtfEpdFont::reclaimInactiveSlot() {
+  int victim = -1;
+  uint32_t minUse = UINT32_MAX;
+  for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+    if (s == activeSlot_ || s == targetSlot_) continue;
+    bool hasAlloc = false;
+    for (const Face& f : faces_) {
+      if (f.slots[s].bmp.capacity() > 0 || f.slots[s].glyphs.capacity() > 0) {
+        hasAlloc = true;
+        break;
+      }
+    }
+    if (hasAlloc && (victim < 0 || slotMeta_[s].lastUse < minUse)) {
+      minUse = slotMeta_[s].lastUse;
+      victim = s;
+    }
+  }
+  if (victim < 0) return false;
+  for (Face& f : faces_) {
+    f.slots[victim].release();
+  }
+  slotMeta_[victim] = SlotMeta{};
+  return true;
+}
+
+void TtfEpdFont::resetSlots() {
+  for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+    slotMeta_[s] = SlotMeta{};
+  }
+  activeSlot_ = 0;
+  targetSlot_ = 0;
+  slotClock_ = 0;
 }
 
 void TtfEpdFont::clearCache() {
-  // Drop cached page glyphs on every inited face but keep the allocations: the
-  // vectors keep capacity (clear() does not free) and f.bmp keeps its buffer, so
-  // the next prewarm re-faults into buffers already sized to the book.
+  if (evictionLocked_) return;  // mid-fault: targetSlot and active faces are live
+  // Drop cached glyphs across all slots on explicit cache invalidation.
   for (Face& f : faces_) {
-    if (f.inited) flushFace(f);
+    for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+      f.slots[s].flush();
+    }
   }
+  resetSlots();
 }
 
 void TtfEpdFont::releaseResidentCaches() {
@@ -345,11 +440,9 @@ void TtfEpdFont::releaseResidentCaches() {
     f.initFailures = 0;
     // Actually RELEASE the caches (swap-with-empty frees capacity; clear() alone
     // would not).
-    flushFace(f);
-    freeink::font::PsramVector<uint8_t>().swap(f.bmp);
-    freeink::font::PsramVector<EpdGlyph>().swap(f.glyphs);
-    freeink::font::PsramVector<uint32_t>().swap(f.cps);
-    freeink::font::PsramVector<uint16_t>().swap(f.slot);
+    for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+      f.slots[s].release();
+    }
     freeink::font::PsramVector<uint64_t>().swap(f.kernKeys);
     freeink::font::PsramVector<int8_t>().swap(f.kernVals);
     // Keep the regular face's FreeType face live so coverage()/metrics still
@@ -369,18 +462,87 @@ void TtfEpdFont::releaseResidentCaches() {
       f.ready = false;
     }
   }
+  resetSlots();
 }
 
 const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
   if (!f.inited || (master_ && !master_->faces_[&f - faces_].ready)) initFace(f);
   if (!f.ready) return nullptr;
+
+  const uint8_t target = targetSlot_;
+  GlyphSlot& targetSlot = f.slots[target];
+
+  // 1. Check target slot first (direct cache hit).
   {
-    const auto it = std::lower_bound(f.cps.begin(), f.cps.end(), cp);
-    if (it != f.cps.end() && *it == cp) return &f.glyphs[f.slot[static_cast<size_t>(it - f.cps.begin())]];
+    const auto it = std::lower_bound(targetSlot.cps.begin(), targetSlot.cps.end(), cp);
+    if (it != targetSlot.cps.end() && *it == cp) {
+      const size_t gIdx = targetSlot.slot[static_cast<size_t>(it - targetSlot.cps.begin())];
+      return &targetSlot.glyphs[gIdx];
+    }
   }
 
-  // Resolve to a glyph ID: cmap first, then the GSUB result for the ligature
-  // presentation codepoints (whose glyphs commonly have no cmap entry at all).
+  // Helper growth lambdas: exact and heap-checked.
+  static constexpr size_t kTableStep = 64;
+  const auto growTables = [&](GlyphSlot& s) {
+    return reserveChecked(s.glyphs, s.glyphs.size() + 1, kTableStep, s.maxGlyphs) &&
+           reserveChecked(s.cps, s.cps.size() + 1, kTableStep, s.maxGlyphs) &&
+           reserveChecked(s.slot, s.slot.size() + 1, kTableStep, s.maxGlyphs);
+  };
+  const auto evictOthers = [&]() {
+    evictionLocked_ = true;
+    freeink::MemoryManager::instance().ensureFree(16 * 1024);
+    evictionLocked_ = false;
+  };
+  const auto insertGlyph = [&](const EpdGlyph& eg) -> const EpdGlyph* {
+    targetSlot.glyphs.push_back(eg);
+    const uint16_t newIdx = static_cast<uint16_t>(targetSlot.glyphs.size() - 1);
+    const auto it = std::lower_bound(targetSlot.cps.begin(), targetSlot.cps.end(), cp);
+    const size_t pos = static_cast<size_t>(it - targetSlot.cps.begin());
+    targetSlot.cps.insert(it, cp);
+    targetSlot.slot.insert(targetSlot.slot.begin() + pos, newIdx);
+    return &targetSlot.glyphs[newIdx];
+  };
+
+  // 2. Check other slots. If found, copy the rasterized glyph into targetSlot
+  // without touching FreeType or reading from SD (instant copy path).
+  for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+    if (s == target) continue;
+    GlyphSlot& srcSlot = f.slots[s];
+    const auto it = std::lower_bound(srcSlot.cps.begin(), srcSlot.cps.end(), cp);
+    if (it != srcSlot.cps.end() && *it == cp) {
+      const EpdGlyph srcG = srcSlot.glyphs[srcSlot.slot[static_cast<size_t>(it - srcSlot.cps.begin())]];
+      const size_t bytes = srcG.dataLength;
+      if (bytes > targetSlot.cap) continue;
+      if (targetSlot.glyphs.size() >= targetSlot.maxGlyphs || targetSlot.used + bytes > targetSlot.cap) {
+        targetSlot.flush();
+      }
+      if (!growTables(targetSlot)) {
+        evictOthers();
+        if (!growTables(targetSlot)) return nullptr;
+      }
+      if (bytes > 0) {
+        if (!reserveChecked(targetSlot.bmp, targetSlot.used + bytes, 4096, targetSlot.cap)) {
+          evictOthers();
+          if (!reserveChecked(targetSlot.bmp, targetSlot.used + bytes, 4096, targetSlot.cap)) {
+            // Cannot allocate bitmap in targetSlot: do not poison cache with a blank entry
+            continue;
+          }
+        }
+      }
+      EpdGlyph eg = srcG;
+      if (bytes > 0) {
+        if (targetSlot.bmp.size() < targetSlot.used + bytes) targetSlot.bmp.resize(targetSlot.used + bytes, 0);
+        memcpy(targetSlot.bmp.data() + targetSlot.used, srcSlot.bmp.data() + srcG.dataOffset, bytes);
+        eg.dataOffset = static_cast<uint32_t>(targetSlot.used);
+        targetSlot.used += bytes;
+      } else {
+        eg.dataOffset = static_cast<uint32_t>(targetSlot.used);
+      }
+      return insertGlyph(eg);
+    }
+  }
+
+  // 3. Not in any slot: rasterize via FreeType into targetSlot.
   freeink::font::FtFont::GlyphId gid = f.ft->glyphId(cp);
   if (gid == 0 && cp >= 0xFB00u && cp <= 0xFB04u) gid = f.ligGid[cp - 0xFB00u];
   if (gid == 0 && cp != REPLACEMENT_GLYPH) return nullptr;
@@ -396,52 +558,58 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
   freeink::font::FtFont::GlyphMetrics gm;
   const bool haveMetrics = f.ft->metricsGlyph26_6(gid, size26_6, gm);
   const freeink::font::GlyphBitmap* g = f.ft->rasterizeGlyph26_6(gid, size26_6);
-  uint32_t px = (g && g->pixels) ? static_cast<uint32_t>(g->width) * g->height : 0;
-  size_t bytes = px ? (f.twoBit ? (px + 3) / 4 : (px + 7) / 8) : 0;
-  if (bytes > f.cap) {
-    bytes = 0;
-    px = 0;
-  }
-  if (f.glyphs.size() >= f.maxGlyphs || f.used + bytes > f.cap) flushFace(f);
-
-  // All growth below is exact and heap-checked (see reserveChecked). On a
-  // failed grow, ask the memory manager to evict rebuildable caches (render
-  // glyph cache, other fonts' arenas — evictionLocked_ keeps THIS font's
-  // faces alive) and retry once. After that: a failed table grow is an
-  // uncached miss (caller skips the glyph this pass); a failed arena grow
-  // degrades to an advance-only glyph so layout survives.
-  static constexpr size_t kTableStep = 64;
-  const auto growTables = [&]() {
-    return reserveChecked(f.glyphs, f.glyphs.size() + 1, kTableStep, f.maxGlyphs) &&
-           reserveChecked(f.cps, f.cps.size() + 1, kTableStep, f.maxGlyphs) &&
-           reserveChecked(f.slot, f.slot.size() + 1, kTableStep, f.maxGlyphs);
-  };
-  const auto evictOthers = [&]() {
+  if (!g) {
     evictionLocked_ = true;
     freeink::MemoryManager::instance().ensureFree(16 * 1024);
     evictionLocked_ = false;
-  };
-  if (!growTables()) {
-    evictOthers();
-    if (!growTables()) return nullptr;
+    reclaimInactiveSlot();
+    g = f.ft->rasterizeGlyph26_6(gid, size26_6);
   }
-  if (px && !reserveChecked(f.bmp, f.used + bytes, 4096, f.cap)) {
+  if (!g) {
+    // Rasterization failed: do not pollute cache with a blank or dummy entry.
+    // Returning nullptr causes EpdFont::getGlyph() to fall back to REPLACEMENT_GLYPH (tofu),
+    // and leaves this codepoint uncached so subsequent passes retry rasterization.
+    return nullptr;
+  }
+  uint32_t px = g->pixels ? static_cast<uint32_t>(g->width) * g->height : 0;
+  size_t bytes = px ? (f.twoBit ? (px + 3) / 4 : (px + 7) / 8) : 0;
+  if (bytes > targetSlot.cap) {
+    // Glyph bitmap exceeds slot capacity: do not cache a broken zero-byte entry.
+    // Returning nullptr triggers fallback to REPLACEMENT_GLYPH (tofu) and keeps cp uncached.
+    return nullptr;
+  }
+  if (targetSlot.glyphs.size() >= targetSlot.maxGlyphs || targetSlot.used + bytes > targetSlot.cap) {
+    targetSlot.flush();
+  }
+
+  if (!growTables(targetSlot)) {
     evictOthers();
-    if (!reserveChecked(f.bmp, f.used + bytes, 4096, f.cap)) {
-      bytes = 0;
-      px = 0;
+    if (!growTables(targetSlot)) {
+      if (!reclaimInactiveSlot() || !growTables(targetSlot)) return nullptr;
+    }
+  }
+  if (px && !reserveChecked(targetSlot.bmp, targetSlot.used + bytes, 4096, targetSlot.cap)) {
+    evictOthers();
+    if (!reserveChecked(targetSlot.bmp, targetSlot.used + bytes, 4096, targetSlot.cap)) {
+      if (!reclaimInactiveSlot() || !reserveChecked(targetSlot.bmp, targetSlot.used + bytes, 4096, targetSlot.cap)) {
+        // Bitmap allocation failed in targetSlot: do not cache a broken zero-byte entry.
+        // Returning nullptr triggers fallback to REPLACEMENT_GLYPH (tofu) and keeps cp uncached.
+        return nullptr;
+      }
     }
   }
 
   EpdGlyph eg{};
-  const int32_t adv12_4 = haveMetrics ? (gm.advance26_6 + 2) >> 2 : (g ? g->advance << 4 : 0);
+  const int32_t adv12_4 = haveMetrics ? (gm.advance26_6 + 2) >> 2 : (g->advance << 4);
   eg.advanceX = static_cast<uint16_t>(adv12_4 < 0 ? 0 : adv12_4);
-  if (px && g && g->pixels) {
+  if (px && g->pixels) {
     // Grow the byte arena on demand toward the book's page high-water mark.
-    // flush above guarantees f.used + bytes <= f.cap, so this never exceeds the
-    // ceiling; capacity is retained across page turns (clearCache keeps it).
-    if (f.bmp.size() < f.used + bytes) f.bmp.resize(f.used + bytes, 0);
-    uint8_t* dst = f.bmp.data() + f.used;
+    // flush above guarantees targetSlot.used + bytes <= targetSlot.cap, so this
+    // never exceeds the ceiling; capacity is retained across page turns.
+    if (targetSlot.bmp.size() < targetSlot.used + bytes) {
+      targetSlot.bmp.resize(targetSlot.used + bytes, 0);
+    }
+    uint8_t* dst = targetSlot.bmp.data() + targetSlot.used;
     for (size_t i = 0; i < bytes; ++i) dst[i] = 0;
     for (uint32_t i = 0; i < px; ++i) {
       const uint8_t a = g->pixels[i];
@@ -465,21 +633,18 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
     // EpdGlyph.top is positive-above (renderer computes screen Y = cursorY - top,
     // matching the .cpfont converter's top = FreeType bitmap_top). Flip the sign.
     eg.top = static_cast<int16_t>(-g->yoff);
-    eg.dataOffset = static_cast<uint32_t>(f.used);
+    eg.dataOffset = static_cast<uint32_t>(targetSlot.used);
     eg.dataLength = static_cast<uint16_t>(bytes);
-    f.used += bytes;
+    targetSlot.used += bytes;
   } else {
-    eg.dataOffset = static_cast<uint32_t>(f.used);
+    // Valid empty glyph (e.g. space)
+    eg.width = 0;
+    eg.height = 0;
+    eg.dataOffset = static_cast<uint32_t>(targetSlot.used);
     eg.dataLength = 0;
   }
 
-  f.glyphs.push_back(eg);
-  const uint16_t newIdx = static_cast<uint16_t>(f.glyphs.size() - 1);
-  const auto it = std::lower_bound(f.cps.begin(), f.cps.end(), cp);
-  const size_t pos = static_cast<size_t>(it - f.cps.begin());
-  f.cps.insert(it, cp);
-  f.slot.insert(f.slot.begin() + pos, newIdx);
-  return &f.glyphs[newIdx];
+  return insertGlyph(eg);
 }
 
 int8_t TtfEpdFont::faultKern(Face& f, const uint32_t leftCp, const uint32_t rightCp) {
@@ -530,7 +695,30 @@ int8_t TtfEpdFont::kernThunk(void* ctx, const uint32_t leftCp, const uint32_t ri
 }
 const uint8_t* TtfEpdFont::bitmapThunk(void* ctx, const EpdGlyph* glyph) {
   if (glyph == nullptr || glyph->dataLength == 0) return nullptr;
-  return static_cast<Face*>(ctx)->bmp.data() + glyph->dataOffset;
+  Face* f = static_cast<Face*>(ctx);
+  const uint8_t active = f->owner ? f->owner->activeSlot() : 0;
+  const uint8_t target = f->owner ? f->owner->targetSlot() : 0;
+
+  auto checkSlot = [glyph](const GlyphSlot& s) -> const uint8_t* {
+    if (!s.glyphs.empty()) {
+      const EpdGlyph* start = s.glyphs.data();
+      if (glyph >= start && glyph < start + s.glyphs.size()) {
+        return s.bmp.data() + glyph->dataOffset;
+      }
+    }
+    return nullptr;
+  };
+
+  if (const uint8_t* ptr = checkSlot(f->slots[active])) return ptr;
+  if (target != active) {
+    if (const uint8_t* ptr = checkSlot(f->slots[target])) return ptr;
+  }
+  for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
+    if (s != active && s != target) {
+      if (const uint8_t* ptr = checkSlot(f->slots[s])) return ptr;
+    }
+  }
+  return nullptr;
 }
 bool TtfEpdFont::coverageThunk(void* ctx, const uint32_t codepoint) {
   // All styles share one file → coverage comes from the always-live regular face.
@@ -547,7 +735,7 @@ EpdFontFamily TtfEpdFont::family() const {
 
 bool TtfEpdFont::build(const char* utf8, const uint8_t style) {
   if (!loaded_ || style >= 4) return false;
-  flushFace(faces_[style]);
+  faces_[style].slots[targetSlot_].flush();
   return addCoverage(utf8, style);
 }
 bool TtfEpdFont::addCoverage(const char* utf8, const uint8_t style) {

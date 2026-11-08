@@ -726,7 +726,8 @@ void EpubReaderActivity::loop() {
         if (const auto p = section->loadPage(nextPage)) {
           if (auto* fcm = renderer.getFontCacheManager()) {
             const auto t0 = millis();
-            auto scope = fcm->createPrewarmScope();
+            fcm->prepareTargetPage(currentSpineIndex, nextPage, /*lookahead=*/true);
+            auto scope = fcm->createPrewarmScope(FontCacheManager::PrewarmMode::LookaheadNext);
             p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);
             scope.endScanAndPrewarm();
             LOG_DBG("ERS", "Idle prewarm: page %d in %lums", nextPage, millis() - t0);
@@ -1965,6 +1966,12 @@ void EpubReaderActivity::renderBook() {
     // stored-BW slot. Release the old page snapshot before renderContents()
     // needs that slot, then snapshot the newly rendered page below.
     discardOverlayPage();
+
+    if (auto* fcm = renderer.getFontCacheManager()) {
+      if (!fcm->activatePageSlot(currentSpineIndex, section->currentPage, SETTINGS.getReaderFontId())) {
+        fcm->prepareTargetPage(currentSpineIndex, section->currentPage, /*lookahead=*/false);
+      }
+    }
 
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);

@@ -622,16 +622,13 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   if (!registryWasDirty && ttf_ && ttfFamily_ == family.name && ttfPointSize_ == size) return;
 
   // Reader-face glyph-cache budget (used by both the resize fast path and the
-  // full load below): the default 32 KB holds ~90 CJK glyphs, but a CJK page
-  // uses 300+, so the cache flush-cycles mid-page and every page turn
-  // re-rasterizes the whole page through streamed SD reads (multi-second
-  // turns). The arenas are PSRAM-backed (FontPsram); 1 MB / 4096 glyphs holds
-  // a whole Japanese novel's working set (~3000 unique kanji+kana at ~350 B
-  // each), so the flush-everything ceiling is never hit and warm page turns
-  // are pure cache hits. Without PSRAM keep the internal-DRAM-safe default.
+  // full load below): each slot in the 3-slot sliding window holds up to 256 KB
+  // (~1024 CJK glyphs), for a total PSRAM budget of 768 KB. This comfortably
+  // holds Prev, Current, and Next dense CJK pages across grayscale passes
+  // without flushing mid-page. Without PSRAM keep the internal-DRAM-safe default.
   const bool havePsram = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) > 0;
-  const size_t cacheBytes = havePsram ? 1024 * 1024 : 32 * 1024;
-  const uint16_t maxGlyphs = havePsram ? 4096 : 768;
+  const size_t cacheBytes = havePsram ? 256 * 1024 : 32 * 1024;
+  const uint16_t maxGlyphs = havePsram ? 1024 : 768;
 
   // Same family, only the reader size changed (size preview): the open style
   // sources and the size-independent UI fallbacks don't need rebuilding — just

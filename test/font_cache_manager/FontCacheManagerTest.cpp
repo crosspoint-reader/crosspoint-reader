@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <map>
 #include <new>
+#include <optional>
 
 #include "FontCacheManager.h"
 #include "FontDecompressor.h"
@@ -156,4 +157,42 @@ TEST(FontCacheManagerTest, ReleaseCallbackFiresOnReleaseSdFontCaches) {
 
   manager.releaseSdFontCaches();
   EXPECT_EQ(1, callbackCallCount);
+}
+
+TEST(FontCacheManagerTest, LookaheadScopeDoesNotClearAndSetsAccumulate) {
+  SdCardFont font;
+  const std::map<int, EpdFontFamily> noBuiltinFonts;
+  const std::map<int, SdCardFont*> sdFonts{{7, &font}};
+  FontCacheManager manager(noBuiltinFonts, sdFonts, kNoTtfFonts);
+
+  {
+    auto scope = manager.createPrewarmScope(FontCacheManager::PrewarmMode::LookaheadNext);
+    EXPECT_EQ(0, font.clearCacheCallCount);
+    manager.recordText("A", 7, EpdFontFamily::REGULAR);
+    scope.endScanAndPrewarm();
+  }
+
+  ASSERT_EQ(1, font.prewarmCallCount);
+  EXPECT_TRUE(font.prewarmCalls[0].accumulate);
+  EXPECT_EQ(0, font.clearCacheCallCount);
+}
+
+TEST(FontCacheManagerTest, MovedLookaheadScopePreservesPrewarmState) {
+  SdCardFont font;
+  const std::map<int, EpdFontFamily> noBuiltinFonts;
+  const std::map<int, SdCardFont*> sdFonts{{7, &font}};
+  FontCacheManager manager(noBuiltinFonts, sdFonts, kNoTtfFonts);
+
+  std::optional<FontCacheManager::PrewarmScope> movedScope;
+  {
+    auto scope = manager.createPrewarmScope(FontCacheManager::PrewarmMode::LookaheadNext);
+    movedScope.emplace(std::move(scope));
+  }  // Original scope is destroyed here; its destructor must not clean up active prewarm state
+
+  manager.recordText("B", 7, EpdFontFamily::REGULAR);
+  movedScope->endScanAndPrewarm();
+
+  ASSERT_EQ(1, font.prewarmCallCount);
+  EXPECT_TRUE(font.prewarmCalls[0].accumulate);
+  EXPECT_EQ(0, font.clearCacheCallCount);
 }

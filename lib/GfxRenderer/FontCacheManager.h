@@ -34,6 +34,14 @@ class FontCacheManager {
   void logStats(const char* label = "render");
   void resetStats();
 
+  // Multi-slot page prewarm management.
+  enum class PrewarmMode : uint8_t { RenderCurrent, LookaheadNext };
+  bool activatePageSlot(int spineIndex, int pageNumber, int primaryFontId = -1);
+  void prepareTargetPage(int spineIndex, int pageNumber, bool lookahead);
+  void restoreActiveSlot();
+  void clearTargetSlot();
+  bool isLocked() const;
+
   // Scan-mode API: called by GfxRenderer::drawText() during scan pass
   bool isScanning() const;
   void recordText(const char* text, int fontId, EpdFontFamily::Style style);
@@ -44,7 +52,7 @@ class FontCacheManager {
   // RAII scope for two-pass prewarm pattern
   class PrewarmScope {
    public:
-    explicit PrewarmScope(FontCacheManager& manager);
+    explicit PrewarmScope(FontCacheManager& manager, PrewarmMode mode = PrewarmMode::RenderCurrent);
     ~PrewarmScope();
     void endScanAndPrewarm();
     PrewarmScope(PrewarmScope&& other) noexcept;
@@ -54,9 +62,10 @@ class FontCacheManager {
 
    private:
     FontCacheManager* manager_;
+    PrewarmMode mode_ = PrewarmMode::RenderCurrent;
     bool active_ = true;
   };
-  PrewarmScope createPrewarmScope();
+  PrewarmScope createPrewarmScope(PrewarmMode mode = PrewarmMode::RenderCurrent);
 
  private:
   ReleaseCallback releaseCb_ = nullptr;
@@ -67,13 +76,18 @@ class FontCacheManager {
   [[maybe_unused]] const std::map<int, TtfEpdFont*>& ttfFonts_;
   FontDecompressor* fontDecompressor_ = nullptr;
 
+  bool pageSlotActive_ = false;
+  int preparedSpineIndex_ = -1;
+  int preparedPageNumber_ = -1;
+  bool preparedLookahead_ = false;
+
   enum class ScanMode : uint8_t { None, Scanning };
   ScanMode scanMode_ = ScanMode::None;
 
   // A render pass touches at most a handful of font ids. Codepoints are packed
   // with a compact font slot and resolved style, then grouped for prewarming.
   static constexpr uint8_t MAX_SCAN_FONTS = 4;
-  static constexpr uint16_t MAX_SCAN_CODEPOINTS = 512;
+  static constexpr uint16_t MAX_SCAN_CODEPOINTS = 1024;
   static constexpr uint8_t SCAN_STYLE_SHIFT = 21;
   static constexpr uint8_t SCAN_FONT_SHIFT = SCAN_STYLE_SHIFT + 2;
   static constexpr uint32_t SCAN_CODEPOINT_MASK = (1U << SCAN_STYLE_SHIFT) - 1;

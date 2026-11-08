@@ -16,7 +16,17 @@ FontCacheManager::FontCacheManager(const std::map<int, EpdFontFamily>& fontMap,
 
 void FontCacheManager::setFontDecompressor(FontDecompressor* d) { fontDecompressor_ = d; }
 
+bool FontCacheManager::isLocked() const {
+#if CROSSPOINT_VECTOR_FONTS
+  for (const auto& [id, font] : ttfFonts_) {
+    if (font && font->isEvictionLocked()) return true;
+  }
+#endif
+  return false;
+}
+
 void FontCacheManager::clearCache() {
+  if (isLocked()) return;
   if (fontDecompressor_) fontDecompressor_->clearCache();
   for (auto& [id, font] : sdCardFonts_) {
     font->clearCache();
@@ -26,6 +36,10 @@ void FontCacheManager::clearCache() {
     if (font) font->clearCache();
   }
 #endif
+  pageSlotActive_ = false;
+  preparedSpineIndex_ = -1;
+  preparedPageNumber_ = -1;
+  preparedLookahead_ = false;
 }
 
 void FontCacheManager::releaseSdFontCaches() {
@@ -39,6 +53,10 @@ void FontCacheManager::releaseSdFontCaches() {
     if (font) font->releaseResidentCaches();
   }
 #endif
+  pageSlotActive_ = false;
+  preparedSpineIndex_ = -1;
+  preparedPageNumber_ = -1;
+  preparedLookahead_ = false;
 }
 
 void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask, bool accumulate) {
@@ -49,6 +67,11 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
 #if CROSSPOINT_VECTOR_FONTS
   auto tit = ttfFonts_.find(fontId);
   if (tit != ttfFonts_.end() && tit->second) {
+    // If this font was loaded late (e.g. variant loaded during scan), enroll it
+    // in the prepared target page so it receives the page tag and target slot.
+    if (preparedSpineIndex_ >= 0 && preparedPageNumber_ >= 0) {
+      tit->second->prepareTargetPage(preparedSpineIndex_, preparedPageNumber_, preparedLookahead_);
+    }
     for (uint8_t i = 0; i < 4; ++i) {
       if (styleMask & (1 << i)) {
         if (accumulate) {
@@ -168,11 +191,86 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
   }
 }
 
+bool FontCacheManager::activatePageSlot([[maybe_unused]] const int spineIndex, [[maybe_unused]] const int pageNumber,
+                                        [[maybe_unused]] const int primaryFontId) {
+#if CROSSPOINT_VECTOR_FONTS
+  bool primaryHit = false;
+  bool anyHit = false;
+  uint8_t hitMask = 0;
+  uint8_t idx = 0;
+  for (auto& [id, font] : ttfFonts_) {
+    if (font && font->activatePage(spineIndex, pageNumber)) {
+      anyHit = true;
+      if (id == primaryFontId) primaryHit = true;
+      hitMask |= static_cast<uint8_t>(1 << idx);
+    }
+    idx++;
+  }
+  if ((primaryFontId >= 0 && primaryHit) || (primaryFontId < 0 && anyHit)) {
+    idx = 0;
+    for (auto& [id, font] : ttfFonts_) {
+      if (font && !(hitMask & (1 << idx))) {
+        font->prepareTargetPage(spineIndex, pageNumber, /*lookahead=*/false);
+      }
+      idx++;
+    }
+    preparedSpineIndex_ = spineIndex;
+    preparedPageNumber_ = pageNumber;
+    preparedLookahead_ = false;
+    pageSlotActive_ = true;
+    return true;
+  }
+#endif
+  pageSlotActive_ = false;
+  return false;
+}
+
+void FontCacheManager::prepareTargetPage([[maybe_unused]] const int spineIndex, [[maybe_unused]] const int pageNumber,
+                                         const bool lookahead) {
+  preparedSpineIndex_ = spineIndex;
+  preparedPageNumber_ = pageNumber;
+  preparedLookahead_ = lookahead;
+#if CROSSPOINT_VECTOR_FONTS
+  for (auto& [id, font] : ttfFonts_) {
+    if (font) {
+      font->prepareTargetPage(spineIndex, pageNumber, lookahead);
+    }
+  }
+#endif
+  if (!lookahead) pageSlotActive_ = false;
+}
+
+void FontCacheManager::restoreActiveSlot() {
+#if CROSSPOINT_VECTOR_FONTS
+  for (auto& [id, font] : ttfFonts_) {
+    if (font) font->restoreActiveSlot();
+  }
+#endif
+  preparedSpineIndex_ = -1;
+  preparedPageNumber_ = -1;
+  preparedLookahead_ = false;
+}
+
+void FontCacheManager::clearTargetSlot() {
+#if CROSSPOINT_VECTOR_FONTS
+  for (auto& [id, font] : ttfFonts_) {
+    if (font) font->clearTargetSlot();
+  }
+#endif
+  for (auto& [id, font] : sdCardFonts_) {
+    if (font) font->clearCache();
+  }
+  if (fontDecompressor_) fontDecompressor_->clearCache();
+}
+
 // --- PrewarmScope implementation ---
 
-FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager) : manager_(&manager) {
+FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager, const PrewarmMode mode)
+    : manager_(&manager), mode_(mode) {
   manager_->scanMode_ = ScanMode::Scanning;
-  manager_->clearCache();
+  if (mode_ == PrewarmMode::RenderCurrent && !manager_->pageSlotActive_) {
+    manager_->clearTargetSlot();
+  }
   manager_->resetStats();
   manager_->scanCodepointCount_ = 0;
   manager_->scanFontCount_ = 0;
@@ -181,8 +279,15 @@ FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager) : manage
 }
 
 void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
+  if (!active_) return;
+  active_ = false;
   manager_->scanMode_ = ScanMode::None;
-  if (manager_->scanCodepointCount_ == 0) return;
+  if (manager_->scanCodepointCount_ == 0) {
+    if (mode_ == PrewarmMode::LookaheadNext) {
+      manager_->restoreActiveSlot();
+    }
+    return;
+  }
 
   std::sort(manager_->scanCodepoints_, manager_->scanCodepoints_ + manager_->scanCodepointCount_);
 
@@ -190,6 +295,8 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
   for (uint8_t group = 1; group < SCAN_GROUP_COUNT; group++) {
     groupStarts[group] = groupStarts[group - 1] + manager_->scanGroupCounts_[group - 1];
   }
+
+  const bool accumulate = (mode_ == PrewarmMode::LookaheadNext) || manager_->pageSlotActive_;
 
   // Each packed entry provides four bytes, enough for one UTF-8 codepoint.
   // Encoding high groups first means a terminator can overwrite only a group
@@ -210,24 +317,32 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
     const uint8_t fontSlot = static_cast<uint8_t>(group) / 4;
     const uint8_t style = static_cast<uint8_t>(group) & 0x03;
     // This group is the complete glyph set for one font/style in this render.
-    manager_->prewarmCache(manager_->scanFontIds_[fontSlot], utf8Text, 1 << style, /*accumulate=*/false);
+    manager_->prewarmCache(manager_->scanFontIds_[fontSlot], utf8Text, 1 << style, accumulate);
   }
 
   manager_->scanCodepointCount_ = 0;
   manager_->scanFontCount_ = 0;
   memset(manager_->scanGroupCounts_, 0, sizeof(manager_->scanGroupCounts_));
+
+  if (mode_ == PrewarmMode::LookaheadNext) {
+    manager_->restoreActiveSlot();
+  }
 }
 
 FontCacheManager::PrewarmScope::~PrewarmScope() {
   if (active_) {
     endScanAndPrewarm();  // no-op if already called
-    manager_->clearCache();
+    if (mode_ == PrewarmMode::RenderCurrent && !manager_->pageSlotActive_) {
+      manager_->clearTargetSlot();
+    }
   }
 }
 
 FontCacheManager::PrewarmScope::PrewarmScope(PrewarmScope&& other) noexcept
-    : manager_(other.manager_), active_(other.active_) {
+    : manager_(other.manager_), mode_(other.mode_), active_(other.active_) {
   other.active_ = false;
 }
 
-FontCacheManager::PrewarmScope FontCacheManager::createPrewarmScope() { return PrewarmScope(*this); }
+FontCacheManager::PrewarmScope FontCacheManager::createPrewarmScope(const PrewarmMode mode) {
+  return PrewarmScope(*this, mode);
+}
