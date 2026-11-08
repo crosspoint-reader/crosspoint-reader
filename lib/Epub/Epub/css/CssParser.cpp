@@ -1494,6 +1494,10 @@ void CssParser::parseFontFace(const std::string_view declBlock, const std::strin
     const bool skipped = iequalsAscii(extension, "woff") || iequalsAscii(extension, "woff2") ||
                          iequalsAscii(extension, "svg") || url.empty() || url.substr(0, 5) == "data:";
     if (!skipped) {
+      if (baseDir.size() + url.size() > MAX_FONT_FACE_HREF) {
+        LOG_ERR("CSS", "Ignoring @font-face with long src (%zu bytes)", baseDir.size() + url.size());
+        return;
+      }
       if (fontFaces_.size() >= MAX_FONT_FACES) {
         LOG_ERR("CSS", "Ignoring @font-face past %zu faces", MAX_FONT_FACES);
         return;
