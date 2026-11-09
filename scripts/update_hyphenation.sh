@@ -27,3 +27,8 @@ process pl
 process pt
 process sv
 process fi
+
+# Greek uses the polytonic patterns (hyph-el-polyton.tex), which cover monotonic
+# spelling as well. hypher ships only the monotonic trie, so this one is built
+# locally from hyph-utf8 patterns using hypher's tests/generate.rs with the Greek
+# entry pointed at hyph-el-polyton.tex. See licenses/hyphenation.txt.
