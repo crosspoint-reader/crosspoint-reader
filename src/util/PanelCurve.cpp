@@ -65,7 +65,10 @@ void readFromCard(const Source& src, uint8_t table[256], uint32_t& hash) {
     }
   }
   if (value >= 0) {
-    if (count == 256) return useIdentity(table, hash);
+    if (count == 256) {
+      LOG_ERR("CRV", "More than 256 values in %s", path);
+      return useIdentity(table, hash);
+    }
     parsed[count++] = static_cast<uint8_t>(value);
   }
   if (count != 256) {
