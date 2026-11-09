@@ -44,6 +44,7 @@
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+#include <esp_rtc_time.h>
 #include <esp_sleep.h>
 
 #include "activities/boot_sleep/SleepActivity.h"
@@ -473,6 +474,15 @@ static bool holdSleepWhileUsbPowered() {
 #include <driver/gpio.h>
 
 RTC_DATA_ATTR char sleepRedrawPath[192];
+// When the redraw is due on the RTC counter, which keeps running in deep sleep:
+// the delay counts from the sleep, also across presses that do not wake.
+RTC_DATA_ATTR uint64_t sleepRedrawDueUs = 0;
+// An overdue redraw fires this soon after the reader is back asleep.
+static constexpr uint64_t OVERDUE_REDRAW_US = 1000000ULL;
+static uint64_t sleepRedrawLeftUs() {
+  const uint64_t now = esp_rtc_get_time_us();
+  return sleepRedrawDueUs > now + OVERDUE_REDRAW_US ? sleepRedrawDueUs - now : OVERDUE_REDRAW_US;
+}
 static bool bootWasPanic = false;
 // Power button seen during a timer redraw: a press edge, and the longest hold
 // that started and ended inside the redraw (both edges, timed in the ISR).
@@ -553,7 +563,9 @@ void enterDeepSleep(bool fromTimeout = false) {
   if (minutes > 0 && !isQuickResumeSleep && !bootWasPanic && powerManager.getBatteryPercentage() >= 15 &&
       !imagePath.empty() && imagePath.size() < sizeof(sleepRedrawPath)) {
     memcpy(sleepRedrawPath, imagePath.c_str(), imagePath.size() + 1);
-    if (esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(minutes) * 60000000ULL) != ESP_OK) {
+    const uint64_t delayUs = static_cast<uint64_t>(minutes) * 60000000ULL;
+    sleepRedrawDueUs = esp_rtc_get_time_us() + delayUs;
+    if (esp_sleep_enable_timer_wakeup(delayUs) != ESP_OK) {
       sleepRedrawPath[0] = '\0';
       LOG_ERR("MAIN", "Could not arm the sleep-image redraw");
     }
@@ -693,6 +705,13 @@ void setup() {
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
+#if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+    // A redraw timer woke the reader, nobody asked it to: nothing to redraw from, sleep again.
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER && sleepRedrawPath[0] != '\0') {
+      sleepRedrawPath[0] = '\0';
+      powerManager.startDeepSleep(gpio);
+    }
+#endif
     setupDisplayAndFonts(isSilentReboot);
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
@@ -749,7 +768,6 @@ void setup() {
     isSleepWake = true;
     isPersistedSleepWake = !APP_STATE.showBootScreen;
   }
-  sleepRedrawPath[0] = '\0';
 #endif
 
   // Push the saved timezone's POSIX rule into the clock (migrating the legacy
@@ -800,6 +818,12 @@ void setup() {
       if (!wakeHoldVerified && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP &&
           !(FREEINK_DEVICE_PICCO && gpio.isUsbConnected())) {
         LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");
+#if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+        // Keep a pending sleep-image redraw for the time left of its delay.
+        if (sleepRedrawPath[0] != '\0' && CrossPointSettings::redrawDelayMinutes(SETTINGS.sleepSettledRedraw) > 0) {
+          if (esp_sleep_enable_timer_wakeup(sleepRedrawLeftUs()) != ESP_OK) sleepRedrawPath[0] = '\0';
+        }
+#endif
         Storage.prepareForDeepSleep();
         powerManager.startDeepSleep(gpio);
       }
@@ -829,6 +853,11 @@ void setup() {
     default:
       break;
   }
+#if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+  // The reader stays awake: a pending sleep-image redraw is void. Cleared only
+  // here, so a press that does not wake (above) can still keep it.
+  sleepRedrawPath[0] = '\0';
+#endif
 
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
