@@ -392,23 +392,17 @@ bool TtfEpdFont::reclaimInactiveSlot() {
   int victim = -1;
   uint32_t minUse = UINT32_MAX;
   for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
-    if (s == activeSlot_ || s == targetSlot_) continue;
-    bool hasAlloc = false;
+    if (s == activeSlot_ || s == targetSlot_ || slotMeta_[s].lastUse >= minUse) continue;
     for (const Face& f : faces_) {
       if (f.slots[s].bmp.capacity() > 0 || f.slots[s].glyphs.capacity() > 0) {
-        hasAlloc = true;
+        minUse = slotMeta_[s].lastUse;
+        victim = s;
         break;
       }
     }
-    if (hasAlloc && (victim < 0 || slotMeta_[s].lastUse < minUse)) {
-      minUse = slotMeta_[s].lastUse;
-      victim = s;
-    }
   }
   if (victim < 0) return false;
-  for (Face& f : faces_) {
-    f.slots[victim].release();
-  }
+  for (Face& f : faces_) f.slots[victim].release();
   slotMeta_[victim] = SlotMeta{};
   return true;
 }
@@ -697,25 +691,10 @@ const uint8_t* TtfEpdFont::bitmapThunk(void* ctx, const EpdGlyph* glyph) {
   if (glyph == nullptr || glyph->dataLength == 0) return nullptr;
   Face* f = static_cast<Face*>(ctx);
   const uint8_t active = f->owner ? f->owner->activeSlot() : 0;
-  const uint8_t target = f->owner ? f->owner->targetSlot() : 0;
-
-  auto checkSlot = [glyph](const GlyphSlot& s) -> const uint8_t* {
-    if (!s.glyphs.empty()) {
-      const EpdGlyph* start = s.glyphs.data();
-      if (glyph >= start && glyph < start + s.glyphs.size()) {
-        return s.bmp.data() + glyph->dataOffset;
-      }
-    }
-    return nullptr;
-  };
-
-  if (const uint8_t* ptr = checkSlot(f->slots[active])) return ptr;
-  if (target != active) {
-    if (const uint8_t* ptr = checkSlot(f->slots[target])) return ptr;
-  }
-  for (uint8_t s = 0; s < NUM_GLYPH_SLOTS; ++s) {
-    if (s != active && s != target) {
-      if (const uint8_t* ptr = checkSlot(f->slots[s])) return ptr;
+  for (uint8_t i = 0; i < NUM_GLYPH_SLOTS; ++i) {
+    const GlyphSlot& s = f->slots[(active + i) % NUM_GLYPH_SLOTS];
+    if (glyph >= s.glyphs.data() && glyph < s.glyphs.data() + s.glyphs.size()) {
+      return s.bmp.data() + glyph->dataOffset;
     }
   }
   return nullptr;

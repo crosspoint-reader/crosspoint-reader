@@ -194,25 +194,17 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
 bool FontCacheManager::activatePageSlot([[maybe_unused]] const int spineIndex, [[maybe_unused]] const int pageNumber,
                                         [[maybe_unused]] const int primaryFontId) {
 #if CROSSPOINT_VECTOR_FONTS
-  bool primaryHit = false;
-  bool anyHit = false;
-  uint8_t hitMask = 0;
-  uint8_t idx = 0;
-  for (auto& [id, font] : ttfFonts_) {
-    if (font && font->activatePage(spineIndex, pageNumber)) {
-      anyHit = true;
-      if (id == primaryFontId) primaryHit = true;
-      hitMask |= static_cast<uint8_t>(1 << idx);
-    }
-    idx++;
-  }
-  if ((primaryFontId >= 0 && primaryHit) || (primaryFontId < 0 && anyHit)) {
-    idx = 0;
+  const auto pit = ttfFonts_.find(primaryFontId);
+  const bool hasHit = (primaryFontId >= 0)
+                          ? (pit != ttfFonts_.end() && pit->second && pit->second->activatePage(spineIndex, pageNumber))
+                          : std::any_of(ttfFonts_.begin(), ttfFonts_.end(), [&](const auto& pair) {
+                              return pair.second && pair.second->activatePage(spineIndex, pageNumber);
+                            });
+  if (hasHit) {
     for (auto& [id, font] : ttfFonts_) {
-      if (font && !(hitMask & (1 << idx))) {
+      if (font && !font->activatePage(spineIndex, pageNumber)) {
         font->prepareTargetPage(spineIndex, pageNumber, /*lookahead=*/false);
       }
-      idx++;
     }
     preparedSpineIndex_ = spineIndex;
     preparedPageNumber_ = pageNumber;
