@@ -937,7 +937,7 @@ void loop() {
 
   if (mappedInputManager.wasPowerReleaseConsumed()) {
     mappedInputManager.resetPowerButtonInput();
-    return;
+    if (!mappedInputManager.powerSleepRequested()) return;
   }
 
   if (mappedInputManager.powerSleepClick()) {
@@ -971,6 +971,9 @@ void loop() {
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }
+
+  // A completed long hold stays consumed even when sleep is temporarily blocked.
+  if (mappedInputManager.wasPowerReleaseConsumed()) return;
 
 #if FREEINK_DEVICE_PAPERMONO
   // Paper Mono reports the PMIC power button as a one-tick click, so the held

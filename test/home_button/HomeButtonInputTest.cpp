@@ -62,6 +62,7 @@ TEST(HomeButtonInput, PowerWakeHoldAndReleaseAreConsumed) {
     EXPECT_TRUE(input.suppressesHold());
   }
   input.update(true, true, 10000, 400);  // A new physical press overlaps the committed release.
+  EXPECT_FALSE(input.shouldSleep());
   EXPECT_TRUE(input.wasReleaseConsumed());
   EXPECT_FALSE(input.wasShortReleased());
   input.update(true, false, 401, 400);
@@ -74,6 +75,12 @@ TEST(HomeButtonInput, PowerWakeHoldAndReleaseAreConsumed) {
   input.update(true, false, 0, 400);
   input.update(false, true, 100, 400);
   EXPECT_TRUE(input.wasShortReleased());
+
+  input.begin(true, false);
+  input.update(true, false, 0, 400);
+  input.update(false, true, 100, 400);
+  EXPECT_TRUE(input.wasShortReleased());
+  EXPECT_FALSE(input.wasReleaseConsumed());
 }
 
 TEST(HomeButtonInput, PowerRestartHoldCanSleepButNeverClick) {
@@ -85,6 +92,7 @@ TEST(HomeButtonInput, PowerRestartHoldCanSleepButNeverClick) {
     input.update(true, true, releaseMs, 400);
     EXPECT_FALSE(input.wasShortReleased());
     EXPECT_TRUE(input.wasReleaseConsumed());
+    EXPECT_EQ(input.shouldSleep(), releaseMs > 400);
     input.update(true, false, 0, 400);
     input.update(false, true, 100, 400);
     EXPECT_TRUE(input.wasShortReleased());
@@ -98,6 +106,7 @@ TEST(HomeButtonInput, PowerDurationAndConsumedGesturesHaveOneMeaning) {
     input.update(true, false, threshold, threshold);
     EXPECT_FALSE(input.shouldSleep());
     input.update(true, true, threshold, threshold);
+    EXPECT_FALSE(input.shouldSleep());
     EXPECT_TRUE(input.wasShortReleased());
     input.update(false, false, threshold, threshold);
     EXPECT_FALSE(input.wasShortReleased());
@@ -107,6 +116,15 @@ TEST(HomeButtonInput, PowerDurationAndConsumedGesturesHaveOneMeaning) {
     input.update(false, true, 401, threshold);
     EXPECT_FALSE(input.wasShortReleased());
     EXPECT_TRUE(input.wasReleaseConsumed());
+    EXPECT_TRUE(input.shouldSleep());
+    input.update(false, false, 0, threshold);
+    EXPECT_FALSE(input.shouldSleep());
+
+    input.update(true, false, 0, threshold);
+    input.update(true, true, 600, threshold);  // The old release wins over a fresh physical press.
+    EXPECT_TRUE(input.shouldSleep());
+    EXPECT_TRUE(input.wasReleaseConsumed());
+    EXPECT_FALSE(input.wasShortReleased());
   }
 
   // Click-to-sleep must still allow X4 Pro's frontlight double-click window.
@@ -119,6 +137,7 @@ TEST(HomeButtonInput, PowerDurationAndConsumedGesturesHaveOneMeaning) {
   input.begin(false, false);
   input.update(true, false, 401, 400);
   input.update(false, true, 500, 1000);  // A setting change cannot turn a long hold into a click.
+  EXPECT_FALSE(input.shouldSleep());
   EXPECT_FALSE(input.wasShortReleased());
 
   input.update(true, false, 0, 400);
@@ -131,6 +150,7 @@ TEST(HomeButtonInput, PowerDurationAndConsumedGesturesHaveOneMeaning) {
   afterRestart.update(true, false, 10000, 400);
   EXPECT_FALSE(afterRestart.shouldSleep());
   afterRestart.update(false, true, 10000, 400);
+  EXPECT_FALSE(afterRestart.shouldSleep());
   EXPECT_TRUE(afterRestart.wasReleaseConsumed());
   EXPECT_FALSE(afterRestart.wasShortReleased());
 

@@ -72,7 +72,7 @@ class MappedInputManager {
   bool wasShortPowerReleased() const {
     return gpio.wasReleased(HalGPIO::BTN_POWER) && powerButtonInput.wasShortReleased();
   }
-  bool powerSleepRequested() const { return gpio.isPressed(HalGPIO::BTN_POWER) && powerButtonInput.shouldSleep(); }
+  bool powerSleepRequested() const { return powerButtonInput.shouldSleep(); }
   bool wasPowerReleaseConsumed() const { return powerButtonInput.wasReleaseConsumed(); }
   void consumePowerGesture() const {
     powerButtonInput.consume();

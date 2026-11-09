@@ -54,7 +54,10 @@ harness = r"""
 class GfxRenderer {};
 namespace BoardConfig {
   enum class InputStyle { DigitalButtons, DigitalConfirmPowerHold };
-  struct { InputStyle inputStyle = InputStyle::DigitalButtons; } ACTIVE;
+  struct {
+    InputStyle inputStyle = InputStyle::DigitalButtons;
+    struct { int up = 2, down = 3; } input;
+  } ACTIVE;
   bool x4Pro = false;
   bool isX4Pro() { return x4Pro; }
   bool paperMono = false;
@@ -62,6 +65,12 @@ namespace BoardConfig {
 }
 unsigned long clockMs = 1000;
 unsigned long millis() { return clockMs; }
+uint32_t testNow = 1000;
+constexpr int LOW = 0;
+uint8_t sideButtons = 0;
+int digitalRead(int pin) {
+  return (sideButtons & (pin == BoardConfig::ACTIVE.input.up ? 1 : 2)) ? LOW : 1;
+}
 constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
 struct CrossPointSettings {
   enum { VIBRATION_OFF, VIBRATION_TOUCH_PAGE };
@@ -169,9 +178,27 @@ int main() {
   gpio.held = false; gpio.physicalPowerHeld = false; gpio.released = true;
   input.update();
   assert(input.wasPowerReleaseConsumed() && !input.wasShortPowerReleased());
+  assert(!input.powerSleepRequested());
+
+  // Sticky Sleep emits logical Power immediately; work can delay polling until release.
+  SETTINGS.shortPwrBtn = SETTINGS.SLEEP;
+  input.beginPowerInput(false, false);
+  gpio.released = false; gpio.held = true; gpio.powerHeldMs = 0;
+  input.update();
+  assert(!input.powerSleepRequested());
+  gpio.held = false; gpio.released = true; gpio.powerHeldMs = 600;
+  input.update();
+  assert(input.powerSleepRequested());
+  assert(input.wasPowerReleaseConsumed() && !input.wasShortPowerReleased());
+  checkSleepDispatch(input, gpio);
+  gpio.released = false;
+  input.update();
+  assert(!input.powerSleepRequested());
 
   // A shared key released before its logical Power threshold emits Confirm instead.
+  SETTINGS.shortPwrBtn = SETTINGS.IGNORE;
   gpio.button = HalGPIO::BTN_CONFIRM;
+  gpio.released = true;
   input.beginPowerInput(true, true);
   input.update();
   assert(input.wasPowerReleaseConsumed());
@@ -343,6 +370,13 @@ void checkPowerClicks() {
   frame(9020, false, false, true, 20);
   frame(9521, false, false, false, 20);
   assert(input.homeButtonAction() == HomeButtonAction::Sync);
+
+  SETTINGS.shortPwrBtn = CrossPointSettings::SLEEP;
+  frame(10000, true, true, false, 0);
+  frame(10600, false, false, true, 600);
+  assert(input.powerSleepRequested() && input.wasPowerReleaseConsumed());
+  assert(!input.powerSleepClick() && !input.wasPowerSingleClick());
+  checkSleepDispatch(input, gpio);
 }
 
 int main() {
@@ -354,6 +388,41 @@ int main() {
 }
 """
 harness = harness.replace("PICKER_CONFIRM_CONDITION", picker_confirm)
+main_source = (ROOT / "src/main.cpp").read_text()
+release_guard = main_source.split("  if (mappedInputManager.wasPowerReleaseConsumed()) {", 1)[1].split(
+    "  if (mappedInputManager.powerSleepClick()) {", 1)[0]
+sleep_dispatch = main_source.split("  const bool x4ProAwaitingClickWindow =", 1)[1].split(
+    "#if FREEINK_DEVICE_PAPERMONO", 1)[0]
+dispatch_harness = r"""
+bool slept = false, forwardedRelease = false;
+void enterDeepSleep() { slept = true; }
+#define LOG_DBG(...) ((void)0)
+void dispatchSleep(MappedInputManager& mappedInputManager, HalGPIO& gpio,
+                   bool x4ProDoubleClickEnabled, unsigned long allowSleepAt) {
+  slept = forwardedRelease = false;
+  if (mappedInputManager.wasPowerReleaseConsumed()) {
+""" + release_guard + "  const bool x4ProAwaitingClickWindow =" + sleep_dispatch + r"""
+  forwardedRelease = true;
+}
+void checkSleepDispatch(MappedInputManager& input, HalGPIO& gpio) {
+  dispatchSleep(input, gpio, false, 0);
+  assert(slept && !forwardedRelease);
+  dispatchSleep(input, gpio, true, 0);  // A long release is not a double-click candidate.
+  assert(slept && !forwardedRelease);
+  dispatchSleep(input, gpio, false, millis() + 1);
+  assert(!slept && !forwardedRelease);  // Startup delay still consumes the release.
+  input.beginPowerInput(true, true);
+  input.update();
+  dispatchSleep(input, gpio, false, 0);
+  assert(!slept && !forwardedRelease);
+  input.beginPowerInput(false, false);
+  gpio.powerHeldMs = 150;
+  input.update();
+  dispatchSleep(input, gpio, true, 0);
+  assert(!slept);  // Short click still waits for X4 Pro's double-click window.
+}
+"""
+harness = harness.replace("void checkRemoteButtons() {", dispatch_harness + "void checkRemoteButtons() {")
 hal_source = (ROOT / "lib/hal/HalGPIO.cpp").read_text()
 hal_methods = []
 for signature, following in (
@@ -368,8 +437,10 @@ struct PowerClockHarness {
   struct {
     bool pressed = false;
     uint32_t powerMs = 0, buttonMs = 0;
+    bool held = true;
     void update() {}
     bool wasPressed(uint8_t) const { return pressed; }
+    bool isPressed(uint8_t) const { return held; }
     uint8_t capacitivePageButtonMask() const { return 0; }
     uint32_t getPowerButtonHeldTime() const { return powerMs; }
     uint32_t getHeldTime() const { return buttonMs; }
@@ -383,30 +454,63 @@ struct PowerClockHarness {
 };
 """ + "\n".join(hal_methods) + r"""
 void checkPowerClocks() {
-  BoardConfig::paperMono = true;
   PowerClockHarness gpio;
   PowerButtonInput input;
-  input.begin(false, false);
-  gpio.inputMgr = {true, 5, 5};  // PMIC press; no hardware hold duration.
-  gpio.update();
-  input.update(true, false, gpio.getPowerButtonHeldTime(), 400);
-  gpio.inputMgr = {false, 1000, 1000};  // Synchronous work delays the release poll.
-  gpio.update();
-  input.update(false, true, gpio.getPowerButtonHeldTime(), 400);
-  assert(input.wasShortReleased());
+#if FREEINK_DEVICE_PAPERMONO
+  BoardConfig::paperMono = true;
+  // A PMIC pulse remains a click even with an inherited side-button timestamp.
+  for (uint8_t sides : {0, 1, 2, 3}) {
+    gpio = {};
+    sideButtons = sides;
+    testNow = 0;
+    gpio.inputMgr = {false, 0, 0, false};
+    gpio.update();
+    input.begin(false, false);
+    testNow = sides == 1 ? 1000 : 100;
+    gpio.inputMgr = {true, sides ? testNow : 0u, 0};
+    gpio.update();
+    input.update(true, false, gpio.getPowerButtonHeldTime(), 400);
+    assert(!input.shouldSleep());
+    testNow += sides == 0 ? 1000 : 500;
+    gpio.inputMgr = {false, testNow, 500, false};
+    gpio.update();
+    input.update(false, true, gpio.getPowerButtonHeldTime(), 400);
+    assert(input.wasShortReleased() && !input.wasReleaseConsumed());
+  }
 
-  gpio.inputMgr = {true, 650, 0};  // Two side buttons synthesize a real Power hold.
-  gpio.update();
-  input.update(true, false, gpio.getPowerButtonHeldTime(), 400);
-  assert(input.shouldSleep());
-  gpio.inputMgr = {false, 1000, 350};
-  gpio.update();
-  input.update(false, true, gpio.getPowerButtonHeldTime(), 400);
-  assert(input.wasReleaseConsumed() && !input.wasShortReleased());
+  // An early PMIC pulse must not hide the chord that matures on the next poll.
+  for (bool earlyClick : {false, true}) {
+    gpio = {};
+    input.begin(false, false);
+    sideButtons = 3;
+    testNow = 0;
+    gpio.inputMgr = {false, 0, 0, false};
+    gpio.update();
+    if (earlyClick) {
+      testNow = 100;
+      gpio.inputMgr = {true, 100, 0};
+      gpio.update();
+      input.update(true, false, gpio.getPowerButtonHeldTime(), 400);
+      assert(!input.shouldSleep());
+    }
+    testNow = 650;
+    gpio.inputMgr = {!earlyClick, 650, 0};
+    gpio.update();
+    input.update(true, false, gpio.getPowerButtonHeldTime(), 400);
+    assert(input.shouldSleep());
+    sideButtons = 0;
+    testNow = 1000;
+    gpio.inputMgr = {false, 1000, 350, false};
+    gpio.update();
+    input.update(false, true, gpio.getPowerButtonHeldTime(), 400);
+    assert(input.wasReleaseConsumed() && !input.wasShortReleased());
+  }
+#else
   BoardConfig::paperMono = false;
   gpio.inputMgr = {true, 300, 300};
   gpio.update();
   assert(gpio.getPowerButtonHeldTime() == 300);
+#endif
 }
 """
 harness = harness.replace("int main() {", clock_harness + "int main() {\n  checkPowerClocks();")
@@ -416,9 +520,10 @@ with tempfile.TemporaryDirectory() as directory:
     cpp = directory / "remote_input.cpp"
     executable = directory / "remote_input"
     cpp.write_text("#include <initializer_list>\n" + harness)
-    for touch in (0, 1):
+    for touch, paper_mono in ((0, 0), (1, 0), (0, 1), (1, 1)):
         subprocess.run([
-            "c++", "-std=c++20", f"-DFREEINK_CAP_TOUCH={touch}", "-I", str(directory),
+            "c++", "-std=c++20", f"-DFREEINK_CAP_TOUCH={touch}",
+            f"-DFREEINK_DEVICE_PAPERMONO={paper_mono}", "-I", str(directory),
             "-I", str(ROOT / "src"), str(cpp), "-o", str(executable),
         ], check=True)
         subprocess.run([str(executable)], check=True)
