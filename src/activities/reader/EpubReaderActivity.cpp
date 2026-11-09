@@ -520,7 +520,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
   std::string author = epub->getAuthor();
 
   auto activity = makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, std::move(pages), marginLeft,
-                                                           marginTop, initialX, initialY, mode);
+                                                           marginTop, initialX, initialY, mode, spineIndex, pageNumber);
   if (activity && restoreSelection.valid) activity->setInitialSelection(restoreSelection);
   if (!activity) {
     LOG_ERR("CLIP", "Failed to allocate clipping selection activity");

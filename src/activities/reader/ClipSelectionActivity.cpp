@@ -48,14 +48,16 @@ const char* cleanWordStart(const char* text) {
 ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              std::vector<std::unique_ptr<Page>> pages, const int marginLeft,
                                              const int marginTop, const int initialX, const int initialY,
-                                             const Mode mode)
+                                             const Mode mode, const int spineIndex, const int basePageNumber)
     : Activity("ClipSelection", renderer, mappedInput),
       pages(std::move(pages)),
       marginLeft(marginLeft),
       marginTop(marginTop),
       initialX(initialX),
       initialY(initialY),
-      mode(mode) {}
+      mode(mode),
+      spineIndex(spineIndex),
+      basePageNumber(basePageNumber) {}
 
 ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              std::span<const std::unique_ptr<Page>> borrowedPages, const int marginLeft,
@@ -839,6 +841,12 @@ void ClipSelectionActivity::render(RenderLock&&) {
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   renderer.setClipRect(safe.x, safe.y, safe.width, safe.height);
   auto* fcm = renderer.getFontCacheManager();
+  if (fcm && spineIndex >= 0 && basePageNumber >= 0) {
+    const int page = basePageNumber + currentPageOffset;
+    if (!fcm->activatePageSlot(spineIndex, page, fontId)) fcm->prepareTargetPage(spineIndex, page, false);
+  } else if (fcm && lastRenderedPageOffset >= 0 && lastRenderedPageOffset != currentPageOffset) {
+    fcm->clearTargetSlot();
+  }
   auto scope = fcm->createPrewarmScope();
   pageAt(currentPageOffset).render(renderer, fontId, marginLeft + offsetX, marginTop + offset);
   scope.endScanAndPrewarm();

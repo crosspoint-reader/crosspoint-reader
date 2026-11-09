@@ -29,7 +29,7 @@ class ClipSelectionActivity final : public Activity {
 
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         std::vector<std::unique_ptr<Page>> pages, int marginLeft, int marginTop, int initialX = -1,
-                        int initialY = -1, Mode mode = Mode::Clip);
+                        int initialY = -1, Mode mode = Mode::Clip, int spineIndex = -1, int basePageNumber = -1);
 
   // The definition viewer retains these pages until this child exits.
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -102,6 +102,8 @@ class ClipSelectionActivity final : public Activity {
   const int initialX;
   const int initialY;
   const Mode mode;
+  const int spineIndex = -1;
+  const int basePageNumber = -1;
   bool lookupAvailable = false;
   OptionPopup actionPopup;
   // ponytail: retain 16 button frames during refresh; increase only if overflow is observed.
