@@ -285,6 +285,8 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
   if (manager_->scanCodepointCount_ == 0) {
     if (mode_ == PrewarmMode::LookaheadNext) {
       manager_->restoreActiveSlot();
+    } else {
+      manager_->pageSlotActive_ = true;
     }
     return;
   }
@@ -326,6 +328,8 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
 
   if (mode_ == PrewarmMode::LookaheadNext) {
     manager_->restoreActiveSlot();
+  } else {
+    manager_->pageSlotActive_ = true;
   }
 }
 

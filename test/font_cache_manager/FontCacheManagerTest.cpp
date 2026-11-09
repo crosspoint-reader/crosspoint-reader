@@ -196,3 +196,31 @@ TEST(FontCacheManagerTest, MovedLookaheadScopePreservesPrewarmState) {
   EXPECT_TRUE(font.prewarmCalls[0].accumulate);
   EXPECT_EQ(0, font.clearCacheCallCount);
 }
+
+TEST(FontCacheManagerTest, SubsequentRenderCurrentScopeDoesNotClearWhenSlotActive) {
+  SdCardFont font;
+  const std::map<int, EpdFontFamily> noBuiltinFonts;
+  const std::map<int, SdCardFont*> sdFonts{{7, &font}};
+  FontCacheManager manager(noBuiltinFonts, sdFonts, kNoTtfFonts);
+
+  // Initial render pass sets pageSlotActive_ = true
+  {
+    auto scope = manager.createPrewarmScope(FontCacheManager::PrewarmMode::RenderCurrent);
+    EXPECT_EQ(1, font.clearCacheCallCount);  // first render clears target slot
+    manager.recordText("A", 7, EpdFontFamily::REGULAR);
+    scope.endScanAndPrewarm();
+  }
+
+  // Second pass (e.g. clipping cursor movement or repaint) must NOT clear target slot and must accumulate
+  {
+    auto scope = manager.createPrewarmScope(FontCacheManager::PrewarmMode::RenderCurrent);
+    EXPECT_EQ(1, font.clearCacheCallCount);  // must not increment
+    manager.recordText("B", 7, EpdFontFamily::REGULAR);
+    scope.endScanAndPrewarm();
+  }
+
+  ASSERT_EQ(2, font.prewarmCallCount);
+  EXPECT_FALSE(font.prewarmCalls[0].accumulate);  // initial pass replaces
+  EXPECT_TRUE(font.prewarmCalls[1].accumulate);   // subsequent pass accumulates without clearing
+  EXPECT_EQ(1, font.clearCacheCallCount);
+}
