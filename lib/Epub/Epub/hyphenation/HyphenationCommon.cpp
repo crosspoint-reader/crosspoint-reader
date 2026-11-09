@@ -169,6 +169,7 @@ bool isGreekLetter(const uint32_t cp) {
     switch (cp) {
       case 0x0374:  // ʹ numeral sign
       case 0x0375:  // ͵ lower numeral sign
+      case 0x037A:  // ͺ ypogegrammeni (spacing)
       case 0x037E:  // ; Greek question mark
       case 0x0384:  // ΄ tonos
       case 0x0385:  // ΅ dialytika tonos

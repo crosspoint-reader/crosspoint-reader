@@ -68,6 +68,11 @@ git clone https://github.com/typst/hypher && cd hypher
 curl -LO https://raw.githubusercontent.com/hyphenation/tex-hyphen/master/hyph-utf8/tex/generic/hyph-utf8/patterns/tex/hyph-el-polyton.tex
 mv hyph-el-polyton.tex patterns/
 # In tests/generate.rs, change the Greek entry from "hyph-el-monoton.tex" to "hyph-el-polyton.tex"
+cargo test --test generate generate_code || true
+# The test rewrites tries/el.bin and then deliberately panics with
+# "Trie data or generated code was outdated." whenever the output changed, so a
+# failure here is expected on the first run. Confirm the file was regenerated
+# (re-running the test now passes) before embedding it:
 cargo test --test generate generate_code
 python3 /path/to/crosspoint-reader/scripts/generate_hyphenation_trie.py \
   --input tries/el.bin \

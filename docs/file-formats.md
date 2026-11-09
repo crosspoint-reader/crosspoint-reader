@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 75
+
+Version 75 keeps the binary layout and rebuilds completed and partial sections.
+Greek (`el`, `grc`) gained hyphenation patterns and NFD polytonic text now
+composes fully, so cached line breaks change for Greek books. Book metadata and
+saved progress are kept.
+
 ### Version 74
 
 Version 74 keeps the binary layout and rebuilds completed and partial sections.
