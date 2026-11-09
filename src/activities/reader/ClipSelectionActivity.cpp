@@ -1,6 +1,7 @@
 #include "ClipSelectionActivity.h"
 
 #include <Arduino.h>
+#include <BidiUtils.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalMemory.h>
