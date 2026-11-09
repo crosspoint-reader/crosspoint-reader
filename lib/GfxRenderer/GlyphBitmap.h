@@ -11,6 +11,19 @@ namespace glyphBitmap {
 // Framebuffer plane a glyph is painted into.
 enum class Plane : uint8_t { BW, GrayLSB, GrayMSB };
 
+// Which 2bpp coverage values the BW plane paints black (bit n = value n):
+// 0x0e paints light gray and up (25% coverage), 0x0c dark gray and up (50%).
+// EEGO A4 uses 50%: at its pixel density the 25% cutoff swelled every stroke
+// of unsmoothed text (menus, status bar, anti-aliasing off). Its anti-aliased
+// pages fold base and grays into one Gray3 transition that reads the gray
+// masks directly, so the base cutoff does not change their edges. Overlay
+// panels drive gray pixels from a black base and keep 25%.
+#if FREEINK_DEVICE_EEGO_A4
+inline constexpr uint8_t bwTwoBitLevels = 0x0c;
+#else
+inline constexpr uint8_t bwTwoBitLevels = 0x0e;
+#endif
+
 // Position of glyph pixel (0, 0) plus the step for one move along the glyph's
 // x and y axes, all in one coordinate space. The axes must describe an
 // orthogonal unit rotation: each is +/-1 on exactly one component.
@@ -97,7 +110,7 @@ inline void draw(const uint8_t* bitmap, int width, int height, bool twoBit, Plan
   uint8_t levels = 0x02;
   bool clearBits = state;
   if (twoBit) {
-    levels = plane == Plane::BW ? 0x0e : plane == Plane::GrayMSB ? 0x06 : 0x04;
+    levels = plane == Plane::BW ? bwTwoBitLevels : plane == Plane::GrayMSB ? 0x06 : 0x04;
     if (plane != Plane::BW) clearBits = false;
   }
 
