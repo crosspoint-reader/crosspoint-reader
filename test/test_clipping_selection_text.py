@@ -274,6 +274,7 @@ struct HalDisplay { static constexpr int FAST_REFRESH = 0; };
 enum { STR_BACK, STR_SELECT, STR_LOOKUP, STR_DONE, STR_DIR_LEFT, STR_DIR_RIGHT };
 #define tr(x) x
 struct Theme {
+  mutable std::vector<bool> handleDirections;
   static Theme& getInstance() { static Theme theme; return theme; }
   Rect getScreenSafeArea(const Renderer&, bool, bool) const { return {0,0,1000,1000}; }
   struct Metrics { int verticalSpacing = 4; };
@@ -281,12 +282,13 @@ struct Theme {
   int hints = 0;
   int confirmLabel = -1;
   void drawButtonHints(Renderer&, int, int confirm, int, int) { ++hints; confirmLabel = confirm; }
-  void drawSelectionHandle(const Renderer&, Rect, bool) const {}
+  void drawSelectionHandle(const Renderer&, Rect, bool left) const { handleDirections.push_back(left); }
   void drawSelectionActions(const Renderer&, Rect, int = 3, int = 0) const {}
 } GUI;
 using UITheme = Theme;
 struct Input {
-  bool hasTouch() const { return false; }
+  bool touch = false;
+  bool hasTouch() const { return touch; }
   struct Labels { int btn1,btn2,btn3,btn4; };
   Labels mapLabels(int a,int b,int c,int d) const { return {a,b,c,d}; }
 };
@@ -339,6 +341,8 @@ struct ClipSelectionActivity {
   uint16_t rowCount = 0;
   int fontId = 0, lineHeight = 16, marginLeft = 0, marginTop = 0;
   int selected = 0, rangeStart = -1, currentPageOffset = 0;
+  int activeFragmentCenterX = 0;
+  bool activeFragmentValid = false;
   bool touchDragSelecting = false;
   bool isLookup() const { return mode != Mode::Clip; }
   struct Popup { bool isActive() const { return false; } } actionPopup;
@@ -346,7 +350,7 @@ struct ClipSelectionActivity {
   int lastRenderedTextOffset = 0, lastRenderedTextXOffset = 0;
   bool buildSelectedText(int first, int last, std::string& text) const;
   bool extractWords();
-  int closestInRow(uint16_t row, int centerX) const;
+  int closestInRow(uint16_t row, int centerX, int* fragmentCenter = nullptr) const;
   int endpointFragmentCenter(const WordBox&, bool start) const;
   void moveVertical(int direction);
   void selectIndex(int index);
@@ -361,6 +365,7 @@ struct ClipSelectionActivity {
   int textOffset() const { return testOffsetY; }
   int textXOffset() const { return testOffsetX; }
   Rect handleRect(int, bool) const;
+  int handleEndpointAt(int x, int y, int first, int last) const;
   Rect actionRect() const { return {}; }
 };
 """ + build_text + extract_words + closest_in_row + word_hit + selected_contains + move_vertical + select_index + endpoint_center + handle_rect + gap_draw + incremental_draw + selection_draw + r"""
@@ -616,6 +621,36 @@ int main() {
     fragmented.selected = 2;
     fragmented.moveVertical(1);
     assert(fragmented.selected == 0);
+    assert(fragmented.activeFragmentValid && fragmented.activeFragmentCenterX == 112);
+  }
+  // Three rows: the middle word splits visually, and only its second fragment
+  // lines up with the correct candidate in the third row.
+  {
+    ClipSelectionActivity cascade;
+    cascade.mode = ClipSelectionActivity::Mode::DefinitionLookup;
+    auto page = std::make_unique<Page>();
+    auto line = std::make_unique<PageLine>();
+    line->block.packedText = std::string("abcאבג") + '\0' + "דהו" + '\0' + "top" + '\0' +
+                             "near" + '\0' + "far" + '\0';
+    line->block.positions = {0, 32, 92, 12, 92};
+    line->block.fragments = {{0, 0, 24, "abc", 0, 88}, {0, 88, 48, "גבא", 0, 88}};
+    page->elements.push_back(std::move(line));
+    cascade.pages.push_back(std::move(page));
+    HalMemory::stats = {1024 * 1024, 1024 * 1024};
+    assert(cascade.extractWords() && cascade.wordCount == 5);
+    cascade.words[0].row = cascade.words[1].row = 1;
+    cascade.words[2].row = 0;
+    cascade.words[3].row = cascade.words[4].row = 2;
+    cascade.rowCount = 3;
+    cascade.selected = 2;
+    cascade.moveVertical(1);
+    assert(cascade.selected == 0 && cascade.activeFragmentCenterX == 112);
+    cascade.moveVertical(1);
+    assert(cascade.selected == 4 && cascade.activeFragmentCenterX == 104);
+    cascade.moveVertical(-1);
+    assert(cascade.selected == 0 && cascade.activeFragmentCenterX == 112);
+    cascade.selectIndex(3);
+    assert(!cascade.activeFragmentValid);
   }
   // A Latin word in an RTL paragraph is still selected from left to right.
   {
@@ -623,14 +658,31 @@ int main() {
     auto page = std::make_unique<Page>();
     auto line = std::make_unique<PageLine>();
     line->block.style.isRtl = true;
-    line->block.text = "abc";
-    line->block.positions = {30};
+    line->block.text = "a";
+    line->block.positions = {1};
     page->elements.push_back(std::move(line));
     rtlLatin.pages.push_back(std::move(page));
     HalMemory::stats = {1024 * 1024, 1024 * 1024};
     assert(rtlLatin.extractWords() && rtlLatin.wordCount == 1);
-    assert(rtlLatin.words[0].logicalStartX == 30);
+    assert(rtlLatin.words[0].logicalStartX == 1);
     assert(rtlLatin.words[0].logicalEndX == rtlLatin.words[0].x + rtlLatin.words[0].width);
+    assert(rtlLatin.words[0].isRtl);  // Paragraph still controls button navigation.
+    const Rect start = rtlLatin.handleRect(0, true);
+    const Rect end = rtlLatin.handleRect(0, false);
+    assert(start.x <= rtlLatin.words[0].logicalStartX);
+    assert(end.x >= rtlLatin.words[0].logicalEndX);
+    assert(start.x + start.width > end.x);  // Both touch regions overlap.
+    rtlLatin.mappedInput.touch = true;
+    rtlLatin.selected = rtlLatin.rangeStart = 0;
+    GUI.handleDirections.clear();
+    rtlLatin.drawSelection();
+    assert(GUI.handleDirections.size() == 2);
+    assert(GUI.handleDirections[0] && !GUI.handleDirections[1]);
+    // On a narrow word close to the screen edge the handle hit boxes overlap.
+    // Resolve the press to the nearest logical endpoint instead of always Start.
+    const int hitY = start.y + 3;
+    assert(rtlLatin.handleEndpointAt(3, hitY, 0, 0) == 0);
+    assert(rtlLatin.handleEndpointAt(11, hitY, 0, 0) == 1);
   }
   // Compressed dictionary rows must not let a taller font selection box hit
   // or highlight the next line; widths use rendered rather than layout metrics.

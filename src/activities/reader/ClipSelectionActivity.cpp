@@ -96,9 +96,15 @@ void ClipSelectionActivity::onEnter() {
     if (word.pageOffset != 0) break;
     firstPageRows = std::max<uint16_t>(firstPageRows, static_cast<uint16_t>(word.row + 1));
   }
-  const int middle = closestInRow(firstPageRows / 2, renderer.getScreenWidth() / 2);
-  if (middle >= 0) selected = middle;
+  int initialFragmentCenter = renderer.getScreenWidth() / 2;
+  const int middle = closestInRow(firstPageRows / 2, initialFragmentCenter, &initialFragmentCenter);
+  if (middle >= 0) {
+    selected = middle;
+    activeFragmentCenterX = initialFragmentCenter;
+    activeFragmentValid = true;
+  }
   if (initialSelection.valid) {
+    activeFragmentValid = false;
     for (size_t i = 0; i < wordCount; ++i) {
       const auto& word = words[i];
       // The definition viewer shows the whole range; otherwise (restoring after a lookup) only place the cursor and
@@ -118,6 +124,7 @@ void ClipSelectionActivity::onEnter() {
       return;
     }
     selected = rangeStart = hit;
+    activeFragmentValid = false;
     ignoreInitialTouch = true;
   }
   requestUpdate();
@@ -281,7 +288,7 @@ bool ClipSelectionActivity::hasVisualFragments(const WordBox& word) const {
                                   [&](const TextBlock::VisualFragment& f) { return f.wordIndex == word.sourceWord; });
 }
 
-int ClipSelectionActivity::closestInRow(const uint16_t row, const int centerX) const {
+int ClipSelectionActivity::closestInRow(const uint16_t row, const int centerX, int* fragmentCenter) const {
   int best = -1;
   int bestDistance = INT_MAX;
   for (int i = 0; i < static_cast<int>(wordCount); ++i) {
@@ -292,6 +299,7 @@ int ClipSelectionActivity::closestInRow(const uint16_t row, const int centerX) c
       if (distance < bestDistance) {
         bestDistance = distance;
         best = i;
+        if (fragmentCenter) *fragmentCenter = sx + width / 2;
       }
     });
   }
@@ -390,15 +398,20 @@ bool ClipSelectionActivity::isWithinCurrentPageEndDwellSlop(const int x, const i
 void ClipSelectionActivity::moveVertical(const int direction) {
   const int targetRow = static_cast<int>(words[selected].row) + direction;
   if (targetRow < 0 || targetRow >= rowCount) return;
-  const int next = closestInRow(static_cast<uint16_t>(targetRow), words[selected].x + words[selected].width / 2);
+  const int referenceX = activeFragmentValid ? activeFragmentCenterX : words[selected].x + words[selected].width / 2;
+  int nextCenterX = referenceX;
+  const int next = closestInRow(static_cast<uint16_t>(targetRow), referenceX, &nextCenterX);
   if (next >= 0 && next != selected) {
     selectIndex(next);
+    activeFragmentCenterX = nextCenterX;
+    activeFragmentValid = true;
   }
 }
 
 void ClipSelectionActivity::selectIndex(const int index) {
   if (index < 0 || index >= static_cast<int>(wordCount) || index == selected) return;
   selected = index;
+  activeFragmentValid = false;
   currentPageOffset = words[selected].pageOffset;
   requestUpdate();
 }
@@ -568,6 +581,7 @@ void ClipSelectionActivity::loop() {
         cancel();
       } else {
         selected = rangeStart = hit;
+        activeFragmentValid = false;
         requestUpdate();
       }
     }
@@ -613,29 +627,25 @@ void ClipSelectionActivity::loop() {
       if (actionAt(touchX, touchY) >= 0) return;
       const int first = std::min(rangeStart, selected);
       const int last = std::max(rangeStart, selected);
-      for (int endpoint = 0; endpoint < 2; ++endpoint) {
-        const int index = endpoint == 0 ? first : last;
-        if (words[index].pageOffset != currentPageOffset) continue;
-        const Rect handle = handleRect(index, endpoint == 0);
-        if (touchX < handle.x || touchX >= handle.x + handle.width || touchY < handle.y ||
-            touchY >= handle.y + handle.height)
-          continue;
-        selected = index;
-        rangeStart = endpoint == 0 ? last : first;
-        dragOffsetX = endpointFragmentCenter(words[index], endpoint == 0) - touchX;
-        dragOffsetY = words[index].y + textOffset() + words[index].height / 2 - touchY;
-        touchDragSelecting = true;
-        touchDragHasMoved = false;
-        touchDragStartX = touchX;
-        touchDragStartY = touchY;
-        touchDragPageEndIndex = -1;
-        return;
-      }
+      const int endpoint = handleEndpointAt(touchX, touchY, first, last);
+      if (endpoint < 0) return;
+      const int index = endpoint == 0 ? first : last;
+      selected = index;
+      rangeStart = endpoint == 0 ? last : first;
+      activeFragmentValid = false;
+      dragOffsetX = endpointFragmentCenter(words[index], endpoint == 0) - touchX;
+      dragOffsetY = words[index].y + textOffset() + words[index].height / 2 - touchY;
+      touchDragSelecting = true;
+      touchDragHasMoved = false;
+      touchDragStartX = touchX;
+      touchDragStartY = touchY;
+      touchDragPageEndIndex = -1;
       return;
     }
     const int hit = wordAt(touchX, touchY);
     if (hit >= 0) {
       selected = rangeStart = hit;
+      activeFragmentValid = false;
       dragOffsetX = 0;
       dragOffsetY = 0;
       touchDragSelecting = true;
@@ -720,10 +730,29 @@ Rect ClipSelectionActivity::handleRect(const int index, const bool start) const 
   const WordBox& word = words[index];
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int size = std::max(24, UITheme::getInstance().getMetrics().verticalSpacing * 2);
-  const bool left = start != word.isRtl;
+  // Handle direction follows this word's mapped logical edges, not the
+  // paragraph direction used for horizontal navigation.
+  const bool left = start != (word.logicalStartX > word.logicalEndX);
   const int edge = start ? word.logicalStartX : word.logicalEndX;
   return Rect{std::clamp(edge - (left ? size : 0), safe.x, safe.x + safe.width - size),
               std::clamp(word.y + textOffset() + word.height, safe.y, safe.y + safe.height - size), size, size};
+}
+
+int ClipSelectionActivity::handleEndpointAt(const int x, const int y, const int first, const int last) const {
+  int best = -1;
+  int bestDistance = INT_MAX;
+  for (int endpoint = 0; endpoint < 2; ++endpoint) {
+    const int index = endpoint == 0 ? first : last;
+    if (words[index].pageOffset != currentPageOffset) continue;
+    if (!selectionGeometry::contains(handleRect(index, endpoint == 0), x, y)) continue;
+    const int edge = endpoint == 0 ? words[index].logicalStartX : words[index].logicalEndX;
+    const int distance = std::abs(x - edge);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = endpoint;
+    }
+  }
+  return best;
 }
 
 int ClipSelectionActivity::selectionTop() const {
@@ -885,9 +914,10 @@ void ClipSelectionActivity::drawSelection() const {
   }
   if (rangeStart >= 0 && mappedInput.hasTouch()) {
     if (words[first].pageOffset == currentPageOffset)
-      GUI.drawSelectionHandle(renderer, handleRect(first, true), !words[first].isRtl);
+      GUI.drawSelectionHandle(renderer, handleRect(first, true),
+                              words[first].logicalStartX <= words[first].logicalEndX);
     if (words[last].pageOffset == currentPageOffset)
-      GUI.drawSelectionHandle(renderer, handleRect(last, false), words[last].isRtl);
+      GUI.drawSelectionHandle(renderer, handleRect(last, false), words[last].logicalStartX > words[last].logicalEndX);
     if (!touchDragSelecting) GUI.drawSelectionActions(renderer, actionRect(), actionCount(), firstAction());
   } else {
     const WordBox& cursor = words[selected];

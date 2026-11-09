@@ -461,9 +461,10 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
               }
             }
           }
-          // Use the identical word-origin metric as the justified draw path.
+          // Both justified and non-justified LTR selection use the same
+          // rendered whole-line word origin, including space-to-glyph kerning.
           const int advance =
-              placement.gaps > 0
+              paragraphLevel == 0
                   ? renderedPlainWordOrigin(owner.renderer, fontId, bytes, start, ranges[n].end - offset, family)
                   : renderedPlainPrefixWidth(owner.renderer, fontId, bytes, start, family, paragraphLevel);
           positions[n] = advance + (placement.gaps > 0 ? placement.justifyExtra * gapIndex / placement.gaps : 0);

@@ -770,6 +770,20 @@ int main() {
       assert(fallback.words[i] == kern.drawCalls[i].text);
       assert(fallback.positions[i] == kern.drawCalls[i].x);
     }
+
+    // When the same long LTR line is not justified, full-line rendering still
+    // includes separator-to-word kerning in every selectable word origin.
+    DictionaryDefinitionActivity::PlainSelectionLine plainFallback;
+    plainFallback.text = longLine;
+    plainFallback.layout(owner, 0, 0, true, {}, 0);
+    const size_t wordStart = longLine.find("zb");
+    const int expectedPlainX =
+        renderedPlainWordOrigin(owner.renderer, 0, longLine.c_str(), wordStart, wordStart + 2,
+                                EpdFontFamily::BOLD);
+    assert(plainFallback.words.size() == 3);
+    assert(plainFallback.positions[1] == expectedPlainX);
+    assert(expectedPlainX != renderedPlainPrefixWidth(owner.renderer, 0, longLine.c_str(), wordStart,
+                                                      EpdFontFamily::BOLD, 0));
   }
   // Alignment offsets are part of the selectable PageLine, including later pages.
   for (const int alignment : {CrossPointSettings::CENTER_ALIGN, CrossPointSettings::RIGHT_ALIGN}) {

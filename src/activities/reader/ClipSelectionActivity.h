@@ -96,7 +96,7 @@ class ClipSelectionActivity final : public Activity {
   int firstAction() const { return lookupAvailable ? 0 : 1; }
   int actionCount() const { return mode == Mode::DefinitionLookup ? 1 : 3 - firstAction(); }
   int actionAt(int x, int y) const;
-  int closestInRow(uint16_t row, int centerX) const;
+  int closestInRow(uint16_t row, int centerX, int* fragmentCenter = nullptr) const;
   int wordAt(int x, int y) const;
   int dragWordAt(int x, int y) const;
   bool selectionContains(int x, int y) const;
@@ -110,6 +110,7 @@ class ClipSelectionActivity final : public Activity {
   bool handleButtons(uint8_t buttons);
   int endpointFragmentCenter(const WordBox& word, bool start) const;
   Rect handleRect(int index, bool start) const;
+  int handleEndpointAt(int x, int y, int first, int last) const;
   Rect actionRect() const;
   int selectionTop() const;
   int textOffset() const;
@@ -139,6 +140,9 @@ class ClipSelectionActivity final : public Activity {
   std::unique_ptr<WordBox[]> words;
   size_t wordCount = 0;
   int selected = 0;
+  // Tracks the visual fragment chosen by the last vertical move.
+  int activeFragmentCenterX = 0;
+  bool activeFragmentValid = false;
   int rangeStart = -1;
   uint8_t currentPageOffset = 0;
   uint16_t rowCount = 0;
