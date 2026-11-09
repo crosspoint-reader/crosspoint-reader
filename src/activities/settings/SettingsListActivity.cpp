@@ -86,6 +86,8 @@ void SettingsListActivity::openSection(const SettingsSection section) {
   auto activity = makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, section);
   if (!activity) {
     LOG_ERR("SETTINGS", "OOM: SettingsActivity");
+    // The pending sub-section belongs to this open: left set, a later Display open would jump into it. [NOT-TESTED]
+    pendingSettingsSubSection = SettingsSection::End;
     return;
   }
   startActivityForResult(std::move(activity), [this](const ActivityResult&) {
