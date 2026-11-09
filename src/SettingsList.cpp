@@ -186,6 +186,9 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(buildLongPressMenuSetting());
   if (CrossPointSettings::hasPowerDoubleClick()) emit(buildDoublePowerButtonSetting());
   emit(buildShortPowerButtonSetting());
+  if (BoardConfig::isEegoA4() || BoardConfig::isX4Pro())
+    emit(SettingInfo::Toggle(StrId::STR_LONG_PRESS_WAKE, &CrossPointSettings::longPressWake, "longPressWake",
+                             StrId::STR_CAT_CONTROLS));
   // Always persisted; isHiddenOnDevice() hides it when the IMU probe fails.
   emit(SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
                          {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED}, "tiltPageTurn",
