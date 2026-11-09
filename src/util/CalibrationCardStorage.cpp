@@ -101,7 +101,7 @@ bool picturesCard(const bool landscape, std::string& path) {
 
 bool booksCard(std::string& path) {
   path = BOOKS;
-  Storage.remove("/.crosspoint/calibration/books_card_v1.epub");  // an older layout is never reused. [NOT-TESTED]
+  Storage.remove("/.crosspoint/calibration/books_card_v1.epub");  // an older layout is never reused.
   if (Storage.exists(BOOKS)) return true;
   const std::string title = tr(STR_CAL_BOOKS_SCREEN);
   return writeFile(BOOKS, [&](Sink& s) {
