@@ -460,7 +460,7 @@ void BmpViewerActivity::loop() {
   const uint32_t settleMs = CrossPointSettings::redrawDelayMinutes(SETTINGS.imageSettledRedraw) * 60000UL;
   if (settleMs > 0 && imagePainted.load(std::memory_order_acquire) && !settledRedrawDone) {
     // Load the paint time BEFORE sampling the clock: with millis() first, a repaint finishing in between stores a
-    // later time and the unsigned difference wraps, firing the one-shot redraw early. [NOT-TESTED]
+    // later time and the unsigned difference wraps, firing the one-shot redraw early.
     const unsigned long paintedAt = paintedAtMs.load(std::memory_order_relaxed);
     if (millis() - paintedAt >= settleMs) {
       settledRedrawDone = true;

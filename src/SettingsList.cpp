@@ -64,7 +64,7 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                            StrId::STR_CAT_DISPLAY));
 
   // Persisted on every board so a settings file from an X4 Pro keeps the value; shown only on the X4 Pro
-  // (isHiddenOnDevice). [NOT-TESTED]
+  // (isHiddenOnDevice).
   emit(SettingInfo::Enum(StrId::STR_SLEEP_SETTLED_REDRAW, &CrossPointSettings::sleepSettledRedraw,
                          {StrId::STR_STATE_OFF, StrId::STR_AFTER_1_MIN, StrId::STR_AFTER_2_MIN, StrId::STR_AFTER_5_MIN},
                          "sleepRedrawDelay", StrId::STR_CAT_DISPLAY));
