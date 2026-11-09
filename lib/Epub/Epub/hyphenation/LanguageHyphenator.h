@@ -16,6 +16,8 @@ class LanguageHyphenator {
 
   size_t minPrefix() const { return config_.minPrefix; }
   size_t minSuffix() const { return config_.minSuffix; }
+  // The letter test and lowercase mapping this hyphenator was built with (lets tests check the registry's wiring).
+  const LiangWordConfig& config() const { return config_; }
 
  protected:
   const SerializedHyphenationPatterns& patterns_;
