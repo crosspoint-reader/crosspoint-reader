@@ -162,8 +162,8 @@ bool isLatinLetter(const uint32_t cp) {
 bool isCyrillicLetter(const uint32_t cp) { return (cp >= 0x0400 && cp <= 0x052F); }
 
 // Greek and Coptic (U+0370..U+03FF) plus Greek Extended (U+1F00..U+1FFF, polytonic).
-// Spacing diacritics and Greek punctuation inside these blocks are excluded so they
-// act as word boundaries rather than letters.
+// Spacing diacritics, Greek punctuation and unassigned code points inside these blocks
+// are excluded so they act as word boundaries rather than letters.
 bool isGreekLetter(const uint32_t cp) {
   if (cp >= 0x0370 && cp <= 0x03FF) {
     switch (cp) {
@@ -174,6 +174,15 @@ bool isGreekLetter(const uint32_t cp) {
       case 0x0385:  // ΅ dialytika tonos
       case 0x0387:  // · ano teleia
       case 0x03F6:  // ϶ reversed lunate epsilon symbol
+      case 0x0378:  // unassigned
+      case 0x0379:
+      case 0x0380:
+      case 0x0381:
+      case 0x0382:
+      case 0x0383:
+      case 0x038B:
+      case 0x038D:
+      case 0x03A2:
         return false;
       default:
         return true;
@@ -196,6 +205,29 @@ bool isGreekLetter(const uint32_t cp) {
       case 0x1FEF:  // ῭ ΅ `
       case 0x1FFD:  // ´ oxia
       case 0x1FFE:  // ῾ dasia
+      case 0x1F16:  // unassigned
+      case 0x1F17:
+      case 0x1F1E:
+      case 0x1F1F:
+      case 0x1F46:
+      case 0x1F47:
+      case 0x1F4E:
+      case 0x1F4F:
+      case 0x1F58:
+      case 0x1F5A:
+      case 0x1F5C:
+      case 0x1F5E:
+      case 0x1F7E:
+      case 0x1F7F:
+      case 0x1FB5:
+      case 0x1FC5:
+      case 0x1FD4:
+      case 0x1FD5:
+      case 0x1FDC:
+      case 0x1FF0:
+      case 0x1FF1:
+      case 0x1FF5:
+      case 0x1FFF:
         return false;
       default:
         return true;

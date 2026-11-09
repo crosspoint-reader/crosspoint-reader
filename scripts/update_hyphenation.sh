@@ -28,7 +28,6 @@ process pt
 process sv
 process fi
 
-# Greek uses the polytonic patterns (hyph-el-polyton.tex), which cover monotonic
-# spelling as well. hypher ships only the monotonic trie, so this one is built
-# locally from hyph-utf8 patterns using hypher's tests/generate.rs with the Greek
-# entry pointed at hyph-el-polyton.tex. See licenses/hyphenation.txt.
+# NOTE: Greek (hyph-el.trie.h) is intentionally not processed here. It is built from
+# hyph-el-polyton.tex rather than hypher's monotonic el.bin; see the "Greek is built
+# separately" section in docs/hyphenation-trie-format.md for the procedure.

@@ -51,3 +51,25 @@ To use it, run:
 ```sh
 ./scripts/update_hyphenation.sh
 ```
+
+### Greek (`hyph-el.trie.h`) is built separately
+
+`update_hyphenation.sh` does **not** touch the Greek trie. hypher ships `el.bin`
+built from `hyph-el-monoton.tex`, which only knows the basic Greek block; CrossPoint
+instead uses `hyph-el-polyton.tex` (from
+[hyph-utf8](https://github.com/hyphenation/tex-hyphen)), whose patterns list every
+accented vowel in both its Greek Extended (U+1F00–1FFF) and basic-block spellings,
+so one trie hyphenates monotonic and polytonic text alike.
+
+To rebuild it, use hypher's own pattern compiler:
+
+```sh
+git clone https://github.com/typst/hypher && cd hypher
+curl -LO https://raw.githubusercontent.com/hyphenation/tex-hyphen/master/hyph-utf8/tex/generic/hyph-utf8/patterns/tex/hyph-el-polyton.tex
+mv hyph-el-polyton.tex patterns/
+# In tests/generate.rs, change the Greek entry from "hyph-el-monoton.tex" to "hyph-el-polyton.tex"
+cargo test --test generate generate_code
+python3 /path/to/crosspoint-reader/scripts/generate_hyphenation_trie.py \
+  --input tries/el.bin \
+  --output /path/to/crosspoint-reader/lib/Epub/Epub/hyphenation/generated/hyph-el.trie.h
+```
