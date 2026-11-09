@@ -470,10 +470,29 @@ static bool holdSleepWhileUsbPowered() {
 #endif
 
 #if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+#include <driver/gpio.h>
+
 RTC_DATA_ATTR char sleepRedrawPath[192];
 static bool bootWasPanic = false;
+// Power button seen during a timer redraw: a press edge, and the longest hold
+// that started and ended inside the redraw (both edges, timed in the ISR).
 static volatile bool settledRedrawPress = false;
-static void IRAM_ATTR onSettledRedrawPress() { settledRedrawPress = true; }
+static volatile uint32_t settledRedrawPressAtMs = 0;  // 0 = not held now
+static volatile uint32_t settledRedrawHoldMs = 0;
+static gpio_num_t settledRedrawPin = GPIO_NUM_NC;
+static bool settledRedrawActiveHigh = false;
+static void IRAM_ATTR onSettledRedrawEdge() {
+  const bool pressed = (gpio_get_level(settledRedrawPin) != 0) == settledRedrawActiveHigh;
+  const uint32_t now = millis();
+  if (pressed) {
+    settledRedrawPress = true;
+    settledRedrawPressAtMs = now != 0 ? now : 1;
+  } else if (settledRedrawPressAtMs != 0) {
+    const uint32_t held = now - settledRedrawPressAtMs;
+    if (held > settledRedrawHoldMs) settledRedrawHoldMs = held;
+    settledRedrawPressAtMs = 0;
+  }
+}
 #endif
 
 // Enter deep sleep mode
@@ -645,6 +664,11 @@ void setup() {
   // click-to-wake is a setting, and an X4 battery power-off cuts all power, so
   // only SD state survives to the next boot.
   // The Metalio boots after the button is released, so it skips the check.
+#if FREEINK_DEVICE_X4PRO && !defined(SIMULATOR)
+  // A power wake must be held from the press to this sample, so a hold seen
+  // during a timer redraw wakes only if it lasts at least this long.
+  const uint32_t wakeSampleAtMs = millis();
+#endif
   const bool wakeHoldVerified = wakeupReason != HalGPIO::WakeupReason::PowerButton || BoardConfig::isMetalioEInk4() ||
                                 gpio.verifyPowerButtonWakeup();
 
@@ -700,16 +724,22 @@ void setup() {
     const std::string path = sleepRedrawPath;
     sleepRedrawPath[0] = '\0';
     settledRedrawPress = false;
+    settledRedrawPressAtMs = 0;
+    settledRedrawHoldMs = 0;
     const int8_t pin = BoardConfig::ACTIVE.input.power;
-    if (pin >= 0)
-      attachInterrupt(pin, onSettledRedrawPress, BoardConfig::ACTIVE.input.powerActiveHigh ? RISING : FALLING);
+    if (pin >= 0) {
+      settledRedrawPin = static_cast<gpio_num_t>(pin);
+      settledRedrawActiveHigh = BoardConfig::ACTIVE.input.powerActiveHigh;
+      attachInterrupt(pin, onSettledRedrawEdge, CHANGE);
+    }
     I18N.setLanguage(static_cast<Language>(SETTINGS.language));
     UITheme::getInstance().reload();
     setupDisplayAndFonts(/*seamless=*/true);
     SleepActivity::redrawCustomImage(renderer, mappedInputManager, path);
     if (pin >= 0) detachInterrupt(pin);
     const bool clickWakes = settledRedrawPress && SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP;
-    if (!clickWakes && !gpio.verifyPowerButtonWakeup()) {
+    const bool holdWakes = settledRedrawHoldMs != 0 && settledRedrawHoldMs >= wakeSampleAtMs;
+    if (!clickWakes && !holdWakes && !gpio.verifyPowerButtonWakeup()) {
       halTiltSensor.deepSleep();
       display.deepSleep();
       Storage.prepareForDeepSleep();
