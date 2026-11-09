@@ -690,9 +690,13 @@ const std::string& SleepActivity::lastCustomImagePath() { return lastCustomSleep
 bool SleepActivity::redrawCustomImage(GfxRenderer& renderer, MappedInputManager& input, const std::string& path) {
   const SleepActivity painter(renderer, input);
   display.setInverted(false);
-  if (painter.renderCustomSleepBmp(path)) return true;
-  painter.renderDefaultSleepScreen();
-  return false;
+  const bool painted = painter.renderCustomSleepBmp(path);
+  if (!painted) painter.renderDefaultSleepScreen();
+  // A redraw repaints a retained screen; it is not a sleep transition. Forget
+  // the path so a later sleep that skips SleepActivity cannot arm another
+  // redraw for this image.
+  lastCustomSleepPath.clear();
+  return painted;
 }
 
 void SleepActivity::onEnter() {
