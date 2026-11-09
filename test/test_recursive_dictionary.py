@@ -598,7 +598,8 @@ int main() {
   assert(Dictionary::cleanWord("שלום") == "שלום");
   assert(Dictionary::cleanWord("שָׁלוֹם ABC café e\u0301 日本語 😀") == "שלום abc café e\u0301 日本語 😀");
   assert(Dictionary::cleanWord("א־ב׀ג׃ד׆ה׳ו״ז") == "א־ב׀ג׃ד׆ה׳ו״ז");
-  assert(Dictionary::cleanWord("\u0591\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7").empty());
+  assert(Dictionary::cleanWord("\u0591\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7\u05C8\u05C9\uFB1E").empty());
+  assert(Dictionary::cleanWord("א\u05A2ב\u05BAג\u05C5ד\u05C7ה\u05C8ו\u05C9ז\uFB1E") == "אבגדהוז");
   for (uint32_t cp = 0x0591; cp <= 0x05BD; ++cp) {
     std::string pointed = "א";
     utf8AppendCodepoint(cp, pointed);

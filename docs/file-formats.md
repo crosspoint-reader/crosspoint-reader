@@ -669,6 +669,7 @@ build-assigned discovery counter — breaks ties and carries books whose
 filesystem reports no time. Fold version 3 introduced the timestamp key; a
 fold bump rebuilds ranks while preserving `firstSeen`.
 Fold version 4 preserves leading articles in title sort and search keys.
+Fold version 5 drops all Unicode 18.0 Hebrew combining marks, including U+05C8 and U+05C9.
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
 

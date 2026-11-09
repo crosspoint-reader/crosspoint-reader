@@ -773,8 +773,7 @@ std::string Dictionary::cleanWord(const char* word) {
   while (*read) {
     const auto* charStart = read;
     const uint32_t cp = utf8NextCodepoint(&read);
-    if ((cp >= 0x0591 && cp <= 0x05BD) || cp == 0x05BF || cp == 0x05C1 || cp == 0x05C2 || cp == 0x05C4 ||
-        cp == 0x05C5 || cp == 0x05C7) {
+    if (isHebrewMark(cp)) {
       continue;
     }
     const size_t bytes = static_cast<size_t>(read - charStart);
