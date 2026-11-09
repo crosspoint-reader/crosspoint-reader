@@ -337,6 +337,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t SCREEN_MARGIN_MAX = 40;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 5;
   uint8_t screenMargin = SCREEN_MARGIN_MIN;
+  // EEGO A4 and X4 Pro: 0 = wake the same way the button sleeps (a click when
+  // Short Power Button Click is Sleep, a hold otherwise); 1 = waking always
+  // needs a hold.
+  uint8_t longPressWake = 0;
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in
   // SettingsList.h, so it stays out of the on-device Settings screen.

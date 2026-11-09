@@ -237,6 +237,16 @@ bool HalGPIO::verifyPowerButtonWakeup() {
   return heldAtFirstSample && inputMgr.isPowerButtonPhysicallyPressed();
 }
 
+bool HalGPIO::powerButtonHeldUntil(const unsigned long untilMs) {
+  inputMgr.update();
+  while (inputMgr.isPowerButtonPhysicallyPressed()) {
+    if (millis() >= untilMs) return true;
+    delay(5);
+    inputMgr.update();
+  }
+  return false;
+}
+
 bool HalGPIO::isUsbConnected() const {
   if (!deviceIsX3() && BoardConfig::ACTIVE.usbDetect >= 0) {
     return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;

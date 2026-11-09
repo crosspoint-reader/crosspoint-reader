@@ -663,6 +663,24 @@ void setup() {
   trustedtime::init();
   bleturner::begin(pageturner::host, SETTINGS.ble);
 
+#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_X4PRO
+  // Always Long Press to Wake keeps click-to-sleep but demands a hold to wake,
+  // so a bump in a bag or pocket cannot. Checked before the light or display
+  // come up. On the EEGO A4 waking also mirrors sleeping when the setting is
+  // off: a click wakes only with Short Power Button Click = Sleep, otherwise it
+  // takes the same hold. The X4 Pro keeps its stock wake when the setting is off.
+  const bool clickSleeps = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP;
+  const bool wakeNeedsHold = SETTINGS.longPressWake != 0 || (BoardConfig::isEegoA4() && !clickSleeps);
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !isSilentReboot && wakeNeedsHold) {
+    constexpr unsigned long WAKE_HOLD_MS = 500;
+    if (!wakeHoldVerified || !gpio.powerButtonHeldUntil(WAKE_HOLD_MS)) {
+      LOG_DBG("MAIN", "Power button released before the wake hold, sleeping");
+      Storage.prepareForDeepSleep();
+      powerManager.startDeepSleep(gpio);
+    }
+  }
+#endif
+
   // Brightness and warmth are always restored. A normal wake starts with the
   // light off unless Restore Light on Wake is enabled; silent maintenance
   // reboots replay the live state captured at restart, so they neither go dark
