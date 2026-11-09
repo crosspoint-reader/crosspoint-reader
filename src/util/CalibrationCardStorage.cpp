@@ -13,7 +13,8 @@ namespace calibcard {
 namespace {
 constexpr char PICTURES_PORTRAIT[] = "/.crosspoint/calibration/pictures_portrait_v2.bmp";
 constexpr char PICTURES_LANDSCAPE[] = "/.crosspoint/calibration/pictures_landscape_v2.bmp";
-constexpr char BOOKS[] = "/.crosspoint/calibration/books_card_v1.epub";
+// v2: the OPF identifier became a valid UUID (v1 carried a non-hex one).
+constexpr char BOOKS[] = "/.crosspoint/calibration/books_card_v2.epub";
 
 struct FileSink final : Sink {
   HalFile& file;
@@ -100,6 +101,7 @@ bool picturesCard(const bool landscape, std::string& path) {
 
 bool booksCard(std::string& path) {
   path = BOOKS;
+  Storage.remove("/.crosspoint/calibration/books_card_v1.epub");  // an older layout is never reused. [NOT-TESTED]
   if (Storage.exists(BOOKS)) return true;
   const std::string title = tr(STR_CAL_BOOKS_SCREEN);
   return writeFile(BOOKS, [&](Sink& s) {

@@ -155,7 +155,7 @@ void writeEpub(Sink& out, const std::string& title) {
   const std::string opf =
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" "
       "unique-identifier=\"uid\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier "
-      "id=\"uid\">urn:uuid:4b1f6c2e-9d0a-4f3e-8c51-keinkt-books-card</dc:identifier><dc:title>" +
+      "id=\"uid\">urn:uuid:4b1f6c2e-9d0a-4f3e-8c51-6b65696e6b74</dc:identifier><dc:title>" +
       t +
       "</dc:title><dc:language>en</dc:language><meta property=\"dcterms:modified\">2026-11-05T00:00:00Z</meta>"
       "</metadata><manifest><item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" "
