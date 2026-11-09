@@ -841,7 +841,7 @@ void ClipSelectionActivity::render(RenderLock&&) {
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   renderer.setClipRect(safe.x, safe.y, safe.width, safe.height);
   auto* fcm = renderer.getFontCacheManager();
-  if (fcm && spineIndex >= 0 && basePageNumber >= 0) {
+  if (fcm && spineIndex >= 0) {
     const int page = basePageNumber + currentPageOffset;
     if (!fcm->activatePageSlot(spineIndex, page, fontId)) fcm->prepareTargetPage(spineIndex, page, false);
   } else if (fcm && lastRenderedPageOffset >= 0 && lastRenderedPageOffset != currentPageOffset) {
