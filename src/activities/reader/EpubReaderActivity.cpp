@@ -1973,8 +1973,10 @@ void EpubReaderActivity::renderBook() {
     markPageRendered();
   }
 
-  if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
-      section->pageCount != lastSavedPageCount) {
+  // A queued turn is about to replace this page: let its render save instead
+  // of holding the next refresh back for an SD write.
+  if (pendingManualTurn == 0 && (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
+                                 section->pageCount != lastSavedPageCount)) {
     if (saveProgress(currentSpineIndex, section->currentPage, section->estimatedTotalPages())) {
       lastSavedSpineIndex = currentSpineIndex;
       lastSavedPage = section->currentPage;
