@@ -976,8 +976,9 @@ void DictionaryDefinitionActivity::startSelection(const int x, const int y) {
     if (result.isCancelled) return;
     const auto& selected = std::get<ClippingResult>(result.data);
     content.currentPage = content.selectionPage + selected.endPageOffset;
-    content.selection = {selected.startPageOffset, selected.endPageOffset, selected.startWordIndex,
-                         selected.endWordIndex, true};
+    content.selection = {
+        selected.startPageOffset, selected.endPageOffset, selected.startWordIndex, selected.endWordIndex, true,
+        selected.fragmentIndex,   selected.cursorAtStart};
     if (lookup->depth == lookup->history.size()) {
       showMessage(StrId::STR_DICT_HISTORY_FULL);
       return;

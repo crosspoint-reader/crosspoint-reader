@@ -25,6 +25,9 @@ class ClipSelectionActivity final : public Activity {
     uint16_t firstWord = 0;
     uint16_t lastWord = 0;
     bool valid = false;
+    // The fragment selected before a nested definition lookup, if split.
+    uint16_t fragmentIndex = UINT16_MAX;
+    bool cursorAtStart = false;
   };
 
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -86,6 +89,10 @@ class ClipSelectionActivity final : public Activity {
   }
 
   bool hasVisualFragments(const WordBox& word) const;
+  void restoreInitialSelection();
+  void rememberFragmentAtX(int index, int x);
+  void restoreFragmentIndex(uint16_t index);
+  uint16_t activeFragmentIndex() const;
 
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
 

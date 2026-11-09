@@ -217,8 +217,9 @@ bool buttonContactClosed() { return gpio.rawInputActive(); }
 ClipSelectionActivity::Selection lookupReturnSelectionFor(const ClippingResult& clipping) {
   if (clipping.startPageOffset != clipping.endPageOffset) return {};
   // The restored cursor lands on lastWord, so make that the end the user was extending.
-  if (clipping.cursorAtStart) return {0, 0, clipping.endWordIndex, clipping.startWordIndex, true};
-  return {0, 0, clipping.startWordIndex, clipping.endWordIndex, true};
+  if (clipping.cursorAtStart)
+    return {0, 0, clipping.endWordIndex, clipping.startWordIndex, true, clipping.fragmentIndex};
+  return {0, 0, clipping.startWordIndex, clipping.endWordIndex, true, clipping.fragmentIndex};
 }
 
 }  // namespace

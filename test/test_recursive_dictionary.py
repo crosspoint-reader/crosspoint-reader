@@ -345,7 +345,7 @@ int main() {
   assert(view.prepareDefinition(view.content));
   view.content.currentPage = 1;
   view.content.selectionPage = 0;
-  view.content.selection = {0, 1, 2, 0, true};
+  view.content.selection = {0, 1, 2, 0, true, 1, true};
   // On C3 the inflate window must fit before another definition is allocated.
   dictionary.canRead = [&] {
     return view.content.text.empty() && view.content.text.capacity() == std::string{}.capacity() &&
@@ -365,6 +365,7 @@ int main() {
   assert(view.lookup->depth == 0 && view.content.text == dictionary.entries.at(10));
   assert(view.content.currentPage == 1 && view.content.selection.valid);
   assert(view.content.selection.lastPage == 1 && view.content.selection.firstWord == 2);
+  assert(view.content.selection.fragmentIndex == 1 && view.content.selection.cursorAtStart);
   view.lookup->pendingWord = "missing";
   view.navigateDefinition(false);
   assert(view.lookup->depth == 0 && view.content.currentPage == 1);
@@ -398,9 +399,12 @@ int main() {
   ClippingResult selected;
   selected.action = ClippingResult::Action::Lookup;
   selected.text = "alias";
+  selected.fragmentIndex = 1;
+  selected.cursorAtStart = true;
   view.child.reset();
   const unsigned reads = dictionary.reads;
   view.callback(ActivityResult{std::move(selected)});
+  assert(view.content.selection.fragmentIndex == 1 && view.content.selection.cursorAtStart);
   assert(view.lookup->depth == 16 && view.lookup->pendingWord.empty() && dictionary.reads == reads);
   assert(view.message == StrId::STR_DICT_HISTORY_FULL);
   for (int i = 0; i < 16; ++i) view.navigateDefinition(true);
@@ -776,14 +780,23 @@ int main() {
     DictionaryDefinitionActivity::PlainSelectionLine plainFallback;
     plainFallback.text = longLine;
     plainFallback.layout(owner, 0, 0, true, {}, 0);
-    const size_t wordStart = longLine.find("zb");
-    const int expectedPlainX =
-        renderedPlainWordOrigin(owner.renderer, 0, longLine.c_str(), wordStart, wordStart + 2,
-                                EpdFontFamily::BOLD);
+    // Independent expectations from the stub's metrics: each BOLD rendered
+    // glyph advances 2px, and a preceding space adds 2px of 'z' kerning.
+    // Do not call the word-origin helper to derive expected results.
+    const int prefixWithoutKerning = 126 * 2;  // 125 'a' glyphs + one space
+    const int expectedLevel0 = prefixWithoutKerning + 2;
     assert(plainFallback.words.size() == 3);
-    assert(plainFallback.positions[1] == expectedPlainX);
-    assert(expectedPlainX != renderedPlainPrefixWidth(owner.renderer, 0, longLine.c_str(), wordStart,
-                                                      EpdFontFamily::BOLD, 0));
+    assert(plainFallback.words[1] == "zb");
+    assert(plainFallback.positions[1] == expectedLevel0);
+
+    DictionaryDefinitionActivity::PlainSelectionLine rtlFallback;
+    rtlFallback.text = longLine;
+    rtlFallback.layout(owner, 0, 0, true, {}, 1);
+    const int expectedLevel1 = prefixWithoutKerning;
+    assert(rtlFallback.words.size() == 3);
+    assert(rtlFallback.words[1] == "zb");
+    assert(rtlFallback.positions[1] == expectedLevel1);
+    assert(expectedLevel1 != expectedLevel0);
   }
   // Alignment offsets are part of the selectable PageLine, including later pages.
   for (const int alignment : {CrossPointSettings::CENTER_ALIGN, CrossPointSettings::RIGHT_ALIGN}) {
@@ -983,9 +996,13 @@ int main() {
   assert(!lookupReturnSelectionFor(multiPage).valid);
   ClippingResult singlePage = multiPage;
   singlePage.endPageOffset = 0;
+  singlePage.fragmentIndex = 1;
   const auto restored = lookupReturnSelectionFor(singlePage);
   assert(restored.valid && restored.firstPage == 0 && restored.lastPage == 0 && restored.firstWord == 3 &&
-         restored.lastWord == 5);
+         restored.lastWord == 5 && restored.fragmentIndex == 1);
+  singlePage.cursorAtStart = true;
+  const auto reversed = lookupReturnSelectionFor(singlePage);
+  assert(reversed.valid && reversed.firstWord == 5 && reversed.lastWord == 3 && reversed.fragmentIndex == 1);
   // Long Back also exits at the first definition, where there are no ancestors.
   DictionaryDefinitionActivity root;
   root.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);

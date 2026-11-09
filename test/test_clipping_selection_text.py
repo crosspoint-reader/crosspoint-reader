@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT / "src/activities/reader/ClipSelectionActivity.cpp").read_text()
 reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
 header = (ROOT / "src/activities/reader/ClipSelectionActivity.h").read_text()
+selection_meta = "struct Selection {" + header.split("struct Selection {", 1)[1].split("  };", 1)[0] + "};"
 word_box = "struct WordBox {" + header.split("struct WordBox {", 1)[1].split("  };", 1)[0] + "};"
 visual_helper = "template <typename Visitor>" + header.split("template <typename Visitor>", 1)[1].split("  bool hasVisualFragments", 1)[0]
 action_helpers = "\n".join(line for line in header.splitlines()
@@ -325,7 +326,7 @@ bool selectionLowMemory(const int first, const int last) {
 }
 """ + clean_word + r"""
 struct ClipSelectionActivity {
-""" + word_box + visual_helper + action_helpers + r"""
+""" + selection_meta + word_box + visual_helper + action_helpers + r"""
   std::unique_ptr<WordBox[]> words = makeUniqueNoThrow<WordBox[]>(240);
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
   enum class Mode { Clip, Lookup, DefinitionLookup };
@@ -340,6 +341,7 @@ struct ClipSelectionActivity {
   size_t wordCount = 0;
   uint16_t rowCount = 0;
   int fontId = 0, lineHeight = 16, marginLeft = 0, marginTop = 0;
+  Selection initialSelection;
   int selected = 0, rangeStart = -1, currentPageOffset = 0;
   int activeFragmentCenterX = 0;
   bool activeFragmentValid = false;
@@ -358,6 +360,10 @@ struct ClipSelectionActivity {
   int wordAt(int x, int y) const;
   bool selectionContains(int x, int y) const;
   bool hasVisualFragments(const WordBox& word) const;
+  void restoreInitialSelection();
+  void rememberFragmentAtX(int index, int x);
+  void restoreFragmentIndex(uint16_t index);
+  uint16_t activeFragmentIndex() const;
   void drawSelection() const;
   bool renderIncremental();
   void ditherGapBetween(const WordBox&, const WordBox&, int, int) const;
@@ -649,6 +655,27 @@ int main() {
     assert(cascade.selected == 4 && cascade.activeFragmentCenterX == 104);
     cascade.moveVertical(-1);
     assert(cascade.selected == 0 && cascade.activeFragmentCenterX == 112);
+    const uint16_t savedFragment = cascade.activeFragmentIndex();
+    assert(savedFragment == 1);
+    // Reentering a definition restores the selected visual fragment, including
+    // when the original selection cursor was on the first source word.
+    cascade.initialSelection = {0, 0, 0, 4, true, savedFragment, true};
+    cascade.selected = 3;
+    cascade.rangeStart = -1;
+    cascade.activeFragmentValid = false;
+    cascade.restoreInitialSelection();
+    assert(cascade.selected == 0 && cascade.rangeStart == 4);
+    assert(cascade.activeFragmentValid && cascade.activeFragmentCenterX == 112);
+    cascade.moveVertical(1);
+    assert(cascade.selected == 4 && cascade.activeFragmentCenterX == 104);
+
+    // Normal and stale fragment metadata should not force an active span.
+    cascade.initialSelection = {0, 0, 0, 4, true};
+    cascade.restoreInitialSelection();
+    assert(!cascade.activeFragmentValid);
+    cascade.initialSelection.fragmentIndex = 99;
+    cascade.restoreInitialSelection();
+    assert(!cascade.activeFragmentValid);
     cascade.selectIndex(3);
     assert(!cascade.activeFragmentValid);
   }
