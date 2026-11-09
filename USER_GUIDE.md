@@ -404,6 +404,13 @@ Behavior notes:
 - You can store up to 8 OPDS servers.
 - OPDS authentication supports HTTP Basic auth. If you use Calibre Content Server with authentication enabled, set it to Basic (not Digest).
 
+Downloading and reading from a catalog:
+
+- Selecting a book opens its details page. For a free download, **Download & Read** downloads the book and opens it; **Download** saves it and returns you to the catalog, so you can download several books in a row.
+- If the book is already in your download folder (found by the current download folder and filename format settings), the page shows **On this device** and offers **Read**, which opens your copy without downloading it, and **Redownload**. Redownload replaces your copy and resets its reading position.
+- Opening a book from a catalog restarts the device into the book to free the memory Wi-Fi used, so a short loading screen appears first.
+- Purchases, library loans, and passphrase-protected (LCP) books keep their single **Buy**, **Borrow**, **Place Hold**, or **Download** button.
+
 You can also manage OPDS servers from the web interface while in File Transfer mode:
 
 1. Connect to the device web UI.

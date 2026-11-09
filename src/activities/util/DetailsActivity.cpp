@@ -23,6 +23,7 @@ namespace fui = freeink::ui;
 namespace {
 constexpr fui::ActionId ACTION_PRIMARY = 1;
 constexpr fui::ActionId ACTION_MORE = 2;
+constexpr fui::ActionId ACTION_SECONDARY = 3;
 // htmlToPlainText marks a heading line with this byte. The plain-text target
 // used here has no bold style, so the marker is dropped again after conversion.
 constexpr char DETAILS_HEADING_MARKER = '\x01';
@@ -38,6 +39,7 @@ void DetailsActivity::onEnter() {
   setResult(std::move(cancelled));
   resetUi();
   app.on(ACTION_PRIMARY, &DetailsActivity::onPrimaryEvent, this);
+  app.on(ACTION_SECONDARY, &DetailsActivity::onSecondaryEvent, this);
   app.on(ACTION_MORE, &DetailsActivity::onMoreEvent, this);
   app.setScreen(&DetailsActivity::detailsScreen, this);
   requestUpdate();
@@ -86,14 +88,24 @@ void DetailsActivity::loop() {
     cancel();
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     confirm();
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
-             mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+  } else if (mappedInput.wasReleased(MappedInputManager::Button::NavPrevious)) {
+    // Nav* swap with orientation exactly as mapLabels() swaps the hints.
+    confirmSecondary();
+  } else if (mappedInput.wasReleased(MappedInputManager::Button::NavNext)) {
     openMore();
   }
 }
 
 void DetailsActivity::confirm() {
   setResult(ActivityResult{});
+  finish();
+}
+
+void DetailsActivity::confirmSecondary() {
+  if (spec.secondaryLabel.empty()) return;
+  MenuResult choice;
+  choice.action = SECONDARY_ACTION;
+  setResult(ActivityResult{choice});
   finish();
 }
 
@@ -115,6 +127,12 @@ void DetailsActivity::onPrimaryEvent(const fui::ActionEvent&, void* user) {
   auto* self = static_cast<DetailsActivity*>(user);
   self->app.clearTapFlash();
   self->confirm();
+}
+
+void DetailsActivity::onSecondaryEvent(const fui::ActionEvent&, void* user) {
+  auto* self = static_cast<DetailsActivity*>(user);
+  self->app.clearTapFlash();
+  self->confirmSecondary();
 }
 
 void DetailsActivity::onMoreEvent(const fui::ActionEvent&, void* user) {
@@ -203,6 +221,11 @@ void DetailsActivity::buildScreen(UiScreen& screen) {
   props.primary.label = asPtr(spec.actionLabel);
   props.primary.action = ACTION_PRIMARY;
   styleButton(props.primary);
+  props.secondary.label = asPtr(spec.secondaryLabel);
+  if (props.secondary.label) {
+    props.secondary.action = ACTION_SECONDARY;
+    styleButton(props.secondary);
+  }
   if (!spec.description.empty()) {
     props.more.label = tr(STR_DETAILS);
     props.more.action = ACTION_MORE;
@@ -239,7 +262,8 @@ void DetailsActivity::render(RenderLock&&) {
   }
 
   const char* moreLabel = spec.description.empty() ? "" : tr(STR_DETAILS);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), spec.actionLabel.c_str(), "", moreLabel);
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_BACK), spec.actionLabel.c_str(), spec.secondaryLabel.c_str(), moreLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
