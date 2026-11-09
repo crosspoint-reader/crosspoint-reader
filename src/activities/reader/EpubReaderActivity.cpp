@@ -1008,10 +1008,19 @@ void EpubReaderActivity::loop() {
       pendingManualTurn = 0;
       return;
     }
+    // Taps queued while the panel was busy collapse into one refresh that
+    // lands on the final page. Stop at a chapter edge: the next section has
+    // to load before it can be paged through.
     const bool forward = pendingManualTurn > 0;
+    int queued = forward ? pendingManualTurn : -pendingManualTurn;
     pendingManualTurn = 0;
-    const bool succeeded = pageTurn(forward);
-    notePageTurn(forward, succeeded);
+    bool succeeded = false;
+    while (queued-- > 0 && section) {
+      const bool turned = pageTurn(forward);
+      notePageTurn(forward, turned);
+      if (!turned) break;
+      succeeded = true;
+    }
     if (succeeded && pendingManualTurnTouch) haptic_feedback::touchAction();
     pendingManualTurnTouch = false;
     requestUpdate();
@@ -1062,7 +1071,9 @@ void EpubReaderActivity::loop() {
   }
 
   if (turnGuardActive) {
-    pendingManualTurn = prevTriggered ? -1 : 1;
+    constexpr int8_t kMaxQueuedTurns = 4;
+    const int8_t queuedTurns = static_cast<int8_t>(pendingManualTurn + (prevTriggered ? -1 : 1));
+    pendingManualTurn = std::clamp<int8_t>(queuedTurns, -kMaxQueuedTurns, kMaxQueuedTurns);
     pendingManualTurnTouch = touch.prev || touch.next;
     return;
   }
