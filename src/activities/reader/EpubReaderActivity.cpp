@@ -1384,11 +1384,14 @@ bool EpubReaderActivity::launchKOReaderSync(const KOReaderSyncActivity::Mode mod
                                             const KOReaderSyncActivity::CompletionTarget completionTarget,
                                             std::optional<KOReaderProgress> prefetchedRemoteProgress,
                                             std::optional<CrossPointPosition> prefetchedRemotePosition) {
+  // A manual sync is also the session boundary for plugins, as before automatic
+  // modes existed; automatic modes stay silent.
+  if (mode == KOReaderSyncActivity::Mode::MANUAL) flushReaderSession();
+
   // Without a KOReader server the sync activity only brings the device online
   // and drains the plugin-event outbox; an automatic sync has nothing to do.
   if (!KOREADER_STORE.hasCredentials()) {
     if (mode != KOReaderSyncActivity::Mode::MANUAL) return false;
-    flushReaderSession();
     activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
         renderer, mappedInput, epub->getPath(), getCurrentPosition(), SavedProgressPosition{}, "",
         KOReaderSyncActivity::Mode::MANUAL, KOReaderSyncActivity::CompletionTarget::READER, std::nullopt,
