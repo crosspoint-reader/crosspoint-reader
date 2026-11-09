@@ -51,6 +51,21 @@ TEST_P(Utf8ComposeNfc, ComposesStackedVietnameseMarks) {
   EXPECT_EQ(compose("a" + kCombDotBelow + kCombCirc), "\xE1\xBA\xAD");
 }
 
+// Polytonic Greek stacks a breathing mark and an accent (and sometimes an iota
+// subscript) on one vowel. The second-level pairs (ἀ + ́ -> ἄ) must be present or
+// NFD Greek text stays decomposed and the Greek hyphenator rejects the word.
+TEST_P(Utf8ComposeNfc, ComposesStackedPolytonicGreekMarks) {
+  const std::string alpha = "\xCE\xB1", omega = "\xCF\x89";
+  const std::string psili = "\xCC\x93", dasia = "\xCC\x94", perispomeni = "\xCD\x82", ypogegrammeni = "\xCD\x85";
+  // α + psili + acute -> ἄ (U+1F04)
+  EXPECT_EQ(compose(alpha + psili + kCombAcute), "\xE1\xBC\x84");
+  // ω + dasia + perispomeni + ypogegrammeni -> ᾧ (U+1FA7)
+  EXPECT_EQ(compose(omega + dasia + perispomeni + ypogegrammeni), "\xE1\xBE\xA7");
+  // Whole word: ἄνθρωπος
+  EXPECT_EQ(compose(alpha + psili + kCombAcute + "\xCE\xBD\xCE\xB8\xCF\x81\xCF\x89\xCF\x80\xCE\xBF\xCF\x82"),
+            "\xE1\xBC\x84\xCE\xBD\xCE\xB8\xCF\x81\xCF\x89\xCF\x80\xCE\xBF\xCF\x82");
+}
+
 // A combining mark with no composition for its base is left unchanged, and the
 // base is preserved.
 TEST_P(Utf8ComposeNfc, LeavesUncomposableMarksIntact) {
