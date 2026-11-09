@@ -47,6 +47,7 @@ class HalGPIO {
   bool usbStateChanged = false;
   uint8_t previousCapacitivePageButtons = 0;
   bool capacitivePagePressed = false;
+  bool powerButtonClick = false;
 
  public:
   enum class DeviceType : uint8_t { X4, X3 };
@@ -75,6 +76,13 @@ class HalGPIO {
   // Button input methods
   void update();
   bool isPressed(uint8_t buttonIndex) const;
+  bool isPowerButtonPhysicallyPressed() const {
+#if CROSSPOINT_EMULATED == 0
+    return inputMgr.isPowerButtonPhysicallyPressed();
+#else
+    return isPressed(BTN_POWER);
+#endif
+  }
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;

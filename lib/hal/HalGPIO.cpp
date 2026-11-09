@@ -122,6 +122,11 @@ void HalGPIO::begin() {
 
 void HalGPIO::update() {
   inputMgr.update();
+  if (inputMgr.wasPressed(BTN_POWER)) {
+    // PMIC pulses start both clocks together; timed chords backdate only Power.
+    const auto powerHeldMs = inputMgr.getPowerButtonHeldTime();
+    powerButtonClick = BoardConfig::isPaperMono() && powerHeldMs <= inputMgr.getHeldTime();
+  }
   const uint8_t pageButtons = inputMgr.capacitivePageButtonMask();
   capacitivePagePressed = (pageButtons & ~previousCapacitivePageButtons) != 0;
   previousCapacitivePageButtons = pageButtons;
@@ -160,7 +165,9 @@ bool HalGPIO::rawInputActive() {
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
-unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
+unsigned long HalGPIO::getPowerButtonHeldTime() const {
+  return powerButtonClick ? 0 : inputMgr.getPowerButtonHeldTime();
+}
 
 bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 

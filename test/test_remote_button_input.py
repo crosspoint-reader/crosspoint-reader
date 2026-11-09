@@ -18,6 +18,9 @@ for signature, following in (
     ("bool MappedInputManager::isPressed(", "MappedInputManager::Labels MappedInputManager::mapLabels("),
 ):
     methods.append(signature + source.split(signature, 1)[1].split(following, 1)[0])
+methods.append("#if FREEINK_CAP_TOUCH\n" + "bool MappedInputManager::wasPowerConfirmClick() const" + source.split(
+    "bool MappedInputManager::wasPowerConfirmClick() const", 1
+)[1].split("#endif", 1)[0] + "#endif\n")
 
 stub = r"""
 #pragma once
@@ -25,6 +28,7 @@ stub = r"""
 struct HalGPIO {
   enum { BTN_BACK, BTN_CONFIRM, BTN_LEFT, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_POWER };
   bool pressed = false, released = false, held = false;
+  bool physicalPowerHeld = false;
   uint8_t button = 0;
   unsigned long powerHeldMs = 20;
   void update() {}
@@ -33,6 +37,8 @@ struct HalGPIO {
   bool wasPressed(uint8_t b) const { return b == button && pressed; }
   bool wasReleased(uint8_t b) const { return b == button && released; }
   bool isPressed(uint8_t b) const { return b == button && held; }
+  bool isPowerButtonPhysicallyPressed() const { return physicalPowerHeld; }
+  bool hasTouch() const { return true; }
   unsigned long getHeldTime() const { return 900; }
   unsigned long getPowerButtonHeldTime() const { return powerHeldMs; }
   bool wasCapacitivePagePressed() const { return false; }
@@ -47,8 +53,12 @@ harness = r"""
 #include "MappedInputManager.h"
 class GfxRenderer {};
 namespace BoardConfig {
+  enum class InputStyle { DigitalButtons, DigitalConfirmPowerHold };
+  struct { InputStyle inputStyle = InputStyle::DigitalButtons; } ACTIVE;
   bool x4Pro = false;
   bool isX4Pro() { return x4Pro; }
+  bool paperMono = false;
+  bool isPaperMono() { return paperMono; }
 }
 unsigned long clockMs = 1000;
 unsigned long millis() { return clockMs; }
@@ -57,6 +67,7 @@ struct CrossPointSettings {
   enum { VIBRATION_OFF, VIBRATION_TOUCH_PAGE };
   POWER_ACTIONS
   int shortPwrBtn = IGNORE, doublePwrBtn = PWR_FRONTLIGHT;
+  uint16_t getPowerButtonDuration() const { return shortPwrBtn == SLEEP ? 10 : 400; }
   int vibration = VIBRATION_OFF, hapticIntensity = 0;
   int homeButtonTapAction = 0, homeButtonDoubleTapAction = 0, homeButtonLongPressAction = 0;
 } SETTINGS;
@@ -113,6 +124,78 @@ int main() {
   }
   gpio.held = false;
   assert(input.injectRemoteClick(RemoteButton::Back));
+
+  // All power-bound reader shortcuts share duration and startup qualification.
+  const auto doubleAction = SETTINGS.doublePwrBtn;
+  SETTINGS.doublePwrBtn = SETTINGS.IGNORE;
+  gpio.button = HalGPIO::BTN_POWER;
+  for (int action : {SETTINGS.PWR_BOOKMARK, SETTINGS.PWR_SYNC, SETTINGS.PWR_READER_MENU}) {
+    SETTINGS.shortPwrBtn = action;
+    for (bool restartHold : {false, true}) {
+      input.beginPowerInput(false, restartHold);
+      gpio.held = true; gpio.released = false; gpio.powerHeldMs = 100;
+      input.update();
+      gpio.held = false; gpio.released = true; gpio.physicalPowerHeld = true;
+      input.update(true);
+      assert((input.homeButtonAction() != HomeButtonAction::Ignore) == !restartHold);
+      gpio.released = false; gpio.physicalPowerHeld = false;
+      input.update();
+      assert((input.homeButtonAction() != HomeButtonAction::Ignore) == !restartHold);
+      input.update();
+      assert(input.homeButtonAction() == HomeButtonAction::Ignore);
+    }
+    input.beginPowerInput(false, false);
+    gpio.held = true; gpio.powerHeldMs = 0;
+    input.update();
+    gpio.held = false; gpio.released = true; gpio.powerHeldMs = 1000;
+    input.update(true);
+    assert(input.homeButtonAction() == HomeButtonAction::Ignore);
+    gpio.released = false;
+    input.update();
+    assert(input.homeButtonAction() == HomeButtonAction::Ignore);
+  }
+
+  // Sticky's consumed key remains physically held before logical Power appears.
+  SETTINGS.shortPwrBtn = SETTINGS.IGNORE;
+  BoardConfig::ACTIVE.inputStyle = BoardConfig::InputStyle::DigitalConfirmPowerHold;
+  gpio.released = false; gpio.held = false; gpio.physicalPowerHeld = true;
+  input.beginPowerInput(true, true);
+  input.update();
+  assert(!input.powerSleepRequested() && input.suppressPowerAfterRestart());
+  input.beginPowerInput(input.suppressPowerAfterRestart(), true);
+  gpio.held = true; gpio.powerHeldMs = 1000;
+  input.update();
+  assert(!input.powerSleepRequested());
+  gpio.held = false; gpio.physicalPowerHeld = false; gpio.released = true;
+  input.update();
+  assert(input.wasPowerReleaseConsumed() && !input.wasShortPowerReleased());
+
+  // A shared key released before its logical Power threshold emits Confirm instead.
+  gpio.button = HalGPIO::BTN_CONFIRM;
+  input.beginPowerInput(true, true);
+  input.update();
+  assert(input.wasPowerReleaseConsumed());
+  assert(!input.wasShortPowerReleased());
+  input.beginPowerInput(false, false);
+  input.update();
+  assert(!input.wasPowerReleaseConsumed());
+  assert(input.wasReleased(Button::Confirm) && !input.wasShortPowerReleased());
+  BoardConfig::ACTIVE.inputStyle = BoardConfig::InputStyle::DigitalButtons;
+
+#if FREEINK_CAP_TOUCH
+  SETTINGS.shortPwrBtn = SETTINGS.PWR_CONFIRM;
+  gpio.button = HalGPIO::BTN_POWER;
+  for (bool suppress : {false, true}) {
+    input.beginPowerInput(suppress, suppress);
+    gpio.held = true; gpio.released = false; gpio.powerHeldMs = 0;
+    input.update();
+    gpio.held = false; gpio.released = true; gpio.powerHeldMs = 100;
+    input.update();
+    assert(input.wasPressed(Button::Confirm) == !suppress);
+    assert(input.wasReleased(Button::Confirm) == !suppress);
+  }
+#endif
+  SETTINGS.doublePwrBtn = doubleAction;
 }
 """
 harness = harness.replace("POWER_ACTIONS", power_actions)
@@ -190,6 +273,7 @@ void checkPowerClicks() {
   HalGPIO gpio;
   GfxRenderer renderer;
   MappedInputManager input(gpio, renderer);
+  input.beginPowerInput(false, false);
   gpio.button = HalGPIO::BTN_POWER;
   auto frame = [&](unsigned long time, bool pressed, bool held, bool released, unsigned long duration) {
     clockMs = time;
@@ -241,6 +325,24 @@ void checkPowerClicks() {
   assert(!input.powerSleepClick());
   frame(7521, false, false, false, 20);
   assert(input.powerSleepClick());
+
+  // Wake and restart contacts must never enter the configurable click classifier.
+  SETTINGS.shortPwrBtn = CrossPointSettings::PWR_SYNC;
+  for (const bool suppress : {false, true}) {
+    input.beginPowerInput(suppress, true);
+    frame(8000, false, true, false, 0);
+    frame(8020, false, false, true, 20);
+    assert(input.wasPowerReleaseConsumed());
+    assert(!input.wasPowerSingleClick() && !pickerConfirms(input));
+    frame(8521, false, false, false, 20);
+    assert(input.homeButtonAction() == HomeButtonAction::Ignore);
+    assert(!input.powerSleepClick() && !input.wasPowerSingleClick());
+  }
+  // A fresh press after the suppressed contact is released still dispatches normally.
+  frame(9000, true, true, false, 0);
+  frame(9020, false, false, true, 20);
+  frame(9521, false, false, false, 20);
+  assert(input.homeButtonAction() == HomeButtonAction::Sync);
 }
 
 int main() {
@@ -252,15 +354,72 @@ int main() {
 }
 """
 harness = harness.replace("PICKER_CONFIRM_CONDITION", picker_confirm)
+hal_source = (ROOT / "lib/hal/HalGPIO.cpp").read_text()
+hal_methods = []
+for signature, following in (
+    ("void HalGPIO::update()", "bool HalGPIO::wasUsbStateChanged()"),
+    ("unsigned long HalGPIO::getPowerButtonHeldTime() const", "bool HalGPIO::hasTouch() const"),
+):
+    hal_methods.append((signature + hal_source.split(signature, 1)[1].split(following, 1)[0]).replace(
+        "HalGPIO::", "PowerClockHarness::"))
+clock_harness = r"""
+struct PowerClockHarness {
+  static constexpr uint8_t BTN_POWER = HalGPIO::BTN_POWER;
+  struct {
+    bool pressed = false;
+    uint32_t powerMs = 0, buttonMs = 0;
+    void update() {}
+    bool wasPressed(uint8_t) const { return pressed; }
+    uint8_t capacitivePageButtonMask() const { return 0; }
+    uint32_t getPowerButtonHeldTime() const { return powerMs; }
+    uint32_t getHeldTime() const { return buttonMs; }
+  } inputMgr;
+  bool powerButtonClick = false, capacitivePagePressed = false;
+  bool usbStateChanged = false, lastUsbConnected = false;
+  uint8_t previousCapacitivePageButtons = 0;
+  bool isUsbConnected() const { return false; }
+  void update();
+  unsigned long getPowerButtonHeldTime() const;
+};
+""" + "\n".join(hal_methods) + r"""
+void checkPowerClocks() {
+  BoardConfig::paperMono = true;
+  PowerClockHarness gpio;
+  PowerButtonInput input;
+  input.begin(false, false);
+  gpio.inputMgr = {true, 5, 5};  // PMIC press; no hardware hold duration.
+  gpio.update();
+  input.update(true, false, gpio.getPowerButtonHeldTime(), 400);
+  gpio.inputMgr = {false, 1000, 1000};  // Synchronous work delays the release poll.
+  gpio.update();
+  input.update(false, true, gpio.getPowerButtonHeldTime(), 400);
+  assert(input.wasShortReleased());
+
+  gpio.inputMgr = {true, 650, 0};  // Two side buttons synthesize a real Power hold.
+  gpio.update();
+  input.update(true, false, gpio.getPowerButtonHeldTime(), 400);
+  assert(input.shouldSleep());
+  gpio.inputMgr = {false, 1000, 350};
+  gpio.update();
+  input.update(false, true, gpio.getPowerButtonHeldTime(), 400);
+  assert(input.wasReleaseConsumed() && !input.wasShortReleased());
+  BoardConfig::paperMono = false;
+  gpio.inputMgr = {true, 300, 300};
+  gpio.update();
+  assert(gpio.getPowerButtonHeldTime() == 300);
+}
+"""
+harness = harness.replace("int main() {", clock_harness + "int main() {\n  checkPowerClocks();")
 with tempfile.TemporaryDirectory() as directory:
     directory = Path(directory)
     (directory / "HalGPIO.h").write_text(stub)
     cpp = directory / "remote_input.cpp"
     executable = directory / "remote_input"
     cpp.write_text("#include <initializer_list>\n" + harness)
-    subprocess.run([
-        "c++", "-std=c++20", "-DFREEINK_CAP_TOUCH=0", "-I", str(directory),
-        "-I", str(ROOT / "src"), str(cpp), "-o", str(executable),
-    ], check=True)
-    subprocess.run([str(executable)], check=True)
+    for touch in (0, 1):
+        subprocess.run([
+            "c++", "-std=c++20", f"-DFREEINK_CAP_TOUCH={touch}", "-I", str(directory),
+            "-I", str(ROOT / "src"), str(cpp), "-o", str(executable),
+        ], check=True)
+        subprocess.run([str(executable)], check=True)
 print("Remote button input regression checks passed")
