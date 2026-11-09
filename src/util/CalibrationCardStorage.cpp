@@ -1,3 +1,4 @@
+#include <Epub.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -5,6 +6,7 @@
 #include <memory>
 #include <new>
 
+#include "BookCacheUtils.h"
 #include "CalibrationCard.h"
 
 // SD part of the calibration card: written once into DIR, reused afterwards (the viewer and the EPUB caches key on it).
@@ -15,6 +17,7 @@ constexpr char PICTURES_PORTRAIT[] = "/.crosspoint/calibration/pictures_portrait
 constexpr char PICTURES_LANDSCAPE[] = "/.crosspoint/calibration/pictures_landscape_v2.bmp";
 // v2: the OPF identifier became a valid UUID (v1 carried a non-hex one).
 constexpr char BOOKS[] = "/.crosspoint/calibration/books_card_v2.epub";
+constexpr char BOOKS_V1[] = "/.crosspoint/calibration/books_card_v1.epub";
 
 struct FileSink final : Sink {
   HalFile& file;
@@ -37,7 +40,7 @@ bool writeFile(const char* path, Fn&& fill) {
   FileSink sink(file);
   const bool filled = fill(sink);
   const bool closed = file.close();
-  if (!filled || !sink.ok || !closed || !Storage.rename(tmp.c_str(), path)) {
+  if (!filled || !sink.ok || !closed || !Storage.replaceFile(tmp.c_str(), path)) {
     LOG_ERR("CAL", "Writing %s failed", path);
     Storage.remove(tmp.c_str());
     return false;
@@ -101,9 +104,17 @@ bool picturesCard(const bool landscape, std::string& path) {
 
 bool booksCard(std::string& path) {
   path = BOOKS;
-  Storage.remove("/.crosspoint/calibration/books_card_v1.epub");  // an older layout is never reused.
-  if (Storage.exists(BOOKS)) return true;
+  // An older layout is never reused. Its reader cache goes too, even when the EPUB is already gone.
+  Storage.remove(BOOKS_V1);
+  clearBookCache(BOOKS_V1);
+  // The title is written into the EPUB and kept in its reader cache: after a language change both are rebuilt.
+  // loadMetadata() reads the cached title, or the EPUB's own one when the cache is missing.
   const std::string title = tr(STR_CAL_BOOKS_SCREEN);
+  std::string cardTitle, cardAuthor;
+  if (Storage.exists(BOOKS) && Epub(BOOKS, "/.crosspoint").loadMetadata(cardTitle, cardAuthor) && cardTitle == title) {
+    return true;
+  }
+  clearBookCache(BOOKS);
   return writeFile(BOOKS, [&](Sink& s) {
     writeEpub(s, title);
     return true;
