@@ -300,6 +300,9 @@ inline bool isHiddenOnDevice(const SettingInfo& s) {
     // power click (other touch boards) cover these shortcuts.
     case StrId::STR_LONG_PRESS_MENU:
       return BoardConfig::hasTouch();
+    // The sleep-image redraw timer exists only on the X4 Pro (main.cpp); other boards keep the saved value.
+    case StrId::STR_SLEEP_SETTLED_REDRAW:
+      return !BoardConfig::isX4Pro();
     default:
       return false;
   }
