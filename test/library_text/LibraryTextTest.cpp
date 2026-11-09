@@ -118,6 +118,25 @@ TEST(LibraryFold, RecognizesAndDropsAllHebrewMarks) {
   }
 }
 
+TEST(LibraryFold, ArabicVowelMarksExcludeShaddahHamzaAndMaddah) {
+  const uint32_t marks[] = {0x064B, 0x064C, 0x064D, 0x064E, 0x064F, 0x0650, 0x0652, 0x0670};
+  size_t nextMark = 0;
+  for (uint32_t cp = 0; cp <= 0x10FFFF; ++cp) {
+    const bool expected = nextMark < std::size(marks) && cp == marks[nextMark];
+    ASSERT_EQ(isArabicVowelMark(cp), expected) << "codepoint " << cp;
+    if (expected) ++nextMark;
+  }
+  // Library search still folds all Arabic marks, including shaddah.
+  for (uint32_t cp = 0x064B; cp <= 0x065F; ++cp) {
+    std::string pointed = "ش";
+    utf8AppendCodepoint(cp, pointed);
+    pointed += "كل";
+    EXPECT_EQ(fold(pointed), "شكل") << "codepoint " << cp;
+  }
+  EXPECT_EQ(fold("شَكَّلَ"), "شكل");
+  EXPECT_EQ(fold("ش\u0670كل"), "شكل");
+}
+
 TEST(LibraryFold, GroupInitialUsesUnicodeLettersAndBucketsNumbers) {
   EXPECT_EQ(library::foldedGroupInitial(fold("Alpha")), static_cast<uint32_t>('a'));
   EXPECT_EQ(library::foldedGroupInitial(fold("\u05E9\u05DC\u05D5\u05DD")), 0x05E9u);

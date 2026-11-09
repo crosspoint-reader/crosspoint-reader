@@ -122,7 +122,7 @@ constexpr CodepointRange NUMBER_RANGES[] = {
 };
 
 constexpr CodepointRange MARK_RANGES[] = {
-    {0x0483, 0x0489}, {0x0610, 0x061A}, {0x064B, 0x065F}, {0x0670, 0x0670}, {0x06D6, 0x06DC},
+    {0x0483, 0x0489}, {0x0610, 0x061A}, {0x0651, 0x065F}, {0x06D6, 0x06DC},
     {0x06DF, 0x06E4}, {0x06E7, 0x06E8}, {0x06EA, 0x06ED}, {0x08D3, 0x08FF},
 };
 
@@ -131,7 +131,7 @@ bool isUnicodeNumber(const uint32_t cp) {
 }
 
 bool isUnicodeMark(const uint32_t cp) {
-  return isHebrewMark(cp) || utf8IsCombiningMark(cp) ||
+  return isHebrewMark(cp) || isArabicVowelMark(cp) || utf8IsCombiningMark(cp) ||
          inRanges(cp, MARK_RANGES, sizeof(MARK_RANGES) / sizeof(MARK_RANGES[0]));
 }
 

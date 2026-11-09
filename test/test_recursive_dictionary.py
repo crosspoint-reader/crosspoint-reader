@@ -600,6 +600,13 @@ int main() {
   assert(Dictionary::cleanWord("א־ב׀ג׃ד׆ה׳ו״ז") == "א־ב׀ג׃ד׆ה׳ו״ז");
   assert(Dictionary::cleanWord("\u0591\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7\u05C8\u05C9\uFB1E").empty());
   assert(Dictionary::cleanWord("א\u05A2ב\u05BAג\u05C5ד\u05C7ה\u05C8ו\u05C9ז\uFB1E") == "אבגדהוז");
+  assert(Dictionary::cleanWord("شَكَّلَ") == "شكّل");
+  assert(Dictionary::cleanWord("شَكَلَ") == "شكل");
+  assert(Dictionary::cleanWord("شَكَّٰلَ") == "شكّل");
+  assert(Dictionary::cleanWord("\u064B\u064C\u064D\u064E\u064F\u0650\u0652\u0670").empty());
+  assert(Dictionary::cleanWord("\u064E“شَكَّلَ!”\u0652") == "شكّل");
+  assert(Dictionary::cleanWord("أ إ آ ا\u0654 ا\u0655 ا\u0653") == "أ إ آ ا\u0654 ا\u0655 ا\u0653");
+  assert(Dictionary::cleanWord("ش\u0656ك\u06E1ل\u08F0") == "ش\u0656ك\u06E1ل\u08F0");
   for (uint32_t cp = 0x0591; cp <= 0x05BD; ++cp) {
     std::string pointed = "א";
     utf8AppendCodepoint(cp, pointed);
@@ -609,6 +616,9 @@ int main() {
   auto hebrewResult = Dictionary::LookupResult::Found;
   assert(!dictionary.lookup("שָׁלוֹם", definition, headword, &hebrewResult));
   assert(hebrewResult == Dictionary::LookupResult::NotFound && dictionary.searchedWord == "שלום");
+  auto arabicResult = Dictionary::LookupResult::Found;
+  assert(!dictionary.lookup("شَكَّلَ", definition, headword, &arabicResult));
+  assert(arabicResult == Dictionary::LookupResult::NotFound && dictionary.searchedWord == "شكّل");
   for (const char* suffix : {"ing", "ed", "ies"}) {
     const std::string phrase = std::string(4096 - std::strlen(suffix), 'a') + suffix;
     auto result = Dictionary::LookupResult::Found;

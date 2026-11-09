@@ -121,6 +121,11 @@ inline bool isHebrewMark(const uint32_t cp) {
          (cp >= 0x05C4 && cp <= 0x05C5) || (cp >= 0x05C7 && cp <= 0x05C9) || cp == 0xFB1E;
 }
 
+// Basic harakat and superscript alef, excluding shaddah, hamza and maddah.
+inline bool isArabicVowelMark(const uint32_t cp) {
+  return (cp >= 0x064B && cp <= 0x0650) || cp == 0x0652 || cp == 0x0670;
+}
+
 // Returns true for Unicode combining diacritical marks that should not advance the cursor.
 inline bool utf8IsCombiningMark(const uint32_t cp) {
   return (cp >= 0x0300 && cp <= 0x036F)      // Combining Diacritical Marks
