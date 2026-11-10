@@ -43,6 +43,11 @@ void HalPowerManager::begin() {
 }
 
 void HalPowerManager::setPowerSaving(bool enabled) {
+#if FREEINK_DEVICE_MURPHY_M4
+  // FT6336U touch is unreliable after runtime CPU frequency changes on this board.
+  (void)enabled;
+  return;
+#else
   if (normalFreq <= 0) {
     return;  // invalid state
   }
@@ -79,6 +84,7 @@ void HalPowerManager::setPowerSaving(bool enabled) {
 
   // Otherwise, no change needed
   xSemaphoreGive(modeMutex);
+#endif
 }
 
 void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton) const {
@@ -138,6 +144,10 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton)
   // button. Must run after display.deepSleep() so the panel controller gets its
   // deep-sleep command while its rail is still up (enterDeepSleep() in main.cpp
   // guarantees that ordering).
+#if FREEINK_DEVICE_MURPHY_M4
+  // Stops the touch sampler task before its rail is cut.
+  gpio.prepareForDeepSleep();
+#endif
   freeink::PowerManager::powerDownRailsForSleep();
 
 #if FREEINK_DEVICE_PAPERMONO
