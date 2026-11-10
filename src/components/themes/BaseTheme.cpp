@@ -901,7 +901,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       const int barLeft = std::max(orientedMarginLeft, intrusion + 1);
       const int barRight = renderer.getScreenWidth() - std::max(orientedMarginRight, intrusion + 1);
       const int barWidth = std::max(0, barRight - barLeft) * static_cast<int>(std::min<size_t>(progress, 100)) / 100;
-      renderer.fillRect(barLeft, barY, barWidth, screenHeight - barY, true);
+      renderer.fillRect(barLeft, barY, barWidth, sb.progressBarHeightPx + edgeGap, true);
     } else {
       const int barMarginLeft = fillMargin ? 0 : orientedMarginLeft;
       const int barMarginRight = fillMargin ? 0 : orientedMarginRight;
