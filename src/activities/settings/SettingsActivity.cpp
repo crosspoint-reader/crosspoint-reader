@@ -72,6 +72,11 @@ SettingsSection sectionFor(const SettingInfo& setting) {
       setting.valuePtr == &CrossPointSettings::moveFinishedToReadFolder) {
     return SettingsSection::Library;
   }
+  if (setting.valuePtr == &CrossPointSettings::refreshFrequency || setting.valuePtr == &CrossPointSettings::fadingFix ||
+      setting.valuePtr == &CrossPointSettings::sleepSettledRedraw ||
+      setting.valuePtr == &CrossPointSettings::imageSettledRedraw) {
+    return SettingsSection::ScreenClean;
+  }
   if (setting.valuePtr == &CrossPointSettings::sleepTimeoutMinutes) return SettingsSection::Display;
   if (setting.category == StrId::STR_CAT_DISPLAY) return SettingsSection::Display;
   if (setting.category == StrId::STR_CAT_READER) return SettingsSection::Reader;
@@ -146,6 +151,7 @@ void SettingsActivity::rebuildSettings() {
     addAction(SettingsSection::General, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
     addAction(SettingsSection::General, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
   }
+  addAction(SettingsSection::Display, StrId::STR_SCREEN_CLEAN_SETTINGS, SettingAction::ScreenCleanSettings);
   addAction(SettingsSection::General, StrId::STR_ABOUT, SettingAction::About);
   rebuildRowItems();
 }
@@ -182,6 +188,7 @@ void SettingsActivity::rebuildRowItems() {
 }
 
 const char* SettingsActivity::headerTitle() const {
+  if (section == SettingsSection::ScreenClean) return tr(STR_SCREEN_CLEAN_SETTINGS);
   return I18N.get(SETTINGS_SECTION_TITLES[static_cast<size_t>(section)]);
 }
 
@@ -283,6 +290,15 @@ void SettingsActivity::toggleSelectedSetting() {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
     switch (setting.action) {
+      case SettingAction::ScreenCleanSettings: {
+        auto activity = makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, SettingsSection::ScreenClean);
+        if (!activity) {
+          LOG_ERR("SETTINGS", "OOM: screen cleaning settings");
+          return;
+        }
+        startActivityForResult(std::move(activity), [this](const ActivityResult&) { requestUpdate(); });
+        return;
+      }
       case SettingAction::HomeButton: {
         // Activities must outlive this call and are owned by the activity stack.
         auto activity = makeUniqueNoThrow<HomeButtonSettingsActivity>(renderer, mappedInput);
@@ -505,6 +521,18 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
                                                 static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+
+  if (section == SettingsSection::ScreenClean) {
+    auto noteStyle = screen.theme().smallText;
+    noteStyle.maxLines = 6;
+    const char* note = tr(STR_SCREEN_CLEAN_NOTE);
+    const int16_t side = static_cast<int16_t>(metrics.contentSidePadding);
+    const int16_t noteW = static_cast<int16_t>(screen.body().width - 2 * side);
+    const int16_t noteH = fui::measureWrappedText(screen.target(), note, noteStyle, noteW).height;
+    screen.target().text(
+        screen.takeTop(noteH, static_cast<int16_t>(metrics.verticalSpacing)).inset(fui::Insets{0, side, 0, side}), note,
+        noteStyle);
+  }
 
   // rowItems_ (label/actionValue) was built by rebuildRowItems(); only the
   // live value text needs refreshing here, by assigning into the existing

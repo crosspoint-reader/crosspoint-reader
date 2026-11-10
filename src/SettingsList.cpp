@@ -63,6 +63,15 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
                            StrId::STR_CAT_DISPLAY));
 
+  // Persisted on every board so a settings file from an X4 Pro keeps the value; shown only on the X4 Pro
+  // (isHiddenOnDevice).
+  emit(SettingInfo::Enum(StrId::STR_SLEEP_SETTLED_REDRAW, &CrossPointSettings::sleepSettledRedraw,
+                         {StrId::STR_STATE_OFF, StrId::STR_AFTER_1_MIN, StrId::STR_AFTER_2_MIN, StrId::STR_AFTER_5_MIN},
+                         "sleepRedrawDelay", StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Enum(StrId::STR_IMAGE_SETTLED_REDRAW, &CrossPointSettings::imageSettledRedraw,
+                         {StrId::STR_STATE_OFF, StrId::STR_AFTER_1_MIN, StrId::STR_AFTER_2_MIN, StrId::STR_AFTER_5_MIN},
+                         "imageRedrawDelay", StrId::STR_CAT_DISPLAY));
+
   // --- Reader ---
   // Built-in font-family entry. Replaced per-call with a registry-aware
   // version when SD fonts are installed.
