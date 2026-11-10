@@ -278,7 +278,10 @@ def load_glyph(code_point):
         if glyph_index > 0:
             nudge = glyph_x_nudges.get(code_point)
             if nudge:
-                face.load_glyph(glyph_index, load_flags & ~freetype.FT_LOAD_RENDER)
+                # NO_BITMAP: an embedded bitmap strike has no outline to shift.
+                face.load_glyph(glyph_index, (load_flags & ~freetype.FT_LOAD_RENDER) | freetype.FT_LOAD_NO_BITMAP)
+                if face.glyph.format != freetype.FT_GLYPH_FORMAT_OUTLINE:
+                    sys.exit(f"--glyph-x-nudge: U+{code_point:04X} has no outline to shift")
                 freetype.FT_Outline_Translate(ctypes.byref(face.glyph.outline._FT_Outline), nudge, 0)
                 face.glyph.render(freetype.FT_RENDER_MODE_NORMAL)
             else:
