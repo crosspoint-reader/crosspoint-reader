@@ -388,10 +388,9 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
   const size_t faceIdx = static_cast<size_t>(&f - faces_);
   FaceLock lock(master_ ? master_ : this, faceIdx);
 
-  // Glyph-ID render at the exact fractional ppem. The metrics pass costs a
-  // second glyph load per MISS only (hits come from the cache) and yields the
-  // 26.6 advance, which the 12.4 EpdGlyph.advanceX preserves for the
-  // renderer's differential rounding — GlyphBitmap.advance is whole pixels.
+  // The metrics pass costs a second glyph load per miss, but retains the
+  // fractional advance; GlyphBitmap.advance is whole pixels. Truncate to 12.4
+  // below so only the renderer rounds advance + kerning to whole pixels.
   const uint32_t size26_6 = f.owner->size26_6_;
   freeink::font::FtFont::GlyphMetrics gm;
   const bool haveMetrics = f.ft->metricsGlyph26_6(gid, size26_6, gm);
@@ -434,7 +433,7 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
   }
 
   EpdGlyph eg{};
-  const int32_t adv12_4 = haveMetrics ? (gm.advance26_6 + 2) >> 2 : (g ? g->advance << 4 : 0);
+  const int32_t adv12_4 = haveMetrics ? fp4::truncate26_6_to_4(gm.advance26_6) : (g ? g->advance << 4 : 0);
   eg.advanceX = static_cast<uint16_t>(adv12_4 < 0 ? 0 : adv12_4);
   if (px && g && g->pixels) {
     // Grow the byte arena on demand toward the book's page high-water mark.
