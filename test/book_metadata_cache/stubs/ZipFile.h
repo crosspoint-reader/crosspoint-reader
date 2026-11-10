@@ -9,6 +9,7 @@
 // Inflated sizes of the archive's entries, by path. The batch lookup finds nothing, so every size
 // is looked up by path.
 inline std::map<std::string, uint32_t> zipEntrySizes;
+inline unsigned zipOpenCalls = 0;
 
 class ZipFile {
  public:
@@ -20,7 +21,10 @@ class ZipFile {
 
   static uint64_t fnvHash64(const char*, size_t) { return 0; }
   explicit ZipFile(const std::string&) {}
-  bool open() { return true; }
+  bool open() {
+    ++zipOpenCalls;
+    return true;
+  }
   bool close() { return true; }
   int fillUncompressedSizes(std::deque<SizeTarget>&, std::deque<uint32_t>&) { return 0; }
 

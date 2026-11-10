@@ -23,6 +23,13 @@ inline int failRead = -1;
 inline int failWrite = -1;
 inline int shortWrite = -1;
 inline int failTruncate = -1;
+inline int failSeek = -1;
+inline std::string readFailurePath;
+inline std::string seekFailurePath;
+inline size_t failAllocationBytes = 0;
+inline unsigned skipMatchingAllocations = 0;
+inline unsigned plainLoads = 0;
+inline unsigned groupedLoads = 0;
 inline int failRename = -1;
 inline int failAlloc = -1;
 inline bool failDirectorySeek = false;
@@ -30,6 +37,8 @@ inline std::string failClosePath;
 inline std::string failWritePath;
 inline unsigned parses = 0;
 inline unsigned reads = 0;
+inline std::map<std::string, unsigned> readsByPath;
+inline std::map<std::string, size_t> readBytesByPath;
 inline unsigned seeks = 0;
 inline unsigned delays = 0;
 inline std::map<std::string, unsigned> writesByPath;
@@ -54,6 +63,13 @@ inline void reset() {
   failWrite = -1;
   shortWrite = -1;
   failTruncate = -1;
+  failSeek = -1;
+  readFailurePath.clear();
+  seekFailurePath.clear();
+  failAllocationBytes = 0;
+  skipMatchingAllocations = 0;
+  plainLoads = 0;
+  groupedLoads = 0;
   failRename = -1;
   failAlloc = -1;
   failDirectorySeek = false;
@@ -61,6 +77,8 @@ inline void reset() {
   failWritePath.clear();
   parses = 0;
   reads = 0;
+  readsByPath.clear();
+  readBytesByPath.clear();
   seeks = 0;
   delays = 0;
   writesByPath.clear();
@@ -71,6 +89,8 @@ inline void reset() {
 
 inline void resetIoCounters() {
   reads = 0;
+  readsByPath.clear();
+  readBytesByPath.clear();
   seeks = 0;
   delays = 0;
 }
@@ -147,6 +167,7 @@ class HalFile {
   size_t position() const { return pos; }
   bool seekSet(const size_t offset) {
     fake::seeks++;
+    if ((fake::seekFailurePath.empty() || path == fake::seekFailurePath) && fake::fail(fake::failSeek)) return false;
     if (!node || (node->directory && fake::failDirectorySeek) || (!node->directory && offset > node->bytes.size())) {
       return false;
     }
@@ -166,8 +187,11 @@ class HalFile {
   }
   int read(void* out, size_t size) {
     fake::reads++;
+    fake::readsByPath[path]++;
+    fake::readBytesByPath[path] += size;
     if (size == 0) return 0;
-    if (!node || fake::fail(fake::failRead)) return -1;
+    if (!node || ((fake::readFailurePath.empty() || path == fake::readFailurePath) && fake::fail(fake::failRead)))
+      return -1;
     size = std::min(size, node->bytes.size() - std::min(pos, node->bytes.size()));
     std::memcpy(out, node->bytes.data() + std::min(pos, node->bytes.size()), size);
     pos += size;

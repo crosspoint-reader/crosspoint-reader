@@ -18,6 +18,8 @@ ClixHeader makeHeader(const uint16_t books, const uint32_t folderBytes = 300, co
   h.foldVersion = CLIX_FOLD_VERSION;
   h.bookCount = books;
   h.folderCount = 4;
+  h.metadataEnabled = 1;
+  h.groupKind = static_cast<uint8_t>(GroupKind::Series);
   layoutSections(h, folderBytes, nameBytes == 0 ? books * 80u : nameBytes);
   return h;
 }
@@ -30,7 +32,7 @@ TEST(LibraryFormat, StructSizesAreFrozen) {
   EXPECT_EQ(sizeof(ClixHeader), 64u);
   EXPECT_EQ(sizeof(ClixRecord), 128u);
   EXPECT_EQ(sizeof(ClixFolderHeader), 1u);
-  EXPECT_EQ(CLIX_FORMAT_VERSION, 2u);
+  EXPECT_EQ(CLIX_FORMAT_VERSION, 3u);
 }
 
 TEST(LibraryFormat, RecordsTileSectorsExactly) {
@@ -76,21 +78,32 @@ TEST(LibraryFormat, PermutationArraysDoNotOverlapEachOther) {
   EXPECT_EQ(authorOrderOffset(h, 99), h.permStart + 198u);
   EXPECT_EQ(arrivalOrderOffset(h, 0), h.permStart + 200u);
   EXPECT_GT(arrivalOrderOffset(h, 0), authorOrderOffset(h, h.bookCount - 1));
+  EXPECT_EQ(groupOrderOffset(h, 0), h.permStart + 400u);
+  EXPECT_GT(groupOrderOffset(h, 0), arrivalOrderOffset(h, h.bookCount - 1));
 }
 
 TEST(LibraryFormat, SizeArithmeticMatchesTheSpecTable) {
-  // Spec section 3.7, the 200-book row: 512 header + 1536 folders + 25600
-  // records + 1024 permutations + 16000 names.
   ClixHeader h{};
   memcpy(h.magic, CLIX_MAGIC, sizeof(CLIX_MAGIC));
   h.formatVersion = CLIX_FORMAT_VERSION;
   h.foldVersion = CLIX_FOLD_VERSION;
   h.bookCount = 200;
+  h.groupCount = 20;
   layoutSections(h, 29u * 50u, 80u * 200u);
   EXPECT_EQ(h.folderStart, 512u);
   EXPECT_EQ(h.recordStart, 2048u);
   EXPECT_EQ(h.permStart, 2048u + 25600u);
-  EXPECT_EQ(h.selfSize, 44672u);
+  // Round the 1280-byte group table and 800-byte references up to whole sectors.
+  EXPECT_EQ(h.groupStart, 29184u);
+  EXPECT_EQ(h.groupRefStart, 30720u);
+  EXPECT_EQ(h.nameStart, 31744u);
+  EXPECT_EQ(h.selfSize, 47744u);
+}
+
+TEST(LibraryFormat, GroupEntriesAndRefsIndexTheirSections) {
+  const ClixHeader h = makeHeader(64, 116);
+  EXPECT_EQ(groupEntryOffset(h, 1), h.groupStart + 64u);
+  EXPECT_EQ(groupRefOffset(h, 63), h.groupRefStart + 63u * 4u);
 }
 
 TEST(LibraryFormatValidation, AcceptsAWellFormedHeader) {
@@ -196,6 +209,68 @@ TEST(LibraryFormat, ByteImageIsStableAcrossBuilds) {
 
   EXPECT_EQ(offsetof(ClixHeader, metadataEnabled), 7u);
   EXPECT_EQ(offsetof(ClixHeader, bookCount), 8u);
+  EXPECT_EQ(offsetof(ClixHeader, groupCount), 14u);
   EXPECT_EQ(offsetof(ClixHeader, folderStart), 16u);
-  EXPECT_EQ(offsetof(ClixHeader, selfSize), 40u);
+  EXPECT_EQ(offsetof(ClixHeader, groupStart), 32u);
+  EXPECT_EQ(offsetof(ClixHeader, groupRefStart), 36u);
+  EXPECT_EQ(offsetof(ClixHeader, selfSize), 48u);
+  EXPECT_EQ(offsetof(ClixHeader, groupedCount), 52u);
+  EXPECT_EQ(offsetof(ClixHeader, groupKind), 54u);
+
+  EXPECT_EQ(offsetof(ClixGroupEntry, bookCount), 0u);
+  EXPECT_EQ(offsetof(ClixGroupEntry, nameLen), 2u);
+  EXPECT_EQ(offsetof(ClixGroupEntry, name), 3u);
+  EXPECT_EQ(offsetof(ClixGroupRef, groupId), 0u);
+  EXPECT_EQ(offsetof(ClixGroupRef, position), 2u);
+}
+
+namespace {
+
+// header with the given group fields and offsets laid out to match
+ClixHeader makeGroupHeader(const GroupKind kind, const uint16_t groups, const uint16_t grouped, const uint8_t flags = 0,
+                           const uint8_t metadataEnabled = 1) {
+  ClixHeader h = makeHeader(10, 116);
+  h.groupKind = static_cast<uint8_t>(kind);
+  h.groupCount = groups;
+  h.groupedCount = grouped;
+  h.flags = flags;
+  h.metadataEnabled = metadataEnabled;
+  layoutSections(h, h.folderLen, h.nameLen);
+  return h;
+}
+
+}  // namespace
+
+TEST(LibraryFormatValidation, AcceptsConsistentGroupHeaders) {
+  for (const GroupKind kind : {GroupKind::Series, GroupKind::Publisher, GroupKind::Language, GroupKind::Subject}) {
+    const ClixHeader h = makeGroupHeader(kind, 2, 4);
+    EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::Ok) << "kind=" << static_cast<unsigned>(kind);
+  }
+  const ClixHeader degraded = makeGroupHeader(GroupKind::Series, 0, 0, CLIX_FLAG_GROUPS_DEGRADED);
+  EXPECT_EQ(validateHeader(degraded, degraded.selfSize), ClixValidity::Ok);
+  const ClixHeader noMetadata = makeGroupHeader(GroupKind::None, 0, 0, 0, 0);
+  EXPECT_EQ(validateHeader(noMetadata, noMetadata.selfSize), ClixValidity::Ok);
+}
+
+TEST(LibraryFormatValidation, RejectsInconsistentGroupHeaders) {
+  struct Case {
+    const char* name;
+    ClixHeader header;
+    ClixValidity expected;
+  };
+  ClixHeader unknownKind = makeGroupHeader(GroupKind::Series, 0, 0);
+  unknownKind.groupKind = GROUP_KIND_COUNT;
+  const Case cases[] = {
+      {"more groups than books", makeGroupHeader(GroupKind::Series, 11, 11), ClixValidity::CountOutOfRange},
+      {"grouped books without groups", makeGroupHeader(GroupKind::Series, 0, 4), ClixValidity::CountOutOfRange},
+      {"more groups than grouped books", makeGroupHeader(GroupKind::Series, 5, 4), ClixValidity::CountOutOfRange},
+      {"unknown kind", unknownKind, ClixValidity::SectionsInconsistent},
+      {"counts without a kind", makeGroupHeader(GroupKind::None, 2, 4), ClixValidity::SectionsInconsistent},
+      {"kind without metadata", makeGroupHeader(GroupKind::Series, 0, 0, 0, 0), ClixValidity::SectionsInconsistent},
+      {"degraded without a kind", makeGroupHeader(GroupKind::None, 0, 0, CLIX_FLAG_GROUPS_DEGRADED),
+       ClixValidity::SectionsInconsistent},
+      {"degraded beside a table", makeGroupHeader(GroupKind::Series, 2, 4, CLIX_FLAG_GROUPS_DEGRADED),
+       ClixValidity::SectionsInconsistent},
+  };
+  for (const Case& c : cases) EXPECT_EQ(validateHeader(c.header, c.header.selfSize), c.expected) << c.name;
 }

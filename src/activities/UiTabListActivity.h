@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 #include "activities/UiListActivity.h"
@@ -32,6 +33,7 @@ class UiTabListActivity : public UiListActivity {
   virtual int tabCount() const = 0;
   virtual int activeTab() const = 0;
   virtual const char* tabLabel(int index) const = 0;
+  virtual bool tabEnabled(int) const { return true; }
   virtual freeink::ui::TabIndicator tabIndicator(int) const { return freeink::ui::TabIndicator::None; }
   // Touch tap on a tab pill (bounds already checked).
   virtual void onTabAction(int index) = 0;
@@ -64,15 +66,19 @@ class UiTabListActivity : public UiListActivity {
   // props.selectedIndex = ring - 1.
   void syncTabListViewport(UiScreen& screen, freeink::ui::ListProps& props);
 
-  // Per-tab selection/viewport state, sized in onEnter. Protected so subclass
-  // tab-switch code can seed the target tab's ring/viewport.
+  // Resize to tabCount(), keeping the state of tabs that survive and resetting new ones.
+  void syncTabNavigation();
+
+  // Per-tab selection/viewport state, sized by syncTabNavigation(). Protected so
+  // subclass tab-switch code can seed the target tab's ring/viewport.
   std::vector<freeink::ui::ListNav> tabNavs;
   bool navigationStartedOnTabs = false;
 
   // When > 0, each tab pill is capped at its label width plus this padding
   // per side, centered in its unchanged equal-width slot. With few tabs the
   // default full-slot pill stretches across a third of the screen; screens
-  // with more tabs (Settings) keep the default of 0 (fill the slot).
+  // with more tabs (Settings) keep the default of 0 (fill the slot). The
+  // padding shrinks if the widest label would otherwise not fit its slot.
   int16_t tabPillMaxPad = 0;
 
  private:

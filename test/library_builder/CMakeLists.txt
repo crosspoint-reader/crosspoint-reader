@@ -4,7 +4,9 @@ add_executable(LibraryBuilderTest
   ${REPO_ROOT}/lib/LibraryIndex/LibraryIndexFile.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryFormat.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryText.cpp
+  ${REPO_ROOT}/lib/I18n/LanguageTag.cpp
   ${REPO_ROOT}/lib/Utf8/Utf8.cpp
+  ${REPO_ROOT}/lib/Utf8/LanguageCode.cpp
 )
 target_include_directories(LibraryBuilderTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/stubs
@@ -13,5 +15,5 @@ target_include_directories(LibraryBuilderTest PRIVATE
   ${REPO_ROOT}/lib/Serialization
   ${REPO_ROOT}/lib/Utf8
 )
-target_link_libraries(LibraryBuilderTest PRIVATE crosspoint_test_common GTest::gtest_main)
+target_link_libraries(LibraryBuilderTest PRIVATE crosspoint_test_common crosspoint_i18n_tables GTest::gtest_main)
 gtest_discover_tests(LibraryBuilderTest)

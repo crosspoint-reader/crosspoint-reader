@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
+#include "lib/Epub/Epub/hyphenation/Hyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
 
@@ -233,3 +234,20 @@ TEST(HyphenationEval, Italian) { runLanguageEval("italian", "it", "italian_hyphe
 TEST(HyphenationEval, Polish) { runLanguageEval("polish", "pl", "polish_hyphenation_tests.txt", 98.92); }
 TEST(HyphenationEval, Swedish) { runLanguageEval("swedish", "sv", "swedish_hyphenation_tests.txt", 94.01); }
 TEST(HyphenationEval, Portuguese) { runLanguageEval("portuguese", "pt", "portuguese_hyphenation_tests.txt", 98.21); }
+
+TEST(HyphenationLanguage, IsoAliasesAndRegionalTagsKeepTheSameBreaks) {
+  const std::string word = "Donaudampfschifffahrtsgesellschaft";
+  Hyphenator::setPreferredLanguage("de");
+  const auto expected = Hyphenator::breakOffsets(word, false);
+  ASSERT_FALSE(expected.empty());
+  for (const char* tag : {"deu", "ger", "DEU", "de-DE", "ger_DE"}) {
+    Hyphenator::setPreferredLanguage(tag);
+    const auto actual = Hyphenator::breakOffsets(word, false);
+    ASSERT_EQ(actual.size(), expected.size()) << tag;
+    for (size_t i = 0; i < actual.size(); i++) {
+      EXPECT_EQ(actual[i].byteOffset, expected[i].byteOffset) << tag;
+      EXPECT_EQ(actual[i].requiresInsertedHyphen, expected[i].requiresInsertedHyphen) << tag;
+    }
+  }
+  Hyphenator::setPreferredLanguage("");
+}
