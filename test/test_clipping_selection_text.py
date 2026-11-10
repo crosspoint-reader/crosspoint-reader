@@ -11,6 +11,10 @@ header = (ROOT / "src/activities/reader/ClipSelectionActivity.h").read_text()
 selection_meta = "struct Selection {" + header.split("struct Selection {", 1)[1].split("  };", 1)[0] + "};"
 word_box = "struct WordBox {" + header.split("struct WordBox {", 1)[1].split("  };", 1)[0] + "};"
 visual_helper = "template <typename Visitor>" + header.split("template <typename Visitor>", 1)[1].split("  bool hasVisualFragments", 1)[0]
+assert "bool cursorAtStart = false;" in selection_meta, "Selection extraction missing cursorAtStart field"
+assert "bool discretionaryHyphen = false;" in word_box, "WordBox extraction missing discretionaryHyphen field"
+assert ("void forEachVisualSpan(const WordBox& word, Visitor&& visit) const" in visual_helper
+        and "visit(word.x, word.width);" in visual_helper), "Visual helper extraction missing expected declaration or fallback"
 action_helpers = "\n".join(line for line in header.splitlines()
                            if "int firstAction() const" in line or "int actionCount() const" in line)
 clean_word = "const char* cleanWordStart" + source.split("const char* cleanWordStart", 1)[1].split(
