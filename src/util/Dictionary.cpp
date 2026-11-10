@@ -766,9 +766,24 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
 
 std::string Dictionary::cleanWord(const char* word) {
   if (!word) return "";
-  const auto* b = reinterpret_cast<const unsigned char*>(word);
+  std::string result(word);
+  // Remove marks before trimming so they cannot hide edge punctuation.
+  const auto* read = reinterpret_cast<const unsigned char*>(result.c_str());
+  size_t written = 0;
+  while (*read) {
+    const auto* charStart = read;
+    const uint32_t cp = utf8NextCodepoint(&read);
+    if (isHebrewMark(cp) || isArabicVowelMark(cp)) {
+      continue;
+    }
+    const size_t bytes = static_cast<size_t>(read - charStart);
+    memmove(result.data() + written, charStart, bytes);
+    written += bytes;
+  }
+  result.resize(written);
+  const auto* b = reinterpret_cast<const unsigned char*>(result.c_str());
   size_t start = 0;
-  size_t end = strlen(word);
+  size_t end = result.size();
   // Curly quotes and dashes (General Punctuation U+2000-U+206F = E2 80/81 xx)
   // are all >= 0x80, so isWordByte keeps them; strip those 3-byte codepoints
   // from the edges too, or EPUB text like garage.” never matches a headword.
@@ -809,7 +824,8 @@ std::string Dictionary::cleanWord(const char* word) {
   }
   if (start >= end) return "";
 
-  std::string result(word + start, end - start);
+  result.resize(end);
+  result.erase(0, start);
   std::transform(result.begin(), result.end(), result.begin(),
                  [](unsigned char c) { return c >= 0x80 ? c : static_cast<unsigned char>(std::tolower(c)); });
   return result;

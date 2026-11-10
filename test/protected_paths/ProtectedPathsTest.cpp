@@ -27,6 +27,8 @@ TEST(ProtectedPaths, NamesSdFatWouldTrimOrAliasStillMatch) {
   EXPECT_TRUE(isSensitivePath("/.crosspoint ./opds.json"));
   EXPECT_TRUE(isSensitivePath("/CROSSP~1/wifi.json"));
   EXPECT_TRUE(isSensitivePath("/.crosspoint/WIFI~1.JSO"));
+  EXPECT_TRUE(isSensitivePath("/CROSSP~1/WIFI~1.JSO"));
+  EXPECT_TRUE(isSensitivePath("/CROSSP~1"));                 // WebDAV PROPFIND would list the stores
   EXPECT_FALSE(isSensitivePath("/Books/Photos/IMG~1.JPG"));  // too deep to reach a store
   EXPECT_FALSE(isSensitivePath("/Books/a~b.epub"));
 }
