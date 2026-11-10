@@ -7,9 +7,10 @@ struct SyncCredentials {
     std::string name, value;
   };
   bool enabled = true;
+  std::vector<Header> customHeaders;
   bool getSyncClippings() const { return enabled; }
   bool hasCredentials() const { return true; }
-  std::vector<Header> getCustomHeaders() const { return {}; }
+  const std::vector<Header>& getCustomHeaders() const { return customHeaders; }
   std::string getUsername() const { return "reader"; }
   std::string getMd5Password() const { return "key"; }
   std::string getBasicAuthorization() const { return "Basic cmVhZGVyOnBhc3M="; }

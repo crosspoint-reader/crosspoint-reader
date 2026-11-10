@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <KOReaderCredentialStore.h>
 #include <SecureHttpClient.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <cassert>
@@ -30,6 +31,7 @@ void reset() {
   fake::incomplete = false;
   fake::remoteResponse = "{\"cursor\":0,\"more\":false,\"items\":[]}";
   syncCredentials.enabled = true;
+  syncCredentials.customHeaders.clear();
 }
 void released() {
   auto* scratch = buildscratch::claim(32768);
@@ -82,9 +84,10 @@ void maximumTextRoundTrip() {
 bool hasHeader(const fake::Headers& headers, const std::string& name, const std::string& value) {
   return std::find(headers.begin(), headers.end(), std::make_pair(name, value)) != headers.end();
 }
-// Servers that check only Basic auth must accept every clipping request, like progress sync.
-void everyRequestSendsAuthHeaders() {
+// Every clipping request sends one Authorization header: the configured one, else the Basic auth of progress sync.
+void everyRequestSendsAuthHeaders(const SyncCredentials::Header& custom, const std::string& authorization) {
   reset();
+  syncCredentials.customHeaders = {custom};
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
   fake::syncHeap = 100000;
 #endif
@@ -104,7 +107,12 @@ void everyRequestSendsAuthHeaders() {
   for (const auto& headers : fake::headers) {
     assert(hasHeader(headers, "x-auth-user", "reader"));
     assert(hasHeader(headers, "x-auth-key", "key"));
-    assert(hasHeader(headers, "Authorization", "Basic cmVhZGVyOnBhc3M="));
+    if (!custom.name.empty()) assert(hasHeader(headers, custom.name, custom.value));
+    std::vector<std::string> values;
+    for (const auto& [name, value] : headers) {
+      if (strcasecmp(name.c_str(), "Authorization") == 0) values.push_back(value);
+    }
+    assert(values == std::vector<std::string>{authorization});
   }
 }
 }  // namespace
@@ -112,7 +120,12 @@ void everyRequestSendsAuthHeaders() {
 int main() {
   buildscratch::lend(framebuffer.data(), framebuffer.size());
   maximumTextRoundTrip();
-  everyRequestSendsAuthHeaders();
+  const std::string basic = "Basic cmVhZGVyOnBhc3M=";
+  everyRequestSendsAuthHeaders({}, basic);
+  everyRequestSendsAuthHeaders({"CF-Access-Client-Id", "client"}, basic);
+  for (const char* name : {"Authorization", "authorization", "AuThOrIzAtIoN"}) {
+    everyRequestSendsAuthHeaders({name, "Bearer fixture"}, "Bearer fixture");
+  }
   for (int failure = 0; failure < 3; ++failure) {
     reset();
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
