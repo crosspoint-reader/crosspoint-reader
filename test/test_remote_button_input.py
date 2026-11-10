@@ -389,6 +389,11 @@ int main() {
 """
 harness = harness.replace("PICKER_CONFIRM_CONDITION", picker_confirm)
 main_source = (ROOT / "src/main.cpp").read_text()
+# Rejected wakes must return to sleep before any frontlight restoration.
+wake_validation = main_source.index("  switch (wakeupReason) {")
+wake_validation_end = main_source.index("\n  }\n", wake_validation) + len("\n  }\n")
+frontlight_init = main_source.index("  Frontlight.begin(")
+assert wake_validation_end < frontlight_init < main_source.index("  handleSlideSwitch();", wake_validation_end)
 release_guard = main_source.split("  if (mappedInputManager.wasPowerReleaseConsumed()) {", 1)[1].split(
     "  if (mappedInputManager.powerSleepClick()) {", 1)[0]
 sleep_dispatch = main_source.split("  const bool x4ProAwaitingClickWindow =", 1)[1].split(
