@@ -10,6 +10,7 @@
 #include <optional>
 #include <vector>
 
+#include "BookTextSettings.h"
 #include "BookmarkEntry.h"
 #include "ChapterPosition.h"
 #include "ClipSelectionActivity.h"
@@ -17,11 +18,18 @@
 #include "LinkNoteTitle.h"
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
+#include "ReaderTextSettings.h"
 #include "ReaderToolbarUi.h"
 #include "components/OptionPopup.h"
 
 class EpubReaderActivity final : public ReaderActivity {
   std::shared_ptr<Epub> epub;
+  BookTextSettings bookTextSettings;
+  ReaderTextSettings textSettings;
+  int readerFontId = 0;
+  bool pendingTextSettingsError = false;
+  bool prepareTextSettings();
+  void openTextSettings(bool toolbar);
   std::unique_ptr<Epub::SyncMetadata> vocabularyMetadata;
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
@@ -187,7 +195,7 @@ class EpubReaderActivity final : public ReaderActivity {
   std::string textRowValue(int row) const;
   void showTextRowPopup(int row);
   // Persist + re-paginate + re-render under the open panel (live preview).
-  void applyTextSettingLive();
+  void applyTextSettingLive(const ReaderTextSettings& edited);
   void paintOverlayPopup();
   // Persist the reader text settings, (re)load the selected SD font, and
   // re-paginate the current chapter so changes apply without re-opening the book.

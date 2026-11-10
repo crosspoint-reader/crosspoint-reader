@@ -203,9 +203,10 @@ struct ClipSelectionActivity {
   template<typename... Args> explicit ClipSelectionActivity(Args&&...) {}
 };
 ''' + return_selection_for + r'''
+struct ReaderTextSettings {};
 bool styledAvailable = false;
 bool buildDictionaryHtmlPages(Renderer& renderer, const std::string&, uint16_t, uint16_t,
-                               std::vector<std::unique_ptr<Page>>& pages) {
+                               std::vector<std::unique_ptr<Page>>& pages, const ReaderTextSettings&, int) {
   renderer.cache.released = false;
   if (!styledAvailable) return false;
   for (int i = 0; i < 4; ++i) pages.push_back(std::make_unique<Page>());
@@ -218,6 +219,8 @@ struct DictionaryDefinitionActivity {
   Renderer renderer;
   MappedInputManager mappedInput;
   bool htmlDefinition = false;
+  ReaderTextSettings textSettings;
+  int readerFontId = 0;
   Definition content;
   std::unique_ptr<LookupState> lookup;
   StrId message{};

@@ -18,6 +18,7 @@
 #include "CrossPointSettings.h"
 #include "HapticFeedback.h"
 #include "ReaderUtils.h"
+#include "SdCardFontSystem.h"
 #include "components/HeaderBackTapTarget.h"
 #include "components/UITheme.h"
 #include "util/DictHtmlPages.h"
@@ -123,6 +124,18 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
   }
 };
 
+DictionaryDefinitionActivity::DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                           std::string headword, std::string definition,
+                                                           const bool htmlDefinition,
+                                                           const ReaderTextSettings* textSettings,
+                                                           const int readerFontId)
+    : Activity("DictionaryDefinition", renderer, mappedInput),
+      content{.headword = std::move(headword), .text = std::move(definition)},
+      htmlDefinition(htmlDefinition),
+      textSettings(textSettings ? *textSettings : ReaderTextSettings::defaults()),
+      activateDefaultFont(readerFontId == 0),
+      readerFontId(readerFontId) {}
+
 // cppcheck-suppress constParameterReference // the lookup state holds the dictionary by non-const reference
 bool DictionaryDefinitionActivity::enableLookup(Dictionary& dictionary, std::string&& query) {
   lookup = makeUniqueNoThrow<LookupState>(dictionary);
@@ -133,6 +146,10 @@ bool DictionaryDefinitionActivity::enableLookup(Dictionary& dictionary, std::str
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  if (activateDefaultFont) {
+    RenderLock lock;
+    readerFontId = sdFontSystem.activate(renderer, textSettings);
+  }
   initialLayoutFailed = !prepareDefinition(content);
   if (initialLayoutFailed) {
     content.lines.clear();
@@ -191,7 +208,7 @@ bool DictionaryDefinitionActivity::layoutHtmlPages(Definition& next) {
     return false;
   }
   if (!buildDictionaryHtmlPages(renderer, definition, static_cast<uint16_t>(body.width),
-                                static_cast<uint16_t>(body.height), pages)) {
+                                static_cast<uint16_t>(body.height), pages, textSettings, readerFontId)) {
     return false;
   }
   definition.clear();
@@ -257,7 +274,7 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
   lines.clear();
   if (!reserveLines(next, definition.size() / 32 + 8)) return false;
 
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = readerFontId;
   if (!prepareFont(definition, fontId)) return false;
 
   const BodyArea body = bodyArea();
@@ -477,7 +494,7 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
 
 bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
   // Only the selection window gets packed word arenas; the definition keeps its cheap line spans.
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = readerFontId;
   const int lineHeight = renderer.getLineHeight(fontId, PLAIN_TEXT_LINE_SPACING);
   const int pageCount = std::min<int>(SELECTION_PAGE_WINDOW, content.totalPages - content.selectionPage);
   const size_t scratchBytes =
@@ -560,8 +577,8 @@ void DictionaryDefinitionActivity::startSelection(const int x, const int y) {
                          std::min<size_t>(SELECTION_PAGE_WINDOW, content.pages.size() - content.selectionPage));
   }
   const auto body = bodyArea();
-  auto selection =
-      makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, pages, body.x, body.y, content.selection, x, y);
+  auto selection = makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, pages, body.x, body.y,
+                                                            content.selection, x, y, readerFontId);
   if (!selection) {
     LOG_ERR("DICT", "OOM: definition selection (%u bytes)", static_cast<unsigned>(sizeof(ClipSelectionActivity)));
     lookup->selectionPages.clear();
@@ -721,7 +738,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // Body: two-pass draw inside a prewarm scope (same pattern as the reader's
   // renderContents) so SD-card font glyphs load from SD in one batch instead
   // of one on-demand overflow read per character on every page turn.
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = readerFontId;
   const BodyArea body = bodyArea();
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();

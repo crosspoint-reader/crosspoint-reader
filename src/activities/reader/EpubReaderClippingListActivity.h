@@ -2,18 +2,22 @@
 
 #include <array>
 
+#include "ReaderTextSettings.h"
 #include "activities/UiListActivity.h"
 #include "clippings/ClippingPreview.h"
 #include "components/OptionPopup.h"
 
 class EpubReaderClippingListActivity final : public UiListActivity {
  public:
-  EpubReaderClippingListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  EpubReaderClippingListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                 const ReaderTextSettings& textSettings, int readerFontId);
 
   void onEnter() override;
   void render(RenderLock&&) override;
 
  private:
+  ReaderTextSettings textSettings;
+  int readerFontId;
   void rebuildRows();
   void refreshRowWindow(int start);
   void openSelected();

@@ -8,6 +8,7 @@
 
 class GfxRenderer;
 class TextBlock;
+struct ReaderTextSettings;
 
 namespace textsettings {
 
@@ -39,7 +40,7 @@ struct PreviewLayout {
 
 // Draws the sample-text pane via the reader engine, reusing layout across redraws.
 // The caption is borrowed for this draw; only the sample layout is cached.
-void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previewPadding, int labelGap, Rect bounds,
-                   const char* caption);
+void renderPreview(const GfxRenderer& renderer, const ReaderTextSettings& settings, int fontId, PreviewLayout& layout,
+                   int previewPadding, int labelGap, Rect bounds, const char* caption);
 
 }  // namespace textsettings

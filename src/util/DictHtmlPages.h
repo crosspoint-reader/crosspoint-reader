@@ -7,6 +7,7 @@
 #include <vector>
 
 class GfxRenderer;
+struct ReaderTextSettings;
 
 // Lays out a StarDict HTML definition through the EPUB chapter parser,
 // yielding the same styled, paginated Pages the reader renders. Returns false
@@ -14,3 +15,7 @@ class GfxRenderer;
 // the caller falls back to the plain-text viewer path.
 bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, uint16_t viewportWidth,
                               uint16_t viewportHeight, std::vector<std::unique_ptr<Page>>& pagesOut);
+
+bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, uint16_t viewportWidth,
+                              uint16_t viewportHeight, std::vector<std::unique_ptr<Page>>& pagesOut,
+                              const ReaderTextSettings& textSettings, int readerFontId);

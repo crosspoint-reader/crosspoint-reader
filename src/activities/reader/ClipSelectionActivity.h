@@ -29,12 +29,12 @@ class ClipSelectionActivity final : public Activity {
 
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         std::vector<std::unique_ptr<Page>> pages, int marginLeft, int marginTop, int initialX = -1,
-                        int initialY = -1, Mode mode = Mode::Clip);
+                        int initialY = -1, Mode mode = Mode::Clip, int readerFontId = 0);
 
   // The definition viewer retains these pages until this child exits.
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         std::span<const std::unique_ptr<Page>> borrowedPages, int marginLeft, int marginTop,
-                        Selection selection, int initialX = -1, int initialY = -1);
+                        Selection selection, int initialX = -1, int initialY = -1, int readerFontId = 0);
 
   // Restore a previous selection (page offsets relative to the first page) on enter.
   void setInitialSelection(const Selection& selection) { initialSelection = selection; }
@@ -108,7 +108,7 @@ class ClipSelectionActivity final : public Activity {
   std::array<uint8_t, 16> pendingButtons{};
   size_t pendingButtonCount = 0;
   WordSelectionInput selectionInput;
-  int fontId = 0;
+  const int fontId;
   int lineHeight = 0;
   std::unique_ptr<WordBox[]> words;
   size_t wordCount = 0;

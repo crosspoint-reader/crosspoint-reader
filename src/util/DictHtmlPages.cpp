@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "ReaderTextSettings.h"
 
 namespace {
 
@@ -193,6 +194,13 @@ bool writeNormalizedXhtml(const std::string& html, HalFile& file) {
 
 bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, const uint16_t viewportWidth,
                               const uint16_t viewportHeight, std::vector<std::unique_ptr<Page>>& pagesOut) {
+  return buildDictionaryHtmlPages(renderer, definition, viewportWidth, viewportHeight, pagesOut,
+                                  ReaderTextSettings::defaults(), SETTINGS.getReaderFontId());
+}
+
+bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, const uint16_t viewportWidth,
+                              const uint16_t viewportHeight, std::vector<std::unique_ptr<Page>>& pagesOut,
+                              const ReaderTextSettings& textSettings, const int readerFontId) {
   if (ESP.getFreeHeap() < MIN_STYLED_FREE_HEAP || ESP.getMaxAllocHeap() < MIN_STYLED_MAX_ALLOC) {
     LOG_ERR("DHTML", "Low heap for styled definition (%u free, %u max block)", ESP.getFreeHeap(),
             ESP.getMaxAllocHeap());
@@ -225,9 +233,9 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     // handling, the only path that dereferences it.
     std::unique_ptr<ChapterHtmlSlimParser> parser;
     parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
-        nullptr, tmpPath, renderer, SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-        SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-        SETTINGS.hyphenationEnabled, SETTINGS.focusReadingEnabled,
+        nullptr, tmpPath, renderer, readerFontId, textSettings.getReaderLineCompression(),
+        textSettings.extraParagraphSpacing, textSettings.paragraphAlignment, viewportWidth, viewportHeight,
+        textSettings.hyphenationEnabled, textSettings.focusReadingEnabled,
         [&pagesOut, &parser, &retainedElements, &limitReason](std::unique_ptr<Page> page, uint16_t, uint16_t,
                                                               uint32_t) {
           if (limitReason) return;
@@ -258,8 +266,8 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     if (!parser) {
       LOG_ERR("DHTML", "OOM: ChapterHtmlSlimParser");
     } else {
-      parser->setTextSpacing(SETTINGS.getCharacterSpacing(), SETTINGS.wordSpacing);
-      parser->setParagraphIndentSpaces(SETTINGS.paragraphIndentSpaces);
+      parser->setTextSpacing(textSettings.getCharacterSpacing(), textSettings.wordSpacing);
+      parser->setParagraphIndentSpaces(textSettings.paragraphIndentSpaces);
       ok = parser->parseAndBuildPages();  // closes the file on both outcomes
     }
   }

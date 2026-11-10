@@ -23,8 +23,12 @@ constexpr int ENTER_DELETE_MODE_MS = 700;
 
 }  // namespace
 
-EpubReaderClippingListActivity::EpubReaderClippingListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiListActivity("EpubReaderClippings", renderer, mappedInput, /*wantsTouchLongPress=*/true) {}
+EpubReaderClippingListActivity::EpubReaderClippingListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                               const ReaderTextSettings& textSettings,
+                                                               const int readerFontId)
+    : UiListActivity("EpubReaderClippings", renderer, mappedInput, /*wantsTouchLongPress=*/true),
+      textSettings(textSettings),
+      readerFontId(readerFontId) {}
 
 void EpubReaderClippingListActivity::onEnter() {
   UiListActivity::onEnter();
@@ -98,7 +102,8 @@ void EpubReaderClippingListActivity::readSelected() {
   std::string text;
   if (!clipping || !CLIPPINGS.readClippingText(static_cast<size_t>(nav.selected), text)) return;
   const std::string title = clipping->chapterTitle[0] != '\0' ? clipping->chapterTitle : tr(STR_CLIPPINGS);
-  auto detail = makeUniqueNoThrow<DictionaryDefinitionActivity>(renderer, mappedInput, title, std::move(text));
+  auto detail = makeUniqueNoThrow<DictionaryDefinitionActivity>(renderer, mappedInput, title, std::move(text), false,
+                                                                &textSettings, readerFontId);
   if (!detail) {
     LOG_ERR("CLIP", "Failed to allocate clipping detail activity");
     return;

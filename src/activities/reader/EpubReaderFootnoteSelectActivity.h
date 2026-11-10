@@ -16,11 +16,8 @@
 class EpubReaderFootnoteSelectActivity final : public Activity {
  public:
   explicit EpubReaderFootnoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                            std::unique_ptr<Page> page, int marginLeft, int marginTop)
-      : Activity("EpubReaderFootnoteSelect", renderer, mappedInput),
-        page(std::move(page)),
-        marginLeft(marginLeft),
-        marginTop(marginTop) {}
+                                            std::unique_ptr<Page> page, int marginLeft, int marginTop,
+                                            int readerFontId = 0);
 
  private:
   void onEnter() override;
@@ -36,6 +33,7 @@ class EpubReaderFootnoteSelectActivity final : public Activity {
   std::unique_ptr<Page> page;
   const int marginLeft;
   const int marginTop;
+  const int fontId;
 
   struct FootnoteLink {
     const PageLink* link;

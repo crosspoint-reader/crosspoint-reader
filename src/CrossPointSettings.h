@@ -321,8 +321,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Reader font settings
   uint8_t fontFamily = NOTOSANS;
   // Point size of the reader font. Only sizes the active family actually ships
-  // are selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
-  // available size (and persists the snap) whenever the family changes.
+  // are selectable; font activation resolves unavailable requested sizes to the
+  // nearest supported size without rewriting the request.
   uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
   uint8_t lineSpacing = LINE_SPACING_120;
   uint8_t paragraphAlignment = JUSTIFIED;
@@ -481,12 +481,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     }
   };
   StatusBarSpec statusBarSpec() const;
-
-  // Resolved text-rendering configuration for the Epub layout engine. The
-  // viewport is renderer/orientation-derived, so the caller supplies it —
-  // passing it in keeps a spec from ever existing in a half-filled state.
-  // Unlocked for the same reason as statusBarSpec(); see the note above.
-  ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight) const;
 
   static const char* getFilePath() { return "/.crosspoint/settings.json"; }
   void toJson(JsonDocument& doc) const;

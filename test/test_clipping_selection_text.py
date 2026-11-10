@@ -260,16 +260,18 @@ using GfxRenderer = Renderer;
 using TextBlock = Block;
 struct BoardConfig { static bool isEegoA4() { return false; } };
 unsigned long millis() { return 0; }
-struct Settings {
+struct ReaderTextSettings {
   int screenMargin = 0;
-  int getReaderFontId() const { return 0; }
-  ReaderRenderSpec readerRenderSpec(int width, int height) const {
+  ReaderRenderSpec renderSpec(int fontId, int width, int height, uint8_t imageRendering) const {
     ReaderRenderSpec spec;
+    spec.fontId = fontId;
     spec.viewportWidth = width;
     spec.viewportHeight = height;
+    spec.imageRendering = imageRendering;
     return spec;
   }
-} SETTINGS;
+};
+struct Settings { uint8_t imageRendering = 0; } SETTINGS;
 struct SavedClippings {
   Clipping clipping;
   bool hasClippings() const { return true; }
@@ -324,6 +326,8 @@ struct ClipSelectionActivity {
 """ + build_text + extract_words + gap_draw + incremental_draw + selection_draw + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
+  ReaderTextSettings textSettings;
+  int readerFontId = 0;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
   struct Section { int currentPage = 0, pageCount = 1; } sectionData;
   Section* section = &sectionData;

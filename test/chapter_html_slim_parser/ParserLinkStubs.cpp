@@ -30,3 +30,19 @@ void ImageBlock::renderPlaceholder(GfxRenderer&, int, int) const {}
 bool ImageBlock::needsDecode() const { return false; }
 bool ImageBlock::serialize(HalFile&) { return false; }
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile&) { return nullptr; }
+
+#include <CrossPointSettings.h>
+#include <ReaderTextSettings.h>
+
+ReaderTextSettings ReaderTextSettings::defaults() {
+  ReaderTextSettings text;
+  text.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
+  text.paragraphAlignment = SETTINGS.paragraphAlignment;
+  text.hyphenationEnabled = SETTINGS.hyphenationEnabled;
+  text.focusReadingEnabled = SETTINGS.focusReadingEnabled;
+  text.wordSpacing = SETTINGS.wordSpacing;
+  text.paragraphIndentSpaces = SETTINGS.paragraphIndentSpaces;
+  return text;
+}
+float ReaderTextSettings::getReaderLineCompression() const { return SETTINGS.getReaderLineCompression(); }
+int8_t ReaderTextSettings::getCharacterSpacing() const { return SETTINGS.getCharacterSpacing(); }

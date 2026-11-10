@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "ReaderTextSettings.h"
 #include "activities/Activity.h"
 #include "util/Dictionary.h"
 #include "vocabulary/VocabularyStore.h"
@@ -18,13 +19,8 @@ class DictionaryWordSelectActivity final : public Activity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         std::unique_ptr<Page> page, int marginLeft, int marginTop,
-                                        std::string lookupText = {}, VocabularyContext vocabulary = {})
-      : Activity("DictionaryWordSelect", renderer, mappedInput),
-        page(std::move(page)),
-        marginLeft(marginLeft),
-        marginTop(marginTop),
-        lookupText(std::move(lookupText)),
-        vocabulary(std::move(vocabulary)) {}
+                                        std::string lookupText = {}, VocabularyContext vocabulary = {},
+                                        const ReaderTextSettings* textSettings = nullptr, int readerFontId = 0);
 
   void onEnter() override;
   void loop() override;
@@ -38,7 +34,8 @@ class DictionaryWordSelectActivity final : public Activity {
   std::unique_ptr<Page> page;
   const int marginLeft;
   const int marginTop;
-  int fontId = 0;
+  const ReaderTextSettings textSettings;
+  const int fontId;
 
   std::string lookupText;
   VocabularyContext vocabulary;

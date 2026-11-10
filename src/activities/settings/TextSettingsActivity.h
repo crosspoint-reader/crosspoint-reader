@@ -6,10 +6,13 @@
 #include <string>
 #include <vector>
 
+#include "ReaderTextSettings.h"
 #include "TextSettingsPreview.h"
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
 #include "components/themes/BaseTheme.h"
+
+class BookTextSettings;
 
 // Reader text settings with a shared live preview pane: tab bar
 // (Font | Size | Layout | Style) is position 0 of the Up/Down nav ring, same
@@ -21,7 +24,7 @@ class TextSettingsActivity final : public UiTabListActivity {
   enum class Tab : uint8_t { Family, Size, Layout, Style, Count };
 
   TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const SdCardFontRegistry* registry,
-                       Tab initialTab = Tab::Family);
+                       Tab initialTab = Tab::Family, BookTextSettings* bookSettings = nullptr);
 
   void onEnter() override;
   void render(RenderLock&&) override;
@@ -39,7 +42,7 @@ class TextSettingsActivity final : public UiTabListActivity {
     ScreenMargin,
     Count
   };
-  enum class StyleRow { FocusReading, Hyphenation, EmbeddedStyle, AntiAliasing, Count };
+  enum class StyleRow { FocusReading, Hyphenation, EmbeddedStyle, AntiAliasing, UseDefaults, Count };
 
   // --- UiTabListActivity contract ---
   int listCount() const override;
@@ -55,6 +58,8 @@ class TextSettingsActivity final : public UiTabListActivity {
   bool handleButtons() override;
   bool handleCustomInput() override;
 
+  bool applySettings(const ReaderTextSettings& candidate);
+  void refreshSettings();
   void applyFamily(int listIndex);
   void applySize(int listIndex);
   // Repopulates sizes_ (and currentSizeIndex_) from the active family's
@@ -84,7 +89,6 @@ class TextSettingsActivity final : public UiTabListActivity {
   struct FontEntry {
     std::string name;
     bool isBuiltin;
-    uint8_t settingIndex;
   };
 
   struct SizeEntry {
@@ -93,6 +97,10 @@ class TextSettingsActivity final : public UiTabListActivity {
   };
 
   const SdCardFontRegistry* registry_;
+  BookTextSettings* bookSettings_;
+  ReaderTextSettings settings_;
+  int fontId_ = 0;
+  bool showSaveError_ = false;
   OptionPopup optionPopup_;
   std::vector<FontEntry> fonts_;
   std::vector<SizeEntry> sizes_;

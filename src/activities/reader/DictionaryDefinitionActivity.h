@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "ClipSelectionActivity.h"
+#include "ReaderTextSettings.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 #include "util/Dictionary.h"
@@ -21,10 +22,8 @@
 class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string headword,
-                                        std::string definition, bool htmlDefinition = false)
-      : Activity("DictionaryDefinition", renderer, mappedInput),
-        content{.headword = std::move(headword), .text = std::move(definition)},
-        htmlDefinition(htmlDefinition) {}
+                                        std::string definition, bool htmlDefinition = false,
+                                        const ReaderTextSettings* textSettings = nullptr, int readerFontId = 0);
 
   bool enableLookup(Dictionary& dictionary, std::string&& query);
 
@@ -106,6 +105,9 @@ class DictionaryDefinitionActivity final : public Activity {
 
   Definition content;
   const bool htmlDefinition;
+  const ReaderTextSettings textSettings;
+  const bool activateDefaultFont;
+  int readerFontId;
   std::unique_ptr<LookupState> lookup;
   StrId message = StrId::STR_DICT_NOT_FOUND;
   unsigned long messageTime = 0;

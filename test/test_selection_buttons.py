@@ -15,7 +15,7 @@ method = "void ClipSelectionActivity::loopButtons()" + source.split(
 )[1].split("void ClipSelectionActivity::loop()", 1)[0]
 members = "std::array<uint8_t, 16> pendingButtons" + header.split(
     "std::array<uint8_t, 16> pendingButtons", 1
-)[1].split("  int fontId", 1)[0]
+)[1].split("  WordSelectionInput selectionInput;", 1)[0] + "  WordSelectionInput selectionInput;\n"
 harness = r"""
 #include <algorithm>
 #include <array>

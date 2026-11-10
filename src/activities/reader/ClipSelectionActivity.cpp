@@ -48,19 +48,20 @@ const char* cleanWordStart(const char* text) {
 ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              std::vector<std::unique_ptr<Page>> pages, const int marginLeft,
                                              const int marginTop, const int initialX, const int initialY,
-                                             const Mode mode)
+                                             const Mode mode, const int readerFontId)
     : Activity("ClipSelection", renderer, mappedInput),
       pages(std::move(pages)),
       marginLeft(marginLeft),
       marginTop(marginTop),
       initialX(initialX),
       initialY(initialY),
-      mode(mode) {}
+      mode(mode),
+      fontId(readerFontId != 0 ? readerFontId : SETTINGS.getReaderFontId()) {}
 
 ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              std::span<const std::unique_ptr<Page>> borrowedPages, const int marginLeft,
                                              const int marginTop, const Selection selection, const int initialX,
-                                             const int initialY)
+                                             const int initialY, const int readerFontId)
     : Activity("ClipSelection", renderer, mappedInput),
       borrowedPages(borrowedPages),
       initialSelection(selection),
@@ -68,14 +69,14 @@ ClipSelectionActivity::ClipSelectionActivity(GfxRenderer& renderer, MappedInputM
       marginTop(marginTop),
       initialX(initialX),
       initialY(initialY),
-      mode(Mode::DefinitionLookup) {}
+      mode(Mode::DefinitionLookup),
+      fontId(readerFontId != 0 ? readerFontId : SETTINGS.getReaderFontId()) {}
 
 void ClipSelectionActivity::onEnter() {
   Activity::onEnter();
   std::string dictionaryPath;
   lookupAvailable =
       mode == Mode::DefinitionLookup || DictionaryRegistry::resolveBasePath(SETTINGS.dictionaryName, dictionaryPath);
-  fontId = SETTINGS.getReaderFontId();
   lineHeight = renderer.getLineHeight(fontId);
   const bool extracted = extractWords();
   if (!extracted && mode == Mode::DefinitionLookup) {

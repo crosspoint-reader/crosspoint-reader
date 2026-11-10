@@ -18,9 +18,23 @@ void indexBuildYield(void*) { vTaskDelay(1); }
 
 }  // namespace
 
+DictionaryWordSelectActivity::DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                           std::unique_ptr<Page> page, const int marginLeft,
+                                                           const int marginTop, std::string lookupText,
+                                                           VocabularyContext vocabulary,
+                                                           const ReaderTextSettings* textSettings,
+                                                           const int readerFontId)
+    : Activity("DictionaryWordSelect", renderer, mappedInput),
+      page(std::move(page)),
+      marginLeft(marginLeft),
+      marginTop(marginTop),
+      textSettings(textSettings ? *textSettings : ReaderTextSettings::defaults()),
+      fontId(readerFontId != 0 ? readerFontId : SETTINGS.getReaderFontId()),
+      lookupText(std::move(lookupText)),
+      vocabulary(std::move(vocabulary)) {}
+
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
-  fontId = SETTINGS.getReaderFontId();
   lookupPending = true;
   popupMsg = StrId::STR_DICT_LOOKING_UP;
   popup = Popup::Busy;
@@ -70,7 +84,8 @@ void DictionaryWordSelectActivity::performLookup() {
       LOG_ERR("VOCAB", "Could not save successful dictionary lookup");
     }
     auto activity = makeUniqueNoThrow<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
-                                                                    std::move(definition), dict.definitionsAreHtml());
+                                                                    std::move(definition), dict.definitionsAreHtml(),
+                                                                    &textSettings, fontId);
     if (!activity || !activity->enableLookup(dict, std::move(lookupText))) {
       LOG_ERR("DICT", "OOM: definition activity");
       popup = Popup::Error;

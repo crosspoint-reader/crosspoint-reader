@@ -18,9 +18,10 @@
 
 class GfxRenderer;
 class TtfEpdFont;
+struct ReaderTextSettings;
 
 /// Facade that owns the SD card font registry, manager, and resolver logic.
-/// Hides implementation details behind a single begin() + ensureLoaded() API.
+/// Keeps one resident reader family and its sized variants.
 class SdCardFontSystem {
  public:
   // Constructor and destructor are out-of-line (defined in the .cpp where
@@ -37,6 +38,13 @@ class SdCardFontSystem {
   /// Call before entering the reader or after settings change.
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).
   void ensureLoaded(GfxRenderer& renderer);
+
+  /// Activate a requested family/size without changing or persisting settings.
+  /// Caller owns RenderLock and must quiesce users of the previous font first.
+  /// Returns the registered effective font ID, including built-in fallback.
+  int activate(GfxRenderer& renderer, const ReaderTextSettings& requested);
+  uint8_t activePointSize() const { return activePointSize_; }
+  bool isFallback() const { return fallback_; }
 
   /// Resolve an SD card font ID from family name + reader point size.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
@@ -58,6 +66,7 @@ class SdCardFontSystem {
   void refreshIfDirty() {
     if (registryDirty_.exchange(false, std::memory_order_acquire)) {
       registry_.discover();
+      residentReloadNeeded_.store(true, std::memory_order_release);
     }
   }
 
@@ -75,7 +84,8 @@ class SdCardFontSystem {
   // Load/refresh the selected TTF family at the current reader size, register
   // it with the renderer, and track it so ensureSdCardFontReady() rebuilds its
   // glyph set per page. registryWasDirty forces a reload even if unchanged.
-  void loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, bool registryWasDirty);
+  void loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t requestedPointSize,
+                     bool registryWasDirty);
   // Unregister + free the active TTF font (and its UI-size fallbacks), if any.
   void unloadTtf(GfxRenderer& renderer);
   // Register the loaded TTF at each built-in UI size as a script fallback, so UI
@@ -115,6 +125,11 @@ class SdCardFontSystem {
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
+  std::atomic<bool> residentReloadNeeded_{false};
+  char requestedFamily_[32] = {};
+  uint8_t requestedPointSize_ = 0;
+  uint8_t activePointSize_ = 0;
+  bool fallback_ = false;
 
 #if CROSSPOINT_VECTOR_FONTS
   // One style source file. SMALL files are read fully into `bytes` (resident,

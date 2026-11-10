@@ -764,3 +764,19 @@ Book moves rename the store and its `.deleted` journal (plus recovery sidecars)
 together. The stored source path is informational and is refreshed on the next
 save; the current file path selects the store. Local book deletion cleans up all
 of these sidecars but preserves the independent `My Clippings.txt` export.
+
+## `text-settings.bin`
+
+Version 1 stores per-book overrides for the existing Text Settings controls.
+The optional file is in the book cache alongside `book.bin` and `progress.bin`;
+clearing the whole reading cache removes it. Section re-pagination leaves it intact.
+
+The record is exactly 47 bytes: `u8 version`, `u16 overrideMask`, a fixed 32-byte
+NUL-terminated SD family name (empty means built-in Noto Sans), then twelve `u8`
+values. Bit 0 selects the family. Bits 1 through 12 select, in order: point size,
+line-spacing index, word-spacing percentage, character-spacing index, extra
+paragraph spacing, paragraph indentation, alignment, screen margin, Focus Reading,
+hyphenation, embedded style, and text anti-aliasing. Unset fields inherit global
+defaults. Character-spacing index 0..4 represents -2..+2 pixels. Unknown versions,
+unknown mask bits, incorrect lengths, or invalid active fields are ignored.
+Font IDs and resolved fallback sizes are not persisted.

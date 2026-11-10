@@ -14,6 +14,16 @@ constexpr unsigned long WORD_REPEAT_START_MS = 500;
 constexpr unsigned long WORD_REPEAT_INTERVAL_MS = 500;
 }  // namespace
 
+EpubReaderFootnoteSelectActivity::EpubReaderFootnoteSelectActivity(GfxRenderer& renderer,
+                                                                   MappedInputManager& mappedInput,
+                                                                   std::unique_ptr<Page> page, const int marginLeft,
+                                                                   const int marginTop, const int readerFontId)
+    : Activity("EpubReaderFootnoteSelect", renderer, mappedInput),
+      page(std::move(page)),
+      marginLeft(marginLeft),
+      marginTop(marginTop),
+      fontId(readerFontId != 0 ? readerFontId : SETTINGS.getReaderFontId()) {}
+
 void EpubReaderFootnoteSelectActivity::onEnter() {
   Activity::onEnter();
   snapshot = makeUniqueNoThrow<uint8_t[]>(SNAPSHOT_CAPACITY);
@@ -140,7 +150,7 @@ void EpubReaderFootnoteSelectActivity::render(RenderLock&&) {
 
   // Render the page underneath
   if (page) {
-    page->render(renderer, SETTINGS.getReaderFontId(), marginLeft, marginTop);
+    page->render(renderer, fontId, marginLeft, marginTop);
   }
 
   if (!footnoteLinks.empty()) {
