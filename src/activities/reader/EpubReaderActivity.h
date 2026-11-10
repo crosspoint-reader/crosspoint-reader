@@ -35,7 +35,8 @@ class EpubReaderActivity final : public ReaderActivity {
   std::optional<uint32_t> pendingOffsetJump;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
-  int8_t pendingManualTurn = 0;
+  // Written by loop(), read by the render task.
+  std::atomic<int8_t> pendingManualTurn{0};
   bool pendingManualTurnTouch = false;
   bool pendingPercentJump = false;
   float pendingSpineProgress = 0.0f;
