@@ -290,7 +290,7 @@ void XtcReaderActivity::renderPage() {
   markPageRendered();
 }
 
-bool XtcReaderActivity::pageTurn(bool isForward) {
+bool XtcReaderActivity::performPageTurn(bool isForward) {
   if (!xtc) return false;
   if (isForward) {
     if (currentPage < xtc->getPageCount()) {
@@ -306,7 +306,7 @@ bool XtcReaderActivity::pageTurn(bool isForward) {
   return false;
 }
 
-bool XtcReaderActivity::skipPages(int amount) {
+bool XtcReaderActivity::performSkipPages(int amount) {
   if (!xtc) return false;
   int newPage = static_cast<int>(currentPage) + amount;
   if (newPage < 0) newPage = 0;
