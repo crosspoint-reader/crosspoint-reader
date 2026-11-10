@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <HalGPIO.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
@@ -122,6 +123,22 @@ void SettingsActivity::rebuildSettings() {
     if (sectionFor(setting) != section || !showOnDevice(setting)) continue;
     settings.push_back(std::move(setting));
   }
+
+#if FREEINK_DEVICE_MURPHY_M4 && !defined(SIMULATOR)
+  // The two panel batches cannot be told apart at runtime, so the owner picks one. It is applied at boot.
+  if (section == SettingsSection::General) {
+    settings.push_back(
+        SettingInfo::DynamicEnum(
+            StrId::STR_M4_HARDWARE_BATCH, {StrId::STR_M4_BATCH_1, StrId::STR_M4_BATCH_2},
+            [] { return gpio.murphyM4Batch() == freeink::MurphyM4Batch::First ? 0 : 1; },
+            [](const uint8_t value) {
+              const auto batch = value == 0 ? freeink::MurphyM4Batch::First : freeink::MurphyM4Batch::Second;
+              if (batch == gpio.murphyM4Batch()) return;
+              if (gpio.saveMurphyM4Batch(batch)) silentRestart();
+            })
+            .withManagedEnumPicker());
+  }
+#endif
 
   // Clock configuration only exists where the RTC probe found hardware.
   if (halClock.isAvailable()) {
@@ -253,7 +270,7 @@ void SettingsActivity::toggleSelectedSetting() {
                                     ? static_cast<uint8_t>(setting.enumLabels().size())
                                     : static_cast<uint8_t>(setting.enumStringValues.size());
     const uint8_t cur = setting.valueGetter();
-    if (totalValues > 2) {
+    if (totalValues > 2 || setting.managedEnumPicker) {
       const auto valueSetter = setting.valueSetter;
       auto onSelect = [this, valueSetter, sleepScreenChanged, quickResumeTimeoutChanged](int idx) {
         valueSetter(idx);

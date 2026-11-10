@@ -7,6 +7,10 @@
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 
+#if FREEINK_DEVICE_MURPHY_M4
+#include "MurphyM4BatchPreference.h"
+#endif
+
 #if FREEINK_DEVICE_LILYGO
 #include <BoardT5S3.h>
 #endif
@@ -18,6 +22,32 @@ namespace {
 constexpr char HW_NAMESPACE[] = "cphw";
 constexpr char NVS_KEY_DEV_OVERRIDE[] = "dev_ovr";  // 0=auto, 1=x4, 2=x3
 constexpr char NVS_KEY_DEV_CACHED[] = "dev_det";    // 0=unknown, 1=x4, 2=x3
+#if FREEINK_DEVICE_MURPHY_M4
+constexpr char NVS_KEY_M4_BATCH[] = "m4_batch_v3";
+
+uint8_t readNvsUChar(const char* key, const uint8_t defaultValue) {
+  Preferences prefs;
+  if (!prefs.begin(HW_NAMESPACE, true)) return defaultValue;
+  const uint8_t value = prefs.getUChar(key, defaultValue);
+  prefs.end();
+  return value;
+}
+
+bool writeNvsUChar(const char* key, const uint8_t value) {
+  Preferences prefs;
+  if (!prefs.begin(HW_NAMESPACE, false)) return false;
+  const bool written = prefs.putUChar(key, value) == sizeof(value);
+  prefs.end();
+  return written;
+}
+
+// Unset or invalid selects batch 2, the shipping hardware. The batches cannot be told apart at runtime.
+freeink::MurphyM4Batch loadMurphyM4Batch() {
+  const uint8_t stored = readNvsUChar(
+      NVS_KEY_M4_BATCH, MurphyM4BatchPreference::encode(freeink::MurphyM4Batch::Second));
+  return MurphyM4BatchPreference::decode(stored);
+}
+#endif
 
 enum class NvsDeviceValue : uint8_t { Unknown = 0, X4 = 1, X3 = 2 };
 
@@ -108,6 +138,11 @@ void HalGPIO::begin() {
 #else
   _deviceType = DeviceType::X4;
 #endif
+#if FREEINK_DEVICE_MURPHY_M4
+  _murphyM4Batch = loadMurphyM4Batch();
+  LOG_INF("HW", "Murphy M4 batch %u selected", _murphyM4Batch == freeink::MurphyM4Batch::First ? 1U : 2U);
+  inputMgr.setMurphyM4Batch(_murphyM4Batch);
+#endif
   inputMgr.begin();
 #if FREEINK_DEVICE_LILYGO
   // T5S3 IO48 key sits behind the PCA9535 expander. Mirrors BoardT5S3::begin(), which also
@@ -119,6 +154,16 @@ void HalGPIO::begin() {
   }
 #endif
 }
+
+#if FREEINK_DEVICE_MURPHY_M4
+bool HalGPIO::saveMurphyM4Batch(const freeink::MurphyM4Batch batch) {
+  if (writeNvsUChar(NVS_KEY_M4_BATCH, MurphyM4BatchPreference::encode(batch))) return true;
+  LOG_ERR("HW", "Failed to save Murphy M4 batch");
+  return false;
+}
+
+bool HalGPIO::restoreTouchAfterDisplayReset() { return inputMgr.reinitializeTouchAfterSharedReset(); }
+#endif
 
 void HalGPIO::update() {
   inputMgr.update();
