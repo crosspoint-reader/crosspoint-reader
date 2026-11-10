@@ -17,6 +17,9 @@ void HalDisplay::begin(bool seamless) {
   if (gpio.deviceIsX3()) {
     einkDisplay.setDisplayX3();
   }
+#if FREEINK_DEVICE_MURPHY_M4
+  einkDisplay.setMurphyM4Batch(gpio.murphyM4Batch());
+#endif
 
   einkDisplay.begin();
 

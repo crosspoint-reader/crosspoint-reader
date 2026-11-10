@@ -537,6 +537,11 @@ void setupDisplayAndFonts(bool seamless = false) {
 #endif
 
   display.begin(seamless);
+#if FREEINK_DEVICE_MURPHY_M4
+  if (!gpio.restoreTouchAfterDisplayReset()) {
+    LOG_ERR("MAIN", "Failed to restore Murphy M4 touch after display reset");
+  }
+#endif
   renderer.begin();
   activityManager.begin();
   LOG_DBG("MAIN", "Display initialized");
