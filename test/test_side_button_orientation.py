@@ -6,7 +6,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT / "src/MappedInputManager.cpp").read_text()
-mapping = source[source.index("bool MappedInputManager::isNavDirectionSwapped()"):
+mapping = source[source.index("bool MappedInputManager::readButton("):
                  source.index("namespace {", source.index("bool MappedInputManager::mapButton("))]
 mapping += source[source.index("MappedInputManager::Labels MappedInputManager::mapLabels("):
                   source.index("int MappedInputManager::getPressedFrontButton()")]
@@ -31,6 +31,7 @@ struct HalGPIO {
   bool wasPressed(uint8_t b) const { return pressed == b; }
   bool wasReleased(uint8_t b) const { return pressed == b; }
   bool isPressed(uint8_t b) const { return pressed == b; }
+  bool isCapacitivePagePressed(uint8_t) const { return false; }
 };
 """
 harness = r"""
