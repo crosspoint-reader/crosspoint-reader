@@ -327,14 +327,17 @@ void TtfEpdFont::flushFace(Face& f) {
   f.kernKeys.clear();
   f.kernVals.clear();
   f.used = 0;
+  f.miniMetadataOnly = false;
 }
 
 void TtfEpdFont::clearCache() {
-  // Drop cached page glyphs on every inited face but keep the allocations: the
-  // vectors keep capacity (clear() does not free) and f.bmp keeps its buffer, so
-  // the next prewarm re-faults into buffers already sized to the book.
+  // Retain resident glyph data across PrewarmScopes (mirrors SdCardFont::resetStyleMiniData):
+  // the next prewarm subset-checks against f.cps in build(), which lets the idle
+  // prewarm of page N+1 serve the actual page turn with zero FreeType rasterizations.
+  // Full cache release still happens on memory pressure via releaseResidentCaches().
+  // If an allocation failure left incomplete glyphs (miniMetadataOnly), flush so next pass retries.
   for (Face& f : faces_) {
-    if (f.inited) flushFace(f);
+    if (f.inited && f.miniMetadataOnly) flushFace(f);
   }
 }
 
@@ -401,6 +404,7 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
   if (bytes > f.cap) {
     bytes = 0;
     px = 0;
+    f.miniMetadataOnly = true;
   }
   if (f.glyphs.size() >= f.maxGlyphs || f.used + bytes > f.cap) flushFace(f);
 
@@ -430,9 +434,11 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
     if (!reserveChecked(f.bmp, f.used + bytes, 4096, f.cap)) {
       bytes = 0;
       px = 0;
+      f.miniMetadataOnly = true;
     }
   }
 
+  if (!g || !haveMetrics) f.miniMetadataOnly = true;
   EpdGlyph eg{};
   const int32_t adv12_4 = haveMetrics ? (gm.advance26_6 + 2) >> 2 : (g ? g->advance << 4 : 0);
   eg.advanceX = static_cast<uint16_t>(adv12_4 < 0 ? 0 : adv12_4);
@@ -547,7 +553,39 @@ EpdFontFamily TtfEpdFont::family() const {
 
 bool TtfEpdFont::build(const char* utf8, const uint8_t style) {
   if (!loaded_ || style >= 4) return false;
-  flushFace(faces_[style]);
+  Face& f = faces_[style];
+  if (!f.inited || !f.ready) initFace(f);
+  if (!f.ready) return false;
+
+  // Multi-page / idle-prewarm hit: resident glyph data persists across PrewarmScopes
+  // (clearCache keeps it), so when previous pages or an idle prewarm already loaded
+  // every requested codepoint the font covers, this page needs zero FreeType rasterizations.
+  if (utf8 != nullptr && !f.cps.empty() && !f.miniMetadataOnly) {
+    bool covered = true;
+    const auto* p = reinterpret_cast<const unsigned char*>(utf8);
+    while (*p != '\0') {
+      const uint32_t cp = utf8NextCodepoint(&p);
+      const auto it = std::lower_bound(f.cps.begin(), f.cps.end(), cp);
+      if (it != f.cps.end() && *it == cp) continue;
+      const bool supported = f.ft->hasGlyph(cp) || (cp >= 0xFB00u && cp <= 0xFB04u && f.ligGid[cp - 0xFB00u] != 0);
+      if (supported) {
+        covered = false;
+        break;
+      }
+    }
+    if (covered) return true;
+  }
+
+  // Accumulate glyphs across pages until the cache is nearly full:
+  // Flush only if an allocation failure left incomplete glyphs (miniMetadataOnly)
+  // or if remaining headroom cannot guarantee fitting a full new page (~512 unique
+  // glyphs or ~64KB bitmap data). Otherwise keep previously loaded glyphs and only
+  // fault the new codepoints via addCoverage().
+  const size_t headroomGlyphs = std::min<size_t>(512, f.maxGlyphs / 2);
+  const size_t headroomBytes = std::min<size_t>(64 * 1024, f.cap / 2);
+  if (f.miniMetadataOnly || f.glyphs.size() + headroomGlyphs > f.maxGlyphs || f.used + headroomBytes > f.cap) {
+    flushFace(f);
+  }
   return addCoverage(utf8, style);
 }
 bool TtfEpdFont::addCoverage(const char* utf8, const uint8_t style) {

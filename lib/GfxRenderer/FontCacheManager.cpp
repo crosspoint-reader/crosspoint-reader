@@ -44,8 +44,9 @@ void FontCacheManager::releaseSdFontCaches() {
 void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask, bool accumulate) {
   // TTF (vector) font prewarm path. This is the single dispatch every draw path
   // funnels through (reader endScanAndPrewarm, the settings preview, UI text),
-  // so building here covers them all. accumulate=false means "this is the whole
-  // glyph set for this render" → replace; accumulate=true → add incrementally.
+  // so building here covers them all. For TTF, build() maintains an accumulating
+  // cache across render scopes with a headroom check, flushing only on capacity
+  // exhaustion or degradation; addCoverage() faults incremental codepoints.
 #if CROSSPOINT_VECTOR_FONTS
   auto tit = ttfFonts_.find(fontId);
   if (tit != ttfFonts_.end() && tit->second) {
@@ -85,6 +86,15 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
       LOG_DBG("FCM", "prewarmCache: %d glyph(s) not cached for style %d", missed, i);
     }
   }
+}
+
+int FontCacheManager::getIdleLookaheadPages(const int fontId) const {
+#if CROSSPOINT_VECTOR_FONTS
+  return ttfFonts_.count(fontId) > 0 ? 5 : 1;
+#else
+  (void)fontId;
+  return 1;
+#endif
 }
 
 void FontCacheManager::logStats(const char* label) {

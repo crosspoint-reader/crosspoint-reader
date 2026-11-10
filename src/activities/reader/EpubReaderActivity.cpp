@@ -712,26 +712,48 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
-  {
-    RenderLock lock(RenderLock::Mode::Try);
-    if (lock.ownsLock() && section && !section->isBuilding() && renderer.hasFrameBuffer() &&
-        lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
-        ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP && ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
-        (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
-      idlePrewarmSpine = currentSpineIndex;
-      idlePrewarmPage = section->currentPage;
-      const int nextPage = section->currentPage + 1;
-      if (nextPage < static_cast<int>(section->pageCount)) {
-        if (const auto p = section->loadPage(nextPage)) {
-          if (auto* fcm = renderer.getFontCacheManager()) {
-            const auto t0 = millis();
-            auto scope = fcm->createPrewarmScope();
-            p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);
-            scope.endScanAndPrewarm();
-            LOG_DBG("ERS", "Idle prewarm: page %d in %lums", nextPage, millis() - t0);
-          }
+  constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 150;
+  if (section && !section->isBuilding() && renderer.hasFrameBuffer() && lastRenderCompleteMs != 0 &&
+      millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS && ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP &&
+      ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
+      (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
+    if (auto* fcm = renderer.getFontCacheManager()) {
+      const int maxLookahead = fcm->getIdleLookaheadPages(SETTINGS.getReaderFontId());
+      int completedOffset = 0;
+      for (int offset = 1; offset <= maxLookahead; ++offset) {
+        if (offset > 1) {
+          mappedInput.update(true);
         }
+        float nx = 0.0f;
+        float ny = 0.0f;
+        if (buttonContactClosed() || anyButtonPressed() || pendingManualTurn != 0 || gpio.wasAnyPressed() ||
+            gpio.wasAnyReleased() ||
+            (gpio.hasTouch() && (gpio.wasTouchDown(nx, ny) || gpio.wasTouchReleased() || gpio.isTouchHeldAt(nx, ny)))) {
+          break;
+        }
+        const int targetPage = section->currentPage + offset;
+        if (targetPage >= static_cast<int>(section->pageCount)) {
+          completedOffset = offset;
+          break;
+        }
+
+        RenderLock lock(RenderLock::Mode::Try);
+        if (!lock.ownsLock()) break;
+
+        if (const auto p = section->loadPage(targetPage)) {
+          const auto t0 = millis();
+          auto scope = fcm->createPrewarmScope();
+          p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);
+          scope.endScanAndPrewarm();
+          LOG_DBG("ERS", "Idle prewarm: page %d in %lums", targetPage, millis() - t0);
+          completedOffset = offset;
+        } else {
+          break;
+        }
+      }
+      if (completedOffset > 0) {
+        idlePrewarmSpine = currentSpineIndex;
+        idlePrewarmPage = section->currentPage;
       }
     }
   }

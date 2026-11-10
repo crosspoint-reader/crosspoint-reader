@@ -75,11 +75,10 @@ class TtfEpdFont {
 
   EpdFontFamily family() const;
 
-  // Per-scope reset (mirrors SdCardFont::clearCache): drop every face's cached
-  // page glyphs but KEEP the allocations (byte arena + vector capacity), so a
-  // page turn re-faults into buffers already sized to the book and stops touching
-  // the allocator once converged. Driven by FontCacheManager::clearCache() /
-  // PrewarmScope, symmetrically with the SD fonts.
+  // Per-scope reset (mirrors SdCardFont::clearCache): retains resident glyph
+  // data across PrewarmScopes so build() can subset-check against f.cps to serve
+  // page turns from idle-prewarmed glyphs with zero FreeType rasterizations.
+  // Full release still happens via releaseResidentCaches().
   void clearCache();
 
   // Heap-critical teardown (mirrors SdCardFont::releaseResidentCaches): free
@@ -90,7 +89,10 @@ class TtfEpdFont {
   // transitions (WiFi + web server, image decode, dictionary, sleep).
   void releaseResidentCaches();
 
-  // Optional batch pre-warm of a face (defaults to regular; styles fault lazily).
+  // Batch pre-warm of a face for a render scope (defaults to regular; styles fault lazily).
+  // Retains existing glyph coverage and accumulates across scopes when headroom allows,
+  // performing a clean cache flush only when degraded or when remaining capacity cannot
+  // guarantee fitting a full new page.
   bool build(const char* utf8, uint8_t style = 0);
   bool addCoverage(const char* utf8, uint8_t style = 0);
 
@@ -116,12 +118,13 @@ class TtfEpdFont {
     uint16_t maxGlyphs = 0;
     bool twoBit = true;
     uint16_t sizePx = 0;
-    uint8_t srcIndex = 0;      // which Source this face initializes from
-    int weight = 400;          // design weight requested (wght axis / faux bold)
-    bool wantItalic = false;   // request italic from the source (axis or oblique)
-    bool inited = false;       // init attempted (lazy)
-    bool ready = false;        // FreeType face live
-    uint8_t initFailures = 0;  // consecutive failed initFace attempts
+    uint8_t srcIndex = 0;           // which Source this face initializes from
+    int weight = 400;               // design weight requested (wght axis / faux bold)
+    bool wantItalic = false;        // request italic from the source (axis or oblique)
+    bool inited = false;            // init attempted (lazy)
+    bool ready = false;             // FreeType face live
+    bool miniMetadataOnly = false;  // bitmap allocation failed: advance-only
+    uint8_t initFailures = 0;       // consecutive failed initFace attempts
     // GSUB 'liga' resolution (fi fl ff ffi ffl), resolved once at initFace():
     // ligGid[i] is the raw glyph ID for U+FB00+i (0 = none), and ligPairs is
     // the EpdFont pair table (sorted by key) that routes applyLigatures() to
