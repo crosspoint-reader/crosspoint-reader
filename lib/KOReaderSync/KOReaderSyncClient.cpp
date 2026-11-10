@@ -1,6 +1,7 @@
 #include "KOReaderSyncClient.h"
 
 #include <ArduinoJson.h>
+#include <HalMemory.h>
 #include <Logging.h>
 #include <SecureHttpClient.h>
 #include <base64.h>
@@ -16,33 +17,10 @@ namespace {
 constexpr char DEVICE_NAME[] = "CrossPoint";
 constexpr char DEVICE_ID[] = "crosspoint-reader";
 
-// KOSync's TLS-1.3 servers can't be reached through the precompiled system
-// mbedTLS (TLS 1.3 is stubbed out), so requests run over wolfSSL via
-// SecureHttpClient. The handshake still needs working heap; gate on it. wolfSSL's
-// footprint is smaller than mbedTLS's old ~48KB peak, but keep a conservative
-// floor. Check both total free heap and largest contiguous block so fragmented
-// heap does not fall through into a failed TLS allocation path.
-// MEMFIX-PORT: TLS heap gate; portable
-// Field data (July 2026): launching sync from a reader session lands at
-// 51.9-58.2 KB free / 42-53 KB maxAlloc after WiFi comes up. wolfSSL handles
-// allocation failure by returning MEMORY_E (no abort under -fno-exceptions),
-// so an optimistic attempt degrades to the same clean "sync failed" as the
-// gate — the gate only needs to keep out states where a doomed handshake
-// would waste tens of seconds, not guarantee success.
-//
-// Free and largest-block have separate requirements: with SP ECC
-// (WOLFSSL_HAVE_SP_ECC) the handshake's crypto uses fixed 256-bit arrays, so
-// the largest single TLS allocation is the ~17 KB wolfSSL record buffer, not
-// a run of fast-math bignums. A handshake was measured succeeding inside a
-// 43 KB largest block; requiring 50 KB contiguous refused syncs that fit.
-//
-// The 35 KB free floor covers the measured peak of what remains after the SP
-// ECC + X25519 work: session object plus record buffer plus RSA cert-verify
-// temps (2 KB apiece at FP_MAX_BITS 8192) totals ~30-40 KB transient. The old
-// 50 KB floor was calibrated against the fast-math bignum failure mode that
-// SP ECC removed, and sat inside the 51.9-58.2 KB band a reading session
-// normally leaves, refusing syncs that would have succeeded. A wrong guess
-// here fails soft: MEMORY_E aborts the handshake within its 15 s deadline.
+// wolfSSL uses the default allocator, which can use PSRAM on supported builds.
+// Keep a free-space floor and room for a full TLS record when the server does
+// not negotiate our smaller record limit. These are preflight margins, not a
+// guarantee that a handshake will fit.
 constexpr uint32_t MIN_FREE_FOR_TLS = 35000;
 constexpr uint32_t MIN_BLOCK_FOR_TLS = 20000;
 
@@ -57,13 +35,22 @@ void applyAuthHeaders(freeink::SecureHttpClient& http) {
   http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
 }
 
+// Caller-configured headers (e.g. a Cloudflare Access service token) applied
+// on top of the KOSync auth scheme, including on createUser() which has no
+// KOSync credentials yet.
+void applyCustomHeaders(freeink::SecureHttpClient& http) {
+  for (const auto& header : KOREADER_STORE.getCustomHeaders()) {
+    if (!header.name.empty()) http.addHeader(header.name, header.value);
+  }
+}
+
 // True when free heap is too low to risk a TLS handshake.
 bool insufficientHeap() {
-  const uint32_t freeHeap = ESP.getFreeHeap();
-  const uint32_t maxAllocHeap = ESP.getMaxAllocHeap();
-  if (freeHeap < MIN_FREE_FOR_TLS || maxAllocHeap < MIN_BLOCK_FOR_TLS) {
-    LOG_ERR("KOSync", "Insufficient heap for TLS handshake: %u bytes free (need %u), %u max alloc (need %u)", freeHeap,
-            MIN_FREE_FOR_TLS, maxAllocHeap, MIN_BLOCK_FOR_TLS);
+  const auto heap = HalMemory::getDefaultHeap();
+  if (heap.freeBytes < MIN_FREE_FOR_TLS || heap.largestBlockBytes < MIN_BLOCK_FOR_TLS) {
+    LOG_ERR("KOSync",
+            "Insufficient allocatable heap for TLS handshake: %zu bytes free (need %u), %zu max alloc (need %u)",
+            heap.freeBytes, MIN_FREE_FOR_TLS, heap.largestBlockBytes, MIN_BLOCK_FOR_TLS);
     return true;
   }
   return false;
@@ -87,6 +74,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
   }
+  applyCustomHeaders(http);
   applyAuthHeaders(http);
   const int httpCode = http.GET();
   http.end();
@@ -126,6 +114,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::createUser() {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
   }
+  applyCustomHeaders(http);
   http.addHeader("Accept", "application/vnd.koreader.v1+json");
   http.addHeader("Content-Type", "application/json");
   const int httpCode = http.sendRequest("POST", body);
@@ -148,7 +137,8 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     return NO_CREDENTIALS;
   }
 
-  const std::string url = KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash;
+  const std::string url =
+      KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash + "?position_kinds=locator,percentage";
   LOG_DBG("KOSync", "Getting progress: %s (heap: %u)", url.c_str(), (unsigned)ESP.getFreeHeap());
   if (insufficientHeap()) return LOW_MEMORY;
 
@@ -158,6 +148,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
   }
+  applyCustomHeaders(http);
   applyAuthHeaders(http);
   const int httpCode = http.GET();
   lastHttpCode = httpCode;
@@ -196,7 +187,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     outProgress.timestamp = doc["timestamp"].as<int64_t>();
 
     outProgress.position.reset();
-    if (KOREADER_STORE.usesCrossPointSyncServer()) {
+    if (KOREADER_STORE.supportsRichProgress()) {
       const JsonObjectConst pos = doc["position"].as<JsonObjectConst>();
       if (!pos.isNull()) {
         KOReaderRichPosition rich;
@@ -243,13 +234,32 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
     meta["filename"] = progress.metadata->filename;
     meta["title"] = progress.metadata->title;
     meta["authors"] = progress.metadata->authors;
+    if (KOREADER_STORE.supportsExtendedMetadata()) {
+      if (!progress.metadata->isbn.empty()) meta["isbn"] = progress.metadata->isbn;
+      if (!progress.metadata->asin.empty()) meta["asin"] = progress.metadata->asin;
+      if (!progress.metadata->series.empty()) meta["series"] = progress.metadata->series;
+      if (progress.metadata->seriesIndex.has_value()) meta["series_index"] = *progress.metadata->seriesIndex;
+    }
+
+    JsonDocument extra;
+    if (!progress.metadata->extraJson.empty() &&
+        deserializeJson(extra, progress.metadata->extraJson) == DeserializationError::Ok) {
+      for (JsonPairConst kv : extra.as<JsonObjectConst>()) {
+        // Flat strings, numbers, and booleans keep their JSON type; null and
+        // nested values are skipped, and the reserved keys above always win.
+        const JsonVariantConst value = kv.value();
+        if (!(value.is<const char*>() || value.is<bool>() || value.is<long long>() || value.is<double>())) continue;
+        if (!meta[kv.key().c_str()].isNull()) continue;
+        meta[kv.key().c_str()] = value;
+      }
+    }
   }
   doc["progress"] = progress.progress;
   doc["percentage"] = progress.percentage;
   doc["device"] = DEVICE_NAME;
   doc["device_id"] = DEVICE_ID;
-  if (progress.position.has_value() && KOREADER_STORE.usesCrossPointSyncServer()) {
-    // CrossPoint-specific extension: do not send it to third-party KOSync servers.
+  if (progress.position.has_value() && KOREADER_STORE.supportsRichProgress()) {
+    // Enhanced position is opt-in by server type; strict KOSync never receives it.
     const auto& p = *progress.position;
     auto pos = doc["position"].to<JsonObject>();
     pos["pctQ"] = p.pctQ;
@@ -272,6 +282,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
   }
+  applyCustomHeaders(http);
   applyAuthHeaders(http);
   http.addHeader("Content-Type", "application/json");
   const int httpCode = http.sendRequest("PUT", body);

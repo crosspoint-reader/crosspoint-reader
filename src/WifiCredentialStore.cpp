@@ -208,22 +208,3 @@ std::string WifiCredentialStore::getLastConnectedSsid() const {
   std::lock_guard<std::mutex> lock(credentialMutex);
   return lastConnectedSsid;
 }
-
-void WifiCredentialStore::clearLastConnectedSsid() {
-  {
-    std::lock_guard<std::mutex> lock(credentialMutex);
-    if (lastConnectedSsid.empty()) return;
-    lastConnectedSsid.clear();
-  }
-  saveToFile();
-}
-
-void WifiCredentialStore::clearAll() {
-  {
-    std::lock_guard<std::mutex> lock(credentialMutex);
-    credentials.clear();
-    lastConnectedSsid.clear();
-  }
-  saveToFile();
-  LOG_DBG("WCS", "Cleared all WiFi credentials");
-}

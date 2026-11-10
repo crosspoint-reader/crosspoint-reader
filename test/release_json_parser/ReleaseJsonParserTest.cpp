@@ -545,6 +545,58 @@ TEST(ReleaseJsonParser, FirmwareBinExactMatch) {
   EXPECT_EQ(p.getFirmwareSize(), 200u);
 }
 
+TEST(ReleaseJsonParser, ConfiguredFirmwareNameMatch) {
+  const char* json = R"({
+      "tag_name": "1.6.1",
+      "assets": [
+        {"name": "firmware-x4pro.bin", "browser_download_url": "https://legacy", "size": 100},
+        {"name": "crosspoint-1.6.1-sticky.bin", "browser_download_url": "https://sticky", "size": 200},
+        {"name": "crosspoint-1.6.1-x4pro.bin", "browser_download_url": "https://x4pro", "size": 300}
+      ]
+    })";
+
+  ReleaseJsonParser p;
+  p.setFirmwareAssetName("crosspoint-1.6.1-x4pro.bin");
+  p.feed(json, strlen(json));
+
+  EXPECT_TRUE(p.foundFirmware());
+  EXPECT_STREQ(p.getFirmwareUrl(), "https://x4pro");
+  EXPECT_EQ(p.getFirmwareSize(), 300u);
+}
+
+TEST(ReleaseJsonParser, ConfiguredFirmwareNameIsNotOverwrittenBySameSuffix) {
+  const char* json = R"({
+      "tag_name": "1.6.1",
+      "assets": [
+        {"name": "crosspoint-1.6.1-x4pro.bin", "browser_download_url": "https://correct", "size": 100},
+        {"name": "crosspoint-1.6.0-x4pro.bin", "browser_download_url": "https://stale", "size": 200}
+      ]
+    })";
+
+  ReleaseJsonParser p;
+  p.setFirmwareAssetName("crosspoint-1.6.1-x4pro.bin");
+  p.feed(json, strlen(json));
+
+  EXPECT_TRUE(p.foundFirmware());
+  EXPECT_STREQ(p.getFirmwareUrl(), "https://correct");
+  EXPECT_EQ(p.getFirmwareSize(), 100u);
+}
+
+TEST(ReleaseJsonParser, ConfiguredFirmwareNameRejectsDifferentVersion) {
+  const char* json = R"({
+      "tag_name": "1.6.1",
+      "assets": [
+        {"name": "crosspoint-1.6.0-x4pro.bin", "browser_download_url": "https://stale", "size": 200}
+      ]
+    })";
+
+  ReleaseJsonParser p;
+  p.setFirmwareAssetName("crosspoint-1.6.1-x4pro.bin");
+  p.feed(json, strlen(json));
+
+  EXPECT_FALSE(p.foundFirmware());
+}
+
 TEST(ReleaseJsonParser, LargeSize) {
   // 16MB firmware (maximum flash size)
   const char* json =

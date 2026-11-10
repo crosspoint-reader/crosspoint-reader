@@ -15,10 +15,10 @@ namespace fui = freeink::ui;
 EpubReaderChapterSelectionActivity::EpubReaderChapterSelectionActivity(GfxRenderer& renderer,
                                                                        MappedInputManager& mappedInput,
                                                                        const std::shared_ptr<Epub>& epub,
-                                                                       const int currentSpineIndex)
+                                                                       const int currentTocIndex)
     : UiListActivity("EpubReaderChapterSelection", renderer, mappedInput),
       epub(epub),
-      currentSpineIndex(currentSpineIndex) {}
+      currentTocIndex(currentTocIndex) {}
 
 void EpubReaderChapterSelectionActivity::onEnter() {
   UiListActivity::onEnter();
@@ -40,11 +40,7 @@ void EpubReaderChapterSelectionActivity::onEnter() {
   // Start with the current chapter at the top of the viewport; the first
   // screen build pulls the viewport to it (ListNav follow-on-build) and
   // materializes the row window there (refreshTocWindow in buildScreen).
-  int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-  if (tocIndex == -1) {
-    tocIndex = 0;
-  }
-  nav.selected = tocIndex;
+  nav.selected = currentTocIndex;
 }
 
 // Materialize the ListItem/label window starting at `start` (clamped). TOC
@@ -129,10 +125,10 @@ void EpubReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   // Content: the safe area minus the header band drawChrome paints the title in.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
-                                      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
-                                      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)),
-                                      static_cast<int16_t>(safe.x)});
+  screen.setContentMarginFromScreen(fui::Insets{
+      static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
+      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
+      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)), static_cast<int16_t>(safe.x)});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   if (!epub) {
@@ -158,8 +154,5 @@ void EpubReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
 }
 
 void EpubReaderChapterSelectionActivity::drawChrome() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  GUI.drawHeader(renderer, Rect{safe.x, safe.y + metrics.topPadding, safe.width, metrics.headerHeight},
-                 tr(STR_SELECT_CHAPTER));
+  GUI.drawHeader(renderer, UITheme::getInstance().getHeaderRect(renderer, true, false), tr(STR_SELECT_CHAPTER));
 }

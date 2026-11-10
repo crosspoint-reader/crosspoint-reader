@@ -29,7 +29,8 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       cp = applyLigatures(cp, string);
     }
 
-    const EpdGlyph* glyph = getGlyph(cp);
+    EpdGlyph solidFallback;
+    const EpdGlyph* glyph = getGlyphMetrics(cp, solidFallback);
     if (!glyph) {
       // Keep cursor movement stable when a base glyph is missing, but don't attach subsequent
       // combining marks to stale base metrics.
@@ -81,6 +82,18 @@ void EpdFont::getTextDimensions(const char* string, int* w, int* h) const {
   *h = maxY - minY;
 }
 
+// Split form: the search touches only the codepoint array. See EpdFontData::kernLeftCodepoints.
+static uint8_t lookupKernClassSplit(const uint16_t* codepoints, const uint8_t* classIds, const uint16_t count,
+                                    const uint32_t cp) {
+  if (!codepoints || count == 0 || cp > 0xFFFF) {
+    return 0;
+  }
+  const auto target = static_cast<uint16_t>(cp);
+  const uint16_t* end = codepoints + count;
+  const auto it = std::lower_bound(codepoints, end, target);
+  return (it != end && *it == target) ? classIds[it - codepoints] : 0;
+}
+
 static uint8_t lookupKernClass(const EpdKernClassEntry* entries, const uint16_t count, const uint32_t cp) {
   if (!entries || count == 0 || cp > 0xFFFF) {
     return 0;
@@ -105,20 +118,63 @@ int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const 
   if (utf8IsCjkBreakable(leftCp) || utf8IsCjkBreakable(rightCp)) {
     return 0;
   }
-  if (!data->kernMatrix) {
+  if (data->kernHandler) {
+    return data->kernHandler(data->glyphMissCtx, leftCp, rightCp);
+  }
+  if (!data->kernMatrix && !data->kernRowOffsets) {
     return 0;
   }
-  const uint8_t lc = lookupKernClass(data->kernLeftClasses, data->kernLeftEntryCount, leftCp);
+  if (!data->kernLeftClasses && !data->kernLeftCodepoints) {
+    return 0;
+  }
+  // Built-in fonts carry the split arrays, SD-card fonts the packed ones; never both.
+  const bool split = data->kernLeftCodepoints != nullptr;
+  const uint8_t lc =
+      split ? lookupKernClassSplit(data->kernLeftCodepoints, data->kernLeftClassIds, data->kernLeftEntryCount, leftCp)
+            : lookupKernClass(data->kernLeftClasses, data->kernLeftEntryCount, leftCp);
   if (lc == 0) return 0;
-  const uint8_t rc = lookupKernClass(data->kernRightClasses, data->kernRightEntryCount, rightCp);
+  const uint8_t rc = split ? lookupKernClassSplit(data->kernRightCodepoints, data->kernRightClassIds,
+                                                  data->kernRightEntryCount, rightCp)
+                           : lookupKernClass(data->kernRightClasses, data->kernRightEntryCount, rightCp);
   if (rc == 0) return 0;
+
+  // Sparse (built-in fonts): scan the row. Linear rather than binary — rows hold ~15 entries on
+  // average, short enough that the scan measured faster (worst-case mix +11% over dense against
+  // +19% for std::lower_bound), and it should widen on hardware that reads these arrays through
+  // a flash cache, since the scan walks forwards through a cache line.
+  if (data->kernRowOffsets) {
+    const uint16_t begin = data->kernRowOffsets[lc - 1];
+    const uint16_t end = data->kernRowOffsets[lc];
+    const auto target = static_cast<uint8_t>(rc - 1);
+    const uint8_t* cols = data->kernSparseCols;
+    for (uint16_t i = begin; i < end; i++) {
+      if (cols[i] == target) return data->kernSparseValues[i];
+      if (cols[i] > target) break;  // sorted ascending, so past the target means absent
+    }
+    return 0;
+  }
+
+  // Dense (SD-card fonts, mapped straight out of the .cpfont).
   return data->kernMatrix[(lc - 1) * data->kernRightClassCount + (rc - 1)];
+}
+
+// Arabic contextual joining (including Lam-Alef) is resolved earlier by
+// do_shape() in MiniBidi, which emits presentation forms in visual order.
+// Font GSUB ligatures must not run a second pass over that output: a shaped
+// Alef+Lam ("…ال…") is FEDF+FE8E, which the font's Lam-Alef pairs would
+// wrongly re-collapse into FEFB/FEFC — transposing the letters (e.g. کسالت →
+// کسلات). Latin ligatures (ff/fi/fl) key off ASCII and are unaffected.
+static inline bool isArabicPresentationForm(const uint32_t cp) {
+  return (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF);
 }
 
 uint32_t EpdFont::getLigature(const uint32_t leftCp, const uint32_t rightCp) const {
   const auto* pairs = data->ligaturePairs;
   const auto count = data->ligaturePairCount;
   if (!pairs || count == 0 || leftCp > 0xFFFF || rightCp > 0xFFFF) {
+    return 0;
+  }
+  if (isArabicPresentationForm(leftCp) || isArabicPresentationForm(rightCp)) {
     return 0;
   }
 
@@ -183,6 +239,9 @@ const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
     if (loaded) return loaded;
   }
 
+  // The turned comma uses the matching quotation-mark shape when absent.
+  if (cp == 0x02BB && hasCodepoint(0x2018)) return getGlyph(0x2018);
+
   if (cp != REPLACEMENT_GLYPH) {
     return getGlyph(REPLACEMENT_GLYPH);
   }
@@ -205,4 +264,29 @@ bool EpdFont::hasCodepoint(const uint32_t cp) const {
     return data->coverageHandler(data->glyphMissCtx, cp);
   }
   return false;
+}
+
+const EpdGlyph* EpdFont::getGlyphMetrics(const uint32_t cp, EpdGlyph& solidFallback) const {
+  if (!syntheticGlyph::isSolid(cp) || hasCodepoint(cp)) return getGlyph(cp);
+
+  // Match the current font's em width and ascender without allocating a bitmap.
+  const EpdGlyph* emGlyph = hasCodepoint('M') ? getGlyph('M') : nullptr;
+  const int ascender = data->ascender > 0 ? data->ascender : 8;
+  const uint16_t advance = emGlyph && emGlyph->advanceX > 0
+                               ? emGlyph->advanceX
+                               : static_cast<uint16_t>(fp4::fromPixel(std::max(1, (ascender * 3 + 3) / 4)));
+  const int advancePx = std::max(1, fp4::toPixel(advance));
+  const bool square = cp == syntheticGlyph::BLACK_SQUARE;
+  const int height = std::clamp(square ? (ascender * 2 + 2) / 3 : ascender, 1, 255);
+  const int width = std::min(255, square ? std::min(height, advancePx) : advancePx);
+  const int left = square ? std::max(0, (advancePx - width) / 2) : 0;
+  const int top = square ? height + std::max(0, (ascender - height) / 2) : height;
+  solidFallback = {static_cast<uint8_t>(width),
+                   static_cast<uint8_t>(height),
+                   advance,
+                   static_cast<int16_t>(left),
+                   static_cast<int16_t>(top),
+                   0,
+                   0};
+  return &solidFallback;
 }

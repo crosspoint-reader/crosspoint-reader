@@ -29,7 +29,16 @@ class TextSettingsActivity final : public UiTabListActivity {
  private:
   // Row indices per tab. enum class (not plain enum) so a LayoutRow can't be
   // silently confused with a StyleRow of equal value.
-  enum class LayoutRow { LineSpacing, ParaSpacing, Alignment, ScreenMargin, Count };
+  enum class LayoutRow {
+    LineSpacing,
+    WordSpacing,
+    CharacterSpacing,
+    ParaSpacing,
+    ParaIndentation,
+    Alignment,
+    ScreenMargin,
+    Count
+  };
   enum class StyleRow { FocusReading, Hyphenation, EmbeddedStyle, AntiAliasing, Count };
 
   // --- UiTabListActivity contract ---
@@ -41,6 +50,8 @@ class TextSettingsActivity final : public UiTabListActivity {
   void activateIndex(int index) override;
   void onTabAction(int index) override;
   void stepTab(int direction) override { switchTab(direction); }
+  void drawChrome() override;
+  void drawFooter() override;
   bool handleButtons() override;
   bool handleCustomInput() override;
 
@@ -55,11 +66,9 @@ class TextSettingsActivity final : public UiTabListActivity {
   void activateRow(int row);
 
   std::string layoutValueText(int row) const;
-  std::string styleValueText(int row) const;
+  bool styleRowChecked(int row) const;
   // Button-hint label for Confirm at the current ring position.
   const char* confirmLabelText() const;
-  // True when the focused list row is a setting the preview cannot reflect.
-  bool focusedRowHasNoPreview() const;
   void switchTab(int direction = 1);
 
   // Row storage for the active tab: rowItems_ (label/actionValue) is
@@ -95,7 +104,5 @@ class TextSettingsActivity final : public UiTabListActivity {
 
   ThemeMetrics metrics_ = {};
   int afterHeader = 0;
-  int bottomReserved = 0;
-  int usableHeight = 0;
   int previewHeight = 0;
 };

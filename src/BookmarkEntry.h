@@ -1,11 +1,15 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
 // A single bookmark entry — a position in a book.
 struct BookmarkEntry {
+  static constexpr std::size_t MAX_NAME_LENGTH = 128;
+
   std::string xpath;    // XPath-like progress string
   std::string summary;  // First few words of a page to help identify it
+  std::string name;     // Optional user-provided label
   float percentage;     // Progress percentage (0.0 to 1.0)
 
   uint16_t computedSpineIndex = 0;        // Spine index at the time of bookmarking

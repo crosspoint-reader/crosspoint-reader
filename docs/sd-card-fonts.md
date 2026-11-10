@@ -3,9 +3,18 @@
 CrossPoint supports loading additional fonts from the SD card, including fonts
 with extended Unicode coverage (CJK, Cyrillic, Greek, etc.).
 
+If CrossPoint enables external RAM on your device, you can load `.ttf`, `.otf`,
+and `.ttc` files directly. Otherwise, convert them to `.cpfont` files first.
+All devices can use `.cpfont` files.
+
+The font releases include a `LICENSE` file with the original font notices.
+If you distribute font copies, keep the applicable notices with those copies.
+The source notices are in [licenses/fonts.txt](../licenses/fonts.txt).
+
 ## Installing Fonts
 
-There are three ways to install fonts:
+There are three ways to install `.cpfont` fonts. Direct TTF/OTF/TTC loading uses
+the manual SD card copy method below.
 
 ### Option 1: Download from device (recommended)
 
@@ -52,27 +61,62 @@ There are three ways to install fonts:
 
 3. Insert the SD card and power on your CrossPoint reader
 
-## CJK in the User Interface
+### Direct TTF/OTF/TTC fonts
+
+If CrossPoint enables external RAM on your device, copy a `.ttf`, `.otf`, or
+`.ttc` file directly into `/fonts/` or `/.fonts/`. The filename without its
+extension becomes the family name. For example, `/fonts/Bookerly.ttf` appears as
+`Bookerly` in **Settings > Reader > Font Family**.
+
+For a family with separate styles, put its files in one subfolder. The folder
+name becomes the family name. For example:
+
+    /fonts/Bookerly/Bookerly-Regular.ttf
+    /fonts/Bookerly/Bookerly-Bold.ttf
+    /fonts/Bookerly/Bookerly-Italic.ttf
+    /fonts/Bookerly/Bookerly-BoldItalic.ttf
+
+The reader selects regular, bold, italic, and bold italic faces from the font
+files. One regular file is enough; the reader derives missing styles. A `.cpfont`
+file in the same family folder takes priority over TTF/OTF/TTC files, so keep
+the two formats in separate folders. If both font roots contain the same family
+name, the copy in `/.fonts/` takes priority.
+
+Direct fonts use the standard reader sizes: 12, 14, 16, and 18 pt. The **Fonts**
+tab in File Transfer accepts `.cpfont` files only. Copy direct fonts to the SD
+card instead. To remove a loose font file, delete that file from the SD card.
+The Fonts page can delete families stored in subfolders.
+
+## Non-Latin Scripts Fallback in the User Interface
 
 The built-in UI fonts are Latin-only, so by default the interface (book titles
 in the library, file names in the browser, list rows, headers) shows
-replacement boxes for Chinese/Japanese/Korean text even when book *content*
-renders correctly with a selected SD-card font.
+replacement boxes for non-Latin text — CJK, Greek, Cyrillic, Armenian, and any
+other script the SD-font converter ships an interval for — even when book
+*content* renders correctly with a selected SD-card font.
 
-To avoid shipping a large CJK glyph set in flash, CrossPoint instead reuses the
-SD-card font you already selected: when a UI string contains a CJK character
+To avoid shipping every script's glyph set in flash, CrossPoint instead reuses
+the SD-card font you already selected: when a UI string contains a character
 the built-in font cannot draw, that whole string is rendered with your selected
 SD-card font instead.
 
 The fallback is **size-matched**. The built-in UI fonts render at 8 pt
 (small/author lines), 10 pt (list rows) and 12 pt (book-cover titles, headers),
 so CrossPoint loads your SD family at those sizes too and maps each UI font to
-its same-size SD font. CJK book names therefore appear at the same size as the
-Latin text around them. For this to work the family must contain `.cpfont`
-files at sizes **8, 10 and 12** (in addition to the reader sizes 12–18); any UI
-size missing from the family simply keeps showing boxes for CJK at that size.
+its same-size SD font. Non-Latin book names therefore appear at the same size
+as the Latin text around them. A `.cpfont` family must contain files at sizes
+**8, 10 and 12** for this UI fallback (in addition to the reader sizes 12–18) —
+**missing these is the most common reason non-Latin UI text still shows
+replacement boxes even though the book itself renders fine.** Any missing UI
+size keeps showing boxes for that script at that size. Direct TTF/OTF/TTC
+families use the same file at all three UI sizes.
 
-Note that **Settings > Reader > Font Size** lists every size the family ships,
+These UI sizes only take effect if the reader-size font also matches one of
+CrossPoint's built-in fallback-detection codepoints — see `kFallbackProbes` in
+`src/SdCardFontSystem.cpp` for the current list. A script outside that list
+gets no UI fallback even with the correct `.cpfont` sizes present.
+
+For `.cpfont` families, **Settings > Reader > Font Size** lists every size the family ships,
 so a family built at 8,10,12,14,16,18 offers all six as reading sizes — the UI
 sizes are not hidden from the list. Reading at 8 pt is your call; if you would
 rather not see the small sizes there, convert two families (one with the UI
@@ -90,19 +134,21 @@ When converting your own font, include the UI sizes:
 
 What this means in practice:
 
-- Select a CJK-capable SD font under **Settings > Reader > Font Family**
-  (see [Installing Fonts](#installing-fonts) and the `cjk` / `hangul` presets
-  under [Converting Custom Fonts](#converting-custom-fonts)). That single
-  selection drives both book content *and* size-matched CJK fallback in the UI.
+- Select a non-Latin-capable SD font under **Settings > Reader > Font Family**
+  (see [Installing Fonts](#installing-fonts) and the interval presets for
+  `.cpfont` under [Converting Custom Fonts](#converting-custom-fonts)). That
+  single selection drives both book content *and* size-matched fallback in
+  the UI.
 - Pure-Latin UI strings keep the crisp built-in font; only strings that
-  actually contain CJK are routed to the SD font.
+  actually contain a character the built-in font lacks are routed to the SD
+  font.
 - The fallback is per *string*, not per glyph: a mixed title such as
   `三体 Vol.1` renders entirely in the SD font (including the Latin part). If
   that SD font is a `Mono` family, the Latin portion will appear half/full
   width.
 - If no SD font is selected (a built-in reading font is active), there is no
-  CJK fallback and the UI again shows boxes for CJK — pick a CJK SD font to
-  restore it.
+  fallback and the UI again shows boxes for non-Latin text — pick an SD font
+  covering that script to restore it.
 
 ## Available Pre-Built Fonts
 
@@ -111,7 +157,7 @@ The current list of pre-built fonts is maintained in the
 
 ## Converting Custom Fonts
 
-To convert your own TrueType/OpenType fonts:
+To make `.cpfont` files for any device, convert your TrueType/OpenType fonts:
 
 ### Prerequisites
 
@@ -139,13 +185,19 @@ To convert your own TrueType/OpenType fonts:
       --name MyFont \
       --output-dir ./MyFont/
 
+> **Using this font for non-Latin UI fallback too?** The examples above only
+> include the reader sizes (12–18). To also get fallback for this font's
+> script in the library, headers, and file browser (see
+> [Non-Latin Scripts Fallback in the User Interface](#non-latin-scripts-fallback-in-the-user-interface)),
+> add the UI sizes: `--sizes 8,10,12,14,16,18`.
+
 ### Available Unicode interval presets
 
 | Preset | Coverage |
 |--------|----------|
 | `ascii` | U+0020–U+007E (Basic Latin) |
 | `latin1` | U+0080–U+00FF (Latin-1 Supplement) |
-| `latin-ext` | European languages (Latin + Extended-A/B + punctuation + ligatures) |
+| `latin-ext` | European languages (Latin + Extended-A/B + combining diacritical marks + punctuation + currency + letterlike symbols such as ™ and № + minus sign + ligatures) |
 | `greek` | Greek + Extended Greek |
 | `cyrillic` | Cyrillic + Supplement |
 | `hebrew` | Hebrew + Alphabetic Presentation Forms |
@@ -167,7 +219,7 @@ To convert your own TrueType/OpenType fonts:
 Combine presets with commas: `--intervals latin-ext,greek,cyrillic`
 
 You can also specify arbitrary Unicode ranges directly:
-`--intervals latin-ext,(0x2100-0x214F)`
+`--intervals 'latin-ext,(0x2190-0x21FF)'`
 
 To list all presets with codepoint counts:
 

@@ -1,17 +1,16 @@
 #pragma once
 
-#include <functional>
 #include <string>
 
 #include "activities/Activity.h"
+#include "components/UiAppHost.h"
 
-class ButtonRemapActivity final : public Activity {
+class ButtonRemapActivity final : public Activity, private UiAppHost {
  public:
   explicit ButtonRemapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("ButtonRemap", renderer, mappedInput) {}
+      : Activity("ButtonRemap", renderer, mappedInput), UiAppHost(renderer) {}
 
   void onEnter() override;
-  void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
 
@@ -20,17 +19,22 @@ class ButtonRemapActivity final : public Activity {
 
   // Index of the logical role currently awaiting input.
   uint8_t currentStep = 0;
+  enum class ExitAction : uint8_t { None, Save, Reset, Cancel };
+  ExitAction exitAction = ExitAction::None;
   // Temporary mapping from logical role -> hardware button index.
   uint8_t tempMapping[4] = {0xFF, 0xFF, 0xFF, 0xFF};
   // Error banner timing (used when reassigning duplicate buttons).
   unsigned long errorUntil = 0;
   std::string errorMessage;
+  freeink::ui::ListItem rowItems[4]{};
 
+  static void screenTrampoline(UiScreen& screen, void* user);
+  void buildScreen(UiScreen& screen);
   // Commit temporary mapping to settings.
   void applyTempMapping();
   // Returns false if a hardware button is already assigned to a different role.
   bool validateUnassigned(uint8_t pressedButton);
   // Labels for UI display.
-  const char* getRoleName(uint8_t roleIndex) const;
+  static const char* getRoleName(uint8_t roleIndex);
   const char* getHardwareName(uint8_t buttonIndex) const;
 };

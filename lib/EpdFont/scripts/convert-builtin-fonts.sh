@@ -5,35 +5,20 @@ set -e
 cd "$(dirname "$0")"
 
 READER_FONT_STYLES=("Regular" "Italic" "Bold" "BoldItalic")
-NOTOSERIF_FONT_SIZES=(12 14 16 18)
 NOTOSANS_FONT_SIZES=(12 14 16 18)
-
-for size in ${NOTOSERIF_FONT_SIZES[@]}; do
-  for style in ${READER_FONT_STYLES[@]}; do
-    font_name="notoserif_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
-    font_path="../builtinFonts/source/NotoSerif/NotoSerif-${style}.ttf"
-    output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
-    echo "Generated $output_path"
-  done
-done
 
 for size in ${NOTOSANS_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
     font_name="notosans_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
+    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum --zopfli > $output_path
     echo "Generated $output_path"
   done
 done
 
 UI_FONT_SIZES=(10 12)
-# Medium, not Regular, is the UI text weight: 1-bit rasterisation at these sizes
-# snaps stems to whole pixels, and Regular lands on 2px where Medium lands on 3.
-UI_FONT_STYLES=("Medium" "Bold")
-
-python generate-ui-noto-fonts.py
+UI_FONT_STYLES=("Regular" "Bold")
 
 # Arabic glyphs for UI text (menus, file browser titles). The built-in fonts
 # must cover the *output* of MiniBidi's do_shape() — contextual presentation
@@ -49,9 +34,11 @@ ARABIC_INTERVALS=(
   --additional-intervals 0x061F,0x061F  # Arabic question mark
   --additional-intervals 0x0621,0x0621  # hamza (non-joining, never shaped)
   --additional-intervals 0x0640,0x0640  # tatweel
+  --additional-intervals 0x0654,0x0654  # Persian/Urdu ezafe hamza, Arabic hamza carriers
   --additional-intervals 0x0660,0x0669  # Arabic-Indic digits
   --additional-intervals 0x06BA,0x06BA  # noon ghunna base (initial/medial keep base cp)
   --additional-intervals 0x06D4,0x06D4  # Urdu full stop
+  --additional-intervals 0x06D5,0x06D5  # ae (isolated; Kurdish/Uyghur/Ottoman) — has no presentation form
   --additional-intervals 0x06F0,0x06F9  # extended Arabic-Indic digits (Farsi/Urdu)
   --additional-intervals 0xFB56,0xFB59  # peh (Farsi)
   --additional-intervals 0xFB66,0xFB69  # tteh (Urdu)
@@ -67,38 +54,29 @@ for size in ${UI_FONT_SIZES[@]}; do
   for style in ${UI_FONT_STYLES[@]}; do
     font_name="ubuntu_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf"
-    # UI-specific optical faces retain readable stroke weight under --mono.
-    if [ "$style" = "Bold" ]; then noto_style="UIBold"; else noto_style="UIMedium"; fi
-    hebrew_path="../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-${noto_style}.ttf"
-    arabic_path="../builtinFonts/source/NotoSansArabic/NotoSansArabic-${noto_style}.ttf"
+    latin_fallback_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
+    hebrew_path="../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-${style}.ttf"
+    arabic_path="../builtinFonts/source/NotoSansArabic/NotoSansArabic-${style}.ttf"
     # Ubuntu lacks the Latin Extended Additional block (U+1EA0-U+1EF9) used for
     # Vietnamese tone marks. Append a Vietnamese-only Ubuntu cut so those glyphs
     # are filled from it while every glyph Ubuntu already has stays unchanged
     # (fontstack is ordered by descending priority).
     viet_path="../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    # Every face in this stack is optically weighted for monochrome rendering.
-    # The Noto faces are variable-font instances and carry no hints, so Hebrew
-    # needs the auto-hinter to reach the same even stem width; Arabic stays on
-    # the plain grid fit, where the auto-hinter costs more ink than
-    # verify-ui-noto-fonts.py allows. Ubuntu Bold keeps its own hints, but
-    # Ubuntu Medium's bytecode grid-fits U+0442 wider than its advance and lands
-    # its left bearing at -1, so that face runs on the auto-hinter as well.
-    autohint_args=(--autohint-font $hebrew_path)
-    if [ "$style" = "Medium" ]; then autohint_args+=(--autohint-font $font_path); fi
-    python fontconvert.py $font_name $size $font_path $hebrew_path $arabic_path $viet_path \
-      --mono "${autohint_args[@]}" --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > $output_path
+    python fontconvert.py $font_name $size $font_path $latin_fallback_path $hebrew_path $arabic_path $viet_path \
+      --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > $output_path
     echo "Generated $output_path"
   done
 done
 
-python verify-ui-noto-fonts.py
-
-python fontconvert.py notosans_8_regular 8 \
+# The small UI face is Ubuntu too, so UI text stays in one family at every size.
+python fontconvert.py ubuntu_8_regular 8 \
+  ../builtinFonts/source/Ubuntu/Ubuntu-Regular.ttf \
   ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf \
   ../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-Regular.ttf \
   ../builtinFonts/source/NotoSansArabic/NotoSansArabic-Regular.ttf \
-  --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/notosans_8_regular.h
+  ../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-Regular.ttf \
+  --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/ubuntu_8_regular.h
 
 echo ""
 echo "Running compression verification..."

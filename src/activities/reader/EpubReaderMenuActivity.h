@@ -17,10 +17,13 @@ class EpubReaderMenuActivity final : public UiListActivity {
     TEXT_SETTINGS,
     NIGHT_MODE,
     FRONTLIGHT,
+    BLUETOOTH,
     GO_TO_PERCENT,
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
     BOOKMARKS,
+    SAVE_CLIPPING,
+    VIEW_CLIPPINGS,
     TOGGLE_BOOKMARK,
     SCREENSHOT,
     DISPLAY_QR,
@@ -30,26 +33,31 @@ class EpubReaderMenuActivity final : public UiListActivity {
     DICTIONARY
   };
 
-  explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
-                                  const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks);
-
-  void render(RenderLock&&) override;
-  bool handleHomeGesture() override;
-
- private:
   struct MenuItem {
     MenuAction action;
     StrId labelId;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks);
+  static void toggleBluetooth();
+  static void buildMenuItems(std::vector<MenuItem>& items, bool hasFootnotes, bool hasBookmarks, bool hasClippings);
 
+  explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
+                                  const int currentPage, const int totalPages, const int bookProgressPercent,
+                                  const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks,
+                                  bool hasClippings, MenuAction& selectedAction);
+
+  void onEnter() override;
+  void onExit() override;
+  void render(RenderLock&&) override;
+  bool handleHomeGesture() override;
+  bool acceptsRemoteInput() const override { return routingReady(); }
+
+ private:
   // Row storage: menuItems is at most MAX_MENU_ITEMS, so a
   // fixed-capacity array avoids any heap allocation for the row list. Labels
   // are set once in the constructor (buildMenuRowItems()); buildScreen()
   // only refreshes rows whose values reflect live state.
-  static constexpr size_t MAX_MENU_ITEMS = 16;
+  static constexpr size_t MAX_MENU_ITEMS = 19;
   freeink::ui::ListItem menuRowItems[MAX_MENU_ITEMS]{};
   void buildMenuRowItems();
 
@@ -67,7 +75,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   void closeCancelled();
 
   // Fixed menu layout
-  const std::vector<MenuItem> menuItems;
+  std::vector<MenuItem> menuItems;
+  MenuAction& selectedAction;
 
   OptionPopup optionPopup;
   std::string title = "Reader Menu";

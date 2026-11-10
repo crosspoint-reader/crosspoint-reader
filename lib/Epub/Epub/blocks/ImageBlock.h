@@ -15,11 +15,10 @@ class ImageBlock final : public Block {
   int16_t getWidth() const { return width; }
   int16_t getHeight() const { return height; }
 
-  bool imageExists() const;
   bool hasValidCache() const;
   bool needsDecode() const;
   void renderPlaceholder(GfxRenderer& renderer, int x, int y) const;
-  static void clearSessionRenderFailures();
+  static void clearRenderFailures();
 
   // A page render draws its image up to ~13 times (BW double-refresh plus every
   // grayscale band pass), and each draw streams the whole .pxc off SD. The

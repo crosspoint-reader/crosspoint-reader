@@ -14,19 +14,24 @@ bool HalTiltSensor::readGyro(float& gx, float& gy, float& gz) const {
 }
 
 void HalTiltSensor::begin() {
-  _available = _sdkImu.begin();
-  if (_available) {
-    _initMs = millis();
-    _lastPollMs = millis();
-    // begin() leaves the sensors sampling; stand them by until tilt page turn
-    // actually wakes them, so a disabled IMU doesn't drain the battery.
-    if (!_sdkImu.sleep()) {
-      LOG_ERR("GYR", "IMU standby failed");
-    }
-    LOG_INF("GYR", "SDK IMU initialized");
+  if (!_sdkImu.begin()) {
+    LOG_ERR("GYR", "SDK IMU not found");
     return;
   }
-  LOG_ERR("GYR", "SDK IMU not found");
+  // begin() leaves the sensors sampling; stand them by until tilt page turn
+  // actually wakes them, so a disabled IMU doesn't drain the battery.
+  if (!_sdkImu.sleep()) {
+    LOG_ERR("GYR", "IMU standby failed");
+  }
+  // Tilt detection reads the gyro; accelerometer-only parts (SC7A20H) can't drive it.
+  _available = _sdkImu.hasGyroscope();
+  if (!_available) {
+    LOG_INF("GYR", "IMU has no gyroscope");
+    return;
+  }
+  _initMs = millis();
+  _lastPollMs = millis();
+  LOG_INF("GYR", "SDK IMU initialized");
 }
 
 bool HalTiltSensor::wake() {

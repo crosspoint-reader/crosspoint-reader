@@ -136,7 +136,7 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
   void handleAutoConnectFailure();
   void showNetworkListFromAutoConnect();
   bool hasAttemptedAutoSsid(const std::string& ssid) const;
-  std::string getSignalStrengthIndicator(int32_t rssi) const;
+  static std::string getSignalStrengthIndicator(int32_t rssi);
 
   void onComplete(bool connected);
 
@@ -146,4 +146,5 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool preventAutoSleep() override { return true; }
 };

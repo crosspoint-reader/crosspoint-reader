@@ -8,6 +8,22 @@ body:
       value: |
         Thanks for taking the time to report this bug! Please fill out the details below.
 
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      description: Which device does this happen on? Pick "Other" for boards CrossPoint does not release firmware for — those are maintained in their own port repositories.
+      options:
+        - Xteink X3
+        - Xteink X4
+        - Xteink X4 Classic
+        - Xteink X4 Pro
+        - Seeed Sticky
+        - M5Stack Paper Mono
+        - Other / not listed
+    validations:
+      required: true
+
   - type: input
     id: version
     attributes:

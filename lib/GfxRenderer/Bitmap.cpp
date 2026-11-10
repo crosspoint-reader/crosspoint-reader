@@ -1,5 +1,7 @@
 #include "Bitmap.h"
 
+#include <Logging.h>
+
 #include <cstdlib>
 #include <cstring>
 
@@ -76,6 +78,8 @@ const char* Bitmap::errorToString(BmpReaderError err) {
 
     case BmpReaderError::OomRowBuffer:
       return "OomRowBuffer";
+    case BmpReaderError::OomDitherer:
+      return "OomDitherer";
     case BmpReaderError::ShortReadRow:
       return "ShortReadRow";
   }
@@ -168,9 +172,21 @@ BmpReaderError Bitmap::parseHeaders() {
   const bool highColor = !nativePalette;
   if (highColor && dithering) {
     if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(width);
+      atkinsonDitherer = new (std::nothrow) AtkinsonDitherer(width, originalThresholds);
+      if (!atkinsonDitherer || !atkinsonDitherer->isValid()) {
+        delete atkinsonDitherer;
+        atkinsonDitherer = nullptr;
+        LOG_ERR("BMP", "OOM: Atkinson ditherer or row buffers");
+        return BmpReaderError::OomDitherer;
+      }
     } else {
-      fsDitherer = new FloydSteinbergDitherer(width);
+      fsDitherer = new (std::nothrow) FloydSteinbergDitherer(width, originalThresholds);
+      if (!fsDitherer || !fsDitherer->isValid()) {
+        delete fsDitherer;
+        fsDitherer = nullptr;
+        LOG_ERR("BMP", "OOM: Floyd-Steinberg ditherer or row buffers");
+        return BmpReaderError::OomDitherer;
+      }
     }
   }
 
@@ -279,6 +295,38 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
   // Flush remaining bits if width is not a multiple of 4
   if (bitShift != 6) *outPtr = currentOutByte;
 
+  return BmpReaderError::Ok;
+}
+
+BmpReaderError Bitmap::readRowGray(const int y, uint8_t* gray, uint8_t* rowBuffer) const {
+  const uint32_t fileRow = topDown ? y : height - 1 - y;
+  if (!file.seek(bfOffBits + fileRow * rowBytes)) return BmpReaderError::SeekPixelDataFailed;
+  if (file.read(rowBuffer, rowBytes) != rowBytes) return BmpReaderError::ShortReadRow;
+
+  switch (bpp) {
+    case 32:
+    case 24: {
+      const int step = bpp / 8;
+      const uint8_t* p = rowBuffer;
+      for (int x = 0; x < width; x++, p += step) gray[x] = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
+      break;
+    }
+    case 8:
+      for (int x = 0; x < width; x++) gray[x] = paletteLum[rowBuffer[x]];
+      break;
+    case 4:
+      for (int x = 0; x < width; x++)
+        gray[x] = paletteLum[(x & 1) ? (rowBuffer[x >> 1] & 0x0F) : (rowBuffer[x >> 1] >> 4)];
+      break;
+    case 2:
+      for (int x = 0; x < width; x++) gray[x] = paletteLum[(rowBuffer[x >> 2] >> (6 - ((x & 3) * 2))) & 0x03];
+      break;
+    case 1:
+      for (int x = 0; x < width; x++) gray[x] = paletteLum[(rowBuffer[x >> 3] & (0x80 >> (x & 7))) ? 1 : 0];
+      break;
+    default:
+      return BmpReaderError::UnsupportedBpp;
+  }
   return BmpReaderError::Ok;
 }
 

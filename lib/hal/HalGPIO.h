@@ -45,6 +45,8 @@ class HalGPIO {
 
   bool lastUsbConnected = false;
   bool usbStateChanged = false;
+  uint8_t previousCapacitivePageButtons = 0;
+  bool capacitivePagePressed = false;
 
  public:
   enum class DeviceType : uint8_t { X4, X3 };
@@ -68,6 +70,7 @@ class HalGPIO {
 
   // Start button GPIO and setup SPI for screen and SD card
   void begin();
+  void prepareForDeepSleep();
 
   // Button input methods
   void update();
@@ -78,14 +81,27 @@ class HalGPIO {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
+  // True when any button contact is closed right now, read straight from the
+  // hardware (ADC ladder off its idle rail, the power GPIO asserted, or the T5S3
+  // expander key, one I2C read), without going through the debounced state.
+  // Cheap enough to call every few ms.
+  bool rawInputActive();
   bool hasTouch() const;
   // Capacitive Home key reported by the touch controller (X4 Pro). The tap
   // event fires on release and excludes a long hold.
   bool hasHomeKey() const;
+  // Two-position slide switch (Picco). Debounced position and its change edge.
+  bool hasToggleSwitch() const;
+  bool isToggleSwitchOn() const;
+  bool wasHomeKeyPressed() const;
   bool wasHomeKeyTapped() const;
   bool wasHomeKeyLongPressed() const;
   bool wasTouchTap(float& nx, float& ny) const;
   bool wasTouchDown(float& nx, float& ny) const;
+  bool wasCapacitivePagePressed() const { return capacitivePagePressed; }
+  bool isCapacitivePagePressed(uint8_t buttonIndex) const {
+    return buttonIndex < 8 && (previousCapacitivePageButtons & (1u << buttonIndex)) != 0;
+  }
   // Raw release edge, reported even when the contact was not a tap (swipe end,
   // drag-off). Snapshot builders forward it so interaction routing can clear
   // pressed state.
@@ -112,6 +128,11 @@ class HalGPIO {
 
   // Check if USB is connected
   bool isUsbConnected() const;
+
+  // Whether a cold boot with no USB detected can be trusted to mean a held
+  // power button (Xteink-style button-energized rail with reliable USB
+  // detection). When false, cold boots always proceed to a normal boot.
+  bool coldBootImpliesPowerButton() const;
 
   // Returns true once per edge (plug or unplug) since the last update()
   bool wasUsbStateChanged() const;

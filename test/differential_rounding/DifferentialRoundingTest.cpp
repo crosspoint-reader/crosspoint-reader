@@ -176,6 +176,120 @@ TEST(EpdFont, KernLookup) {
   EXPECT_EQ(testFont().getKerning('T', 'T'), 0);  // 'T' has no right class
 }
 
+// The font above is the DENSE representation, which only SD-card fonts use now. Every built-in
+// font ships the sparse (CSR) form instead, so it needs its own coverage: same pairs, same
+// answers, including the two zero cells that the sparse form stores by omitting them.
+namespace {
+// Dense equivalent, for reference:  [L1,R1]=-5  [L1,R2]=-7  [L2,R1]=-2  [L2,R2]=-3
+// Rows are [rowOffsets[l], rowOffsets[l+1]) and sorted ascending by column.
+const uint16_t kKernRowOffsetsFull[] = {0, 2, 4};
+const uint8_t kKernSparseColsFull[] = {0, 1, 0, 1};
+const int8_t kKernSparseValuesFull[] = {-5, -7, -2, -3};
+
+// A row with a hole: left class 1 keeps only its R2 entry, left class 2 only its R1 entry.
+// This is the case the dense form cannot distinguish from a stored zero, and the one a
+// binary search gets wrong if it does not confirm the key it landed on.
+const uint16_t kKernRowOffsetsSparse[] = {0, 1, 2};
+const uint8_t kKernSparseColsSparse[] = {1, 0};
+const int8_t kKernSparseValuesSparse[] = {-7, -2};
+
+EpdFontData makeSparseFontData(const uint16_t* rowOffsets, const uint8_t* cols, const int8_t* values) {
+  EpdFontData d = kTestFontData;
+  d.kernMatrix = nullptr;  // force the sparse path
+  d.kernRowOffsets = rowOffsets;
+  d.kernSparseCols = cols;
+  d.kernSparseValues = values;
+  return d;
+}
+}  // namespace
+
+TEST(EpdFont, KernLookupSparseMatchesDense) {
+  const EpdFontData sparseData = makeSparseFontData(kKernRowOffsetsFull, kKernSparseColsFull, kKernSparseValuesFull);
+  EpdFont sparse(&sparseData);
+
+  // Every pair the dense font answers, the sparse font must answer identically.
+  for (const uint32_t left : {'T', 'a', 'o', 'x'}) {
+    for (const uint32_t right : {'T', 'a', 'o', 'x'}) {
+      EXPECT_EQ(sparse.getKerning(left, right), testFont().getKerning(left, right))
+          << "pair " << static_cast<char>(left) << static_cast<char>(right);
+    }
+  }
+}
+
+TEST(EpdFont, KernLookupSparseHandlesMissingEntries) {
+  const EpdFontData sparseData =
+      makeSparseFontData(kKernRowOffsetsSparse, kKernSparseColsSparse, kKernSparseValuesSparse);
+  EpdFont sparse(&sparseData);
+
+  EXPECT_EQ(sparse.getKerning('T', 'o'), -7);  // present, and not the first column of its row
+  EXPECT_EQ(sparse.getKerning('o', 'a'), -2);  // present, first column of its row
+  EXPECT_EQ(sparse.getKerning('T', 'a'), 0);   // absent: column below the one stored
+  EXPECT_EQ(sparse.getKerning('o', 'o'), 0);   // absent: column above the one stored
+  EXPECT_EQ(sparse.getKerning('a', 'o'), 0);   // no left class at all
+  EXPECT_EQ(sparse.getKerning('T', 'x'), 0);   // no right class at all
+}
+
+// The class maps above are the PACKED form, which only SD-card fonts use now. Built-in fonts
+// ship the split arrays, so the same coexistence check the matrix gets applies here too.
+namespace {
+const uint16_t kKernLeftCps[] = {0x54, 0x6F};
+const uint8_t kKernLeftIds[] = {1, 2};
+const uint16_t kKernRightCps[] = {0x61, 0x6F};
+const uint8_t kKernRightIds[] = {1, 2};
+
+EpdFontData makeSplitClassFontData() {
+  EpdFontData d = kTestFontData;
+  d.kernLeftClasses = nullptr;  // force the split path
+  d.kernRightClasses = nullptr;
+  d.kernLeftCodepoints = kKernLeftCps;
+  d.kernLeftClassIds = kKernLeftIds;
+  d.kernRightCodepoints = kKernRightCps;
+  d.kernRightClassIds = kKernRightIds;
+  return d;
+}
+}  // namespace
+
+TEST(EpdFont, KernSplitClassMapMatchesPacked) {
+  const EpdFontData splitData = makeSplitClassFontData();
+  EpdFont split(&splitData);
+  for (const uint32_t left : {'T', 'a', 'o', 'x', 'z'}) {
+    for (const uint32_t right : {'T', 'a', 'o', 'x', 'z'}) {
+      EXPECT_EQ(split.getKerning(left, right), testFont().getKerning(left, right))
+          << "pair " << static_cast<char>(left) << static_cast<char>(right);
+    }
+  }
+}
+
+TEST(EpdFont, KernSplitClassMapWithSparseMatrix) {
+  // The combination the built-in fonts actually ship: split class maps AND a sparse matrix.
+  EpdFontData d = makeSplitClassFontData();
+  d.kernMatrix = nullptr;
+  d.kernRowOffsets = kKernRowOffsetsFull;
+  d.kernSparseCols = kKernSparseColsFull;
+  d.kernSparseValues = kKernSparseValuesFull;
+  EpdFont shipped(&d);
+
+  EXPECT_EQ(shipped.getKerning('T', 'a'), -5);
+  EXPECT_EQ(shipped.getKerning('T', 'o'), -7);
+  EXPECT_EQ(shipped.getKerning('o', 'a'), -2);
+  EXPECT_EQ(shipped.getKerning('o', 'o'), -3);
+  EXPECT_EQ(shipped.getKerning('a', 'o'), 0);  // no left class
+  EXPECT_EQ(shipped.getKerning('T', 'x'), 0);  // no right class
+}
+
+TEST(EpdFont, KernLookupEmptyRowIsZero) {
+  // Left class 1 stores nothing (offsets 0,0) — an empty range must not read past its row.
+  static const uint16_t rowOffsets[] = {0, 0, 1};
+  static const uint8_t cols[] = {0};
+  static const int8_t values[] = {-2};
+  const EpdFontData sparseData = makeSparseFontData(rowOffsets, cols, values);
+  EpdFont sparse(&sparseData);
+
+  EXPECT_EQ(sparse.getKerning('T', 'a'), 0);
+  EXPECT_EQ(sparse.getKerning('T', 'o'), 0);
+  EXPECT_EQ(sparse.getKerning('o', 'a'), -2);
+}
+
 TEST(EpdFont, GlyphLookup) {
   ASSERT_NE(testFont().getGlyph('T'), nullptr);
   ASSERT_NE(testFont().getGlyph('a'), nullptr);
@@ -270,4 +384,87 @@ TEST(EpdFont, HeightCalculation) {
   EXPECT_EQ(textHeight("T"), 12);
   EXPECT_EQ(textHeight("To"), 12);
   EXPECT_EQ(textHeight("oo"), 8);
+}
+
+TEST(EpdFont, MissingSolidSymbolsHaveVisibleBounds) {
+  // No M or replacement glyph: the fallback uses 3/4 of the 12px ascender.
+  EXPECT_EQ(textWidth("█"), 9);
+  EXPECT_EQ(textHeight("█"), 12);
+  EXPECT_EQ(textWidth("███"), 27);
+  EXPECT_EQ(textWidth("■"), 8);
+  EXPECT_EQ(textHeight("■"), 10);
+  EXPECT_EQ(textWidth("o█o"), 26);
+}
+
+TEST(EpdFont, SolidSymbolsUseEmAdvanceAndKeepRealGlyphs) {
+  const EpdGlyph glyphs[] = {{10, 12, 168, 0, 12, 0, 0}, {3, 4, 64, 1, 4, 1, 0}};
+  const EpdUnicodeInterval intervals[] = {{'M', 'M', 0}, {0x25A0, 0x25A0, 1}};
+  EpdFontData data{};
+  data.glyph = glyphs;
+  data.intervals = intervals;
+  data.intervalCount = 2;
+  data.ascender = 12;
+  const EpdFont font(&data);
+  EpdGlyph fallback;
+  const auto* block = font.getGlyphMetrics(0x2588, fallback);
+  ASSERT_EQ(block, &fallback);
+  EXPECT_EQ(block->advanceX, 168);
+  EXPECT_EQ(block->width, 11);
+  EXPECT_EQ(block->height, 12);
+  EXPECT_EQ(font.getGlyphMetrics(0x25A0, fallback), &glyphs[1]);
+}
+
+TEST(EpdFont, SolidFallbackOverridesReplacementGlyph) {
+  const EpdGlyph replacement{2, 3, 32, 0, 3, 1, 0};
+  const EpdUnicodeInterval interval{0xFFFD, 0xFFFD, 0};
+  EpdFontData data{};
+  data.glyph = &replacement;
+  data.intervals = &interval;
+  data.intervalCount = 1;
+  data.ascender = 12;
+  const EpdFont font(&data);
+  EpdGlyph fallback;
+  EXPECT_EQ(font.getGlyphMetrics(0x2588, fallback), &fallback);
+  EXPECT_EQ(fallback.advanceX, fp4::fromPixel(9));
+  EXPECT_EQ(fallback.width, 9);
+  EXPECT_EQ(fallback.height, 12);
+  EXPECT_EQ(font.getGlyphMetrics('Z', fallback), &replacement);
+}
+
+TEST(EpdFont, SolidSymbolsRespectOnDemandFontCoverage) {
+  const EpdGlyph realBlock{7, 9, 112, 0, 9, 1, 0};
+  EpdFontData data{};
+  data.ascender = 12;
+  data.glyphMissCtx = const_cast<EpdGlyph*>(&realBlock);
+  data.coverageHandler = [](void*, uint32_t cp) { return cp == 0x2588; };
+  data.glyphMissHandler = [](void* ctx, uint32_t cp) -> const EpdGlyph* {
+    return cp == 0x2588 ? static_cast<const EpdGlyph*>(ctx) : nullptr;
+  };
+  const EpdFont font(&data);
+  EpdGlyph fallback;
+  EXPECT_EQ(font.getGlyphMetrics(0x2588, fallback), &realBlock);
+  EXPECT_EQ(font.getGlyphMetrics(0x25A0, fallback), &fallback);
+}
+
+TEST(EpdFont, EmptyFontStillMeasuresSolidSymbols) {
+  const EpdFontData data{};
+  const EpdFont font(&data);
+  int width, height;
+  font.getTextDimensions("██", &width, &height);
+  EXPECT_EQ(width, 12);
+  EXPECT_EQ(height, 8);
+}
+
+TEST(EpdFont, MissingTurnedCommaUsesQuoteAndNativeGlyphWins) {
+  const EpdGlyph glyphs[] = {{3, 5, 64, 0, 8, 1, 0}, {4, 6, 80, 0, 9, 1, 1}};
+  const EpdUnicodeInterval intervals[] = {{0x02BB, 0x02BB, 0}, {0x2018, 0x2018, 1}};
+  EpdFontData data{};
+  data.glyph = glyphs;
+  data.intervals = intervals + 1;
+  data.intervalCount = 1;
+  const EpdFont font(&data);
+  EXPECT_EQ(font.getGlyph(0x02BB), &glyphs[1]);
+  data.intervals = intervals;
+  data.intervalCount = 2;
+  EXPECT_EQ(font.getGlyph(0x02BB), &glyphs[0]);
 }

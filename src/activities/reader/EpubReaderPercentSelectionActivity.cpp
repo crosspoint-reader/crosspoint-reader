@@ -16,8 +16,8 @@ namespace fui = freeink::ui;
 namespace {
 constexpr fui::ActionId ACTION_SLIDER = 1;
 constexpr fui::ActionId ACTION_STEP = 2;
-constexpr fui::ActionId ACTION_CANCEL = 3;
 constexpr fui::ActionId ACTION_OK = 4;
+constexpr fui::ActionId ACTION_CHROME = 5;  // absorbs taps on the dialog body; no handler
 // Fine/coarse step sizes for percent adjustments (buttons and -/+ tap zones).
 constexpr int kSmallStep = 1;
 constexpr int kLargeStep = 10;
@@ -33,7 +33,6 @@ void EpubReaderPercentSelectionActivity::onEnter() {
   resetUi();
   app.on(ACTION_SLIDER, &EpubReaderPercentSelectionActivity::onSliderEvent, this);
   app.on(ACTION_STEP, &EpubReaderPercentSelectionActivity::onStepEvent, this);
-  app.on(ACTION_CANCEL, &EpubReaderPercentSelectionActivity::onCancelEvent, this);
   app.on(ACTION_OK, &EpubReaderPercentSelectionActivity::onOkEvent, this);
   app.setScreen(&EpubReaderPercentSelectionActivity::percentScreen, this);
   // Set up rendering task and mark first frame dirty.
@@ -71,12 +70,6 @@ void EpubReaderPercentSelectionActivity::onStepEvent(const fui::ActionEvent& eve
   static_cast<EpubReaderPercentSelectionActivity*>(user)->adjustPercent(event.value * kSmallStep);
 }
 
-void EpubReaderPercentSelectionActivity::onCancelEvent(const fui::ActionEvent&, void* user) {
-  auto* self = static_cast<EpubReaderPercentSelectionActivity*>(user);
-  self->app.clearTapFlash();  // the tap leaves this screen
-  self->cancel();
-}
-
 void EpubReaderPercentSelectionActivity::onOkEvent(const fui::ActionEvent&, void* user) {
   auto* self = static_cast<EpubReaderPercentSelectionActivity*>(user);
   self->app.clearTapFlash();  // the tap leaves this screen
@@ -110,6 +103,13 @@ void EpubReaderPercentSelectionActivity::loop() {
   if (routingReady() && draggingSlider) {
     // Drag ended (possibly off the slider): swallow the tap/swipe events it produced.
     if (!route.snap.touchHeld) draggingSlider = false;
+    return;
+  }
+  // Tap released outside the dialog (inside-taps are absorbed by the chrome
+  // guard): cancel. Swipe-end releases arrive with -1,-1 coords and fall
+  // through — same rule as OptionPopup.
+  if (route.routed && route.snap.touchReleased && route.snap.touchX >= 0) {
+    cancel();
     return;
   }
 
@@ -160,30 +160,25 @@ void EpubReaderPercentSelectionActivity::buildPercentScreen(UiScreen& screen) {
   snprintf(hint2, sizeof(hint2), "%s %d%%", I18N.get(StrId::STR_STEP_HINT_SIDE), kLargeStep);
 
   UiSliderDialogSpec spec;
+  spec.title = tr(STR_GO_TO_PERCENT);
   spec.readout = readout;
   spec.value = percent;
   spec.max = 100;
+  spec.minLabel = "0%";
+  spec.maxLabel = "100%";
   spec.sliderAction = ACTION_SLIDER;
   spec.stepAction = ACTION_STEP;
-  spec.cancelAction = ACTION_CANCEL;
   spec.okAction = ACTION_OK;
+  spec.chromeAction = ACTION_CHROME;
   spec.hintLine1 = hint1;
   spec.hintLine2 = hint2;
-  buildSliderDialogScreen(screen, renderer, mappedInput, spec);
+  buildSliderDialogScreen(screen, uiTarget, mappedInput, spec);
 }
 
 void EpubReaderPercentSelectionActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
-  auto& theme = UITheme::getInstance();
-  auto metrics = theme.getMetrics();
-  Rect screen = theme.getScreenSafeArea(renderer, true, false);
-
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_GO_TO_PERCENT));
-
-  // Percent readout, slider, and hints render through the app so the slider and its
-  // -/+ zones register touch hit rects.
+  // No clearScreen: the dialog is a popup — it dims the frame it opened over
+  // and draws the card on top. Everything renders through the app so the
+  // slider, -/+ zones, and Cancel/OK register touch hit rects.
   renderUi();
 
   // Button hints follow the current front button layout.

@@ -2,14 +2,15 @@
 
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <HiddenItems.h>
 #include <Logging.h>
 
+#include "ClippingStore.h"
+#include "ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
-constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
-
 // RFC 1123 date format helper: "Sun, 06 Nov 1994 08:49:37 GMT"
 // ESP32 doesn't have real-time clock set by default, so we use a fixed epoch date
 // as a fallback. The date is not critical for WebDAV Class 1 operations.
@@ -176,6 +177,11 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
 
   LOG_DBG("DAV", "PROPFIND %s depth=%d", path.c_str(), depth);
 
+  if (isProtectedPath(path)) {
+    s.send(403, "text/plain", "Forbidden");
+    return;
+  }
+
   // Check if path exists
   if (!Storage.exists(path.c_str()) && path != "/") {
     s.send(404, "text/plain", "Not Found");
@@ -230,7 +236,7 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       // Skip hidden/protected items
       bool shouldHide = fileName.startsWith(".");
       if (!shouldHide) {
-        for (const auto* item : HIDDEN_ITEMS) {
+        for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
           if (fileName.equals(item)) {
             shouldHide = true;
             break;
@@ -324,12 +330,29 @@ void WebDAVHandler::handleGet(WebServer& s) {
   }
 
   String contentType = getMimeType(path);
-  s.setContentLength(file.size());
+  const size_t fileSize = file.size();
+  file.close();
+
+  s.setContentLength(fileSize);
   s.send(200, contentType.c_str(), "");
 
+  // **This used to be `client.write(file)`, and it sent exactly one byte.**
+  //
+  // It worked while `Storage.open()` returned an SdFat `FsFile`, which derives
+  // from `Stream`: the call matched `NetworkClient::write(Stream&)` and streamed
+  // the file. `HalFile` derives from `Print`, not `Stream` (lib/hal/HalStorage.h),
+  // so that overload stopped matching, the compiler took `HalFile::operator bool()`
+  // instead, promoted the `true` to `uint8_t`, and wrote a single `0x01`. **The
+  // call site never changed; its meaning did**, and nothing warned because every
+  // step is a legal conversion.
+  //
+  // The reply still carried the real Content-Length, so a client waited for a
+  // body that never arrived and reported a truncated transfer rather than an
+  // error, which is why this reads as a flaky network rather than a server bug.
   NetworkClient client = s.client();
-  client.write(file);
-  file.close();
+  if (!Storage.readFileToStream(path.c_str(), client)) {
+    LOG_ERR("DAV", "GET %s: failed to stream file", path.c_str());
+  }
 }
 
 // ── HEAD ─────────────────────────────────────────────────────────────────────
@@ -434,8 +457,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     }
   } else {
     file.close();
-    clearBookCache(path.c_str());
-    if (Storage.remove(path.c_str())) {
+    if (removeBookFile(path.c_str())) {
       s.send(204);
     } else {
       s.send(500, "text/plain", "Failed to delete file");
@@ -533,8 +555,9 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  if (dstExists) {
-    Storage.remove(dstPath.c_str());
+  if (dstExists && !removeBookFile(dstPath.c_str())) {
+    s.send(500, "text/plain", "Failed to remove destination");
+    return;
   }
 
   HalFile file = Storage.open(srcPath.c_str());
@@ -544,8 +567,8 @@ void WebDAVHandler::handleMove(WebServer& s) {
   }
 
   clearBookCache(srcPath.c_str());
-  bool success = file.rename(dstPath.c_str());
   file.close();
+  const bool success = ClippingStore::moveBook(srcPath.c_str(), dstPath.c_str());
 
   if (success) {
     s.send(dstExists ? 204 : 201);
@@ -759,6 +782,9 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
 }
 
 bool WebDAVHandler::isProtectedPath(const String& path) const {
+  // Covers the credential stores' 8.3 aliases, which no segment check can map.
+  if (protectedpaths::isSensitivePath(path.c_str())) return true;
+
   // Check every segment of the path, not just the last one.
   // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
   int start = 0;
@@ -770,11 +796,16 @@ bool WebDAVHandler::isProtectedPath(const String& path) const {
     int end = path.indexOf('/', start);
     if (end == -1) end = path.length();
 
-    String segment = path.substring(start, end);
+    // SdFat skips leading spaces and drops trailing dots and spaces when it
+    // opens a name, so check the name it would actually open.
+    int first = start;
+    int last = end;
+    while (first < last && path.charAt(first) == ' ') first++;
+    if (path.charAt(first) == '.') return true;
+    while (last > first && (path.charAt(last - 1) == '.' || path.charAt(last - 1) == ' ')) last--;
+    String segment = path.substring(first, last);
 
-    if (segment.startsWith(".")) return true;
-
-    for (const auto* item : HIDDEN_ITEMS) {
+    for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
       if (segment.equals(item)) return true;
     }
 
@@ -798,7 +829,7 @@ bool WebDAVHandler::getOverwrite(WebServer& s) const {
   return true;  // Default is T
 }
 
-String WebDAVHandler::getMimeType(const String& path) const {
+String WebDAVHandler::getMimeType(const String& path) {
   if (FsHelpers::hasEpubExtension(path)) return "application/epub+zip";
   if (FsHelpers::checkFileExtension(path, ".pdf")) return "application/pdf";
   if (FsHelpers::hasTxtExtension(path)) return "text/plain";

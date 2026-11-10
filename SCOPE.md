@@ -32,7 +32,7 @@ During this period, the priorities are:
 PRs in the following areas will be closed until this notice is lifted. Adding these now makes the cleanup and multi-device work materially harder:
 
 * **New themes.** The existing theming surface is frozen. 
-* **New external network connectors.** This includes sync engines, cloud storage clients, OPDS extensions beyond what exists, remote file access, and any new "talk to a server" feature. We now have our own CrossPoint KOSync server which gives us a way to sync to 3rd party systems like Hardcover at an API level instead of bloating the firmware. If you're interested in helping here, the sync server is also open source.
+* **New external network connectors.** This includes sync engines, cloud storage clients, remote file access, and any new "talk to a server" feature. Fixes and improvements to the *existing* OPDS support (usability, performance, compatibility with more catalogs) remain in scope and welcome; what is closed is adding entirely new protocols or connectors. We now have our own CrossPoint KOSync server which gives us a way to sync to 3rd party systems like Hardcover at an API level instead of bloating the firmware. If you're interested in helping here, the sync server is also open source.
 
 If you are unsure whether your idea falls into one of these categories, open a Discussion first.
 
@@ -57,6 +57,20 @@ If you are unsure whether your idea falls into one of these categories, open a D
 * **Writing / Authoring Tools:** No typed notes, journals, or editors. Input hardware and RAM are wrong for this, and other forks already explore this space. 
 * **Active Connectivity:** No RSS readers, news aggregators, or web browsers. Background Wi-Fi drains the battery and complicates the single-core CPU. 
 * **PDF Rendering:** PDFs are fixed-layout documents, so rendering them requires displaying pages as images rather than reflowable text, resulting in constant panning and zooming that makes for a poor reading experience on e-ink. Out of scope on the current hardware class.
+
+### CrossPoint as a downstream foundation
+
+CrossPoint is also used as a foundation for downstream forks with different
+product goals. Supporting that ecosystem does not expand CrossPoint's own
+product scope, but narrowly scoped, product-neutral improvements to existing
+low-level infrastructure may still be accepted when they are broadly reusable
+and do not impose substantial new dependencies, resource cost, or maintenance
+burden on CrossPoint itself.
+
+Downstream-specific UI, policy, workflows, and feature semantics remain out of
+scope. If a reusable primitive cannot be cleanly separated from the downstream
+feature that needs it, that work belongs in the downstream fork unless
+CrossPoint independently chooses to adopt it.
 
 ## 5. Calls to Action
 

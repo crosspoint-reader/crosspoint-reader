@@ -11,7 +11,7 @@ class StatusBarSettingsActivity final : public UiListActivity {
 
   // Must equal ITEM_COUNT in the .cpp (static_assert'd there) — the max
   // possible row count (RTC-equipped devices show all of them).
-  static constexpr int MAX_STATUS_BAR_ITEMS = 11;
+  static constexpr int MAX_STATUS_BAR_ITEMS = 8;
 
   void onEnter() override;
   void render(RenderLock&&) override;

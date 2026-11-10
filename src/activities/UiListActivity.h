@@ -1,5 +1,9 @@
 #pragma once
 
+#include <BoardConfig.h>
+
+#include <atomic>
+
 #include "activities/Activity.h"
 #include "components/UiAppHost.h"
 #include "util/ButtonNavigator.h"
@@ -23,7 +27,8 @@ class UiListActivity : public Activity, protected UiAppHost {
  protected:
   // Base-owned row action; subclass-registered actions start at ACTION_USER.
   static constexpr freeink::ui::ActionId ACTION_ROW = 1;
-  static constexpr freeink::ui::ActionId ACTION_USER = 2;
+  static constexpr freeink::ui::ActionId ACTION_SWIPE_DELETE = 2;
+  static constexpr freeink::ui::ActionId ACTION_USER = 3;
 
   UiListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
                  bool wantsTouchLongPress = false);
@@ -41,6 +46,12 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Touch long-press on a row; only fires when the subclass opted in via the
   // wantsTouchLongPress constructor flag (rows must also carry InputLongPress).
   virtual void onRowLongPress(int index) {}
+#if FREEINK_CAP_TOUCH
+  virtual bool canSwipeDelete(int index) const { return false; }
+  virtual void swipeDelete(int index) {}
+  void configureSwipeDelete(UiScreen& screen, freeink::ui::ListProps& props);
+  void closeSwipeDelete();
+#endif
   // The selection/viewport state the loop, sync, and row dispatch operate on.
   // Default is the single `nav` member; UiTabListActivity redirects it to the
   // active tab's per-tab state.
@@ -48,7 +59,7 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Bounds-checked ACTION_ROW dispatch. Default: selection follows the tapped
   // row, then long-press/activate. UiTabListActivity remaps row -> ring.
   virtual void onRowAction(const freeink::ui::ActionEvent& event);
-  // The button-navigation tail of loop(): release steps the selection, hold
+  // The button-navigation tail of loop(): press steps the selection, hold
   // jumps by page. UiTabListActivity replaces it with the ring walk.
   virtual void navigateButtons();
   // First hook in loop(); return true when the pass is consumed (popups, extra
@@ -69,10 +80,9 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the
   // viewport, and write selection/viewport into props. Call from buildScreen
   // right before screen.list(props).
-  // hasSubtitle: rows carry a second (subtitle) text line, so on non-touch
-  // hardware the denser override below uses the theme's *-with-subtitle row
-  // height instead of its single-line one (see syncListViewport()).
-  void syncListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
+  // SDK resolves fonts, content padding and touch minimum before measuring.
+  // selectionOffset reserves leading ring entries such as the tab bar.
+  void syncListViewport(UiScreen& screen, freeink::ui::ListProps& props, int selectionOffset = 0);
   // Move the selection to index and pull the viewport to it.
   void moveSelectionTo(int index);
 
@@ -88,6 +98,12 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Named apart from UiAppHost::routeTouch so the host overload stays visible
   // (not name-hidden) to subclasses with extra touch surfaces.
   bool routeListTouch();
+#if FREEINK_CAP_TOUCH
+  static void swipeDeleteTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  bool handleSwipeDeleteInput();
+  std::atomic<int16_t> revealedIndex{-1};
+  freeink::ui::ListRevealAction swipeReveal{};
+#endif
 
   const bool wantsTouchLongPress;
 };

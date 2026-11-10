@@ -33,11 +33,16 @@ class OpdsSettingsActivity final : public UiListActivity {
   void handleSelection();
   bool saveServer();
 
-  // Row storage: at most 5 rows (Name/URL/Username/Password + Delete, see
-  // BASE_ITEMS in the .cpp), so a fixed-capacity array avoids any heap
-  // allocation for the row list. Labels are set once in the constructor
-  // (they never change); buildScreen() only refreshes the value pointers,
-  // which already point at editServer's own fields (no new strings built).
-  static constexpr int MAX_MENU_ITEMS = 5;
+  // Row storage: at most 7 rows (Name/URL/Username/Password/2 custom headers
+  // + Delete, see BASE_ITEMS in the .cpp), so a fixed-capacity array avoids
+  // any heap allocation for the row list. Labels are set once in the
+  // constructor (they never change); buildScreen() only refreshes the value
+  // pointers.
+  static constexpr int MAX_MENU_ITEMS = 7;
   freeink::ui::ListItem fieldRowItems[MAX_MENU_ITEMS]{};
+
+  // Masked "Name: ******" display text for the two custom header rows.
+  // fieldRowItems[i].value points here, so these must outlive each render
+  // (unlike Name/URL/Username, which point directly into editServer's fields).
+  std::string headerDisplayBuf[OpdsServer::MAX_CUSTOM_HEADERS];
 };
