@@ -25,6 +25,7 @@
 #include "KeyboardLayoutsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
+#include "NightTimePickerActivity.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
 #include "SdCardFontSystem.h"
@@ -39,6 +40,7 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "util/NightSchedule.h"
 #include "util/PluginEvents.h"
 
 namespace fui = freeink::ui;
@@ -59,6 +61,11 @@ bool showOnDevice(const SettingInfo& setting) {
   if (setting.category == StrId::STR_CAT_READER && setting.inTextSettings) return false;
   if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
       SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
+    return false;
+  }
+  if ((setting.valuePtr == &CrossPointSettings::nightScheduleOnSlot ||
+       setting.valuePtr == &CrossPointSettings::nightScheduleOffSlot) &&
+      !SETTINGS.nightScheduleEnabled) {
     return false;
   }
   return true;
@@ -224,6 +231,17 @@ void SettingsActivity::toggleSelectedSetting() {
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
+    return;
+  }
+
+  if (setting.nameId == StrId::STR_NIGHT_MODE_ON_AT || setting.nameId == StrId::STR_NIGHT_MODE_OFF_AT) {
+    const auto field = setting.nameId == StrId::STR_NIGHT_MODE_ON_AT ? &CrossPointSettings::nightScheduleOnSlot
+                                                                     : &CrossPointSettings::nightScheduleOffSlot;
+    if (auto activity = makeUniqueNoThrow<NightTimePickerActivity>(renderer, mappedInput, setting.nameId, field)) {
+      startActivityForResult(std::move(activity), [this](const ActivityResult&) { requestUpdate(); });
+    } else {
+      LOG_ERR("SETTINGS", "OOM: NightTimePickerActivity");
+    }
     return;
   }
 
@@ -465,6 +483,12 @@ void SettingsActivity::openSleepTimeoutPicker() {
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
   if (setting.action == SettingAction::HomeButton) return tr(STR_CONFIGURE);
   if (setting.action == SettingAction::Plugins) return SETTINGS.pluginsEnabled ? tr(STR_ENABLED) : tr(STR_DISABLED);
+  if (setting.valuePtr == &CrossPointSettings::nightScheduleOnSlot ||
+      setting.valuePtr == &CrossPointSettings::nightScheduleOffSlot) {
+    char buf[nightschedule::SLOT_LABEL_SIZE];
+    nightschedule::formatSlot(SETTINGS.*(setting.valuePtr), SETTINGS.clockFormat == 1, buf, sizeof(buf));
+    return buf;
+  }
   if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Guard like the valueGetter branch below: a corrupt/migrated settings
     // byte must not index past the enum table.
