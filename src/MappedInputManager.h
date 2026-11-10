@@ -48,8 +48,10 @@ class MappedInputManager {
   // current action remains available for immediate Home cancellation.
   void update(bool deferHomeButtonAction = false) const;
   bool powerSleepClick() const { return powerSleepFrame; }
+  bool wasPowerSingleClick() const { return powerSingleClickFrame || wasReleased(Button::Power); }
   void resetPowerButtonInput() const {
     powerButtonInput.reset();
+    powerSingleClickFrame = false;
     powerSleepFrame = false;
     deferredPowerSleepFrame = false;
   }
@@ -157,6 +159,7 @@ class MappedInputManager {
   mutable RemoteButtonInput remoteInput;
   mutable HomeButtonInput homeButtonInput;
   mutable PowerButtonInput powerButtonInput;
+  mutable bool powerSingleClickFrame = false;
   mutable bool powerSleepFrame = false;
   mutable bool deferredPowerSleepFrame = false;
   mutable HomeButtonAction homeAction = HomeButtonAction::Ignore;

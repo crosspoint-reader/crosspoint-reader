@@ -34,10 +34,12 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
     }
   }
   powerSleepFrame = false;
+  powerSingleClickFrame = false;
   const bool classifyPower = BoardConfig::isX4Pro() && SETTINGS.doublePwrBtn != CrossPointSettings::IGNORE;
   if (classifyPower && !gpio.isPressed(HalGPIO::BTN_DOWN)) {
     const auto click = powerButtonInput.update(millis(), gpio.isPressed(HalGPIO::BTN_POWER),
                                                gpio.wasReleased(HalGPIO::BTN_POWER), gpio.getPowerButtonHeldTime());
+    powerSingleClickFrame = click == PowerButtonInput::Click::Single;
     if (click != PowerButtonInput::Click::None) {
       const auto action = click == PowerButtonInput::Click::Double ? SETTINGS.doublePwrBtn : SETTINGS.shortPwrBtn;
       switch (action) {

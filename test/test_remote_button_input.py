@@ -26,6 +26,7 @@ struct HalGPIO {
   enum { BTN_BACK, BTN_CONFIRM, BTN_LEFT, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_POWER };
   bool pressed = false, released = false, held = false;
   uint8_t button = 0;
+  unsigned long powerHeldMs = 20;
   void update() {}
   bool wasAnyPressed() const { return pressed; }
   bool wasAnyReleased() const { return released; }
@@ -33,7 +34,7 @@ struct HalGPIO {
   bool wasReleased(uint8_t b) const { return b == button && released; }
   bool isPressed(uint8_t b) const { return b == button && held; }
   unsigned long getHeldTime() const { return 900; }
-  unsigned long getPowerButtonHeldTime() const { return 20; }
+  unsigned long getPowerButtonHeldTime() const { return powerHeldMs; }
   bool wasCapacitivePagePressed() const { return false; }
   bool hasHomeKey() const { return false; }
   bool wasHomeKeyTapped() const { return false; }
@@ -49,7 +50,8 @@ namespace BoardConfig {
   bool x4Pro = false;
   bool isX4Pro() { return x4Pro; }
 }
-unsigned long millis() { return 1000; }
+unsigned long clockMs = 1000;
+unsigned long millis() { return clockMs; }
 constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
 struct CrossPointSettings {
   enum { VIBRATION_OFF, VIBRATION_TOUCH_PAGE };
@@ -170,14 +172,86 @@ int main() {
 harness = harness.replace("  using Button =", "  checkRouting(input);\n  using Button =")
 # Remote dispatch must work on both the button board and X4 Pro with click classification enabled.
 harness = harness.replace("int main() {", "void checkRemoteButtons() {")
+picker = (ROOT / "src/activities/reader/EpubReaderFootnoteSelectActivity.cpp").read_text()
+picker_confirm = "  if ((mappedInput.wasReleased(" + picker.split(
+    "  if ((mappedInput.wasReleased(", 1
+)[1].split(" {", 1)[0]
 harness += r"""
+#include <vector>
+bool pickerConfirms(const MappedInputManager& mappedInput) {
+  std::vector<int> footnoteLinks{1};
+  PICKER_CONFIRM_CONDITION { return true; }
+  return false;
+}
+void checkPowerClicks() {
+  BoardConfig::x4Pro = true;
+  SETTINGS.shortPwrBtn = CrossPointSettings::PWR_CONFIRM;
+  SETTINGS.doublePwrBtn = CrossPointSettings::PAGE_TURN;
+  HalGPIO gpio;
+  GfxRenderer renderer;
+  MappedInputManager input(gpio, renderer);
+  gpio.button = HalGPIO::BTN_POWER;
+  auto frame = [&](unsigned long time, bool pressed, bool held, bool released, unsigned long duration) {
+    clockMs = time;
+    gpio.pressed = pressed; gpio.held = held; gpio.released = released; gpio.powerHeldMs = duration;
+    input.update();
+  };
+  frame(2000, true, true, false, 0);
+  frame(2020, false, false, true, 20);
+  assert(input.homeButtonAction() == HomeButtonAction::Ignore);
+  frame(2521, false, false, false, 20);
+  assert(input.homeButtonAction() == HomeButtonAction::Confirm);
+  frame(2522, false, false, false, 20);
+  assert(input.homeButtonAction() == HomeButtonAction::Ignore);
+  frame(3000, true, true, false, 0);
+  frame(3020, false, false, true, 20);
+  frame(3100, true, true, false, 0);
+  frame(3120, false, false, true, 20);
+  assert(input.homeButtonAction() == HomeButtonAction::NextPage);
+  assert(!input.wasPowerSingleClick());
+  assert(!pickerConfirms(input));
+  frame(3700, false, false, false, 20);
+  assert(input.homeButtonAction() == HomeButtonAction::Ignore);
+  // A long release must not become Confirm after the normal 400ms short-click limit.
+  frame(4000, true, true, false, 0);
+  frame(4900, false, false, true, 900);
+  assert(input.homeButtonAction() == HomeButtonAction::Ignore);
+  assert(!input.wasPowerSingleClick() && !pickerConfirms(input));
+  for (unsigned long duration : {301ul, 350ul, 400ul, 401ul}) {
+    frame(5000, true, true, false, 0);
+    frame(5000 + duration, false, false, true, duration);
+    assert(input.wasPowerSingleClick() == (duration <= 400));
+    assert(pickerConfirms(input) == (duration <= 400));
+    assert((input.homeButtonAction() == HomeButtonAction::Confirm) == (duration <= 400));
+  }
+  // The picker accepts a single click even when Short click is Ignore.
+  SETTINGS.shortPwrBtn = CrossPointSettings::IGNORE;
+  frame(6000, true, true, false, 0);
+  frame(6020, false, false, true, 20);
+  assert(!pickerConfirms(input));
+  frame(6521, false, false, false, 20);
+  assert(input.wasPowerSingleClick() && pickerConfirms(input));
+  assert(input.homeButtonAction() == HomeButtonAction::Ignore);
+  frame(6522, false, false, false, 20);
+  assert(!input.wasPowerSingleClick());
+  // Configured Sleep is still dispatched separately from the single-click marker.
+  SETTINGS.shortPwrBtn = CrossPointSettings::SLEEP;
+  frame(7000, true, true, false, 0);
+  frame(7020, false, false, true, 20);
+  assert(!input.powerSleepClick());
+  frame(7521, false, false, false, 20);
+  assert(input.powerSleepClick());
+}
+
 int main() {
   for (const bool x4Pro : {false, true}) {
     BoardConfig::x4Pro = x4Pro;
     checkRemoteButtons();
   }
+  checkPowerClicks();
 }
 """
+harness = harness.replace("PICKER_CONFIRM_CONDITION", picker_confirm)
 with tempfile.TemporaryDirectory() as directory:
     directory = Path(directory)
     (directory / "HalGPIO.h").write_text(stub)
