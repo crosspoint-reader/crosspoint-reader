@@ -1,5 +1,6 @@
 #include "UiAppHost.h"
 
+#include "TouchFrameRouting.h"
 #include "UiAppHelpers.h"
 
 namespace fui = freeink::ui;
@@ -27,7 +28,14 @@ UiAppHost::TouchRoute UiAppHost::routeTouch(const MappedInputManager& input, con
     return result;
   }
   result.routed = true;
-  result.event = route(result.snap);
+  int liveX = 0;
+  int liveY = 0;
+  if (routeHeld && input.isScreenTouchHeld(liveX, liveY)) {
+    result.event = routePressThenHold(result.snap, static_cast<int16_t>(liveX), static_cast<int16_t>(liveY),
+                                      [this](const fui::InputSnapshot& snap) { return route(snap); });
+  } else {
+    result.event = route(result.snap);
+  }
   return result;
 }
 
