@@ -138,7 +138,8 @@ void ActivityManager::loop() {
       // The header back button shares this band; its taps stay Back.
       statusBarTap = mappedInput.wasScreenTapped(tx, ty) && ty < 44 && !HeaderBackTapTarget::contains(tx, ty);
     }
-    if (mappedInput.hasTouch() && currentActivity->name != "FrontlightPanel" &&
+    // AirDrop must keep polling consent, storage delivery, and its session deadline.
+    if (mappedInput.hasTouch() && currentActivity->name != "FrontlightPanel" && currentActivity->name != "AirDrop" &&
         (statusBarTap || mappedInput.wasLightPanelGesture())) {
       haptic_feedback::touchAction();
       pushActivity(std::make_unique<FrontlightPanelActivity>(renderer, mappedInput));

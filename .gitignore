@@ -33,3 +33,5 @@ lib/EpdFont/scripts/output/
 sdkconfig.sticky
 sdkconfig.x4pro
 flake.*
+
+/vendor/esp32drop/src/airdrop/core/ad_identity.h
