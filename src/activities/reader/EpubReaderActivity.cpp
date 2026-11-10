@@ -1013,8 +1013,6 @@ void EpubReaderActivity::loop() {
     const bool forward = pendingManualTurn > 0;
     pendingManualTurn = 0;
     const bool succeeded = pageTurn(forward);
-    // The page this turn draws saves itself; nothing is left to catch up on.
-    if (succeeded && !isAtEndOfBook()) progressSaveSkipped = false;
     notePageTurn(forward, succeeded);
     if (succeeded && pendingManualTurnTouch) haptic_feedback::touchAction();
     pendingManualTurnTouch = false;
@@ -1480,6 +1478,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     if (section->currentPage < section->pageCount - 1 || section->isBuilding()) {
       section->currentPage++;
       lastPageTurnTime = millis();
+      progressSaveSkipped = false;  // the page this turn draws saves itself
       return true;
     } else if (currentSpineIndex + 1 < epub->getSpineItemsCount()) {
       RenderLock lock;
@@ -1487,8 +1486,12 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       currentSpineIndex++;
       section.reset();
       lastPageTurnTime = millis();
+      progressSaveSkipped = false;
       return true;
     } else {
+      // The end-of-book screen never saves. Queued turns can arrive here on a
+      // last page that was never drawn, so check it whatever the mark says.
+      progressSaveSkipped = true;
       saveSkippedProgress();
       currentSpineIndex = epub->getSpineItemsCount();
       lastPageTurnTime = millis();
@@ -1498,6 +1501,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     if (section->currentPage > 0) {
       section->currentPage--;
       lastPageTurnTime = millis();
+      progressSaveSkipped = false;
       return true;
     } else if (currentSpineIndex > 0) {
       RenderLock lock;
@@ -1506,6 +1510,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       currentSpineIndex--;
       section.reset();
       lastPageTurnTime = millis();
+      progressSaveSkipped = false;
       return true;
     }
   }
@@ -2095,6 +2100,7 @@ void EpubReaderActivity::saveSkippedProgress() {
   if (!epub || !section) return;
   // Past the last page the section still holds that page.
   const int spineIndex = std::min(currentSpineIndex, epub->getSpineItemsCount() - 1);
+  if (spineIndex == lastSavedSpineIndex && section->currentPage == lastSavedPage) return;
   if (saveProgress(spineIndex, section->currentPage, section->estimatedTotalPages())) {
     lastSavedSpineIndex = spineIndex;
     lastSavedPage = section->currentPage;
