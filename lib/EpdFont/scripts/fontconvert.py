@@ -23,10 +23,12 @@ parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--zopfli", dest="zopfli", action="store_true", help="Use Zopfli for the DEFLATE backend instead of zlib. Produces standard raw-DEFLATE streams (decoded unchanged by the on-device uzlib inflater), typically a few percent smaller than zlib -9, at the cost of much slower compression. Requires --compress and the 'zopfli' package.")
+parser.add_argument("--glyph-x-nudge", dest="glyph_x_nudges", action="append", default=[], metavar="CODEPOINT,DX", help="Shift one glyph's outline DX/64 px sideways before rasterising (repeatable). For a stem that straddles a pixel boundary: in 1-bit mode both of its faint edge pixels turn black and the stem comes out a pixel too wide.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
 args = parser.parse_args()
 
+import ctypes
 import freetype
 from fontTools.ttLib import TTFont
 
@@ -261,6 +263,11 @@ if args.pnum:
         if count > 0:
             print(f"pnum: {count} glyph substitutions from {font_path}", file=sys.stderr)
 
+glyph_x_nudges = {}
+for spec in args.glyph_x_nudges:
+    cp, dx = spec.split(",")
+    glyph_x_nudges[int(cp, 0)] = int(dx, 0)
+
 def load_glyph(code_point):
     face_index = 0
     while face_index < len(font_stack):
@@ -269,7 +276,13 @@ def load_glyph(code_point):
         if glyph_index is None:
             glyph_index = face.get_char_index(code_point)
         if glyph_index > 0:
-            face.load_glyph(glyph_index, load_flags)
+            nudge = glyph_x_nudges.get(code_point)
+            if nudge:
+                face.load_glyph(glyph_index, load_flags & ~freetype.FT_LOAD_RENDER)
+                freetype.FT_Outline_Translate(ctypes.byref(face.glyph.outline._FT_Outline), nudge, 0)
+                face.glyph.render(freetype.FT_RENDER_MODE_NORMAL)
+            else:
+                face.load_glyph(glyph_index, load_flags)
             return face
         face_index += 1
     return None
