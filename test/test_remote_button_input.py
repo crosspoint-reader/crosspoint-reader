@@ -6,6 +6,10 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT / "src/MappedInputManager.cpp").read_text()
+settings_header = (ROOT / "src/CrossPointSettings.h").read_text()
+power_actions = "enum SHORT_PWRBTN {" + settings_header.split(
+    "enum SHORT_PWRBTN {", 1
+)[1].split("};", 1)[0] + "};"
 # Exercise production frame/dispatch methods with physical input under test control.
 methods = []
 for signature, following in (
@@ -19,6 +23,7 @@ stub = r"""
 #pragma once
 #include <cstdint>
 struct HalGPIO {
+  enum { BTN_BACK, BTN_CONFIRM, BTN_LEFT, BTN_RIGHT, BTN_UP, BTN_DOWN, BTN_POWER };
   bool pressed = false, released = false, held = false;
   uint8_t button = 0;
   void update() {}
@@ -28,6 +33,7 @@ struct HalGPIO {
   bool wasReleased(uint8_t b) const { return b == button && released; }
   bool isPressed(uint8_t b) const { return b == button && held; }
   unsigned long getHeldTime() const { return 900; }
+  unsigned long getPowerButtonHeldTime() const { return 20; }
   bool wasCapacitivePagePressed() const { return false; }
   bool hasHomeKey() const { return false; }
   bool wasHomeKeyTapped() const { return false; }
@@ -39,12 +45,16 @@ harness = r"""
 #include <cassert>
 #include "MappedInputManager.h"
 class GfxRenderer {};
+namespace BoardConfig {
+  bool x4Pro = false;
+  bool isX4Pro() { return x4Pro; }
+}
 unsigned long millis() { return 1000; }
 constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
 struct CrossPointSettings {
   enum { VIBRATION_OFF, VIBRATION_TOUCH_PAGE };
-  enum { IGNORE = 0, PWR_BOOKMARK = 7, PWR_SYNC = 8, PWR_READER_MENU = 9 };
-  int shortPwrBtn = IGNORE;
+  POWER_ACTIONS
+  int shortPwrBtn = IGNORE, doublePwrBtn = PWR_FRONTLIGHT;
   int vibration = VIBRATION_OFF, hapticIntensity = 0;
   int homeButtonTapAction = 0, homeButtonDoubleTapAction = 0, homeButtonLongPressAction = 0;
 } SETTINGS;
@@ -103,6 +113,7 @@ int main() {
   assert(input.injectRemoteClick(RemoteButton::Back));
 }
 """
+harness = harness.replace("POWER_ACTIONS", power_actions)
 manager_source = (ROOT / "src/activities/ActivityManager.cpp").read_text()
 remote_turn = "bool ActivityManager::remoteTurn(" + manager_source.split(
     "bool ActivityManager::remoteTurn(", 1
@@ -157,6 +168,16 @@ void checkRouting(MappedInputManager& input) {
 int main() {
 """)
 harness = harness.replace("  using Button =", "  checkRouting(input);\n  using Button =")
+# Remote dispatch must work on both the button board and X4 Pro with click classification enabled.
+harness = harness.replace("int main() {", "void checkRemoteButtons() {")
+harness += r"""
+int main() {
+  for (const bool x4Pro : {false, true}) {
+    BoardConfig::x4Pro = x4Pro;
+    checkRemoteButtons();
+  }
+}
+"""
 with tempfile.TemporaryDirectory() as directory:
     directory = Path(directory)
     (directory / "HalGPIO.h").write_text(stub)
