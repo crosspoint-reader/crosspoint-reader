@@ -155,14 +155,18 @@ struct Renderer {
   mutable size_t layoutMeasurements = 0;
   enum class TextMeasureMode { Layout, Rendered };
   mutable size_t visualRenderCalls = 0;
+  struct Measurement { std::string text; BidiUtils::BidiBaseDir direction; };
+  mutable std::vector<Measurement> renderedMeasurements;
   int getTextAdvanceX(int, const char* text, EpdFontFamily::Style style, int8_t = 0,
                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const {
     if (baseDir == BidiUtils::BidiBaseDir::VISUAL && mode == TextMeasureMode::Rendered) ++visualRenderCalls;
+    if (mode == TextMeasureMode::Rendered) renderedMeasurements.push_back({text, baseDir});
     if (cache.scanning && mode == TextMeasureMode::Rendered) ++scannedRenderedMeasurements;
     if (mode == TextMeasureMode::Layout) ++layoutMeasurements;
     std::string visual;
-    if (baseDir != BidiUtils::BidiBaseDir::VISUAL && BidiUtils::applyBidiVisual(text, visual))
+    if (baseDir != BidiUtils::BidiBaseDir::VISUAL &&
+        BidiUtils::applyBidiVisual(text, visual, static_cast<int>(baseDir)))
       text = visual.c_str();
     const auto* ptr = reinterpret_cast<const unsigned char*>(text);
     int width = 0;
@@ -864,6 +868,40 @@ int main() {
         assert(inherited.renderer.drawCalls[0].direction == BidiUtils::BidiBaseDir::LTR);
       }
     }
+  }
+  // An RTL paragraph can wrap to a Latin-first line with Hebrew; drawing,
+  // rendered measurement, and selectable word placement must agree.
+  {
+    SETTINGS.paragraphAlignment = CrossPointSettings::JUSTIFIED;
+    DictionaryDefinitionActivity rtlMixed;
+    rtlMixed.lookup = std::make_unique<DictionaryDefinitionActivity::LookupState>(dictionary);
+    rtlMixed.bodyWidth = 12;
+    rtlMixed.content.text = "אבג abcdefgh one אבג דהו tail extra";
+    assert(rtlMixed.prepareDefinition(rtlMixed.content) && rtlMixed.buildPlainSelectionPages());
+    assert(rtlMixed.content.lines.size() == 3);
+    assert(rtlMixed.content.lines[1].wraps && rtlMixed.content.lines[1].paragraphRtl);
+    const auto& selected = static_cast<const PageLine&>(*rtlMixed.lookup->selectionPages[0]->elements[1]);
+    assert(selected.block->words == std::vector<std::string>({"דהו", "אבג", "one"}));
+    assert(selected.block->positions == std::vector<int16_t>({0, 4, 8}));
+    assert(selected.x == 1);
+    rtlMixed.renderer.renderedMeasurements.clear();
+    rtlMixed.renderer.drawCalls.clear();
+    rtlMixed.drawBody(0, 0, 0, 0);
+    assert(rtlMixed.renderer.drawCalls.size() == 2);
+    const auto& drawn = rtlMixed.renderer.drawCalls[1];
+    assert(drawn.text == "one אבג דהו" && drawn.direction == BidiUtils::BidiBaseDir::RTL);
+    assert(drawn.x == selected.x);
+    bool measuredRtl = false;
+    for (const auto& measurement : rtlMixed.renderer.renderedMeasurements)
+      if (measurement.text == "one אבג דהו" && measurement.direction == BidiUtils::BidiBaseDir::RTL)
+        measuredRtl = true;
+    assert(measuredRtl);
+    // The stub must use the requested base direction, not silently use AUTO.
+    const int autoAdvance = rtlMixed.renderer.getTextAdvanceX(
+        0, "one אבג", EpdFontFamily::BOLD, 0, BidiUtils::BidiBaseDir::AUTO, Renderer::TextMeasureMode::Rendered);
+    const int rtlAdvance = rtlMixed.renderer.getTextAdvanceX(
+        0, "one אבג", EpdFontFamily::BOLD, 0, BidiUtils::BidiBaseDir::RTL, Renderer::TextMeasureMode::Rendered);
+    assert(autoAdvance == rtlAdvance + 2);
   }
   // Line compression changes both page breaks and the line y coordinates in
   // the selection page and the actual rendered definition.
