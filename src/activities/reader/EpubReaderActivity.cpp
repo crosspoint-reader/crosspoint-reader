@@ -338,6 +338,7 @@ int EpubReaderActivity::bookPercentFor(const ChapterPosition& position) const {
 
 void EpubReaderActivity::openReaderMenu() {
   pendingManualTurn = 0;
+  saveSkippedProgress();
   if (usesToolbarMenu()) {
     // Reached from a child activity's result handler (footnotes, bookmarks,
     // go-to-percent... cancelled back to the menu), so the framebuffer holds
@@ -679,6 +680,7 @@ void EpubReaderActivity::loop() {
     loadFailurePopup.handleInput(mappedInput, [this] { requestUpdate(); });
     return;
   }
+  saveSkippedProgress();
   if (!epub) {
     finish();
     return;
@@ -1011,6 +1013,8 @@ void EpubReaderActivity::loop() {
     const bool forward = pendingManualTurn > 0;
     pendingManualTurn = 0;
     const bool succeeded = pageTurn(forward);
+    // The page this turn draws saves itself; nothing is left to catch up on.
+    if (succeeded && !isAtEndOfBook()) progressSaveSkipped = false;
     notePageTurn(forward, succeeded);
     if (succeeded && pendingManualTurnTouch) haptic_feedback::touchAction();
     pendingManualTurnTouch = false;
@@ -1485,6 +1489,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       lastPageTurnTime = millis();
       return true;
     } else {
+      saveSkippedProgress();
       currentSpineIndex = epub->getSpineItemsCount();
       lastPageTurnTime = millis();
       return true;
@@ -1975,8 +1980,13 @@ void EpubReaderActivity::renderBook() {
 
   // A queued turn is about to replace this page: let its render save instead
   // of holding the next refresh back for an SD write.
-  if (pendingManualTurn == 0 && (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
-                                 section->pageCount != lastSavedPageCount)) {
+  const bool progressChanged = currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
+                               section->pageCount != lastSavedPageCount;
+  if (pendingManualTurn != 0) {
+    // saveSkippedProgress() catches up if that turn never draws a page.
+    if (progressChanged) progressSaveSkipped = true;
+  } else if (progressChanged) {
+    progressSaveSkipped = false;
     if (saveProgress(currentSpineIndex, section->currentPage, section->estimatedTotalPages())) {
       lastSavedSpineIndex = currentSpineIndex;
       lastSavedPage = section->currentPage;
@@ -2073,6 +2083,23 @@ bool EpubReaderActivity::applyDeferredReposition() {
 void EpubReaderActivity::clearDeferredReposition() {
   cachedChapterTotalPageCount = 0;
   cachedVisibleTextOffset.reset();
+}
+
+// A queued turn made renderBook() skip its save, and then no page was drawn for
+// it: the turn was dropped (menu, toolbar, text selection) or it left the book.
+void EpubReaderActivity::saveSkippedProgress() {
+  if (!progressSaveSkipped || pendingManualTurn != 0) return;
+  RenderLock lock(RenderLock::Mode::Try);
+  if (!lock.ownsLock()) return;  // a render is running; loop() tries again
+  progressSaveSkipped = false;
+  if (!epub || !section) return;
+  // Past the last page the section still holds that page.
+  const int spineIndex = std::min(currentSpineIndex, epub->getSpineItemsCount() - 1);
+  if (saveProgress(spineIndex, section->currentPage, section->estimatedTotalPages())) {
+    lastSavedSpineIndex = spineIndex;
+    lastSavedPage = section->currentPage;
+    lastSavedPageCount = section->estimatedTotalPages();
+  }
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
