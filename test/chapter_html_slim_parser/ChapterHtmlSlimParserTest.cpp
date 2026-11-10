@@ -7,6 +7,7 @@
 #include <array>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <set>
@@ -1450,6 +1451,200 @@ TEST_F(ChapterBlockDecorationTest, SdAndVectorFontsSizeThroughTheVariantProvider
   const auto& body = *static_cast<const PageLine*>(lines[1])->getBlock();
   EXPECT_EQ(body.wordFontId(0, SD_FONT), SD_FONT);
   EXPECT_EQ(body.wordFontId(1, SD_FONT), SD_FONT * 1000 + 80);
+}
+
+TEST_F(ChapterBlockDecorationTest, EmbeddedFamiliesFollowPublisherFontsMode) {
+  const uint32_t body = CssParser::hashFontFamily("Garamond");
+  const uint32_t hand = CssParser::hashFontFamily("Handscript");
+  renderer.embeddedFamilies = {body, hand};
+  constexpr int BODY_FONT = 900100;
+  constexpr int HAND_FONT = 901100;
+  const auto parse = [this] {
+    open("body", "font-family: Garamond, serif");
+    open("p", nullptr);
+    text("Plain ");
+    open("span", "font-family: 'handscript'");
+    text("inked");
+    close("span");
+    close("p");
+    open("p", "font-family: \"Handscript\"");
+    text("Letter");
+    close("p");
+    close("body");
+  };
+
+  parser.setPublisherFonts(PublisherFonts::Accents);
+  parse();
+  auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  const auto& mixed = *static_cast<const PageLine*>(lines[0])->getBlock();
+  EXPECT_EQ(mixed.getBlockStyle().fontId, 0);  // the body family stays in the reader font
+  EXPECT_EQ(mixed.wordFontId(0, NOTOSANS_14_FONT_ID), NOTOSANS_14_FONT_ID);
+  EXPECT_EQ(mixed.wordFontId(1, NOTOSANS_14_FONT_ID), HAND_FONT);
+  EXPECT_EQ(static_cast<const PageLine*>(lines[1])->getBlock()->getBlockStyle().fontId, HAND_FONT);
+
+  pages.clear();
+  parser.beginParse();
+  parser.setPublisherFonts(PublisherFonts::All);
+  parse();
+  lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  const auto& all = *static_cast<const PageLine*>(lines[0])->getBlock();
+  EXPECT_EQ(all.getBlockStyle().fontId, BODY_FONT);
+  EXPECT_EQ(all.wordFontId(0, NOTOSANS_14_FONT_ID), BODY_FONT);
+  EXPECT_EQ(all.wordFontId(1, NOTOSANS_14_FONT_ID), HAND_FONT);
+
+  pages.clear();
+  parser.beginParse();
+  parser.setPublisherFonts(PublisherFonts::Off);
+  parse();
+  lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(static_cast<const PageLine*>(lines[1])->getBlock()->getBlockStyle().fontId, 0);
+}
+
+class PublisherBodyFontTest : public ChapterBlockDecorationTest {
+ protected:
+  std::filesystem::path directory;
+  void SetUp() override {
+    ChapterBlockDecorationTest::SetUp();
+    parser.fontId = NOTOSANS_14_FONT_ID;
+    directory = std::filesystem::temp_directory_path() / "crosspoint_body_font_test" /
+                ::testing::UnitTest::GetInstance()->current_test_info()->name();
+    std::filesystem::create_directories(directory);
+    filepath = (directory / "chapter.xhtml").string();
+    renderer.embeddedFamilies = {CssParser::hashFontFamily("EBGaramond"), CssParser::hashFontFamily("YatraOne"),
+                                 CssParser::hashFontFamily("Roboto")};
+    std::ofstream cssFile(directory / "style.css");
+    cssFile << ".indent, .noindent { font-family: EBGaramond, serif; }"
+               ".date, h1 { font-family: YatraOne, sans-serif; }"
+               ".block { font-family: Roboto, sans-serif; }";
+    cssFile.close();
+    HalFile source;
+    ASSERT_TRUE(Storage.openFileForRead("TST", (directory / "style.css").string(), source));
+    ASSERT_EQ(cssParser.loadFromStream(source), CssParser::ParseResult::Complete);
+  }
+  void TearDown() override {
+    parser.abortParse();
+    std::filesystem::remove_all(directory);
+  }
+  void parse(const std::string& html, PublisherFonts mode = PublisherFonts::Accents) {
+    std::ofstream output(filepath);
+    output << html;
+    output.close();
+    parser.setPublisherFonts(mode);
+    ASSERT_TRUE(parser.parseAndBuildPages());
+  }
+  int fontFor(const char* word) {
+    for (const auto& page : pages) {
+      for (const auto& element : page->elements) {
+        if (element->getTag() != TAG_PageLine) continue;
+        const auto& block = *static_cast<const PageLine*>(element.get())->getBlock();
+        for (uint16_t i = 0; i < block.wordCount(); ++i) {
+          if (strcmp(block.wordText(i), word) == 0) {
+            const int font = block.wordFontId(i, parser.fontId);
+            return font == parser.fontId ? 0 : font;
+          }
+        }
+      }
+    }
+    ADD_FAILURE() << "Missing word: " << word;
+    return -1;
+  }
+};
+
+TEST_F(PublisherBodyFontTest, ParagraphBodyFontDoesNotComeFromLeadingDateOrHeading) {
+  parse(
+      "<html><body><h1>Heading</h1><p class='date'>Date</p>"
+      "<p class='noindent'>Ordinary body paragraph with enough narrative text.</p>"
+      "<p class='indent'>More narrative with an <span class='block'>inline</span> accent.</p>"
+      "<p class='block'>Quotation</p></body></html>");
+  EXPECT_EQ(fontFor("Ordinary"), 0);
+  EXPECT_EQ(fontFor("More"), 0);
+  EXPECT_EQ(fontFor("Heading"), 901200);
+  EXPECT_EQ(fontFor("Date"), 901100);
+  EXPECT_EQ(fontFor("inline"), 902100);
+  EXPECT_EQ(fontFor("Quotation"), 902100);
+}
+
+TEST_F(PublisherBodyFontTest, ExplicitRootFontTakesPriorityOverParagraphUsage) {
+  parse(
+      "<html><body style='font-family: EBGaramond'><p>Body</p>"
+      "<p class='block'>A much longer paragraph in an intentionally different publisher font.</p></body></html>");
+  EXPECT_EQ(fontFor("Body"), 0);
+  EXPECT_EQ(fontFor("longer"), 902100);
+}
+
+TEST_F(PublisherBodyFontTest, HiddenAndDecorativeTextDoesNotChooseTheBodyFont) {
+  const std::string decoration(512, 'X');
+  parse(
+      "<html><head><title>Title</title></head><body>"
+      "<p class='date' hidden='hidden'>" +
+      decoration +
+      "</p>"
+      "<blockquote><p class='block'>" +
+      decoration +
+      "</p></blockquote>"
+      "<p class='date' style='text-align: center'>" +
+      decoration +
+      "</p>"
+      "<p class='noindent'>Ordinary prose</p></body></html>");
+  EXPECT_EQ(parser.bodyFontFamily, CssParser::hashFontFamily("EBGaramond"));
+  EXPECT_EQ(fontFor("Ordinary"), 0);
+}
+
+TEST_F(PublisherBodyFontTest, InlineAccentDoesNotChooseTheParagraphFamily) {
+  parse(
+      "<html><body><p class='indent'>"
+      "<span class='block'>A much longer inline accent</span> Body</p></body></html>");
+  EXPECT_EQ(parser.bodyFontFamily, CssParser::hashFontFamily("EBGaramond"));
+  EXPECT_EQ(fontFor("Body"), 0);
+  EXPECT_EQ(fontFor("accent"), 902100);
+}
+
+TEST_F(PublisherBodyFontTest, ReaderFontParagraphsKeepMinorityEmbeddedAccents) {
+  parse(
+      "<html><body><p>Ordinary prose stays in the selected reader font without an embedded family.</p>"
+      "<p class='block'>Quotation</p></body></html>");
+  EXPECT_EQ(fontFor("Ordinary"), 0);
+  EXPECT_EQ(fontFor("Quotation"), 902100);
+}
+
+TEST_F(PublisherBodyFontTest, NoOrdinaryParagraphsPreservesDecorativeFonts) {
+  parse("<html><body><h1>Heading</h1><p class='date' style='text-align: center'>Dedication</p></body></html>");
+  EXPECT_EQ(fontFor("Heading"), 901200);
+  EXPECT_EQ(fontFor("Dedication"), 901100);
+}
+
+TEST_F(PublisherBodyFontTest, AllTextStillUsesThePublisherBodyFont) {
+  parse("<html><body><p class='indent'>Body</p></body></html>", PublisherFonts::All);
+  EXPECT_EQ(fontFor("Body"), 900100);
+  EXPECT_FALSE(parser.bodyFontDetected);
+}
+
+TEST_F(PublisherBodyFontTest, OffStillUsesTheReaderFontEverywhere) {
+  parse("<html><body><h1>Heading</h1><p class='indent'>Body</p></body></html>", PublisherFonts::Off);
+  EXPECT_EQ(fontFor("Body"), 0);
+  EXPECT_EQ(fontFor("Heading"), 0);
+  EXPECT_FALSE(parser.bodyFontDetected);
+}
+
+TEST_F(PublisherBodyFontTest, InheritedContainerFamilyKeepsInlineAccent) {
+  parse(
+      "<html><body><div style='font-family: EBGaramond'><p>Body narrative</p>"
+      "<p><span style='font-family: YatraOne'>Accent</span></p></div></body></html>");
+  EXPECT_EQ(fontFor("Body"), 0);
+  EXPECT_EQ(fontFor("Accent"), 901100);
+}
+
+TEST_F(PublisherBodyFontTest, LongChapterRewindsBeforeLayingOutTheFirstPage) {
+  std::string html = "<html><body><p class='indent'>First ";
+  for (size_t i = 0; i < 12000; ++i) html += "prose ";
+  html += "</p><p class='block'>Lastaccent</p></body></html>";
+  parse(html);
+  EXPECT_EQ(parser.bodyFontFamily, CssParser::hashFontFamily("EBGaramond"));
+  EXPECT_EQ(fontFor("First"), 0);
+  EXPECT_EQ(fontFor("Lastaccent"), 902100);
 }
 
 TEST_F(ChapterBlockDecorationTest, UnloadableVariantFallsBackToSectionFont) {

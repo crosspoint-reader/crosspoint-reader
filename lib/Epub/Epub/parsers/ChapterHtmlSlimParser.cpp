@@ -98,6 +98,121 @@ bool matches(const char* tag_name, const char* const* possible_tags, size_t coun
   return false;
 }
 
+namespace {
+
+// A prefix scan identifies paragraph-defined body fonts before any pages are laid out.
+constexpr size_t BODY_FONT_SCAN_BYTES = 64 * 1024;
+
+class BodyFontProbe {
+  static constexpr size_t MAX_DEPTH = 16;
+  static constexpr size_t MAX_FAMILIES = 33;  // 32 embedded faces plus the reader font
+  struct Frame {
+    uint32_t family = 0;
+    uint32_t paragraphFamily = 0;
+    CssTextAlign alignment = CssTextAlign::Justify;
+    bool inBody = false;
+    bool inParagraph = false;
+    bool ignored = false;
+  };
+  struct Usage {
+    uint32_t family = 0;
+    uint32_t bytes = 0;
+  };
+  const CssParser& css;
+  CssStyle resolvedStyle;
+  std::array<CssAncestor, MAX_DEPTH> ancestors{};
+  std::array<Frame, MAX_DEPTH> frames{};
+  std::array<Usage, MAX_FAMILIES> usage{};
+  size_t depth = 0;
+  uint32_t rootFamily = 0;
+
+  static void XMLCALL start(void* context, const XML_Char* name, const XML_Char** attrs) {
+    auto& self = *static_cast<BodyFontProbe*>(context);
+    const size_t index = self.depth++;
+    if (index >= MAX_DEPTH) return;
+    std::string_view classes, id, inlineStyle;
+    bool hidden = false;
+    if (attrs) {
+      for (size_t i = 0; attrs[i]; i += 2) {
+        if (strcmp(attrs[i], "class") == 0) classes = attrs[i + 1];
+        if (strcmp(attrs[i], "id") == 0) id = attrs[i + 1];
+        if (strcmp(attrs[i], "style") == 0) inlineStyle = attrs[i + 1];
+        if (strcmp(attrs[i], "hidden") == 0) hidden = true;
+      }
+    }
+    auto& style = self.resolvedStyle;
+    style = self.css.resolveStyle(name, classes, id, self.ancestors.data(), index);
+    self.ancestors[index] = CssParser::makeAncestor(name, classes, id);
+    if (!inlineStyle.empty()) style.applyOver(CssParser::parseInlineStyle(inlineStyle));
+    auto& frame = self.frames[index];
+    frame = index == 0 ? Frame{} : self.frames[index - 1];
+    if (style.defined.fontFamily) frame.family = style.fontFamily;
+    if (style.hasTextAlign()) frame.alignment = style.textAlign;
+    if (strcmp(name, "html") == 0 || strcmp(name, "body") == 0) {
+      if (style.defined.fontFamily) self.rootFamily = style.fontFamily;
+    }
+    if (strcmp(name, "body") == 0) frame.inBody = true;
+    frame.ignored = frame.ignored || hidden || style.display == CssDisplay::None ||
+                    VisibleTextUtils::isNonVisibleElement(name) || matches(name, HEADER_TAGS, std::size(HEADER_TAGS)) ||
+                    strcmp(name, "blockquote") == 0 || strcmp(name, "table") == 0 || strcmp(name, "nav") == 0 ||
+                    strcmp(name, "aside") == 0 || strcmp(name, "figure") == 0 || strcmp(name, "pre") == 0 ||
+                    strcmp(name, "rt") == 0;
+    if (strcmp(name, "p") == 0) {
+      frame.inParagraph = true;
+      frame.paragraphFamily = frame.family;
+      frame.ignored =
+          frame.ignored || frame.alignment == CssTextAlign::Center || frame.alignment == CssTextAlign::Right;
+    }
+  }
+
+  static void XMLCALL end(void* context, const XML_Char*) {
+    auto& self = *static_cast<BodyFontProbe*>(context);
+    if (self.depth > 0) --self.depth;
+  }
+
+  static void XMLCALL text(void* context, const XML_Char* text, const int length) {
+    auto& self = *static_cast<BodyFontProbe*>(context);
+    if (self.depth == 0 || self.depth > MAX_DEPTH) return;
+    const auto& frame = self.frames[self.depth - 1];
+    if (!frame.inBody || !frame.inParagraph || frame.ignored) return;
+    uint32_t bytes = 0;
+    for (int i = 0; i < length; ++i) {
+      if (!isWhitespace(text[i])) ++bytes;
+    }
+    if (bytes == 0) return;
+    for (auto& candidate : self.usage) {
+      if (candidate.bytes == 0 || candidate.family == frame.paragraphFamily) {
+        candidate.family = frame.paragraphFamily;
+        candidate.bytes += bytes;
+        return;
+      }
+    }
+  }
+
+  static void XMLCALL entity(void* context, const XML_Char* text, const int length) {
+    if (length >= 3 && text[0] == '&' && text[length - 1] == ';') BodyFontProbe::text(context, "x", 1);
+  }
+
+ public:
+  explicit BodyFontProbe(const CssParser& css) : css(css) {}
+
+  void attach(XML_Parser parser) {
+    XML_SetUserData(parser, this);
+    XML_SetElementHandler(parser, start, end);
+    XML_SetCharacterDataHandler(parser, text);
+    XML_SetDefaultHandlerExpand(parser, entity);
+  }
+
+  uint32_t family() const {
+    if (rootFamily != 0) return rootFamily;
+    const auto best =
+        std::max_element(usage.begin(), usage.end(), [](const Usage& a, const Usage& b) { return a.bytes < b.bytes; });
+    return best->family;
+  }
+};
+
+}  // namespace
+
 bool isNonVisibleTextTag(const char* name) { return VisibleTextUtils::isNonVisibleElement(name); }
 
 const char* getAttribute(const XML_Char** atts, const char* attrName) {
@@ -186,6 +301,10 @@ void ChapterHtmlSlimParser::applyInlinePresentationToEntry(StyleStackEntry& entr
     entry.hasSmallCaps = true;
     entry.smallCaps = css.smallCaps;
   }
+  if (css.defined.fontFamily) {
+    entry.hasFontFamily = true;
+    entry.fontFamily = css.fontFamily;
+  }
 }
 
 void ChapterHtmlSlimParser::applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css) {
@@ -205,7 +324,7 @@ void ChapterHtmlSlimParser::pushBlockTextStyleEntry(const CssStyle& cssStyle) {
                                             [](const StyleStackEntry& entry) { return entry.hasFontScale; });
   if (!cssStyle.hasFontWeight() && !cssStyle.hasFontStyle() && !cssStyle.hasTextDecoration() &&
       !cssStyle.hasSmallCaps() && !cssStyle.defined.whiteSpace && !cssStyle.hasDirection() &&
-      !cssStyle.hasTextAlign() && !sized) {
+      !cssStyle.hasTextAlign() && !sized && !cssStyle.defined.fontFamily) {
     return;
   }
 
@@ -279,9 +398,11 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveTextAlign = currentCssStyle.textAlign;
   effectiveSup = false;
   effectiveSub = false;
+  uint32_t fontFamily = 0;
 
   // Apply inline style stack in order
   for (const auto& entry : inlineStyleStack) {
+    if (entry.hasFontFamily) fontFamily = entry.fontFamily;
     if (entry.hasBold) {
       effectiveBold = entry.bold;
     }
@@ -318,6 +439,11 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
       if (entry.sub) effectiveSup = false;
     }
   }
+  if (publisherFonts == PublisherFonts::Off ||
+      (publisherFonts == PublisherFonts::Accents && fontFamily == bodyFontFamily)) {
+    fontFamily = 0;
+  }
+  effectiveFontFamily = fontFamily;
 
   // Keep flow direction in the active empty text block. Inline direction remains
   // available for CSS inheritance without replacing the paragraph's base direction.
@@ -583,7 +709,7 @@ void ChapterHtmlSlimParser::layoutDropCapLines(
   dropCap = DropCapState{};
 
   // Enlarging the family's largest built-in size keeps outlines smoothest.
-  const int capFontId = fontIdForScale(3.0f);
+  const int capFontId = fontIdFor(3.0f, currentTextBlock->getBlockStyle().fontFamily);
   const int lineHeight = renderer.getLineHeight(layoutFontId, lineCompression);
   const int ascender = renderer.getFontAscenderSize(layoutFontId);
   int32_t advanceFP = 0;
@@ -743,10 +869,16 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     const float base = inlineScale > 0.0f ? inlineScale : currentTextBlock->getBlockStyle().fontScale;
     inlineScale = entry.fontScaleRem ? entry.fontScale : base * entry.fontScale;
   }
-  const uint8_t sizeSlot =
-      inlineScale > 0.0f && (inlineSize.valid || inlineScale != currentTextBlock->getBlockStyle().fontScale)
-          ? currentTextBlock->sizeSlotFor(std::clamp(inlineScale, 0.5f, 3.0f))
-          : 0;
+  // The paragraph's first word picks the block's family; words in another family get a slot.
+  BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
+  if (currentTextBlock->isEmpty() || listItemBulletOnly) blockStyle.fontFamily = effectiveFontFamily;
+  uint8_t sizeSlot = 0;
+  if ((inlineScale > 0.0f && (inlineSize.valid || inlineScale != blockStyle.fontScale)) ||
+      effectiveFontFamily != blockStyle.fontFamily) {
+    const float scale = inlineScale > 0.0f ? std::clamp(inlineScale, 0.5f, 3.0f)
+                                           : (inlineSize.valid ? inlineSize.scale : blockStyle.fontScale);
+    sizeSlot = currentTextBlock->sizeSlotFor(scale, effectiveFontFamily);
+  }
   currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset, linkId,
                             sizeSlot, effectivePreserveWhitespace);
   if (insideTableCell && !tableRowStacked) {
@@ -2266,9 +2398,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // <small>/<big> default to the browser's relative sizes.
     const float tagScale = strcmp(name, "small") == 0 ? 0.83f : (strcmp(name, "big") == 0 ? 1.2f : 0.0f);
     const bool sized = cssStyle.hasFontSize() || tagScale > 0.0f;
+    if (!self->bodyFontDetected && cssStyle.defined.fontFamily &&
+        (strcmp(name, "html") == 0 || strcmp(name, "body") == 0)) {
+      self->bodyFontFamily = cssStyle.fontFamily;
+    }
     if (sized || cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration() ||
         cssStyle.hasSmallCaps() || cssStyle.defined.whiteSpace || cssStyle.hasDirection() ||
-        cssStyle.hasVerticalAlign() || inheritedTableTextAlign) {
+        cssStyle.hasVerticalAlign() || inheritedTableTextAlign || cssStyle.defined.fontFamily) {
       // Flush buffer before style change so preceding text gets current style
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
@@ -2835,9 +2971,49 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
 ChapterHtmlSlimParser::~ChapterHtmlSlimParser() { abortParse(); }
 
+bool ChapterHtmlSlimParser::detectBodyFont() {
+  // The bounded ancestor/usage tables exceed the task's small stack budget.
+  auto probe = makeUniqueNoThrow<BodyFontProbe>(*cssParser);
+  if (!probe) {
+    LOG_ERR("EHP", "OOM: body font probe");
+    return false;
+  }
+  probe->attach(xmlParser_);
+  size_t consumed = 0;
+  while (parseFile_.available() > 0 && consumed < BODY_FONT_SCAN_BYTES) {
+    void* const buffer = XML_GetBuffer(xmlParser_, PARSE_BUFFER_SIZE);
+    if (!buffer) {
+      LOG_ERR("EHP", "OOM: body font scan buffer");
+      return false;
+    }
+    const size_t length = parseFile_.read(buffer, PARSE_BUFFER_SIZE);
+    if (length == 0) {
+      LOG_ERR("EHP", "Body font scan read failed");
+      return false;
+    }
+    consumed += length;
+    if (XML_ParseBuffer(xmlParser_, static_cast<int>(length), parseFile_.available() == 0) == XML_STATUS_ERROR) {
+      // The layout pass reports malformed XML and handles tolerated trailing data.
+      break;
+    }
+    delay(1);
+  }
+  bodyFontFamily = probe->family();
+  LOG_DBG("EHP", "Body font %08x from %u bytes (probe %u bytes)", static_cast<unsigned>(bodyFontFamily),
+          static_cast<unsigned>(consumed), static_cast<unsigned>(sizeof(BodyFontProbe)));
+  if (!XML_ParserReset(xmlParser_, nullptr) || !parseFile_.seek(0)) {
+    LOG_ERR("EHP", "Failed to rewind after body font scan");
+    return false;
+  }
+  bodyFontDetected = true;
+  return true;
+}
+
 bool ChapterHtmlSlimParser::beginParse() {
   stopRequested = false;
   htmlEnded_ = false;
+  bodyFontFamily = 0;
+  bodyFontDetected = false;
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
   // text-align inherit it correctly through getCombinedBlockStyle.
@@ -2877,10 +3053,6 @@ bool ChapterHtmlSlimParser::beginParse() {
     return false;
   }
 
-  // Handle HTML entities (like &nbsp;) that aren't in XML spec or DTD
-  // Using DefaultHandlerExpand preserves normal entity expansion from DOCTYPE
-  XML_SetDefaultHandlerExpand(xmlParser_, defaultHandlerExpand);
-
   if (!Storage.openFileForRead("EHP", filepath, parseFile_)) {
     destroyXmlParser(xmlParser_);
     xmlParser_ = nullptr;
@@ -2892,6 +3064,13 @@ bool ChapterHtmlSlimParser::beginParse() {
     popupFn();
   }
 
+  if (publisherFonts == PublisherFonts::Accents && embeddedStyle && cssParser && !detectBodyFont()) {
+    abortParse();
+    return false;
+  }
+
+  // Handle HTML entities (like &nbsp;) that aren't in XML spec or DTD.
+  XML_SetDefaultHandlerExpand(xmlParser_, defaultHandlerExpand);
   XML_SetUserData(xmlParser_, this);
   XML_SetElementHandler(xmlParser_, startElement, endElement);
   XML_SetCharacterDataHandler(xmlParser_, characterData);
@@ -3035,11 +3214,19 @@ int ChapterHtmlSlimParser::fontIdForScale(const float scale) const {
   return variant != 0 ? variant : fontId;
 }
 
+int ChapterHtmlSlimParser::fontIdFor(const float scale, const uint32_t family) const {
+  if (family != 0) {
+    const int embedded = renderer.resolveFontFamily(family, scale);
+    if (embedded != 0) return embedded;
+  }
+  return fontIdForScale(scale);
+}
+
 int ChapterHtmlSlimParser::prepareBlockFont(ParsedText& text, const float scale) {
   BlockStyle& blockStyle = text.getBlockStyle();
-  const int layoutFontId = fontIdForScale(scale);
+  const int layoutFontId = fontIdFor(scale, blockStyle.fontFamily);
   for (uint8_t slot = 1; slot < text.sizeSlotsInUse(); ++slot) {
-    text.setSizeSlotFontId(slot, fontIdForScale(text.sizeSlotScale(slot)));
+    text.setSizeSlotFontId(slot, fontIdFor(text.sizeSlotScale(slot), text.sizeSlotFamily(slot)));
   }
   blockStyle.fontId = layoutFontId == fontId ? 0 : layoutFontId;
   return layoutFontId;

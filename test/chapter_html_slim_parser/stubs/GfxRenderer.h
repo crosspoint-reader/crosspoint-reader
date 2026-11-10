@@ -10,6 +10,7 @@
 #include <set>
 #include <string>
 #include <tuple>
+#include <vector>
 
 namespace BidiUtils {
 enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
@@ -88,6 +89,15 @@ class GfxRenderer {
     if (fontMap.count(fontId) != 0 || fontId == 0) return true;
     return fontVariantProvider_.load && fontVariantProvider_.load(fontVariantProvider_.ctx, fontId) &&
            fontMap.count(fontId) != 0;
+  }
+  // Fixture embedded fonts: family i resolves to 900000 + i * 1000 + scale * 100.
+  std::vector<uint32_t> embeddedFamilies;
+  int resolveFontFamily(uint32_t family, float scale) const {
+    for (size_t i = 0; i < embeddedFamilies.size(); ++i) {
+      if (embeddedFamilies[i] == family)
+        return 900000 + static_cast<int>(i) * 1000 + static_cast<int>(scale * 100 + 0.5f);
+    }
+    return 0;
   }
   std::map<int, EpdFontFamily> fontMap;
   int getFontAscenderSize(int fontId) const {
