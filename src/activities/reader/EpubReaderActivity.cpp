@@ -852,7 +852,7 @@ void EpubReaderActivity::loop() {
     }
 
     if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
-      const bool succeeded = pageTurn(true);
+      pageTurn(true);
       requestUpdate();
       return;
     }
