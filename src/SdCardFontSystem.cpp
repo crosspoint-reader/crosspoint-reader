@@ -102,19 +102,19 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) { activate(renderer, 
 
 int SdCardFontSystem::activate(GfxRenderer& renderer, const ReaderTextSettings& requested) {
   renderer_ = &renderer;
-  std::memcpy(requestedFamily_, requested.sdFontFamilyName, sizeof(requestedFamily_));
-  requestedFamily_[sizeof(requestedFamily_) - 1] = '\0';
-  requestedPointSize_ = requested.fontPointSize;
+  char requestedFamily[sizeof(requested.sdFontFamilyName)];
+  std::memcpy(requestedFamily, requested.sdFontFamilyName, sizeof(requestedFamily));
+  requestedFamily[sizeof(requestedFamily) - 1] = '\0';
   fallback_ = false;
 
   const bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
   if (registryWasDirty) registry_.discover();
 
-  const auto* family = requestedFamily_[0] ? registry_.findFamily(requestedFamily_) : nullptr;
+  const auto* family = requestedFamily[0] ? registry_.findFamily(requestedFamily) : nullptr;
 #if CROSSPOINT_VECTOR_FONTS
   if (family && family->vector) {
     if (!manager_.currentFamilyName().empty()) unloadCpfonts(renderer);
-    loadTtfFamily(*family, renderer, requestedPointSize_, registryWasDirty);
+    loadTtfFamily(*family, renderer, requested.fontPointSize, registryWasDirty);
     if (ttfFontId_ != 0) {
       activePointSize_ = ttfPointSize_;
       return ttfFontId_;
@@ -123,30 +123,30 @@ int SdCardFontSystem::activate(GfxRenderer& renderer, const ReaderTextSettings& 
     unloadTtf(renderer);
 #endif
     if (family) {
-      const auto* selected = family->findNearestSize(requestedPointSize_);
+      const auto* selected = family->findNearestSize(requested.fontPointSize);
       if (!registryWasDirty && manager_.currentFamilyName() == family->name && selected &&
           manager_.currentPointSize() == selected->pointSize) {
         activePointSize_ = manager_.currentPointSize();
         return manager_.getFontId(family->name);
       }
       unloadCpfonts(renderer);
-      if (manager_.loadFamily(*family, renderer, requestedPointSize_)) {
+      if (manager_.loadFamily(*family, renderer, requested.fontPointSize)) {
         setupUiFallbacks(renderer);
         activePointSize_ = manager_.currentPointSize();
         return manager_.getFontId(family->name);
       }
-      LOG_ERR("SDFS", "Failed to load SD font family: %s (keeping selection)", requestedFamily_);
+      LOG_ERR("SDFS", "Failed to load SD font family: %s (keeping selection)", requestedFamily);
     } else {
       unloadCpfonts(renderer);
-      if (requestedFamily_[0]) LOG_ERR("SDFS", "SD font family unavailable: %s (keeping selection)", requestedFamily_);
+      if (requestedFamily[0]) LOG_ERR("SDFS", "SD font family unavailable: %s (keeping selection)", requestedFamily);
     }
 #if CROSSPOINT_VECTOR_FONTS
   }
 #endif
 
-  fallback_ = requestedFamily_[0] != '\0';
-  activePointSize_ =
-      snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), requestedPointSize_);
+  fallback_ = requestedFamily[0] != '\0';
+  activePointSize_ = snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES),
+                                            requested.fontPointSize);
   static constexpr int BUILTIN_IDS[] = {NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID,
                                         NOTOSANS_18_FONT_ID};
   const auto* size =

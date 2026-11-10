@@ -124,8 +124,6 @@ class SdCardFontSystem {
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
-  char requestedFamily_[32] = {};
-  uint8_t requestedPointSize_ = 0;
   uint8_t activePointSize_ = 0;
   bool fallback_ = false;
 

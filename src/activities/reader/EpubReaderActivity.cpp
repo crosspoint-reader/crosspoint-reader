@@ -1649,11 +1649,6 @@ void EpubReaderActivity::renderBook() {
   // exit from the overlay while its deferred chrome refresh is still pending.
   settleOverlayRefresh();
 
-  if (pendingTextSettingsError) {
-    pendingTextSettingsError = false;
-    GUI.drawPopup(renderer, tr(STR_ERROR_GENERAL_FAILURE));
-  }
-
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;
     pendingSyncSaveError = false;
@@ -2028,6 +2023,12 @@ void EpubReaderActivity::renderBook() {
     // practice; restore a HALF cleanup here if text ever visibly ghosts
     // through the sheet (see #2190 for the mechanism).
     pushOverlayRefresh();
+  }
+
+  if (pendingTextSettingsError) {
+    pendingTextSettingsError = false;
+    settleOverlayRefresh();
+    GUI.drawPopup(renderer, tr(STR_ERROR_GENERAL_FAILURE));
   }
 }
 
