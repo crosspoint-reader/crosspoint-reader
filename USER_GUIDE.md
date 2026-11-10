@@ -249,8 +249,6 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "In Reader" - Show battery percentage everywhere except in reading mode
   - "Always" - Always hide battery percentage
 
-- **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting; options are every 1, 5, 10, 15, or 30 pages.
-
 - **UI Theme**: Set which UI theme to use:
   
   - "Classic" - The original Crosspoint theme
@@ -258,7 +256,13 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
   - "RoundedRaff" - A rounded theme with additional visual styling
 
-- **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
+##### Screen Cleaning
+
+Open **Settings → Display → Screen Cleaning** for settings that reduce traces of previous screens. Existing saved values are preserved.
+
+- **Refresh Frequency**: Choose a full refresh every 1, 5, 10, 15, or 30 pages, or never.
+
+- **Sunlight Fading Fix**: Enable compensation for fading on supported non-touch panels. This option is hidden on X4 Pro and X4 Classic:
   
   - "OFF" (default) - Disable the fix
   - "ON" - Enable the fix
