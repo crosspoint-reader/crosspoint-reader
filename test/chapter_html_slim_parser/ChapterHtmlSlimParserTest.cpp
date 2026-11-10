@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -2299,4 +2300,390 @@ TEST(TextDecorationPosition, UnderlineStaysBelowBaseline) {
     line->render(renderer, 0, 0, 20);
     EXPECT_EQ(renderer.lastLineY, 34);
   });
+}
+
+// A link target is the page of its block's first line. The page open when the block starts is wrong
+// when that line does not fit or the orphan rule carries it on: the jump lands a page early.
+class ChapterAnchorPageTest : public ChapterWidowOrphanTest {
+ protected:
+  void SetUp() override {
+    ChapterWidowOrphanTest::SetUp();
+    parser.insideBody = true;
+  }
+  std::optional<uint16_t> pageOfWord(const char* word) {
+    const auto contains = [&](const Page& page) {
+      for (const auto& element : page.elements) {
+        if (element->getTag() != TAG_PageLine) continue;
+        const auto& block = *static_cast<const PageLine&>(*element).getBlock();
+        for (uint16_t i = 0; i < block.wordCount(); ++i) {
+          if (std::strcmp(block.wordText(i), word) == 0) return true;
+        }
+      }
+      return false;
+    };
+    for (size_t i = 0; i < pages.size(); ++i) {
+      if (contains(*pages[i])) return static_cast<uint16_t>(i);
+    }
+    if (parser.currentPage && contains(*parser.currentPage)) return static_cast<uint16_t>(pages.size());
+    return std::nullopt;
+  }
+  void anchoredParagraph(const char* id, int wordCount) {
+    const XML_Char* attributes[] = {"id", id, nullptr};
+    ChapterHtmlSlimParser::startElement(&parser, "p", attributes);
+    text(words(wordCount));
+    close("p");
+  }
+  std::optional<uint16_t> anchorPage(const char* id) {
+    for (const auto& [key, page] : parser.getAnchors()) {
+      if (key == id) return page;
+    }
+    return std::nullopt;
+  }
+};
+
+TEST_F(ChapterAnchorPageTest, AnchorStaysWhenParagraphStartsOnThePage) {
+  paragraph(13 * 2);
+  anchoredParagraph("n12", 13 * 2);
+  paragraph(1);
+  EXPECT_EQ(anchorPage("n12"), std::optional<uint16_t>(0));
+}
+
+TEST_F(ChapterAnchorPageTest, AnchorFollowsFirstLineThatDoesNotFit) {
+  paragraph(13 * 5);  // the page is full
+  anchoredParagraph("n12", 13 * 2);
+  paragraph(1);
+  EXPECT_EQ(anchorPage("n12"), std::optional<uint16_t>(1));
+}
+
+TEST_F(ChapterAnchorPageTest, AnchorFollowsLoneFirstLineCarriedByOrphanRule) {
+  paragraph(13 * 4);
+  anchoredParagraph("n12", 13 * 3);  // its first line would sit alone at the bottom
+  paragraph(1);
+  ASSERT_GE(pages.size(), 1u);
+  EXPECT_EQ(linesOnPage(0), 4u);
+  EXPECT_EQ(anchorPage("n12"), std::optional<uint16_t>(1));
+}
+
+TEST_F(ChapterAnchorPageTest, AnchorFollowsTwoLineParagraphMovedWhole) {
+  paragraph(13 * 4);
+  anchoredParagraph("n14", 13 * 2);
+  paragraph(1);
+  EXPECT_EQ(anchorPage("n14"), std::optional<uint16_t>(1));
+}
+
+TEST_F(ChapterAnchorPageTest, AnchorStaysWhenOnlyTheParagraphTailMoves) {
+  paragraph(13 * 2);
+  anchoredParagraph("n12", 13 * 8);  // starts on page 0; later breaks carry only its continuation
+  paragraph(1);
+  EXPECT_EQ(anchorPage("n12"), std::optional<uint16_t>(0));
+}
+
+TEST_F(ChapterAnchorPageTest, ConsecutiveAnchoredNotesEachLandOnTheirFirstLine) {
+  anchoredParagraph("n1", 13 * 2);
+  anchoredParagraph("n2", 13 * 2);
+  anchoredParagraph("n3", 13 * 2);  // one line left on page 0: both lines move
+  anchoredParagraph("n4", 13 * 2);
+  paragraph(1);
+  EXPECT_EQ(anchorPage("n1"), std::optional<uint16_t>(0));
+  EXPECT_EQ(anchorPage("n2"), std::optional<uint16_t>(0));
+  EXPECT_EQ(anchorPage("n3"), std::optional<uint16_t>(1));
+  EXPECT_EQ(anchorPage("n4"), std::optional<uint16_t>(1));
+}
+
+TEST_F(ChapterAnchorPageTest, InlineAnchorStaysWithItsParagraphBeforePageBreak) {
+  open("p", nullptr);
+  text(words(13 * 3));
+  const XML_Char* attributes[] = {"id", "inline-target", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", attributes);
+  text("target");
+  close("a");
+  close("p");
+  open("p", "page-break-before: always");
+  text("next page");
+  close("p");
+  EXPECT_EQ(anchorPage("inline-target"), std::optional<uint16_t>(0));
+}
+
+TEST_F(ChapterAnchorPageTest, PendingAnchorCountsTowardChapterLimit) {
+  for (int i = 0; i < 1025; ++i) {
+    const auto id = "target-" + std::to_string(i);
+    const XML_Char* attributes[] = {"id", id.c_str(), nullptr};
+    ChapterHtmlSlimParser::startElement(&parser, "a", attributes);
+    close("a");
+  }
+  ASSERT_TRUE(parser.finishParse());
+  EXPECT_EQ(parser.getAnchors().size(), 1024u);
+}
+
+TEST_F(ChapterAnchorPageTest, EmptyTrailingTableKeepsItsAnchor) {
+  paragraph(13);
+  const XML_Char* attributes[] = {"id", "empty-table", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "table", attributes);
+  close("table");
+  ASSERT_TRUE(parser.finishParse());
+  EXPECT_EQ(anchorPage("empty-table"), std::optional<uint16_t>(0));
+}
+
+TEST_F(ChapterAnchorPageTest, HeadingAnchorFollowsHeadingCarriedWithNextParagraph) {
+  paragraph(13 * 4);
+  const XML_Char* attributes[] = {"id", "heading", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "h2", attributes);
+  text("Heading");
+  close("h2");
+  anchoredParagraph("body", 13 * 3);
+  EXPECT_EQ(anchorPage("heading"), std::optional<uint16_t>(1));
+  EXPECT_EQ(anchorPage("body"), std::optional<uint16_t>(1));
+}
+
+TEST_F(ChapterAnchorPageTest, AnchorFollowsTwoCarriedLinesOfItsParagraph) {
+  paragraph(13 * 3);
+  anchoredParagraph("n12", 13 * 3);
+  paragraph(1);
+  ASSERT_EQ(pages.size(), 1u);
+  EXPECT_EQ(linesOnPage(0), 3u);
+  EXPECT_EQ(anchorPage("n12"), std::optional<uint16_t>(1));
+}
+
+TEST_F(ChapterAnchorPageTest, InlineAnchorBeforeAnAnchoredBlockStaysWithItsText) {
+  open("div", nullptr);
+  text(words(13 * 8));
+  const XML_Char* inlineAttributes[] = {"id", "inline", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", inlineAttributes);
+  text("target");
+  close("a");
+  const XML_Char* nextAttributes[] = {"id", "next", "style", "page-break-before: always", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "p", nextAttributes);
+  text("next");
+  close("p");
+  close("div");
+  EXPECT_EQ(anchorPage("inline"), std::optional<uint16_t>(1));
+  EXPECT_EQ(anchorPage("next"), std::optional<uint16_t>(2));
+}
+
+TEST_F(ChapterAnchorPageTest, TwoInlineAnchorsStayWithTheFirstLineOfALongParagraph) {
+  open("p", nullptr);
+  text("prefix ");
+  const XML_Char* early[] = {"id", "early", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", early);
+  close("a");
+  text("one ");
+  const XML_Char* later[] = {"id", "later", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", later);
+  close("a");
+  text("TARGET " + words(13 * 8));
+  close("p");
+  ASSERT_EQ(pageOfWord("TARGET"), std::optional<uint16_t>(0));
+  EXPECT_EQ(anchorPage("early"), pageOfWord("TARGET"));
+  EXPECT_EQ(anchorPage("later"), pageOfWord("TARGET"));
+}
+
+TEST_F(ChapterAnchorPageTest, InlineAnchorAtThePageBoundaryFollowsTheNextText) {
+  open("p", nullptr);
+  text(words(13 * 5));
+  const XML_Char* attributes[] = {"id", "boundary", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", attributes);
+  text("TARGET " + words(13 * 3));
+  close("a");
+  close("p");
+  ASSERT_EQ(pageOfWord("TARGET"), std::optional<uint16_t>(1));
+  EXPECT_EQ(anchorPage("boundary"), pageOfWord("TARGET"));
+}
+
+TEST_F(ChapterAnchorPageTest, InlineAnchorFollowsItsHeadingToTheNextPage) {
+  paragraph(13 * 4);
+  open("h2", nullptr);
+  text("Heading ");
+  const XML_Char* attributes[] = {"id", "heading-inline", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", attributes);
+  text("TARGET");
+  close("a");
+  close("h2");
+  paragraph(13 * 3);
+  ASSERT_EQ(pageOfWord("TARGET"), std::optional<uint16_t>(1));
+  EXPECT_EQ(anchorPage("heading-inline"), pageOfWord("TARGET"));
+}
+
+TEST_F(ChapterAnchorPageTest, InlineAnchorSurvivesTheSoftFlushOfALongParagraph) {
+  open("p", nullptr);
+  text(words(13 * 60));
+  const XML_Char* attributes[] = {"id", "soft", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", attributes);
+  text("TARGET " + words(13 * 60));
+  close("a");
+  close("p");
+  ASSERT_TRUE(pageOfWord("TARGET").has_value());
+  EXPECT_EQ(anchorPage("soft"), pageOfWord("TARGET"));
+}
+
+TEST_F(ChapterAnchorPageTest, EmptyInlineTargetAtParagraphEndStaysBeforeTheNextPage) {
+  open("p", nullptr);
+  text(words(13 * 3));
+  const XML_Char* attributes[] = {"id", "tail", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", attributes);
+  close("a");
+  close("p");
+  open("p", "page-break-before: always");
+  text("next page");
+  close("p");
+  EXPECT_EQ(anchorPage("tail"), std::optional<uint16_t>(0));
+}
+
+TEST_F(ChapterAnchorPageTest, InlineTargetBeforeAnImageFollowsTheImagePlaceholder) {
+  parser.imageRendering = 1;
+  open("p", nullptr);
+  text(words(13 * 5));
+  const XML_Char* anchor[] = {"id", "image", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", anchor);
+  close("a");
+  const XML_Char* image[] = {"src", "image.png", "alt", "placeholder", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "img", image);
+  close("img");
+  close("p");
+  ASSERT_EQ(pageOfWord("[Image:"), std::optional<uint16_t>(1));
+  EXPECT_EQ(anchorPage("image"), pageOfWord("[Image:"));
+}
+
+TEST_F(ChapterAnchorPageTest, InlineTargetAfterALongImagePlaceholderFollowsItsText) {
+  parser.imageRendering = 1;
+  open("p", nullptr);
+  const auto alt = words(13 * 8);
+  const XML_Char* image[] = {"src", "missing.png", "alt", alt.c_str(), nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "img", image);
+  close("img");
+  text(" ");
+  const XML_Char* anchor[] = {"id", "after", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", anchor);
+  close("a");
+  text("TARGET");
+  close("p");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_TRUE(pageOfWord("TARGET").has_value());
+  EXPECT_EQ(anchorPage("after"), pageOfWord("TARGET"));
+}
+
+TEST_F(ChapterAnchorPageTest, InlineTargetImmediatelyAfterALongImagePlaceholderFollowsItsText) {
+  parser.imageRendering = 1;
+  open("p", nullptr);
+  const auto alt = words(13 * 8);
+  const XML_Char* image[] = {"src", "missing.png", "alt", alt.c_str(), nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "img", image);
+  close("img");
+  const XML_Char* anchor[] = {"id", "after", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", anchor);
+  close("a");
+  text("TARGET");
+  close("p");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_TRUE(pageOfWord("TARGET").has_value());
+  EXPECT_EQ(anchorPage("after"), pageOfWord("TARGET"));
+  EXPECT_EQ(parser.visibleTextOffset, 6u);
+}
+
+TEST_F(ChapterAnchorPageTest, InlineTargetImmediatelyAfterASecondImageFollowsItsText) {
+  parser.imageRendering = 1;
+  open("p", nullptr);
+  const auto alt = words(13 * 8);
+  const XML_Char* first[] = {"src", "first.png", "alt", alt.c_str(), nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "img", first);
+  close("img");
+  const XML_Char* second[] = {"src", "second.png", "alt", alt.c_str(), nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "img", second);
+  close("img");
+  const XML_Char* anchor[] = {"id", "after-second", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", anchor);
+  close("a");
+  text("TARGET");
+  close("p");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_TRUE(pageOfWord("TARGET").has_value());
+  EXPECT_EQ(anchorPage("after-second"), pageOfWord("TARGET"));
+  EXPECT_EQ(parser.visibleTextOffset, 6u);
+}
+
+TEST_F(ChapterAnchorPageTest, InlineTargetAfterAnImageStartsALongTextBlock) {
+  parser.imageRendering = 1;
+  open("p", nullptr);
+  const auto alt = words(13 * 8);
+  const XML_Char* image[] = {"src", "missing.png", "alt", alt.c_str(), nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "img", image);
+  close("img");
+  const XML_Char* anchor[] = {"id", "after", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", anchor);
+  close("a");
+  const auto content = "TARGET " + words(13 * 8);
+  text(content);
+  close("p");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_TRUE(pageOfWord("TARGET").has_value());
+  ASSERT_LT(*pageOfWord("TARGET"), parser.completedPageCount);
+  EXPECT_EQ(anchorPage("after"), pageOfWord("TARGET"));
+  EXPECT_EQ(parser.visibleTextOffset, content.size());
+}
+
+TEST_F(ChapterAnchorPageTest, InlineTargetAfterASecondImageIgnoresTheFirstPlaceholder) {
+  parser.imageRendering = 1;
+  open("p", nullptr);
+  const auto alt = words(13 * 8);
+  const XML_Char* first[] = {"src", "first.png", "alt", alt.c_str(), nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "img", first);
+  close("img");
+  text(" a ");
+  const XML_Char* second[] = {"src", "second.png", "alt", "short", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "img", second);
+  close("img");
+  text(" ");
+  const XML_Char* anchor[] = {"id", "after-second", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", anchor);
+  close("a");
+  text("TARGET");
+  close("p");
+  ASSERT_TRUE(parser.finishParse());
+  // Each fallback ends its own block before the following source text.
+  ASSERT_EQ(pageOfWord("TARGET"), std::optional<uint16_t>(2));
+  EXPECT_EQ(anchorPage("after-second"), pageOfWord("TARGET"));
+}
+
+TEST_F(ChapterAnchorPageTest, InlineTargetBeforeALongImageStaysWithItsFirstLine) {
+  parser.imageRendering = 1;
+  open("p", nullptr);
+  const XML_Char* anchor[] = {"id", "before", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "a", anchor);
+  close("a");
+  const auto alt = words(13 * 8);
+  const XML_Char* image[] = {"src", "missing.png", "alt", alt.c_str(), nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "img", image);
+  close("img");
+  close("p");
+  ASSERT_TRUE(parser.finishParse());
+  ASSERT_TRUE(pageOfWord("[Image:").has_value());
+  EXPECT_EQ(anchorPage("before"), pageOfWord("[Image:"));
+  EXPECT_EQ(parser.visibleTextOffset, 0u);
+}
+
+TEST_F(ChapterAnchorPageTest, ImageFallbackRestoresTheParentStyleAndSourceRange) {
+  parser.imageRendering = 1;
+  parser.paragraphAlignment = static_cast<uint8_t>(CssTextAlign::None);
+  open("p", "text-align: right");
+  const XML_Char* image[] = {"src", "missing.png", "alt", "placeholder", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "img", image);
+  close("img");
+  text("TARGET");
+  close("p");
+  ASSERT_TRUE(parser.finishParse());
+  bool found = false;
+  for (const auto& page : pages) {
+    for (const auto& element : page->elements) {
+      if (element->getTag() != TAG_PageLine) continue;
+      const auto& block = *static_cast<const PageLine&>(*element).getBlock();
+      for (uint16_t i = 0; i < block.wordCount(); ++i) {
+        if (std::strcmp(block.wordText(i), "TARGET") != 0) continue;
+        found = true;
+        EXPECT_EQ(block.getBlockStyle().alignment, CssTextAlign::Right);
+        EXPECT_EQ(block.wordStyle(i) & EpdFontFamily::ITALIC, 0);
+        EXPECT_EQ(block.wordSourceRange(i).start, 0u);
+        EXPECT_EQ(block.wordSourceRange(i).end, 6u);
+      }
+    }
+  }
+  EXPECT_TRUE(found);
 }
