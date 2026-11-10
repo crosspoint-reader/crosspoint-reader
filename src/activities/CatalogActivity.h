@@ -21,7 +21,8 @@ class CatalogActivity : public UiListActivity {
     LIST_PICKER,
     DONE,
     NO_TOKEN,
-    AUTH
+    AUTH,
+    PLUGIN_MENU
   };
 
   void onEnter() override;

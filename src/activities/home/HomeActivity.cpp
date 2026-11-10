@@ -25,6 +25,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/PluginDocuments.h"
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Library, File transfer, Settings
@@ -75,8 +76,23 @@ void HomeActivity::fillCoverGridFromLibrary() {
     index.close();
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
     library::BuildStats stats;
-    if (!library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0) ||
-        !index.open(library::libraryIndexPath())) {
+    const auto pluginDocuments = plugindocuments::collect();
+    const bool built = library::buildLibraryIndex(
+        "/", stats, SETTINGS.libraryUseMetadata != 0,
+        pluginDocuments.empty() ? library::SkipFile{}
+                                : library::SkipFile{plugindocuments::isDocument, &pluginDocuments});
+    // Same as the Library rebuild: a book that became a document leaves Recents.
+    // The index is closed here, so the persistence write cannot overlap its reader.
+    if (!pluginDocuments.empty() && RECENT_BOOKS.pruneMatching(plugindocuments::isDocument, &pluginDocuments)) {
+      RECENT_BOOKS.saveToFile();
+      recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(),
+                                       [&](const RecentBook& book) {
+                                         return plugindocuments::isDocument(&pluginDocuments, book.path);
+                                       }),
+                        recentBooks.end());
+      if (recentBooks.empty()) hasContinueReading = false;
+    }
+    if (!built || !index.open(library::libraryIndexPath())) {
       LOG_ERR("HOME", "Cannot populate cover grid from library");
       return;
     }

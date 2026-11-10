@@ -24,8 +24,8 @@ class EndOfBookOptions : private UiAppHost {
   // Scans the book's folder for suggestions; no-op when already loaded. Call ONLY from
   // the reader's render() (the render task, serialized by RenderLock) — the loaded flag
   // is the release/acquire publication point that lets the main task read the finished
-  // list safely.
-  void loadOnce(const std::string& currentBookPath);
+  // list safely. suggest=false keeps the plain end screen (no folder scan).
+  void loadOnce(const std::string& currentBookPath, bool suggest = true);
 
   // True when the suggestion menu is showing and should own the reader's input.
   bool menuActive() const;

@@ -11,6 +11,18 @@ namespace PluginLocations {
 inline constexpr const char* ROOTS[] = {"/.crosspoint/plugins", "/plugins", "/.plugins"};
 inline constexpr size_t ROOT_COUNT = sizeof(ROOTS) / sizeof(ROOTS[0]);
 inline constexpr const char* INSTALL_MARKER = ".installing";
+// device.json "menu" bounds, shared by the menu screen and the Library filter.
+inline constexpr size_t MAX_MENU_ENTRIES = 32;
+inline constexpr int MAX_MENU_DEPTH = 3;
+// Longest menu file path; a silent restart carries it in a fixed RTC buffer.
+inline constexpr size_t MAX_DOCUMENT_PATH = 255;
+
+// True when documentPath lies inside the folder holding manifestPath
+// (e.g. "/plugins/WADN/device.json"). An empty manifest path (web-only plugin) never matches.
+inline bool isInManifestDir(const std::string& manifestPath, const std::string& documentPath) {
+  const size_t dirLen = manifestPath.rfind('/') + 1;  // 0 when there is no '/'
+  return dirLen > 1 && documentPath.size() > dirLen && documentPath.compare(0, dirLen, manifestPath, 0, dirLen) == 0;
+}
 
 inline bool isPluginRoot(const std::string& dir) {
   for (size_t i = 0; i < ROOT_COUNT; i++) {
@@ -26,23 +38,48 @@ inline bool shouldReuseInstalledBundleDir(const std::string& destDir, const std:
   return !subdir.empty() && subdir.find('/') == std::string::npos && isPluginRoot(destDir);
 }
 
-enum class DeviceKind { None, Catalog, Background };
-enum class PickerAction { None, Catalog, Readme };
+// A bundle entry is both an SD path and the tail of its URL. Percent-encode the
+// bytes a request line cannot carry (spaces, controls, non-ASCII) and the ones
+// that would end the path ('?', '#'); '/' and '%' stay, so nested entries and
+// already-encoded names fetch as before.
+inline std::string bundleEntryUrlPath(const std::string& rel) {
+  static constexpr char HEX_DIGITS[] = "0123456789ABCDEF";
+  std::string out;
+  out.reserve(rel.size());
+  for (const char ch : rel) {
+    const auto c = static_cast<unsigned char>(ch);
+    if (c <= 0x20 || c >= 0x7F || c == '"' || c == '#' || c == '<' || c == '>' || c == '?' || c == '\\' || c == '^' ||
+        c == '`' || c == '{' || c == '|' || c == '}') {
+      out += '%';
+      out += HEX_DIGITS[c >> 4];
+      out += HEX_DIGITS[c & 0x0F];
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+enum class DeviceKind { None, Catalog, Background, Menu };
+enum class PickerAction { None, Catalog, Readme, Menu };
 
 constexpr bool isDiscoverableEntry(const bool quarantined, const bool hasPluginJs, const bool hasDevice,
                                    const bool hasManifest) {
   return !quarantined && (hasPluginJs || hasDevice || hasManifest);
 }
 
-constexpr DeviceKind classifyDeviceManifest(const bool hasBrowseUrl, const bool hasEvents) {
+// A menu wins: its entries may open the catalog, so the catalog is reachable.
+constexpr DeviceKind classifyDeviceManifest(const bool hasBrowseUrl, const bool hasEvents, const bool hasMenu = false) {
+  if (hasMenu) return DeviceKind::Menu;
   if (hasBrowseUrl) return DeviceKind::Catalog;
   if (hasEvents) return DeviceKind::Background;
   return DeviceKind::None;
 }
 
-// A catalog opens; any other plugin with a README shows it (web-only plugins
-// included, so their setup notes are readable on the device).
+// A menu or catalog opens; any other plugin with a README shows it (web-only
+// plugins included, so their setup notes are readable on the device).
 constexpr PickerAction pickerAction(const DeviceKind kind, const bool hasReadme) {
+  if (kind == DeviceKind::Menu) return PickerAction::Menu;
   if (kind == DeviceKind::Catalog) return PickerAction::Catalog;
   return hasReadme ? PickerAction::Readme : PickerAction::None;
 }

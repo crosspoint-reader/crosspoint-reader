@@ -324,7 +324,18 @@ void ActivityManager::goToPlugins(bool showOpds) {
   replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, showOpds, /*rootMode=*/true));
 }
 
-void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
+bool ActivityManager::goToPluginMenuFor(std::string document) {
+  auto activity = makeUniqueNoThrow<PluginCatalogActivity>(renderer, mappedInput, OPDS_STORE.hasServers(),
+                                                           /*rootMode=*/true, std::move(document));
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: plugin menu activity (%u bytes)", static_cast<unsigned>(sizeof(PluginCatalogActivity)));
+    return false;
+  }
+  replaceActivity(std::move(activity));
+  return true;
+}
+
+void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh, const bool pluginDocument) {
   if (path.empty()) {
     goToFileBrowser("/");
     return;
@@ -340,7 +351,8 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
     return;
   }
 
-  auto activity = ReaderActivity::create(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
+  auto activity =
+      ReaderActivity::create(renderer, mappedInput, std::move(path), allowFastInitialRefresh, pluginDocument);
   if (activity) {
     replaceActivity(std::move(activity));
   }
@@ -408,6 +420,14 @@ bool ActivityManager::isReaderActivity() const {
   return std::any_of(stackActivities.begin(), stackActivities.end(),
                      [](const auto& activity) { return activity->isReaderActivity(); }) ||
          (currentActivity && currentActivity->isReaderActivity());
+}
+
+const std::string* ActivityManager::pluginDocumentPath() const {
+  if (currentActivity && currentActivity->pluginDocumentPath()) return currentActivity->pluginDocumentPath();
+  for (auto it = stackActivities.rbegin(); it != stackActivities.rend(); ++it) {
+    if (const std::string* path = (*it)->pluginDocumentPath()) return path;
+  }
+  return nullptr;
 }
 
 bool ActivityManager::isForegroundReader() const {
