@@ -5,6 +5,7 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <HalDisplay.h>
+#include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <Memory.h>
 #include <VectorFontSupport.h>
@@ -19,6 +20,7 @@
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "components/HeaderBackTapTarget.h"
+#include "components/themes/BaseTheme.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -31,6 +33,7 @@
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsListActivity.h"
 #include "util/BmpViewerActivity.h"
+#include "util/ButtonShortcutController.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
 
@@ -90,6 +93,9 @@ void ActivityManager::renderTaskLoop() {
       currentActivity->render(std::move(lock));
       paintedVisit.store(renderingVisit, std::memory_order_release);
     }
+    lock.unlock();
+    // While input is locked, each new frame gets the badge again.
+    if (buttonShortcutController.isQuickLocked()) drawLockBadge();
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
     TaskHandle_t waiter = nullptr;
     taskENTER_CRITICAL(&activityManagerSpinlock);
@@ -418,6 +424,25 @@ bool ActivityManager::isRemoteReaderContext() const {
   return pendingAction == PendingAction::None && currentActivity && currentActivity->acceptsRemoteInput();
 }
 
+bool ActivityManager::foregroundDrawsLockIndicator() const {
+  return pendingAction == PendingAction::None && currentActivity && currentActivity->drawsLockIndicator();
+}
+
+void ActivityManager::drawLockBadge() {
+  RenderLock lock;
+  if (!currentActivity || currentActivity->drawsLockIndicator()) return;
+  HalPowerManager::Lock powerLock;
+  // A deferred refresh of the frame below still reads the buffer the badge goes into.
+  renderer.waitRefreshComplete();
+  BaseTheme::drawLockBadge(renderer);
+  // Only the badge differs from the panel, so FAST adds it and keeps gray content; X3 needs the gray base for that.
+  if (gpio.deviceIsX3()) {
+    renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+  } else {
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
+}
+
 bool ActivityManager::remoteClick(const RemoteButton button) {
   if (!isRemoteReaderContext() || RenderLock::peek() || requestedUpdate.load()) return false;
   return mappedInput.injectRemoteClick(button);
@@ -438,11 +463,11 @@ bool ActivityManager::remoteShortcut(const bool readerMenu) {
   return reader->remoteShortcut(readerMenu);
 }
 
-bool ActivityManager::remoteTurn(const bool forward, const bool chapter) {
+bool ActivityManager::remoteTurn(const bool forward, const bool chapter, const bool pageOnly) {
   if (!isRemoteReaderContext() || mappedInput.hasRemoteClick()) return false;
   auto* reader = isForegroundReader() ? static_cast<ReaderActivity*>(currentActivity.get()) : nullptr;
   if (!reader || reader->inputOverPage()) {
-    return !chapter && remoteClick(forward ? RemoteButton::Next : RemoteButton::Previous);
+    return !chapter && !pageOnly && remoteClick(forward ? RemoteButton::Next : RemoteButton::Previous);
   }
   if (!remoteTurnAccepted(reader->pageRendered.load(std::memory_order_acquire), RenderLock::peek(),
                           reader->inputOverPage())) {

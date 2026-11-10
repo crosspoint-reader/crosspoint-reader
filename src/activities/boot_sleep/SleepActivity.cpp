@@ -30,6 +30,7 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "util/ButtonShortcutController.h"
 
 namespace {
 // Metalio: B/W sleep images use the full 0xF7 waveform instead of HALF (two
@@ -39,6 +40,12 @@ constexpr auto kSleepClean = HalDisplay::FULL_REFRESH;
 #else
 constexpr auto kSleepClean = HalDisplay::HALF_REFRESH;
 #endif
+
+// Waking returns locked, so plain sleep screens show the lock. Image sleep screens skip it: their gray pass
+// leaves no black-and-white frame to draw over.
+void drawWakeLockBadge(const GfxRenderer& renderer, const int minX) {
+  if (buttonShortcutController.isQuickLocked()) BaseTheme::drawLockBadge(renderer, minX);
+}
 
 // The absolute gray paint has no base pass. On Metalio the prior screen shows
 // through it after the panel sits unpowered, so clean with 0xF7 first.
@@ -827,6 +834,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
   renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSPOINT), true, EpdFontFamily::BOLD);
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
+  drawWakeLockBadge(renderer, 0);
 
   // Make sleep screen dark unless light is selected in settings
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
@@ -1102,8 +1110,9 @@ void SleepActivity::renderCoverSleepScreen() const {
 void SleepActivity::renderLastScreenSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
   renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
-  // Only the moon differs from the displayed frame, so a differential FAST
-  // update adds it without the flashing clean pass (which sweeps the panel
+  drawWakeLockBadge(renderer, MOONICON_WIDTH);
+  // Only the moon (and lock) differ from the displayed frame, so a differential
+  // FAST update adds them without the flashing clean pass (which sweeps the panel
   // through the inverse — a full white flash on a night-mode page).
   if (gpio.deviceIsX3()) {
     renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
@@ -1114,5 +1123,6 @@ void SleepActivity::renderLastScreenSleepScreen() const {
 
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
+  drawWakeLockBadge(renderer, 0);
   renderer.displayBuffer(kSleepClean);
 }

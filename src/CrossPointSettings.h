@@ -174,7 +174,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     PWR_BOOKMARK = 7,
     PWR_SYNC = 8,
     PWR_READER_MENU = 9,
+    QUICK_LOCK = 10,
     SHORT_PWRBTN_COUNT
+  };
+
+  // Power + Down chord actions. Values are persisted; append only.
+  enum POWER_CHORD_ACTION {
+    CHORD_SCREENSHOT = 0,
+    CHORD_QUICK_LOCK = 1,
+    CHORD_NEXT_PAGE = 2,
+    CHORD_PREVIOUS_PAGE = 3,
+    CHORD_DISABLED = 4,
+    POWER_CHORD_ACTION_COUNT
   };
 
   // Long-press Confirm action while reading an EPUB. Persisted values are stable;
@@ -304,6 +315,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t homeButtonTapAction = static_cast<uint8_t>(HomeButtonAction::Home);
   uint8_t homeButtonDoubleTapAction = static_cast<uint8_t>(HomeButtonAction::ToggleFrontlight);
   uint8_t homeButtonLongPressAction = static_cast<uint8_t>(HomeButtonAction::ReaderMenu);
+  uint8_t powerChordAction = CHORD_SCREENSHOT;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
@@ -328,6 +340,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
+  // Auto-sleep while locked (default 5 minutes), counted from the lock or the last remote page turn.
+  // The sentinel value QUICK_LOCK_SLEEP_TIMEOUT_NEVER_MINUTES disables it.
+  uint8_t quickLockSleepTimeoutMinutes = 5;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
@@ -431,6 +446,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
   static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;
+  static constexpr uint8_t MIN_QUICK_LOCK_SLEEP_TIMEOUT_MINUTES = 1;
+  static constexpr uint8_t QUICK_LOCK_SLEEP_TIMEOUT_NEVER_MINUTES = 31;
+  static constexpr uint8_t MAX_QUICK_LOCK_SLEEP_TIMEOUT_MINUTES = QUICK_LOCK_SLEEP_TIMEOUT_NEVER_MINUTES;
 
   // Callback to resolve SD card font IDs. Set by SdCardFontSystem::begin().
   // Returns font ID or 0 if not found.
@@ -497,7 +515,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
+  unsigned long getQuickLockSleepTimeoutMs() const;
   int getRefreshFrequency() const;
+
+  // Unlocking takes Power + Down, which Paper Mono cannot hold: its buttons report only clicks.
+  static bool quickLockAvailable();
 };
 
 // Helper macro to access settings

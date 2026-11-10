@@ -114,11 +114,16 @@ class ActivityManager {
   // a page or chapter turn from a remote. False when no book in front took the turn.
   bool isForegroundReader() const;
   bool isRemoteReaderContext() const;
+  bool foregroundDrawsLockIndicator() const;
+  // Draws the Quick Lock badge over the panel's frame, unless the screen shows the lock itself.
+  // Takes the render lock.
+  void drawLockBadge();
   bool remoteClick(RemoteButton button);
   // Home is in front and has painted a frame of its own (not one left from the screen before).
   bool isForegroundHomeShown() const;
   uint32_t visit() const { return screenVisit; }
-  bool remoteTurn(bool forward, bool chapter);
+  // pageOnly refuses the click fallback, so a turn never reaches a menu over the page.
+  bool remoteTurn(bool forward, bool chapter, bool pageOnly = false);
   // A remote button mapped to the reader menu (true) or to a new clipping (false).
   bool remoteShortcut(bool readerMenu);
   bool handleForcedRefresh();

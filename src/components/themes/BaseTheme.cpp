@@ -56,6 +56,38 @@ void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int 
 
 }  // namespace
 
+void BaseTheme::drawLockIcon(const GfxRenderer& renderer, const int x, const int y) {
+  renderer.drawRoundedRect(x + 2, y, 8, 9, 2, 3, true);
+  renderer.fillRect(x, y + 6, lockIconWidth, 8, true);
+  renderer.fillRect(x + 5, y + 8, 2, 4, false);
+}
+
+int BaseTheme::lockBadgeTop(const GfxRenderer& renderer) {
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  return renderer.getScreenHeight() - bottom - lockBadgeSize;
+}
+
+void BaseTheme::drawLockBadge(const GfxRenderer& renderer, const int minX) {
+  constexpr int bodyX = 9;
+  constexpr int bodyY = 21;
+  constexpr int bodyWidth = 30;
+  constexpr int bodyHeight = 22;
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  // Clear the panel's rounded bottom corner, as the status bar does.
+  const int corner = BoardConfig::ACTIVE.bottomCornerRadius != 0 ? BoardConfig::ACTIVE.bottomCornerRadius
+                                                                 : BoardConfig::ACTIVE.cornerRadius;
+  const int x = std::max({left, corner, minX});
+  const int y = lockBadgeTop(renderer);
+
+  // Mask the pixels below the badge so it stays legible on text and images.
+  renderer.fillRect(x, y, lockBadgeSize, lockBadgeSize, false);
+  renderer.drawRoundedRect(x + 15, y + 5, 18, 24, 4, 9, true);
+  renderer.fillRect(x + bodyX, y + bodyY, bodyWidth, bodyHeight, true);
+  renderer.fillRect(x + 22, y + 28, 4, 9, false);
+}
+
 void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
   // Top line
   renderer.drawLine(x + 1, y, x + battWidth - 3, y);
@@ -827,7 +859,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
                               const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
-                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated) {
+                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated,
+                              const bool isLocked) {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -958,6 +991,13 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     const int bookmarkY = textY + 5;
     drawBookmarkStatusIcon(renderer, bookmarkX, bookmarkY);
     leftClusterWidth += bookmarkStatusIconWidth + bookmarkGap;
+  }
+
+  // Draw Quick Lock
+  if (showStatusBarTextLane && isLocked) {
+    const int lockGap = leftClusterWidth > 0 ? bookmarkStatusIconGap : 0;
+    drawLockIcon(renderer, leftClusterX + leftClusterWidth + lockGap, textY + 5);
+    leftClusterWidth += lockIconWidth + lockGap;
   }
 
   // Draw Title

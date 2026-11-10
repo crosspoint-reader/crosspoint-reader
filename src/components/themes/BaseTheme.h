@@ -293,7 +293,14 @@ class BaseTheme {
   static void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
                             std::string title, const int paddingBottom = 0, const int textYOffset = 0,
                             const bool fillMargin = true, const bool isPageBookmarked = false,
-                            const bool pageCountEstimated = false);
+                            const bool pageCountEstimated = false, const bool isLocked = false);
+  // Quick Lock indicators: a small icon for text lines, a badge for screens without a status bar.
+  static constexpr int lockIconWidth = 12;
+  static void drawLockIcon(const GfxRenderer& renderer, int x, int y);
+  // The badge sits in the bottom-left corner of the viewable area, at minX or further right.
+  static constexpr int lockBadgeSize = 48;
+  static int lockBadgeTop(const GfxRenderer& renderer);
+  static void drawLockBadge(const GfxRenderer& renderer, int minX = 0);
   static void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label);
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;

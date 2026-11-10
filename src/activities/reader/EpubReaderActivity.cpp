@@ -6,6 +6,7 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
@@ -24,6 +25,7 @@
 #include <limits>
 
 #include "../../util/BookmarkFile.h"
+#include "../../util/ButtonShortcutController.h"
 #include "BookmarkEntry.h"
 #include "ChapterBuildGate.h"
 #include "ClipSelectionActivity.h"
@@ -2509,7 +2511,13 @@ void EpubReaderActivity::renderStatusBar() const {
   }
 
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked,
-                    section ? section->isBuilding() : false);
+                    section ? section->isBuilding() : false, buttonShortcutController.isQuickLocked());
+}
+
+bool EpubReaderActivity::drawsLockIndicator() const {
+  // The end-of-book screen, the load failure popup and overlays leave no status bar line to show it in.
+  return !loadFailurePopup.isActive() && !isAtEndOfBook() && !inputOverPage() &&
+         SETTINGS.statusBarSpec().textLaneVisible(halClock.isAvailable());
 }
 
 // ---------------------------------------------------------------------------

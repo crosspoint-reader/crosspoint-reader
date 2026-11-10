@@ -72,7 +72,10 @@ SettingsSection sectionFor(const SettingInfo& setting) {
       setting.valuePtr == &CrossPointSettings::moveFinishedToReadFolder) {
     return SettingsSection::Library;
   }
-  if (setting.valuePtr == &CrossPointSettings::sleepTimeoutMinutes) return SettingsSection::Display;
+  if (setting.valuePtr == &CrossPointSettings::sleepTimeoutMinutes ||
+      setting.valuePtr == &CrossPointSettings::quickLockSleepTimeoutMinutes) {
+    return SettingsSection::Display;
+  }
   if (setting.category == StrId::STR_CAT_DISPLAY) return SettingsSection::Display;
   if (setting.category == StrId::STR_CAT_READER) return SettingsSection::Reader;
   if (setting.category == StrId::STR_CAT_CONTROLS) return SettingsSection::Controls;
@@ -224,6 +227,10 @@ void SettingsActivity::toggleSelectedSetting() {
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
+    return;
+  }
+  if (setting.nameId == StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT) {
+    openQuickLockSleepTimeoutPicker();
     return;
   }
 
@@ -462,6 +469,22 @@ void SettingsActivity::openSleepTimeoutPicker() {
       });
 }
 
+void SettingsActivity::openQuickLockSleepTimeoutPicker() {
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(
+          renderer, mappedInput, "QuickLockSleepTimeoutInterval", StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT,
+          SETTINGS.quickLockSleepTimeoutMinutes, CrossPointSettings::MIN_QUICK_LOCK_SLEEP_TIMEOUT_MINUTES,
+          CrossPointSettings::MAX_QUICK_LOCK_SLEEP_TIMEOUT_MINUTES, 1, 5, StrId::STR_SLEEP_TIMER_VALUE_FORMAT, false,
+          StrId::STR_SLEEP_NEVER),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          SETTINGS.quickLockSleepTimeoutMinutes = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
+          SETTINGS.saveToFile();
+        }
+        requestUpdate();
+      });
+}
+
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
   if (setting.action == SettingAction::HomeButton) return tr(STR_CONFIGURE);
   if (setting.action == SettingAction::Plugins) return SETTINGS.pluginsEnabled ? tr(STR_ENABLED) : tr(STR_DISABLED);
@@ -485,13 +508,17 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
     return "";
   }
   if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-    if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
-      if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) {
+    if (setting.nameId == StrId::STR_TIME_TO_SLEEP || setting.nameId == StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT) {
+      const uint8_t neverMinutes = setting.nameId == StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT
+                                       ? CrossPointSettings::QUICK_LOCK_SLEEP_TIMEOUT_NEVER_MINUTES
+                                       : CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES;
+      const uint8_t timeoutMinutes = SETTINGS.*(setting.valuePtr);
+      if (timeoutMinutes >= neverMinutes) {
         return tr(STR_SLEEP_NEVER);
       }
       char valueBuffer[32];
       snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
-               static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
+               static_cast<unsigned int>(timeoutMinutes));
       return valueBuffer;
     }
     return std::to_string(SETTINGS.*(setting.valuePtr));
@@ -543,7 +570,8 @@ void SettingsActivity::drawFooter() {
   const int selected = nav.selected;
   const bool picker =
       selected >= 0 && selected < static_cast<int>(settings.size()) &&
-      (settings[selected].type == SettingType::ACTION || settings[selected].nameId == StrId::STR_TIME_TO_SLEEP);
+      (settings[selected].type == SettingType::ACTION || settings[selected].nameId == StrId::STR_TIME_TO_SLEEP ||
+       settings[selected].nameId == StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT);
   const auto labels =
       mappedInput.mapLabels(tr(STR_BACK), picker ? tr(STR_SELECT) : tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
