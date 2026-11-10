@@ -1011,9 +1011,10 @@ void EpubReaderActivity::loop() {
     // Taps queued while the panel was busy collapse into one refresh that
     // lands on the final page. Stop at a chapter edge: the next section has
     // to load before it can be paged through.
-    const bool forward = pendingManualTurn > 0;
-    int queued = forward ? pendingManualTurn : -pendingManualTurn;
+    const int pending = pendingManualTurn;
     pendingManualTurn = 0;
+    const bool forward = pending > 0;
+    int queued = forward ? pending : -pending;
     bool succeeded = false;
     while (queued-- > 0 && section) {
       const bool turned = pageTurn(forward);
