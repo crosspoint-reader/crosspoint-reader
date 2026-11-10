@@ -327,6 +327,15 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
         KOREADER_STORE.saveToFile();
       },
       "koSyncClippings", StrId::STR_KOREADER_SYNC));
+  emit(SettingInfo::DynamicEnum(
+      StrId::STR_CHECK_ON_OPEN, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
+      [] { return static_cast<uint8_t>(KOREADER_STORE.getCheckOnOpen()); },
+      [](uint8_t v) {
+        if (KOREADER_STORE.getCheckOnOpen() == (v != 0)) return;
+        KOREADER_STORE.setCheckOnOpen(v != 0);
+        KOREADER_STORE.saveToFile();
+      },
+      "koCheckOnOpen", StrId::STR_KOREADER_SYNC));
   // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
   emit(SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                            "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR));

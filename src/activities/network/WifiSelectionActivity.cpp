@@ -27,8 +27,8 @@ constexpr fui::ActionId ACTION_PROMPT = 3;
 }  // namespace
 
 WifiSelectionActivity::WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             const bool autoConnect)
-    : Activity("WifiSelection", renderer, mappedInput), UiAppHost(renderer), allowAutoConnect(autoConnect) {}
+                                             const ConnectMode connectMode)
+    : Activity("WifiSelection", renderer, mappedInput), UiAppHost(renderer), connectMode(connectMode) {}
 
 void WifiSelectionActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<WifiSelectionActivity*>(user);
@@ -145,7 +145,7 @@ void WifiSelectionActivity::onEnter() {
   // Attempt to auto-connect to known networks. Try the last successful
   // network first for speed, then scan and try any visible saved networks by
   // signal strength. The user can interrupt this and show the scan result.
-  if (allowAutoConnect && savedCredentialCount != 0) {
+  if (connectMode != ConnectMode::ListOnly && savedCredentialCount != 0) {
     const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
     if (!lastSsid.empty()) {
       const auto cred = WIFI_STORE.findCredential(lastSsid);
@@ -155,6 +155,11 @@ void WifiSelectionActivity::onEnter() {
     }
 
     startWifiScan(true);
+    return;
+  }
+
+  if (connectMode == ConnectMode::SavedOnly) {
+    onComplete(false);
     return;
   }
 
@@ -212,10 +217,7 @@ void WifiSelectionActivity::processWifiScanResults() {
     realNetworkCount = 0;
     appendHiddenNetworkEntry();
     rebuildNetworkRowItems();
-    autoConnecting = false;
-    state = WifiSelectionState::NETWORK_LIST;
-    selectedNetworkIndex = 0;
-    requestUpdate();
+    endAutoConnect();
     return;
   }
 
@@ -266,10 +268,7 @@ void WifiSelectionActivity::processWifiScanResults() {
     return;
   }
 
-  autoConnecting = false;
-  state = WifiSelectionState::NETWORK_LIST;
-  selectedNetworkIndex = 0;
-  requestUpdate();
+  endAutoConnect();
 }
 
 void WifiSelectionActivity::appendHiddenNetworkEntry() {
@@ -431,14 +430,23 @@ void WifiSelectionActivity::handleAutoConnectFailure() {
     if (tryNextSavedNetworkFromScan()) {
       return;
     }
-    autoConnecting = false;
-    state = WifiSelectionState::NETWORK_LIST;
-    selectedNetworkIndex = 0;
-    requestUpdate();
+    endAutoConnect();
     return;
   }
 
   startWifiScan(true);
+}
+
+void WifiSelectionActivity::endAutoConnect() {
+  autoConnecting = false;
+  if (connectMode == ConnectMode::SavedOnly) {
+    LOG_DBG("WIFI", "No saved network connected; finishing without the network list");
+    onComplete(false);
+    return;
+  }
+  state = WifiSelectionState::NETWORK_LIST;
+  selectedNetworkIndex = 0;
+  requestUpdate();
 }
 
 void WifiSelectionActivity::showNetworkListFromAutoConnect() {
@@ -598,7 +606,7 @@ void WifiSelectionActivity::loop() {
       onComplete(false);
       return;
     }
-    if (autoConnecting && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (autoConnecting && canShowNetworkList() && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       autoConnecting = false;
       manualNetworkListRequested = true;
       requestUpdate();
@@ -615,7 +623,7 @@ void WifiSelectionActivity::loop() {
         onComplete(false);
         return;
       }
-      if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      if (canShowNetworkList() && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
         showNetworkListFromAutoConnect();
         return;
       }
@@ -1050,7 +1058,8 @@ void WifiSelectionActivity::renderConnecting(const Rect* screen, const ThemeMetr
     const Rect statusBounds{statusX, screen->y, statusWidth, screen->height};
     UITheme::drawCenteredWrappedText(renderer, statusBounds, UI_10_FONT_ID, statusText, MAX_STATUS_LINES);
     if (autoConnecting) {
-      const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SHOW_NETWORKS), "", "");
+      const char* showNetworks = canShowNetworkList() ? tr(STR_SHOW_NETWORKS) : "";
+      const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), showNetworks, "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   } else {
@@ -1063,7 +1072,8 @@ void WifiSelectionActivity::renderConnecting(const Rect* screen, const ThemeMetr
         renderer.truncatedText(UI_10_FONT_ID, (std::string(tr(STR_TO_PREFIX)) + selectedSSID).c_str(), statusWidth);
     UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top, ssidInfo.c_str());
     if (autoConnecting) {
-      const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SHOW_NETWORKS), "", "");
+      const char* showNetworks = canShowNetworkList() ? tr(STR_SHOW_NETWORKS) : "";
+      const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), showNetworks, "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   }

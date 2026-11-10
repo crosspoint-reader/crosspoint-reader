@@ -582,7 +582,9 @@ void HomeActivity::render(RenderLock&&) {
   }
 }
 
-void HomeActivity::onRecentBookSelected(const std::string& path) { activityManager.goToReader(path); }
+void HomeActivity::onRecentBookSelected(const std::string& path) {
+  activityManager.goToReader(path, /*allowFastInitialRefresh=*/false, /*checkSyncOnOpen=*/true);
+}
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 

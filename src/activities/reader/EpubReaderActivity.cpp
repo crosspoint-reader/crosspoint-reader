@@ -9,6 +9,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -51,6 +52,7 @@
 #include "SdCardFont.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
+#include "WifiCredentialStore.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "clippings/ClippingText.h"
@@ -685,6 +687,15 @@ void EpubReaderActivity::loop() {
   }
 
   rememberBookOnceRendered();
+
+  // After the first paint, so the book is recorded for the post-sync reboot and
+  // the local position comes from a laid-out page.
+  if (syncCheckPending && bookRemembered) {
+    syncCheckPending = false;
+    if (syncCheckOnOpenAllowed() && launchKOReaderSync(true)) {
+      return;
+    }
+  }
 
   // The radio stopped for a chapter build: once the render task has let go of the lock, that page
   // is on screen; once the build tick below has finished the chapter, no parser is left alive and
@@ -1353,7 +1364,27 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
   }
 }
 
-bool EpubReaderActivity::launchKOReaderSync() {
+bool EpubReaderActivity::syncCheckOnOpenAllowed() {
+  if (!KOREADER_STORE.getCheckOnOpen() || !KOREADER_STORE.hasCredentials()) return false;
+  // Same floor as the sleep-time network join in main.cpp.
+  constexpr uint16_t MIN_BATTERY_PERCENT = 20;
+  if (powerManager.getBatteryPercentage() < MIN_BATTERY_PERCENT) {
+    LOG_DBG("KOSync", "Open check skipped: battery low");
+    return false;
+  }
+  // Without a saved network the check can only end in a pointless reboot.
+  {
+    RenderLock lock(*this);
+    WIFI_STORE.loadFromFile();
+  }
+  if (WIFI_STORE.getCredentialCount() == 0) {
+    LOG_DBG("KOSync", "Open check skipped: no saved WiFi network");
+    return false;
+  }
+  return true;
+}
+
+bool EpubReaderActivity::launchKOReaderSync(const bool checkOnOpen) {
   flushReaderSession();
 
   // Without a KOReader server the sync activity only brings the device online
@@ -1362,7 +1393,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
   if (!KOREADER_STORE.hasCredentials()) {
     activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
         renderer, mappedInput, epub->getPath(), getCurrentPosition(), SavedProgressPosition{}, "",
-        /*pluginEventsOnly=*/true));
+        KOReaderSyncActivity::Mode::PluginEventsOnly));
     return true;
   }
 
@@ -1379,6 +1410,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
 
   if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
     LOG_ERR("KOSync", "Aborting sync because current progress could not be saved");
+    if (checkOnOpen) return false;  // the user did not ask for this sync
     pendingSyncSaveError = true;
     requestUpdate();
     return true;
@@ -1408,7 +1440,8 @@ bool EpubReaderActivity::launchKOReaderSync() {
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
-      renderer, mappedInput, savedEpubPath, localPos, std::move(localKoPos), std::move(localChapterName)));
+      renderer, mappedInput, savedEpubPath, localPos, std::move(localKoPos), std::move(localChapterName),
+      checkOnOpen ? KOReaderSyncActivity::Mode::CheckOnOpen : KOReaderSyncActivity::Mode::Manual));
   return true;
 }
 

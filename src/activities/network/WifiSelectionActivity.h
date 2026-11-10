@@ -40,15 +40,24 @@ enum class WifiSelectionState {
 /**
  * WifiSelectionActivity is responsible for scanning WiFi APs and connecting to them.
  * It will:
- * - Enter scanning mode on entry
- * - List available WiFi networks
+ * - Try saved networks first, unless ConnectMode::ListOnly
+ * - List available WiFi networks (never in ConnectMode::SavedOnly)
  * - Allow selection and launch KeyboardEntryActivity for password if needed
  * - Save the password if requested
  * - Call onComplete callback when connected or cancelled
  *
- * The onComplete callback receives true if connected successfully, false if cancelled.
+ * The onComplete callback receives true if connected successfully, false if
+ * cancelled or, in SavedOnly mode, when no saved network connected.
  */
 class WifiSelectionActivity final : public Activity, private UiAppHost {
+ public:
+  enum class ConnectMode : uint8_t {
+    ListOnly,       // Scan and show the network list
+    SavedThenList,  // Try saved networks, then show the list
+    SavedOnly,      // Try saved networks, then finish cancelled; never shows the list
+  };
+
+ private:
   ButtonNavigator buttonNavigator;
 
   WifiSelectionState state = WifiSelectionState::SCANNING;
@@ -82,8 +91,7 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
   // Whether network was connected using a saved password (skip save prompt)
   bool usedSavedPassword = false;
 
-  // Whether to attempt auto-connect on entry
-  const bool allowAutoConnect;
+  const ConnectMode connectMode;
 
   // Whether we are attempting to auto-connect or auto-scan saved networks.
   bool autoConnecting = false;
@@ -135,13 +143,16 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
   bool tryNextSavedNetworkFromScan();
   void handleAutoConnectFailure();
   void showNetworkListFromAutoConnect();
+  void endAutoConnect();
+  bool canShowNetworkList() const { return connectMode != ConnectMode::SavedOnly; }
   bool hasAttemptedAutoSsid(const std::string& ssid) const;
   static std::string getSignalStrengthIndicator(int32_t rssi);
 
   void onComplete(bool connected);
 
  public:
-  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = true);
+  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                 ConnectMode connectMode = ConnectMode::SavedThenList);
   void onEnter() override;
   void onExit() override;
   void loop() override;
