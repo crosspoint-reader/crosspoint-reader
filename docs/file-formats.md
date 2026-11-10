@@ -90,6 +90,17 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 74
+
+Version 74 preserves the version 73 binary layout and rebuilds completed and
+partial sections for the new page spacing. The reader reserves Screen Margin
+above the bottom status bar. Naturally filled text pages distribute unused
+height between lines, adding at most a quarter of the body line advance per gap.
+Empty lines, section breaks, and trailing block margins and padding retain their
+space. Link hit areas move with their lines. Short endings, explicit page breaks,
+and pages with images, tables, drop caps, or frames keep their spacing. Book
+metadata and saved progress are kept.
+
 ### Version 73
 
 Version 73 keeps the binary layout and rebuilds completed and partial sections.
@@ -397,7 +408,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 64
+#define EXPECTED_VERSION 74
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
