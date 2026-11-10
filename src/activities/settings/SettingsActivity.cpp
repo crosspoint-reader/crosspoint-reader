@@ -27,6 +27,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
+#include "ResetActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
@@ -81,7 +82,7 @@ SettingsSection sectionFor(const SettingInfo& setting) {
 }
 
 // Device-only action rows added per section, beyond the shared list.
-constexpr size_t EXTRA_ROWS_PER_SECTION = 6;
+constexpr size_t EXTRA_ROWS_PER_SECTION = 7;
 }  // namespace
 
 void SettingsActivity::rebuildSettings() {
@@ -146,6 +147,7 @@ void SettingsActivity::rebuildSettings() {
     addAction(SettingsSection::General, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
     addAction(SettingsSection::General, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
   }
+  addAction(SettingsSection::General, StrId::STR_FACTORY_RESET, SettingAction::FactoryReset);
   addAction(SettingsSection::General, StrId::STR_ABOUT, SettingAction::About);
   rebuildRowItems();
 }
@@ -345,6 +347,13 @@ void SettingsActivity::toggleSelectedSetting() {
       }
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::FactoryReset:
+        if (auto activity = makeUniqueNoThrow<ResetActivity>(renderer, mappedInput)) {
+          startActivityForResult(std::move(activity), nullptr);
+        } else {
+          LOG_ERR("SETTINGS", "OOM: ResetActivity");
+        }
         break;
       case SettingAction::CheckForUpdates:
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
