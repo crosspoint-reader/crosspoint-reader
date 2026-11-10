@@ -3149,7 +3149,6 @@ void EpubReaderActivity::openTextSettings(const bool toolbar) {
 
 void EpubReaderActivity::applyReaderTextSettings() {
   const auto resolved = bookTextSettings.resolve();
-  const bool prepareCss = !textSettings.embeddedStyle && resolved.embeddedStyle;
   RenderLock lock;
   if (section) {
     rememberCurrentContentOffset();
@@ -3161,10 +3160,6 @@ void EpubReaderActivity::applyReaderTextSettings() {
   discardOverlayPage();
   textSettings = resolved;
   readerFontId = sdFontSystem.activate(renderer, textSettings);
-  if (prepareCss && epub && !epub->load(true, false)) {
-    LOG_ERR("ERS", "Could not prepare embedded styles");
-    finish();
-  }
 }
 
 // The More panel carries everything the classic list menu offers except the

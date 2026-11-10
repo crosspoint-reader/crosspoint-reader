@@ -107,16 +107,14 @@ int SdCardFontSystem::activate(GfxRenderer& renderer, const ReaderTextSettings& 
   requestedPointSize_ = requested.fontPointSize;
   fallback_ = false;
 
-  // Discovery by the font browser must also invalidate resident font contents.
   const bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
-  const bool reloadResident = residentReloadNeeded_.exchange(false, std::memory_order_acquire) || registryWasDirty;
   if (registryWasDirty) registry_.discover();
 
   const auto* family = requestedFamily_[0] ? registry_.findFamily(requestedFamily_) : nullptr;
 #if CROSSPOINT_VECTOR_FONTS
   if (family && family->vector) {
     if (!manager_.currentFamilyName().empty()) unloadCpfonts(renderer);
-    loadTtfFamily(*family, renderer, requestedPointSize_, reloadResident);
+    loadTtfFamily(*family, renderer, requestedPointSize_, registryWasDirty);
     if (ttfFontId_ != 0) {
       activePointSize_ = ttfPointSize_;
       return ttfFontId_;
@@ -126,7 +124,7 @@ int SdCardFontSystem::activate(GfxRenderer& renderer, const ReaderTextSettings& 
 #endif
     if (family) {
       const auto* selected = family->findNearestSize(requestedPointSize_);
-      if (!reloadResident && manager_.currentFamilyName() == family->name && selected &&
+      if (!registryWasDirty && manager_.currentFamilyName() == family->name && selected &&
           manager_.currentPointSize() == selected->pointSize) {
         activePointSize_ = manager_.currentPointSize();
         return manager_.getFontId(family->name);

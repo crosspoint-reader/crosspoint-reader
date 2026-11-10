@@ -66,7 +66,6 @@ class SdCardFontSystem {
   void refreshIfDirty() {
     if (registryDirty_.exchange(false, std::memory_order_acquire)) {
       registry_.discover();
-      residentReloadNeeded_.store(true, std::memory_order_release);
     }
   }
 
@@ -125,7 +124,6 @@ class SdCardFontSystem {
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
-  std::atomic<bool> residentReloadNeeded_{false};
   char requestedFamily_[32] = {};
   uint8_t requestedPointSize_ = 0;
   uint8_t activePointSize_ = 0;

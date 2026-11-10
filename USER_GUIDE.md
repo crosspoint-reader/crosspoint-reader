@@ -266,12 +266,10 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 #### 3.6.2 Reader
 
 Text Settings opened from a book saves changes for that book. Only settings you
-change are overridden; the others follow the defaults in Settings. The reader
-menu and toolbar use the same saved values. **Use defaults** in the Style tab
-removes all text overrides for the book. Clearing the reading cache also removes
-these overrides. Library titles and menus keep their system UI sizes. If a selected font is
-unavailable, reading temporarily uses Noto Sans without forgetting the saved font.
-
+change are overridden; the others follow the defaults in Settings. **Use defaults**
+in the Style tab removes all text overrides for the book. Clearing the reading
+cache also removes these overrides. If a selected font is unavailable, reading
+temporarily uses Noto Sans without forgetting the saved font.
 
 - **Reader Font Family**: Choose the font used for reading:
   

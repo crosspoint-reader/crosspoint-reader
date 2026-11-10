@@ -130,7 +130,7 @@ bool BookTextSettings::save(const ReaderTextSettings& values, const uint16_t mas
   bool written =
       serialization::tryWritePod(file, FORMAT_VERSION) && serialization::tryWritePod(file, mask) &&
       file.write(values.sdFontFamilyName, sizeof(values.sdFontFamilyName)) == sizeof(values.sdFontFamilyName);
-  for (const auto field : SCALAR_FIELDS) {
+  for (const uint8_t ReaderTextSettings::* const field : SCALAR_FIELDS) {
     if (written) written = serialization::tryWritePod(file, values.*field);
   }
   file.flush();
