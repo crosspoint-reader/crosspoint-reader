@@ -62,6 +62,7 @@
 #include "util/BookCacheUtils.h"
 #include "util/DictionaryRegistry.h"
 #include "util/FirmwareIdentity.h"
+#include "util/PanelCurve.h"
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
 #include "util/TaskWatchdog.h"
@@ -1700,6 +1701,11 @@ void CrossPointWebServer::handlePostSettings() {
       case SettingType::TOGGLE: {
         const int val = doc[s.key].as<int>() ? 1 : 0;
         if (s.valuePtr) {
+          if ((s.valuePtr == &CrossPointSettings::panelCalPictures ||
+               s.valuePtr == &CrossPointSettings::panelCalBooks) &&
+              SETTINGS.*(s.valuePtr) != val) {
+            panelcurve::forget();
+          }
           SETTINGS.*(s.valuePtr) = val;
         }
         applied++;

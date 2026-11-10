@@ -8,6 +8,11 @@
 
 class ImageBlock final : public Block {
  public:
+  // Tone curve for images inside books (Display → Screen calibration → «Калибровка книг»): set by the app before a book
+  // opens; nullptr — none (stock). The table must outlive the book. Cached pixels carry the curve's hash in their name,
+  // so a changed curve decodes the images again.
+  static void setToneCurve(const uint8_t* curve, uint32_t hash);
+
   ImageBlock(const std::string& imagePath, const std::string& srcPath, int16_t width, int16_t height);
   ~ImageBlock() override = default;
 

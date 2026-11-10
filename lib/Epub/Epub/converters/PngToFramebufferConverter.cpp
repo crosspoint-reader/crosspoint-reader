@@ -249,6 +249,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   int outXBase = ctx->config->x;
   int screenWidth = ctx->screenWidth;
   bool useDithering = ctx->config->useDithering;
+  const uint8_t* toneCurve = ctx->config->toneCurve;
 
   // Pre-compute orientation and render-mode state once per callback.
   DirectPixelWriter pw;
@@ -289,9 +290,9 @@ int pngDrawCallback(PNGDRAW* pDraw) {
 
           uint8_t ditheredGray;
           if (useDithering) {
-            ditheredGray = applyBayerDither4Level(gray, outX, outY);
+            ditheredGray = applyBayerDither4Level(toneCurve ? toneCurve[gray] : gray, outX, outY);
           } else {
-            ditheredGray = gray >> 6;
+            ditheredGray = (toneCurve ? toneCurve[gray] : gray) >> 6;
           }
           pw.writePixel(outX, ditheredGray, ctx->alphaLineBuffer != nullptr);
           if (caching) cw.writePixel(outX, ditheredGray);

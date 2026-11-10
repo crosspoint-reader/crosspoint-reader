@@ -144,6 +144,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   if (stride <= 0 || blockH <= 0 || validW <= 0) return 1;
 
   const bool useDithering = ctx->config->useDithering;
+  const uint8_t* toneCurve = ctx->config->toneCurve;
   bool caching = ctx->caching;
   const int32_t fineScaleFPX = ctx->fineScaleFPX;
   const int32_t invScaleFPX = ctx->invScaleFPX;
@@ -210,9 +211,9 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         uint8_t gray = row[dstX - blockX];
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyBayerDither4Level(gray, outX, outY);
+          dithered = applyBayerDither4Level(toneCurve ? toneCurve[gray] : gray, outX, outY);
         } else {
-          dithered = gray / 85;
+          dithered = (toneCurve ? toneCurve[gray] : gray) / 85;
           if (dithered > 3) dithered = 3;
         }
         pw.writePixel(outX, dithered);
@@ -269,9 +270,9 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyBayerDither4Level(gray, outX, outY);
+          dithered = applyBayerDither4Level(toneCurve ? toneCurve[gray] : gray, outX, outY);
         } else {
-          dithered = gray / 85;
+          dithered = (toneCurve ? toneCurve[gray] : gray) / 85;
           if (dithered > 3) dithered = 3;
         }
         pw.writePixel(outX, dithered);
@@ -292,9 +293,9 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyBayerDither4Level(gray, outX, outY);
+          dithered = applyBayerDither4Level(toneCurve ? toneCurve[gray] : gray, outX, outY);
         } else {
-          dithered = gray / 85;
+          dithered = (toneCurve ? toneCurve[gray] : gray) / 85;
           if (dithered > 3) dithered = 3;
         }
         pw.writePixel(outX, dithered);
@@ -318,9 +319,9 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
         uint8_t dithered;
         if (useDithering) {
-          dithered = applyBayerDither4Level(gray, outX, outY);
+          dithered = applyBayerDither4Level(toneCurve ? toneCurve[gray] : gray, outX, outY);
         } else {
-          dithered = gray / 85;
+          dithered = (toneCurve ? toneCurve[gray] : gray) / 85;
           if (dithered > 3) dithered = 3;
         }
         pw.writePixel(outX, dithered);
@@ -351,9 +352,9 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 
       uint8_t dithered;
       if (useDithering) {
-        dithered = applyBayerDither4Level(gray, outX, outY);
+        dithered = applyBayerDither4Level(toneCurve ? toneCurve[gray] : gray, outX, outY);
       } else {
-        dithered = gray / 85;
+        dithered = (toneCurve ? toneCurve[gray] : gray) / 85;
         if (dithered > 3) dithered = 3;
       }
       pw.writePixel(outX, dithered);

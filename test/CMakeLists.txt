@@ -83,6 +83,8 @@ add_subdirectory(absolute_grayscale)
 add_subdirectory(gif_support)
 
 add_subdirectory(bmp_to_bmp)
+add_subdirectory(calibration_card)
+add_subdirectory(panel_curve)
 
 add_subdirectory(sd_card_font)
 add_subdirectory(sd_font_registry)

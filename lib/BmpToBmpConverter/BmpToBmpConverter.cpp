@@ -48,7 +48,8 @@ int upscaleSource(const int i, const int dst, const int src) {
 }  // namespace
 
 bool BmpToBmpConverter::bmpFileToBmpStream(HalFile& bmpFile, Print& bmpOut, const bool crop,
-                                           const bool originalThresholds) {
+                                           const bool originalThresholds, const uint8_t* toneCurve,
+                                           const int targetWidth, const int targetHeight) {
   Bitmap src(bmpFile);
   const BmpReaderError err = src.parseHeaders();
   if (err != BmpReaderError::Ok) {
@@ -58,8 +59,9 @@ bool BmpToBmpConverter::bmpFileToBmpStream(HalFile& bmpFile, Print& bmpOut, cons
 
   // Display dimensions swapped for portrait, as for book covers.
   GifCommon::ImageLayout layout;
-  if (!GifCommon::calculateLayout(src.getWidth(), src.getHeight(), display.getDisplayHeight(),
-                                  display.getDisplayWidth(), crop, layout)) {
+  if (!GifCommon::calculateLayout(src.getWidth(), src.getHeight(),
+                                  targetWidth > 0 ? targetWidth : display.getDisplayHeight(),
+                                  targetHeight > 0 ? targetHeight : display.getDisplayWidth(), crop, layout)) {
     LOG_ERR("BMP", "Invalid BMP layout %dx%d", src.getWidth(), src.getHeight());
     return false;
   }
@@ -160,7 +162,8 @@ bool BmpToBmpConverter::bmpFileToBmpStream(HalFile& bmpFile, Print& bmpOut, cons
       if (oneBit) {
         outRow[x / 8] |= dither1->processPixel(accum[x], x) << (7 - x % 8);
       } else {
-        outRow[x / 4] |= dither2->processPixel(adjustPixel(accum[x]), x) << (6 - (x % 4) * 2);
+        const uint32_t level = toneCurve ? toneCurve[std::min<uint32_t>(accum[x], 255)] : accum[x];
+        outRow[x / 4] |= dither2->processPixel(adjustPixel(level), x) << (6 - (x % 4) * 2);
       }
     }
     if (oneBit)

@@ -2,6 +2,7 @@
 
 #include <BlePageTurner.h>
 #include <BoardConfig.h>
+#include <Epub/blocks/ImageBlock.h>
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <HalDisplay.h>
@@ -33,6 +34,7 @@
 #include "util/BmpViewerActivity.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
+#include "util/PanelCurve.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -340,6 +342,9 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
     return;
   }
 
+  uint32_t bookCurveHash = 0;
+  const uint8_t* bookCurve = panelcurve::bookCurve(bookCurveHash);
+  ImageBlock::setToneCurve(bookCurve, bookCurveHash);
   auto activity = ReaderActivity::create(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
   if (activity) {
     replaceActivity(std::move(activity));
@@ -359,6 +364,7 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 }
 
 void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh) {
+  pendingSettingsSubSection = SettingsSection::End;
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
     const auto& activityName = currentActivity->name;
     if (activityName == "FileBrowser") {

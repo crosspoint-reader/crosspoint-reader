@@ -12,6 +12,7 @@
 #include "HapticFeedback.h"
 #include "MappedInputManager.h"
 #include "activities/ActivityManager.h"
+#include "util/CalibrationCard.h"
 
 namespace ReaderUtils {
 
@@ -261,6 +262,14 @@ inline bool handleBackNavigation(const MappedInputManager& mappedInput, Activity
   // available in menus and other activities; only this reader-surface handler
   // ignores them. Physical Back buttons are unaffected: isPressed() is
   // button-only, and this guard skips just the gesture's own release frame.
+  // The books calibration card: Back — the button or the edge swipe (X4 Pro has no Back button) — returns to
+  // Settings → Display → «Калибровка экрана». Before the reading surface's swipe guard below.
+  // wasReleased first: no path string is built on every frame of a normal book.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && filePath && calibcard::isCalibrationPath(filePath)) {
+    pendingSettingsSubSection = SettingsSection::ScreenCalibration;  // back into «Калибровка экрана»
+    activityManager.goToSettings(SettingsSection::Display);
+    return true;
+  }
   if (mappedInput.wasBackGesture()) {
     return false;
   }

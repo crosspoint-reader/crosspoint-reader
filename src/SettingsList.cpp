@@ -63,6 +63,11 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
                            StrId::STR_CAT_DISPLAY));
 
+  emit(SettingInfo::Toggle(StrId::STR_PANEL_CAL_PICTURES, &CrossPointSettings::panelCalPictures, "panelCalPictures",
+                           StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::Toggle(StrId::STR_PANEL_CAL_BOOKS, &CrossPointSettings::panelCalBooks, "panelCalBooks",
+                           StrId::STR_CAT_DISPLAY));
+
   // --- Reader ---
   // Built-in font-family entry. Replaced per-call with a registry-aware
   // version when SD fonts are installed.

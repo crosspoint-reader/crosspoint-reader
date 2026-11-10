@@ -18,6 +18,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "XtcReaderActivity.h"
+#include "util/CalibrationCard.h"
 #include "util/PluginEvents.h"
 
 ReaderActivity::ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -67,8 +68,9 @@ void ReaderActivity::onEnter() {
     return;
   }
 
-  // Clear remembered book after opening it
-  if (!APP_STATE.openEpubPath.empty()) {
+  // Clear remembered book after opening it (not for the books calibration card: the last real book stays the one
+  // the cover sleep screen and quick resume use)
+  if (!APP_STATE.openEpubPath.empty() && !calibcard::isCalibrationPath(bookPath)) {
     APP_STATE.openEpubPath.clear();
     APP_STATE.saveToFile();
   }
@@ -87,6 +89,8 @@ void ReaderActivity::onEnter() {
 void ReaderActivity::rememberBookOnceRendered() {
   if (bookRemembered || !pageRendered.load(std::memory_order_acquire)) return;
   bookRemembered = true;
+  // The books calibration card (Display → Screen calibration) is not a book: no Recent books, no reopening at boot.
+  if (calibcard::isCalibrationPath(bookPath)) return;
   APP_STATE.openEpubPath = bookPath;
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(bookPath, getBookTitle(), getBookAuthor(), getBookThumbBmpPath());

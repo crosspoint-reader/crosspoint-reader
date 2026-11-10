@@ -8,7 +8,7 @@
 // Settings root: one row per SettingsSection, each opening a
 // SettingsActivity with that group's settings.
 class SettingsListActivity final : public UiListActivity {
-  // Section opened on the first loop pass (End = none), e.g. returning to
+  // Section opened before the first render (End = none), e.g. returning to
   // Network after the Wi-Fi rows' silent restart.
   SettingsSection pendingSection;
 
@@ -28,5 +28,4 @@ class SettingsListActivity final : public UiListActivity {
                                 SettingsSection openSection = SettingsSection::End);
   void onEnter() override;
   void onExit() override;
-  void loop() override;
 };

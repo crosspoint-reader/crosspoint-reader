@@ -6,9 +6,13 @@
 #include <Memory.h>
 #include <Serialization.h>
 
+#include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include <string>
+#include <vector>
 
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
@@ -31,13 +35,78 @@ void ImageBlock::setExtractor(void* ctx, ExtractFn fn) {
 
 namespace {
 
+const uint8_t* bookToneCurve = nullptr;
+uint32_t bookToneHash = 0;
+
+constexpr char PXC_EXT[] = ".pxc";
+constexpr size_t PXC_EXT_LEN = sizeof(PXC_EXT) - 1;
+constexpr size_t CURVE_SUFFIX_LEN = 10;  // "_k" + 8 hex digits
+
+// The pixel-cache suffix of the active book curve: "_k<hash>", or "" for stock.
+void curveSuffix(char (&suffix)[16]) {
+  suffix[0] = '\0';
+  if (bookToneCurve) snprintf(suffix, sizeof(suffix), "_k%08x", static_cast<unsigned>(bookToneHash));
+}
+
 std::string getCachePath(const std::string& imagePath) {
-  // Replace extension with .pxc (pixel cache)
+  // Replace extension with .pxc (pixel cache); with a tone curve, «_k<hash>» before it.
+  char suffix[16];
+  curveSuffix(suffix);
   size_t dotPos = imagePath.rfind('.');
   if (dotPos != std::string::npos) {
-    return imagePath.substr(0, dotPos) + ".pxc";
+    return imagePath.substr(0, dotPos) + suffix + ".pxc";
   }
-  return imagePath + ".pxc";
+  return imagePath + suffix + ".pxc";
+}
+
+// The curve suffix a pixel-cache file name was written with ("" for stock).
+std::string cacheNameSuffix(const char* name, const size_t len) {
+  const size_t stem = len - PXC_EXT_LEN;
+  if (stem < CURVE_SUFFIX_LEN || name[stem - CURVE_SUFFIX_LEN] != '_' || name[stem - CURVE_SUFFIX_LEN + 1] != 'k') {
+    return "";
+  }
+  for (size_t i = stem - CURVE_SUFFIX_LEN + 2; i < stem; i++) {
+    if (!isxdigit(static_cast<unsigned char>(name[i]))) return "";
+  }
+  return std::string(name + stem - CURVE_SUFFIX_LEN, CURVE_SUFFIX_LEN);
+}
+
+// Book cache folder already swept in this book session ("" = none yet).
+std::string sweptCacheDir;
+
+// A new book curve leaves the pixel caches of the old one on the card. On the
+// first decode of a book session, remove this book's image caches written with
+// another curve (or stock, when a curve is active, and the reverse).
+void removeSupersededCaches(const std::string& imagePath) {
+  const size_t slash = imagePath.rfind('/');
+  if (slash == std::string::npos) return;
+  const std::string dirPath = imagePath.substr(0, slash);
+  if (dirPath == sweptCacheDir) return;
+  sweptCacheDir = dirPath;
+
+  char current[16];
+  curveSuffix(current);
+  std::vector<std::string> stale;
+  {
+    HalFile dir = Storage.open(dirPath.c_str());
+    if (!dir || !dir.isDirectory()) return;
+    char name[96];
+    for (HalFile entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+      const bool isDir = entry.isDirectory();
+      name[0] = '\0';
+      entry.getName(name, sizeof(name));
+      entry.close();
+      const size_t len = strlen(name);
+      if (isDir || len <= PXC_EXT_LEN || strncmp(name, "img_", 4) != 0 ||
+          strcmp(name + len - PXC_EXT_LEN, PXC_EXT) != 0) {
+        continue;
+      }
+      if (cacheNameSuffix(name, len) != current) stale.push_back(dirPath + "/" + name);
+    }
+  }
+  // Removed after the directory handle is closed: FAT iteration and unlink do not mix.
+  for (const auto& path : stale) Storage.remove(path.c_str());
+  if (!stale.empty()) LOG_INF("IMG", "Removed %u image caches of another curve", static_cast<unsigned>(stale.size()));
 }
 
 bool readValidCacheHeader(HalFile& cacheFile, const int expectedWidth, const int expectedHeight, uint16_t& cachedWidth,
@@ -381,6 +450,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   }
 
   LOG_DBG("IMG", "Decoding and caching: %s", imagePath.c_str());
+  removeSupersededCaches(imagePath);
 
   RenderConfig config;
   config.x = x;
@@ -392,6 +462,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   config.performanceMode = false;
   config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
   config.cachePath = cachePath;      // Enable caching during decode
+  config.toneCurve = bookToneCurve;  // Display → Screen calibration → «Калибровка книг»; nullptr — stock
 
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {
@@ -432,4 +503,10 @@ std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file) {
   serialization::readPod(file, w);
   serialization::readPod(file, h);
   return std::unique_ptr<ImageBlock>(new (std::nothrow) ImageBlock(path, src, w, h));
+}
+
+void ImageBlock::setToneCurve(const uint8_t* curve, const uint32_t hash) {
+  bookToneCurve = curve;
+  bookToneHash = curve ? hash : 0;
+  sweptCacheDir.clear();  // a book open starts a new sweep
 }

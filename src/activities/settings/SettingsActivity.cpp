@@ -39,6 +39,8 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "util/CalibrationCard.h"
+#include "util/PanelCurve.h"
 #include "util/PluginEvents.h"
 
 namespace fui = freeink::ui;
@@ -72,6 +74,9 @@ SettingsSection sectionFor(const SettingInfo& setting) {
       setting.valuePtr == &CrossPointSettings::moveFinishedToReadFolder) {
     return SettingsSection::Library;
   }
+  if (setting.valuePtr == &CrossPointSettings::panelCalPictures ||
+      setting.valuePtr == &CrossPointSettings::panelCalBooks)
+    return SettingsSection::ScreenCalibration;
   if (setting.valuePtr == &CrossPointSettings::sleepTimeoutMinutes) return SettingsSection::Display;
   if (setting.category == StrId::STR_CAT_DISPLAY) return SettingsSection::Display;
   if (setting.category == StrId::STR_CAT_READER) return SettingsSection::Reader;
@@ -118,6 +123,9 @@ void SettingsActivity::rebuildSettings() {
     addAction(SettingsSection::Controls, StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons);
   }
 
+  addAction(SettingsSection::ScreenCalibration, StrId::STR_CAL_PICTURES_SCREEN,
+            SettingAction::CalibrationPicturesScreen);
+  addAction(SettingsSection::ScreenCalibration, StrId::STR_CAL_BOOKS_SCREEN, SettingAction::CalibrationBooksScreen);
   for (auto& setting : all) {
     if (sectionFor(setting) != section || !showOnDevice(setting)) continue;
     settings.push_back(std::move(setting));
@@ -146,6 +154,7 @@ void SettingsActivity::rebuildSettings() {
     addAction(SettingsSection::General, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
     addAction(SettingsSection::General, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
   }
+  addAction(SettingsSection::Display, StrId::STR_PANEL_CALIBRATION, SettingAction::ScreenCalibrationSettings);
   addAction(SettingsSection::General, StrId::STR_ABOUT, SettingAction::About);
   rebuildRowItems();
 }
@@ -163,6 +172,13 @@ void SettingsActivity::onEnter() {
   syncQuickResumeTimeoutForSleepScreen(/*sleepScreenChanged=*/true, /*quickResumeTimeoutChanged=*/false);
 
   rebuildSettings();
+  if (section == SettingsSection::Display && pendingSettingsSubSection != SettingsSection::End) {
+    const SettingsSection sub = pendingSettingsSubSection;
+    pendingSettingsSubSection = SettingsSection::End;
+    if (auto activity = makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, sub)) {
+      startActivityForResult(std::move(activity), [this](const ActivityResult&) { requestUpdate(); });
+    }
+  }
 }
 
 // Rebuilds rowValues_/rowItems_ (label + actionValue) for settings.
@@ -182,6 +198,7 @@ void SettingsActivity::rebuildRowItems() {
 }
 
 const char* SettingsActivity::headerTitle() const {
+  if (section == SettingsSection::ScreenCalibration) return tr(STR_PANEL_CALIBRATION);
   return I18N.get(SETTINGS_SECTION_TITLES[static_cast<size_t>(section)]);
 }
 
@@ -231,6 +248,9 @@ void SettingsActivity::toggleSelectedSetting() {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
+    if (setting.valuePtr == &CrossPointSettings::panelCalPictures ||
+        setting.valuePtr == &CrossPointSettings::panelCalBooks)
+      panelcurve::forget();
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     const auto enumLabels = setting.enumLabels();
@@ -283,6 +303,33 @@ void SettingsActivity::toggleSelectedSetting() {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
     switch (setting.action) {
+      case SettingAction::ScreenCalibrationSettings: {
+        auto activity = makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, SettingsSection::ScreenCalibration);
+        if (!activity) {
+          LOG_ERR("SETTINGS", "OOM: screen calibration settings");
+          return;
+        }
+        startActivityForResult(std::move(activity), [this](const ActivityResult&) { requestUpdate(); });
+        return;
+      }
+      case SettingAction::CalibrationPicturesScreen:
+      case SettingAction::CalibrationBooksScreen: {
+        // The card is written once (BMP 1.15 MB, EPUB 0.4 MB) and opened like any image / book; Back returns to
+        // Settings → Display → Screen calibration.
+        std::string path;
+        const bool landscape = SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CW ||
+                               SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CCW;
+        const bool ok = setting.action == SettingAction::CalibrationPicturesScreen
+                            ? calibcard::picturesCard(landscape, path)
+                            : calibcard::booksCard(path);
+        if (!ok) {
+          LOG_ERR("SETTINGS", "Calibration card not written");
+          activityManager.goToFullScreenMessage(tr(STR_CAL_CARD_FAILED));
+          return;
+        }
+        activityManager.goToReader(path);
+        return;
+      }
       case SettingAction::HomeButton: {
         // Activities must outlive this call and are owned by the activity stack.
         auto activity = makeUniqueNoThrow<HomeButtonSettingsActivity>(renderer, mappedInput);
@@ -505,6 +552,18 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
                                                 static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+
+  if (section == SettingsSection::ScreenCalibration) {
+    auto noteStyle = screen.theme().smallText;
+    noteStyle.maxLines = 6;
+    const char* note = tr(STR_PANEL_CAL_NOTE);
+    const int16_t side = static_cast<int16_t>(metrics.contentSidePadding);
+    const int16_t noteW = static_cast<int16_t>(screen.body().width - 2 * side);
+    const int16_t noteH = fui::measureWrappedText(screen.target(), note, noteStyle, noteW).height;
+    screen.target().text(
+        screen.takeTop(noteH, static_cast<int16_t>(metrics.verticalSpacing)).inset(fui::Insets{0, side, 0, side}), note,
+        noteStyle);
+  }
 
   // rowItems_ (label/actionValue) was built by rebuildRowItems(); only the
   // live value text needs refreshing here, by assigning into the existing

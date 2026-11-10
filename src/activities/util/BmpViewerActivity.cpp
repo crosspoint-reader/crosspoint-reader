@@ -1,6 +1,7 @@
 #include "BmpViewerActivity.h"
 
 #include <Bitmap.h>
+#include <BmpToBmpConverter.h>
 #include <Epub/converters/JpegToFramebufferConverter.h>
 #include <Epub/converters/PngToFramebufferConverter.h>
 #include <FsHelpers.h>
@@ -13,9 +14,12 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "activities/reader/ReaderUtils.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/CalibrationCard.h"
+#include "util/PanelCurve.h"
 
 namespace {
 constexpr char CUSTOM_SLEEP_ROOT_BMP[] = "/sleep.bmp";
@@ -114,7 +118,8 @@ bool BmpViewerActivity::renderImage() {
   if (!decoder.getDimensions(filePath, dimensions)) return false;
   if (dimensions.width <= 0 || dimensions.height <= 0) return false;
 
-  const auto config = fitImage(dimensions, renderer);
+  auto config = fitImage(dimensions, renderer);
+  config.toneCurve = SETTINGS.panelCalPictures ? toneCurve : nullptr;
   const bool hasPrevious = siblingImages.size() > 1 && currentImageIndex > 0;
   const bool hasNext = siblingImages.size() > 1 && currentImageIndex != -1 &&
                        currentImageIndex < static_cast<int>(siblingImages.size()) - 1;
@@ -159,8 +164,41 @@ bool BmpViewerActivity::renderImage() {
   return ready;
 }
 
+std::string BmpViewerActivity::calibratedBmp() {
+  if (!SETTINGS.panelCalPictures && !calibcard::isCalibrationPath(filePath)) return filePath;
+  HalFile input;
+  if (!Storage.openFileForRead("BMP", filePath, input)) return {};
+  Bitmap source(input);
+  if (source.parseHeaders() != BmpReaderError::Ok) return {};
+  // Screen-ready images have already been quantized; avoid applying a curve twice.
+  if (source.getBpp() <= 2) return filePath;
+  constexpr char target[] = "/.crosspoint/calibrated-view.bmp";
+  constexpr char temporary[] = "/.crosspoint/calibrated-view.bmp.tmp";
+  if (!Storage.ensureDirectoryExists("/.crosspoint")) return {};
+  HalFile output;
+  if (!Storage.openFileForWrite("BMP", temporary, output)) return {};
+  const bool thresholds = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported() &&
+                          display.getController() == HalDisplay::Controller::SSD1677;
+  const bool card = calibcard::isCalibrationPath(filePath);
+  const int width = card ? renderer.getScreenWidth() : std::min(source.getWidth(), renderer.getScreenWidth());
+  const int height = card ? renderer.getScreenHeight() : std::min(source.getHeight(), renderer.getScreenHeight());
+  bool ok = BmpToBmpConverter::bmpFileToBmpStream(input, output, false, thresholds, toneCurve, width, height);
+  ok = output.close() && ok;
+  input.close();
+  if (ok) ok = Storage.replaceFile(temporary, target);
+  if (!ok) {
+    Storage.remove(temporary);
+    LOG_ERR("BMP", "Calibrated image conversion failed");
+    return {};
+  }
+  return target;
+}
+
 void BmpViewerActivity::onEnter() {
   Activity::onEnter();
+  if (calibcard::isCalibrationPath(filePath)) ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+  uint32_t curveHash;
+  panelcurve::load(toneCurve, curveHash);
 
   if (siblingImages.empty() && !filePath.empty()) {
     loadSiblingImages();
@@ -184,7 +222,7 @@ void BmpViewerActivity::onEnter() {
 
   HalFile file;
   // 1. Open the BMP file
-  if (Storage.openFileForRead("BMP", filePath, file)) {
+  if (Storage.openFileForRead("BMP", calibratedBmp(), file)) {
     Bitmap bitmap(file, true,
                   renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported() &&
                       display.getController() == HalDisplay::Controller::SSD1677);
@@ -296,6 +334,10 @@ void BmpViewerActivity::onEnter() {
 
 void BmpViewerActivity::onExit() {
   Activity::onExit();
+  if (calibcard::isCalibrationPath(filePath)) {
+    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+    return;
+  }
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
@@ -460,7 +502,12 @@ void BmpViewerActivity::loop() {
   };
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    activityManager.goToFileBrowser(filePath);
+    if (calibcard::isCalibrationPath(filePath)) {
+      pendingSettingsSubSection = SettingsSection::ScreenCalibration;
+      activityManager.goToSettings(SettingsSection::Display);
+    } else {
+      activityManager.goToFileBrowser(filePath);
+    }
     return;
   }
 
