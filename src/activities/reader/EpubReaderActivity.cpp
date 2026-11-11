@@ -42,6 +42,7 @@
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
+#include "QueuedTurns.h"
 #include "ReaderActivity.h"
 #include "ReaderFontSizes.h"
 #include "ReaderLineSpacing.h"
@@ -1015,13 +1016,23 @@ void EpubReaderActivity::loop() {
     pendingManualTurn = 0;
     const bool forward = pending > 0;
     int queued = forward ? pending : -pending;
+    int held = 0;
+    if (forward) {
+      const auto turns =
+          splitQueuedForwardTurns(queued, section->isBuilding(), section->currentPage, section->pageCount);
+      queued = turns.now;
+      held = turns.held;
+    }
     bool succeeded = false;
-    while (queued-- > 0 && section) {
+    while (queued > 0 && section) {
       const bool turned = pageTurn(forward);
       notePageTurn(forward, turned);
       if (!turned) break;
       succeeded = true;
+      --queued;
     }
+    // Held turns follow the render that finds where the chapter ends.
+    if (held > 0 && queued == 0 && section) pendingManualTurn = static_cast<int8_t>(held);
     if (succeeded && pendingManualTurnTouch) haptic_feedback::touchAction();
     pendingManualTurnTouch = false;
     requestUpdate();
@@ -1072,9 +1083,7 @@ void EpubReaderActivity::loop() {
   }
 
   if (turnGuardActive) {
-    constexpr int8_t kMaxQueuedTurns = 4;
-    const int8_t queuedTurns = static_cast<int8_t>(pendingManualTurn + (prevTriggered ? -1 : 1));
-    pendingManualTurn = std::clamp<int8_t>(queuedTurns, -kMaxQueuedTurns, kMaxQueuedTurns);
+    pendingManualTurn = queueTurn(pendingManualTurn, !prevTriggered);
     pendingManualTurnTouch = touch.prev || touch.next;
     return;
   }

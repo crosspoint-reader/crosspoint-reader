@@ -106,6 +106,7 @@ add_test(NAME BleLearning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_D
 add_subdirectory(ble_link_note_title)
 add_subdirectory(ble_chapter_build_gate)
 add_subdirectory(ble_remote_turn_gate)
+add_subdirectory(queued_turns)
 
 add_subdirectory(${REPO_ROOT}/lib/BlePageTurner/test BlePageTurnerTests)
 
