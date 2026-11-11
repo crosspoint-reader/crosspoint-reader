@@ -118,8 +118,10 @@ void LibraryListActivity::onEnter() {
   // Pruning costs one card lookup per favorite, so it runs on the first entry
   // after boot and after index rebuilds, not on every entry. Deletes made on
   // the device already remove their favorite; this catches books removed some
-  // other way (USB, a card reader).
-  if (!favoritesPrunedThisBoot) {
+  // other way (USB, a card reader). pruneMissing() skips its scan while the
+  // card's state folder is not visible, so a first entry with an unreadable
+  // card does not count, and a later entry tries again.
+  if (!favoritesPrunedThisBoot && Storage.exists("/.crosspoint")) {
     FAVORITES.pruneMissing();
     favoritesPrunedThisBoot = true;
   }
