@@ -21,6 +21,7 @@
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
 #include "HomeButtonSettingsActivity.h"
+#include "HyphenationManagerActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "KeyboardLayoutsActivity.h"
 #include "LanguageSelectActivity.h"
@@ -142,6 +143,7 @@ void SettingsActivity::rebuildSettings() {
   addAction(SettingsSection::General, StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts);
   addAction(SettingsSection::Reader, StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings);
   addAction(SettingsSection::Reader, StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts);
+  addAction(SettingsSection::Reader, StrId::STR_MANAGE_HYPHENATION, SettingAction::ManageHyphenation);
   if (section == SettingsSection::Controls) {
     if (controlsGroup == ControlsGroup::Root) {
       if (BoardConfig::hasHomeKey()) {
@@ -462,6 +464,13 @@ void SettingsActivity::toggleSelectedSetting() {
                                  SETTINGS.saveToFile();
                                  rebuildSettings();
                                });
+        break;
+      case SettingAction::ManageHyphenation:
+        if (auto manager = makeUniqueNoThrow<HyphenationManagerActivity>(renderer, mappedInput)) {
+          startActivityForResult(std::move(manager), [this](const ActivityResult&) { rebuildSettings(); });
+        } else {
+          LOG_ERR("HYPH", "OOM: hyphenation manager");
+        }
         break;
       case SettingAction::TextSettings:
         startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),

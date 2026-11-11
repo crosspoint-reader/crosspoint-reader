@@ -27,6 +27,7 @@ void ConfirmationActivity::onEnter() {
   confirmPopup.show(heading.c_str(), body.c_str(), options, 2, 0, [this](int idx) {
     ActivityResult res;
     res.isCancelled = (idx != 1);
+    res.data = MenuResult{.action = idx};
     setResult(std::move(res));
     finish();
   });
