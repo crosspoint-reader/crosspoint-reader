@@ -114,10 +114,12 @@ class ChapterHtmlSlimParser {
     char text[MAX_DROP_CAP_BYTES + 1] = {};
     uint8_t length = 0;
     uint8_t codepoints = 0;
-    uint8_t lines = 0;  // text lines the letter spans
+    uint8_t lines = 0;                                 // text lines the letter spans
+    uint8_t requestedByteOffset = MAX_DROP_CAP_BYTES;  // sentinel outside the captured bytes
     bool bold = false;
     bool firstLetterPending = false;  // capture the current block's first letter
     int spanDepth = -1;               // capturing the text of the span at this depth
+    uint32_t sourceStart = 0;
   } dropCap;
 
   // Open elements with a CSS border or background shade. Each emits a PageBorderBox around
@@ -290,7 +292,7 @@ class ChapterHtmlSlimParser {
   static void applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css);
   void pushBlockTextStyleEntry(const CssStyle& cssStyle);
   void pushDecorationStyleEntry(CssTextDecoration defaultDecoration, const CssStyle& cssStyle);
-  void emitHorizontalRule(const BlockStyle& blockStyle);
+  void emitHorizontalRule(const BlockStyle& blockStyle, const char* placedAnchorId);
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
@@ -357,7 +359,7 @@ class ChapterHtmlSlimParser {
   const std::string& getRequestedAnchor() const { return requestedAnchor; }
   bool hasPendingRequestedAnchor() const {
     return requestedAnchorWaitingForText || requestedAnchorOffset.has_value() ||
-           requestedAnchorBufferByteOffset.has_value();
+           requestedAnchorBufferByteOffset.has_value() || dropCap.requestedByteOffset < MAX_DROP_CAP_BYTES;
   }
   const std::deque<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 

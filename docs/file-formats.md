@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 76
+
+Completed and partial sections rebuild to refresh fragment destinations and
+source ranges. List markers have empty source ranges. Requested initial
+letters and anchors on displayed images and horizontal rules resolve to the
+page where they are placed. Book metadata and reading progress are kept.
+
 ### Version 75
 
 The serialized layout is unchanged. Non-visible elements, pagebreak markers, and

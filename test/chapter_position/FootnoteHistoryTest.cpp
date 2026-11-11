@@ -165,3 +165,106 @@ TEST(FootnoteHistoryTest, InvalidRestoredDepthLeavesHistoryIntact) {
   ASSERT_EQ(history.depth(), 1);
   expectPosition(history.data()[0], 1, 12);
 }
+
+TEST(FootnoteHistoryTest, CrossSpineNestedReturnPrefersExactPageOverEarlierSpine) {
+  FootnoteHistory history;
+  history.push({1, 12});
+  history.resolveLinkTarget({1, 20});
+  history.push({1, 20});
+  history.resolveLinkTarget({38, 5});
+  history.push({38, 5});
+  history.resolveLinkTarget({1, 20});
+
+  ASSERT_EQ(history.depth(), 1);
+  expectPosition(*history.pop(), 1, 12);
+}
+
+TEST(FootnoteHistoryTest, DuplicateOriginsReturnToNewestExactMatch) {
+  FootnoteHistory history;
+  history.push({1, 12});
+  history.resolveLinkTarget({1, 20});
+  // Ordinary page turns can revisit the origin without consuming history.
+  history.resolveLinkTarget({1, 12});
+  history.push({1, 12});
+  history.resolveLinkTarget({38, 5});
+  history.push({38, 5});
+  history.resolveLinkTarget({1, 12});
+
+  ASSERT_EQ(history.depth(), 1);
+  expectPosition(*history.pop(), 1, 12);
+}
+
+TEST(FootnoteHistoryTest, ExactNestedReturnWinsOverEvictedSpineFallback) {
+  FootnoteHistory history;
+  history.push({1, 12});
+  history.resolveLinkTarget({1, 20});
+  history.push({1, 20});
+  history.resolveLinkTarget({1, 30});
+  history.push({1, 30});
+  history.resolveLinkTarget({38, 5});
+  history.push({38, 5});
+  history.resolveLinkTarget({1, 30});
+
+  ASSERT_EQ(history.depth(), 1);
+  expectPosition(*history.pop(), 1, 20);
+}
+
+TEST(FootnoteHistoryTest, NearbyPageFallbackStillReturnsToFirstSavedSpine) {
+  FootnoteHistory history;
+  history.push({1, 12});
+  history.resolveLinkTarget({1, 20});
+  history.push({1, 20});
+  history.resolveLinkTarget({38, 5});
+  history.push({38, 5});
+  history.resolveLinkTarget({1, 13});
+
+  EXPECT_TRUE(history.empty());
+}
+
+TEST(FootnoteHistoryTest, DiscardPendingLinkLeavesNoHistoryForFirstJump) {
+  FootnoteHistory history;
+  history.push({1, 12});
+  history.discardPendingLink();
+
+  EXPECT_TRUE(history.empty());
+  EXPECT_FALSE(history.pop().has_value());
+}
+
+TEST(FootnoteHistoryTest, DiscardPendingLinkPreservesEarlierReturns) {
+  FootnoteHistory history;
+  history.push({1, 12});
+  history.resolveLinkTarget({2, 5});
+  history.push({2, 5});
+  history.discardPendingLink();
+
+  ASSERT_EQ(history.depth(), 1);
+  expectPosition(*history.pop(), 1, 12);
+}
+
+TEST(FootnoteHistoryTest, DiscardPendingLinkRestoresEvictedReturnBeforeSaving) {
+  FootnoteHistory history;
+  for (int spine = 1; spine <= FootnoteHistory::MAX_DEPTH; ++spine) {
+    history.push({spine, 12});
+    history.resolveLinkTarget({spine + 1, 12});
+  }
+  history.push({4, 12});
+  history.discardPendingLink();
+  history.discardPendingLink();
+
+  FootnoteHistory reopened;
+  ASSERT_TRUE(reopened.restore(history.data(), history.depth()));
+  ASSERT_EQ(reopened.depth(), FootnoteHistory::MAX_DEPTH);
+  for (int spine = FootnoteHistory::MAX_DEPTH; spine >= 1; --spine) {
+    expectPosition(*reopened.pop(), spine, 12);
+  }
+}
+
+TEST(FootnoteHistoryTest, DiscardPendingLinkKeepsRenderedJump) {
+  FootnoteHistory history;
+  history.push({1, 12});
+  history.resolveLinkTarget({2, 5});
+  history.discardPendingLink();
+
+  ASSERT_EQ(history.depth(), 1);
+  expectPosition(*history.pop(), 1, 12);
+}

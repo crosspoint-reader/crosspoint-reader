@@ -84,6 +84,9 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
   std::optional<uint16_t> targetPage;
   std::optional<TextBlock::SourceRange> targetSourceRange;
   std::optional<uint16_t> firstRulePage;
+  std::optional<uint16_t> firstImagePage;
+  std::optional<uint16_t> firstDropCapPage;
+  std::function<void()> onPageEmitted;
 
   bool parseHtml(const std::string& html, const uint16_t height = 32) {
     filepath = (std::filesystem::temp_directory_path() /
@@ -97,6 +100,8 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
     parser.completePageFn = [this](std::unique_ptr<Page> page, auto, auto, auto) {
       for (const auto& element : page->elements) {
         if (element->getTag() == TAG_PageHorizontalRule && !firstRulePage) firstRulePage = parsedPages;
+        if (element->getTag() == TAG_PageImage && !firstImagePage) firstImagePage = parsedPages;
+        if (element->getTag() == TAG_PageDropCap && !firstDropCapPage) firstDropCapPage = parsedPages;
         if (element->getTag() != TAG_PageLine) continue;
         const auto& block = *static_cast<const PageLine&>(*element).getBlock();
         for (uint16_t word = 0; word < block.wordCount(); ++word) {
@@ -107,6 +112,7 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
         }
       }
       ++parsedPages;
+      if (onPageEmitted) onPageEmitted();
     };
     const bool ok = parser.parseAndBuildPages();
     std::filesystem::remove(filepath);
@@ -182,6 +188,158 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
     return selected;
   }
 };
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedImageAfterAnchorCap) {
+  parser.requestedAnchor = "id28";
+  parser.epub = std::make_shared<Epub>();
+  parser.epub->imageBytes = {'G', 'I', 'F', '8', '9', 'a', 1, 0, 64, 0};
+  parser.imageRendering = 0;
+  Epub::enableGifProbeForTest = true;
+  std::string html = "<html><body>";
+  for (int i = 0; i < 1100; ++i) html += "<p id='p" + std::to_string(i) + "'>Before.</p>";
+  html += "<img id='id28' src='probe.gif'/></body></html>";
+  ASSERT_TRUE(parseHtml(html, 64));
+  ASSERT_TRUE(firstImagePage.has_value());
+  ASSERT_GT(*firstImagePage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1025u);
+  EXPECT_EQ(parser.getAnchors().back().first, "id28");
+  EXPECT_EQ(parser.getAnchors().back().second, *firstImagePage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, OrdinaryImageAnchorFollowsPlacementWithoutARequestedFragment) {
+  parser.epub = std::make_shared<Epub>();
+  parser.epub->imageBytes = {'G', 'I', 'F', '8', '9', 'a', 1, 0, 64, 0};
+  parser.imageRendering = 0;
+  Epub::enableGifProbeForTest = true;
+  ASSERT_TRUE(parseHtml("<html><body><p>Before. <img id='id28' src='probe.gif'/></p></body></html>", 64));
+  ASSERT_TRUE(firstImagePage.has_value());
+  ASSERT_EQ(*firstImagePage, 1u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *firstImagePage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, TocImageStartsFreshPageAfterCompletedTextBlock) {
+  parser.tocAnchors = {"id28"};
+  parser.epub = std::make_shared<Epub>();
+  parser.epub->imageBytes = {'G', 'I', 'F', '8', '9', 'a', 1, 0, 1, 0};
+  parser.imageRendering = 0;
+  Epub::enableGifProbeForTest = true;
+  ASSERT_TRUE(parseHtml("<html><body><p>Before.</p><img id='id28' src='probe.gif'/></body></html>", 64));
+  ASSERT_TRUE(firstImagePage.has_value());
+  ASSERT_EQ(*firstImagePage, 1u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *firstImagePage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedRuleAfterPageBreak) {
+  parser.requestedAnchor = "id28";
+  ASSERT_TRUE(parseHtml("<html><body><p>Before.</p><hr id='id28'/></body></html>", 24));
+  ASSERT_TRUE(firstRulePage.has_value());
+  ASSERT_GT(*firstRulePage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *firstRulePage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedDropCapBeforeNextPage) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 112;
+  parser.setParagraphIndentSpaces(0);
+  installSyntheticVariants(renderer);
+  ASSERT_TRUE(
+      parseHtml("<html><body><p><span id='id28' style='float:left;font-size:3em'>N</span>"
+                "ow words beside the initial letter.</p><p style='page-break-before:always'>TARGET</p>"
+                "</body></html>",
+                64));
+  ASSERT_TRUE(firstDropCapPage.has_value());
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, *firstDropCapPage);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *firstDropCapPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedTextAfterListMarker) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 56;
+  parser.setParagraphIndentSpaces(0);
+  ASSERT_TRUE(
+      parseHtml("<html><body><ul style='margin:0;padding:0'><li><span id='id28'>TARGET</span></li></ul>"
+                "</body></html>",
+                16));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, 0u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedDropCapWithoutOrdinaryBodyText) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 112;
+  parser.imageRendering = 1;
+  parser.setParagraphIndentSpaces(0);
+  installSyntheticVariants(renderer);
+  ASSERT_TRUE(
+      parseHtml("<html><body><p><span id='id28' style='float:left;font-size:3em'>N</span>"
+                "<img alt='image placeholder'/></p><p style='page-break-before:always'>TARGET</p>"
+                "</body></html>",
+                64));
+  ASSERT_TRUE(firstDropCapPage.has_value());
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_GT(*targetPage, *firstDropCapPage);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *firstDropCapPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedDropCapFallbackToOrdinaryLetter) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 112;
+  parser.setParagraphIndentSpaces(0);
+  installSyntheticVariants(renderer);
+  targetWord = "N";
+  ASSERT_TRUE(
+      parseHtml("<html><body><p><span id='id28' style='float:left;font-size:3em'>N</span></p>"
+                "<p style='page-break-before:always'>Following.</p></body></html>",
+                64));
+  ASSERT_TRUE(targetPage.has_value());
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *targetPage);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedDropCapRemainsPendingWhenPreviousPageIsEmitted) {
+  parser.requestedAnchor = "id28";
+  parser.viewportWidth = 112;
+  parser.setParagraphIndentSpaces(0);
+  installSyntheticVariants(renderer);
+  bool pendingWhenStopped = false;
+  onPageEmitted = [&] {
+    pendingWhenStopped = parser.hasPendingRequestedAnchor();
+    parser.requestStop();
+  };
+  EXPECT_FALSE(
+      parseHtml("<html><body><p>Before.</p><p id='id28'>"
+                "<span style='float:left;font-size:3em'>N</span>ow words beside the cap.</p></body></html>",
+                48));
+  EXPECT_EQ(parsedPages, 1u);
+  EXPECT_TRUE(pendingWhenStopped);
+  EXPECT_FALSE(firstDropCapPage.has_value());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, SuppressedRequestedImageDoesNotSelectAnAnchor) {
+  parser.requestedAnchor = "id28";
+  parser.imageRendering = 2;
+  ASSERT_TRUE(parseHtml("<html><body><img id='id28' src='probe.gif'/><p>TARGET</p></body></html>"));
+  EXPECT_FALSE(firstImagePage.has_value());
+  EXPECT_TRUE(parser.getAnchors().empty());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RequestedTocRuleKeepsItsChapterBreak) {
+  parser.requestedAnchor = "id28";
+  parser.tocAnchors = {"id28"};
+  ASSERT_TRUE(parseHtml("<html><body><p>Before.</p><hr id='id28'/></body></html>", 64));
+  ASSERT_TRUE(firstRulePage.has_value());
+  ASSERT_EQ(*firstRulePage, 1u);
+  ASSERT_EQ(parser.getAnchors().size(), 1u);
+  EXPECT_EQ(parser.getAnchors().front().second, *firstRulePage);
+}
 
 TEST_F(ChapterHtmlSlimParserTest, RequestedHeadingFollowsKeepWithNextCarry) {
   parser.requestedAnchor = "id28";

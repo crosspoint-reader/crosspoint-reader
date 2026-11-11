@@ -50,6 +50,8 @@ class ParsedText {
   // multiples of the reader's body size). Slot 0 follows the block's own size; the parser
   // resolves each slot's font before layout.
   std::vector<uint8_t> wordSizeSlots;
+  // Layout-only flag. List markers occupy no characters in the XHTML source.
+  static constexpr uint8_t LIST_MARKER_SLOT_FLAG = 0x40;
   static constexpr uint8_t MAX_SIZE_SLOTS = TextBlock::MAX_WORD_FONTS + 1;
   float sizeSlotScales[MAX_SIZE_SLOTS] = {1.0f};
   int32_t sizeSlotFontIds[MAX_SIZE_SLOTS] = {};
@@ -172,6 +174,7 @@ class ParsedText {
   // Callers must treat the block as incomplete and fail the section build.
   bool hadDroppedWords() const { return droppedWords; }
   uint32_t getWordVisibleEndOffsetAt(size_t wordIndex) const;
+  void addListMarker(std::string marker, uint32_t visibleTextOffset);
   // While a line is being handed to layoutAndExtractLines' callback: how many lines of the
   // paragraph follow it, or -1 when the rest of the paragraph is not laid out yet.
   int linesAfterCurrentLine() const { return linesAfterCurrent; }

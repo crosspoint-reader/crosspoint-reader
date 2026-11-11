@@ -36,6 +36,18 @@ class FootnoteHistory {
     pendingSourceSpine = position.spineIndex;
   }
 
+  void discardPendingLink() {
+    if (pendingSourceSpine < 0) return;
+    --count;
+    if (pendingEvictedPosition) {
+      std::copy_backward(positions, positions + count, positions + count + 1);
+      positions[0] = *pendingEvictedPosition;
+      ++count;
+    }
+    pendingSourceSpine = -1;
+    pendingEvictedPosition.reset();
+  }
+
   std::optional<Position> pop() {
     pendingSourceSpine = -1;
     pendingEvictedPosition.reset();
@@ -52,14 +64,20 @@ class FootnoteHistory {
     const bool returnsToEvicted = pendingEvictedPosition && pendingEvictedPosition->spineIndex == target.spineIndex &&
                                   (crossesSpine || pendingEvictedPosition->pageNumber == target.pageNumber);
     pendingEvictedPosition.reset();
+    // An exact nested return takes precedence over a nearby-page spine match.
+    for (int i = count - 1; i >= 0; --i) {
+      if (positions[i].spineIndex == target.spineIndex && positions[i].pageNumber == target.pageNumber) {
+        count = i;
+        return;
+      }
+    }
     if (returnsToEvicted) {
       count = 0;
       return;
     }
     for (int i = 0; i < count; ++i) {
-      // Cross-spine backlinks can land on a nearby page; same-spine notes need a page match.
-      if (positions[i].spineIndex == target.spineIndex &&
-          (crossesSpine || positions[i].pageNumber == target.pageNumber)) {
+      // Without an exact match, keep the original cross-spine nearby-page fallback.
+      if (crossesSpine && positions[i].spineIndex == target.spineIndex) {
         count = i;
         return;
       }

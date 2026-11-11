@@ -317,6 +317,7 @@ uint32_t ParsedText::visibleOffsetAt(const size_t wordIndex) const {
 uint32_t ParsedText::getWordVisibleEndOffsetAt(const size_t wordIndex) const {
   if (wordIndex >= words.size()) return 0;
   const uint32_t start = visibleOffsetAt(wordIndex);
+  if (wordSizeSlots[wordIndex] & LIST_MARKER_SLOT_FLAG) return start;
   const bool discretionaryHyphen = (wordStyles[wordIndex] & TextBlock::DISCRETIONARY_HYPHEN_FLAG) != 0;
   uint32_t end = sourceOffsetAfter(start, countCodepoints(wordAt(wordIndex)) - discretionaryHyphen);
   // A split remainder's source offset excludes the prefix's display-only hyphen.
@@ -449,6 +450,14 @@ bool ParsedText::storeWord(const std::string_view text, WordStore::StoredWord& o
   }
   droppedWords = true;
   return false;
+}
+
+void ParsedText::addListMarker(std::string marker, const uint32_t visibleTextOffset) {
+  const size_t firstToken = words.size();
+  addWord(std::move(marker), EpdFontFamily::REGULAR, false, false, visibleTextOffset);
+  for (size_t i = firstToken; i < words.size(); ++i) {
+    wordSizeSlots[i] |= LIST_MARKER_SLOT_FLAG;
+  }
 }
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -975,7 +984,7 @@ int ParsedText::calculateRubyExtraEndOffset(const size_t lineStartIdx, const siz
 }
 
 int ParsedText::wordFontId(const size_t wordIndex, const int blockFontId) const {
-  const uint8_t slot = wordSizeSlots[wordIndex] & ~TextBlock::SMALL_CAPS_SLOT_FLAG;
+  const uint8_t slot = wordSizeSlots[wordIndex] & ~(TextBlock::SMALL_CAPS_SLOT_FLAG | LIST_MARKER_SLOT_FLAG);
   return slot == 0 || sizeSlotFontIds[slot] == 0 ? blockFontId : sizeSlotFontIds[slot];
 }
 

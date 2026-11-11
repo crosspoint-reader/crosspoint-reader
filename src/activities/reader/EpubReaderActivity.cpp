@@ -232,6 +232,8 @@ EpubReaderActivity::~EpubReaderActivity() {
   // A radio still stopped for this book's build may start again in the next one.
   if (radioReleasedForBuild.load()) bleturner::afterPaint();
 
+  // The progress file still points to the source until the landing page is rendered.
+  footnoteHistory.discardPendingLink();
   if (!footnoteHistory.empty() && epub) saveLinkStack();
 
   section.reset();
@@ -1952,7 +1954,6 @@ void EpubReaderActivity::renderBook() {
     }
     pageLoadRetryCount = 0;
 
-    footnoteHistory.resolveLinkTarget({currentSpineIndex, section->currentPage});
     currentPageVisibleOffset = p->visibleTextOffset;
     currentPageFootnotes = std::move(p->footnotes);
     currentPageLinks = std::move(p->links);
@@ -1969,6 +1970,7 @@ void EpubReaderActivity::renderBook() {
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     markPageRendered();
+    footnoteHistory.resolveLinkTarget({currentSpineIndex, section->currentPage});
   }
 
   if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||

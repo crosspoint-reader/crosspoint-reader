@@ -47,3 +47,20 @@ cache rather than restarting indexing. Inspect the anchor map in
 byte `0x01` followed by the missing ID. The marker certifies only the requested
 fragment for that cache; rebuilding for another fragment or render settings may
 replace it.
+
+For the v76 update, keep both a completed and a suspended v75 cache. After the
+update, each should rebuild with the reading position preserved. Reopen cached
+TXT and Markdown books and verify the saved position too.
+
+Use EPUBs with the relevant markup in addition to the generated fixture. Check
+links to drop caps, list text that starts on the next page, and horizontal rules
+at a page break. Follow image links with a fresh section and after opening the
+section normally to build its cache, both below and beyond the ordinary anchor
+limit. Save a clipping containing only a list marker and another containing the
+marker and text. Both should highlight the selected marker at the same layout.
+After changing the layout, the mixed clipping's text should still highlight.
+
+In an EPUB with nested backlinks, follow two links, then follow a backlink to
+the intermediate page. Back should return to the original page. To check
+interrupted links, sleep while a long destination chapter is still building. On
+wake, the last rendered page and its earlier Back positions should be available.
