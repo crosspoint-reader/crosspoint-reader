@@ -167,6 +167,15 @@ bool ClipSelectionActivity::extractWords() {
       const auto& block = line.getBlock();
       if (!block || !block->valid()) continue;
 
+      // Tight line spacing makes the font's line height exceed the row pitch; cap the highlight so it
+      // cannot paint over neighbouring lines.
+      int rowPitch = INT_MAX;
+      for (const auto& other : pageAt(pageOffset).elements) {
+        if (other->getTag() != TAG_PageLine) continue;
+        const int dy = static_cast<const PageLine&>(*other).yPos - line.yPos;
+        if (dy > 0) rowPitch = std::min(rowPitch, dy);
+      }
+
       if (needsFontPrewarm && block->wordCount() != 0) {
         uint8_t styleMask = 0;
         for (uint16_t i = 0; i < block->wordCount(); ++i) {
@@ -206,7 +215,7 @@ bool ClipSelectionActivity::extractWords() {
         word.x = static_cast<int16_t>(marginLeft + line.xPos + block->wordXpos(i));
         word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i));
         word.width = static_cast<int16_t>(width);
-        word.height = static_cast<int16_t>(renderer.getLineHeight(wordFont));
+        word.height = static_cast<int16_t>(std::min(renderer.getLineHeight(wordFont), rowPitch));
         word.row = rowCount;
         word.pageOffset = static_cast<uint8_t>(pageOffset);
         word.pageWordIndex = pageWordIndex++;
