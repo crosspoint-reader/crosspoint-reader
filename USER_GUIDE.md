@@ -341,6 +341,7 @@ Side buttons, and Taps and gestures where supported by the device. See the
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
   - "Links and Footnotes" - A short press in reading mode opens link selection. If the page has only one link, it opens directly. After following a link, a short press returns to the previous location.
   - "Refresh" - A short press triggers a manual full-screen refresh, useful for clearing ghosting
+- **Always Long Press to Wake** (EEGO A4 and X4 Pro): When on, the device wakes only if the power button is held for about half a second; a shorter press leaves it asleep. Useful with **Short click** set to "Sleep", where a single click otherwise wakes it too, so a bump in a bag cannot. Off by default.
 - **Quick return from links**: Controls whether a short press of the power button acts as Back after following a link or footnote.
 
 #### 3.6.4 System
