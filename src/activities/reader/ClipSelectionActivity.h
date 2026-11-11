@@ -92,6 +92,7 @@ class ClipSelectionActivity final : public Activity {
   const char* confirmLabel() const;
   int selectedWordCount() const;
   void confirmWithButtons();
+  std::unique_ptr<uint16_t[]> logicalOrder(int first, int last) const;
   bool buildSelectedText(int first, int last, std::string& text) const;
   static bool startsNewWord(const WordBox& previous, const WordBox& current);
   void drawSelection() const;

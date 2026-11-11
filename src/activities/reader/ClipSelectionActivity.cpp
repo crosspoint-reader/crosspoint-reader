@@ -389,26 +389,33 @@ bool ClipSelectionActivity::startsNewWord(const WordBox& previous, const WordBox
                      : current.row != previous.row || current.x > previous.x + previous.width + 2;
 }
 
-bool ClipSelectionActivity::buildSelectedText(const int first, const int last, std::string& text) const {
-  text.clear();
-  text.reserve(CLIPPING_TEXT_MAX);
+std::unique_ptr<uint16_t[]> ClipSelectionActivity::logicalOrder(const int first, const int last) const {
   const size_t count = last - first + 1;
   auto order = makeUniqueNoThrow<uint16_t[]>(count);
-  if (!order) {
-    LOG_ERR("CLIP", "OOM: selection export order");
-    return false;
-  }
+  if (!order) return order;
   bool allSourcesKnown = true;
   for (size_t i = 0; i < count; ++i) {
     order[i] = static_cast<uint16_t>(first + i);
     allSourcesKnown &= words[order[i]].startOffset != UINT32_MAX && words[order[i]].endOffset != UINT32_MAX;
   }
-  // Keep navigation in visual order and export in logical source order.
+  // Keep navigation in visual order and use logical source order for export and word counting.
   if (allSourcesKnown) {
     std::sort(order.get(), order.get() + count, [this](const uint16_t a, const uint16_t b) {
       if (words[a].startOffset == words[b].startOffset) return a < b;
       return words[a].startOffset < words[b].startOffset;
     });
+  }
+  return order;
+}
+
+bool ClipSelectionActivity::buildSelectedText(const int first, const int last, std::string& text) const {
+  text.clear();
+  text.reserve(CLIPPING_TEXT_MAX);
+  const size_t count = last - first + 1;
+  auto order = logicalOrder(first, last);
+  if (!order) {
+    LOG_ERR("CLIP", "OOM: selection export order");
+    return false;
   }
   for (size_t i = 0; i < count; ++i) {
     const WordBox& current = words[order[i]];
@@ -475,10 +482,14 @@ int ClipSelectionActivity::selectedWordCount() const {
   // runs) join without a separator in buildSelectedText.
   const int first = std::min(rangeStart, selected);
   const int last = std::max(rangeStart, selected);
+  // Walk logical source order, as buildSelectedText does, so mixed-direction selections count correctly.
+  const auto order = logicalOrder(first, last);
   int count = 1;
   for (int i = first + 1; i <= last; ++i) {
+    const WordBox& previous = words[order ? order[i - first - 1] : i - 1];
+    const WordBox& current = words[order ? order[i - first] : i];
     // CJK has no spaces, so adjacent CJK boxes count separately (text export is unaffected).
-    if (startsNewWord(words[i - 1], words[i]) || endsWithCjk(words[i - 1].text) || startsWithCjk(words[i].text)) {
+    if (startsNewWord(previous, current) || endsWithCjk(previous.text) || startsWithCjk(current.text)) {
       ++count;
     }
   }

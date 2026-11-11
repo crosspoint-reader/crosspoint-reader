@@ -319,6 +319,7 @@ struct ClipSelectionActivity {
   struct Popup { bool isActive() const { return false; } } actionPopup;
   int lastRenderedPageOffset = 0, lastRenderedSelected = 0, lastRenderedRangeStart = -1;
   int lastRenderedTextOffset = 0, lastRenderedTextXOffset = 0;
+  std::unique_ptr<uint16_t[]> logicalOrder(int first, int last) const;
   bool buildSelectedText(int first, int last, std::string& text) const;
   static bool startsNewWord(const WordBox& previous, const WordBox& current);
   bool extractWords();
@@ -601,6 +602,10 @@ int main() {
     expect(activity, 1, 2, "alpha beta");
     expect(activity, 2, 2, "alpha");
     assert(activity.words[1].text == visualSecond);  // Export must not change navigation order.
+    // Word count follows logical order too: four space-separated words despite reversed visual order.
+    activity.rangeStart = 0;
+    activity.selected = 3;
+    assert(activity.selectedWordCount() == 4);
   }
   const std::vector<std::string> ltr{"alpha", "אחד", "שני", "beta"};
   loadLine(activity, ltr, false);
