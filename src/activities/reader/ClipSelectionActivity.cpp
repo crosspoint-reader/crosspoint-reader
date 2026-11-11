@@ -213,9 +213,14 @@ bool ClipSelectionActivity::extractWords() {
         WordBox& word = isRtl ? words[lineStart + (rtlWordCount < remaining ? rtlWordCount : rtlWordCount % remaining)]
                               : words[wordCount++];
         word.x = static_cast<int16_t>(marginLeft + line.xPos + block->wordXpos(i));
-        word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i));
+        // Keep the box anchored to the glyph bottom (descenders) and trim the excess from the top,
+        // which is mostly ascender gap that would overlap the line above.
+        const int fullHeight = renderer.getLineHeight(wordFont);
+        const int height = std::min(fullHeight, rowPitch);
+        word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i) +
+                                      fullHeight - height);
         word.width = static_cast<int16_t>(width);
-        word.height = static_cast<int16_t>(std::min(renderer.getLineHeight(wordFont), rowPitch));
+        word.height = static_cast<int16_t>(height);
         word.row = rowCount;
         word.pageOffset = static_cast<uint8_t>(pageOffset);
         word.pageWordIndex = pageWordIndex++;
