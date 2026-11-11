@@ -899,6 +899,7 @@ void EpubReaderActivity::loop() {
         openDictionaryWordSelect();
         return;
       case CrossPointSettings::LP_MENU_SELECT_TEXT:
+        automaticPageTurnActive = false;
         startClipSelection(-1, -1, ClipSelectionActivity::Mode::Select);
         return;
       case CrossPointSettings::LP_MENU_CREATE_CLIPPING:
