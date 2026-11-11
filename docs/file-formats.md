@@ -90,13 +90,21 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 74
+### Version 75
 
 The header stores a `u32` hyphenation pack identity after
 `hyphenationEnabled`. Installing, updating, or removing a pack invalidates
-sections built with a different identity. This includes version 73 rendering
-and rebuilds completed and partial caches from both branches. Book metadata
-and saved progress are kept.
+sections built with a different identity. Version 75 also includes version 74
+rendering and rebuilds completed and partial caches from both branches,
+which used version 74 for different layouts. Book metadata and saved progress
+are kept.
+
+### Version 74
+
+Version 74 keeps the binary layout and rebuilds completed and partial sections.
+Runtime TrueType advances no longer round up before the final pixel snap, which
+can change cached line breaks and word positions. Bitmap fonts and `.cpfont`
+files are unchanged. Book metadata and saved progress are kept.
 
 ### Version 73
 
@@ -683,6 +691,7 @@ build-assigned discovery counter — breaks ties and carries books whose
 filesystem reports no time. Fold version 3 introduced the timestamp key; a
 fold bump rebuilds ranks while preserving `firstSeen`.
 Fold version 4 preserves leading articles in title sort and search keys.
+Fold version 5 drops all Unicode 18.0 Hebrew combining marks, including U+05C8 and U+05C9.
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
 

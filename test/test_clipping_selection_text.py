@@ -28,8 +28,8 @@ def method(name, next_name, text=source):
     return text[start:text.index(next_name, signature)].rstrip()
 
 extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSelectionActivity::closestInRow")
-clean_draw = method("void ClipSelectionActivity::drawWordClean", "void ClipSelectionActivity::drawWordHighlight")
-highlight_draw = method("void ClipSelectionActivity::drawWordHighlight", "bool ClipSelectionActivity::renderIncremental")
+gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "bool ClipSelectionActivity::renderIncremental")
+incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void ClipSelectionActivity::drawSelection")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
 word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
 word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
@@ -39,8 +39,10 @@ saved_draw = method("void EpubReaderActivity::drawClippingHighlights", "void Epu
 # Compile production extraction, export, and redraws with bounded UI/rendering stubs.
 harness = r"""
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
+#include <climits>
 #include <cstdio>
 #include <memory>
 #include <set>
@@ -57,8 +59,8 @@ harness = r"""
 #include "ClippingStore.h"
 #include <Epub/ReaderRenderSpec.h>
 namespace BidiUtils { enum class BidiBaseDir : int8_t { AUTO = -1, LTR = 0, RTL = 1 }; }
-struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4 }; };
-constexpr int TAG_PageLine = 1;
+struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4, STRIKETHROUGH = 8 }; };
+constexpr int TAG_PageLine = 1, TAG_PageImage = 2;
 struct Rect { int x = 0, y = 0, width = 0, height = 0; };
 enum class Color { LightGray };
 struct Renderer;
@@ -69,6 +71,8 @@ struct Block {
   const char* text = "one";
   std::string packedText;
   std::vector<EpdFontFamily::Style> styles;
+  std::vector<int> positions;
+  void render(const Renderer&, int, int, int) const;
   bool paragraphStart = true;
   bool prefixSpace = false;
   bool valid() const { return true; }
@@ -89,7 +93,7 @@ struct Block {
   }
   uint16_t wordTextLen(uint16_t i) const { return std::char_traits<char>::length(wordText(i)); }
   EpdFontFamily::Style wordStyle(uint16_t i) const { return styles.empty() ? EpdFontFamily::REGULAR : styles[i]; }
-  int wordXpos(uint16_t) const { return 0; }
+  int wordXpos(uint16_t i) const { return positions.empty() ? 0 : positions[i]; }
   Range wordSourceRange(uint16_t i) const {
     return prefixSpace && i == 0 ? Range{range.start, range.start + 1} : range;
   }
@@ -97,17 +101,57 @@ struct Block {
   bool wordHasDiscretionaryHyphen(uint16_t) const { return false; }
 };
 struct PageLine {
+  int tag = TAG_PageLine;
   int xPos = 0, yPos = 0;
   Block block;
-  int getTag() const { return TAG_PageLine; }
+  int getTag() const { return tag; }
   const Block* getBlock() const { return &block; }
 };
-struct Page { std::vector<std::unique_ptr<PageLine>> elements; };
+struct Page {
+  std::vector<std::unique_ptr<PageLine>> elements;
+  mutable int renderCalls = 0;
+  bool hasImages() const {
+    return std::any_of(elements.begin(), elements.end(), [](const auto& e) { return e->getTag() == TAG_PageImage; });
+  }
+  void render(Renderer&, int, int, int) const;
+};
+struct FontCache {
+  bool scanning = false;
+  struct Scope {
+    FontCache& cache;
+    explicit Scope(FontCache& c) : cache(c) { cache.scanning = true; }
+    void endScanAndPrewarm() { cache.scanning = false; }
+    ~Scope() { cache.scanning = false; }
+  };
+  Scope createPrewarmScope() { return Scope(*this); }
+};
 struct Renderer {
   enum RenderMode { BW };
+  enum class DitherMode { Replace, PreserveInk };
   struct Draw { int x, width, tracking; };
   mutable std::vector<Draw> draws;
   mutable std::vector<Draw> fills;
+  mutable std::set<std::pair<int, int>> ink;
+  mutable std::array<int, 4> clip{0, 0, 1000, 1000};
+  mutable FontCache cache;
+  int displays = 0;
+  FontCache* getFontCacheManager() const { return &cache; }
+  void displayBuffer(int) { ++displays; }
+  auto getClipRect() const { return std::array<int, 4>{clip[0], clip[1], clip[2] - clip[0], clip[3] - clip[1]}; }
+  void setClipRect(int x, int y, int w, int h) const { clip = {x, y, x + w, y + h}; }
+  void clearInk(int x, int y, int width, int height) const {
+    for (auto it = ink.begin(); it != ink.end();) {
+      const auto [px, py] = *it;
+      if (px >= std::max(x, clip[0]) && px < std::min(x + width, clip[2]) &&
+          py >= std::max(y, clip[1]) && py < std::min(y + height, clip[3])) it = ink.erase(it);
+      else ++it;
+    }
+  }
+  void drawLine(int x, int y, int endX, int, int thickness, bool) const {
+    for (int py = y; py < y + thickness; ++py)
+      for (int px = x; px <= endX; ++px)
+        if (px >= clip[0] && px < clip[2] && py >= clip[1] && py < clip[3]) ink.emplace(px, py);
+  }
   bool sdFont = false;
   mutable size_t coldMeasurements = 0;
   std::set<std::pair<uint8_t, uint32_t>> advances;
@@ -146,20 +190,72 @@ struct Renderer {
       assert(word == end);
     }
   }
-  void drawText(int font, int x, int, const char* text, bool, EpdFontFamily::Style style,
+  void drawText(int font, int x, int y, const char* text, bool, EpdFontFamily::Style style,
                 BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const {
+    if (!clippingText::hasVisibleText(text)) return;
     draws.push_back({x, getTextAdvanceX(font, text, style, tracking), tracking});
+    for (int i = 0; text[i]; ++i)
+      for (int py = y + 2; py < y + 10; ++py) drawPixel(x + i * (8 + tracking) + 1, py, true);
   }
-  void fillRect(int x, int, int width, int, bool) const { fills.push_back({x, width, 0}); }
-  void fillRectDither(int x, int, int width, int, Color) const { fills.push_back({x, width, 0}); }
-  void drawRect(int, int, int, int, bool) const {}
-  void drawPixel(int, int, bool) const {}
+  void fillRect(int x, int y, int width, int height, bool) const {
+    fills.push_back({x, width, 0}); clearInk(x, y, width, height);
+  }
+  void fillRectDither(int x, int y, int width, int height, Color,
+                      DitherMode mode = DitherMode::Replace) const {
+    fills.push_back({x, width, 0});
+    if (mode == DitherMode::Replace) clearInk(x, y, width, height);
+    for (int py = y; py < y + height; ++py)
+      for (int px = x; px < x + width; ++px)
+        if (px % 2 == 0 && py % 2 == 0 && px >= clip[0] && px < clip[2] && py >= clip[1] && py < clip[3])
+          ink.emplace(px, py);
+  }
+  void drawRect(int x, int y, int w, int h, bool black) const {
+    for (int px = x; px < x + w; ++px) { drawPixel(px, y, black); drawPixel(px, y + h - 1, black); }
+    for (int py = y; py < y + h; ++py) { drawPixel(x, py, black); drawPixel(x + w - 1, py, black); }
+  }
+  void drawPixel(int x, int y, bool black) const {
+    if (x < clip[0] || x >= clip[2] || y < clip[1] || y >= clip[3]) return;
+    if (black) ink.emplace(x,y); else ink.erase({x,y});
+  }
 };
+void Block::render(const Renderer& renderer, int font, int x, int y) const {
+  if (renderer.cache.scanning) return;
+  // The source line owns decorations, including continuous ink across word gaps.
+  for (uint16_t i = 0; i < wordCount(); ++i) {
+    renderer.drawText(font, x + wordXpos(i), y, wordText(i), true, wordStyle(i),
+                       BidiUtils::BidiBaseDir::AUTO, style.characterSpacing);
+    const int right = x + wordXpos(i) + renderer.getTextAdvanceX(font, wordText(i), wordStyle(i), style.characterSpacing);
+    for (const auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH}) {
+      if (!(wordStyle(i) & decoration)) continue;
+      const int left = i > 0 && (wordStyle(i - 1) & decoration) ? x + wordXpos(i - 1) : x + wordXpos(i);
+      const int lineY = y + (decoration == EpdFontFamily::UNDERLINE ? 14 : 8);
+      renderer.drawLine(left, lineY, right, lineY, 2, true);
+    }
+  }
+}
+void Page::render(Renderer& renderer, int font, int x, int y) const {
+  ++renderCalls;
+  for (const auto& line : elements)
+    if (line->getTag() == TAG_PageLine) line->block.render(renderer, font, x + line->xPos, y + line->yPos);
+}
+struct HalDisplay { static constexpr int FAST_REFRESH = 0; };
+enum { STR_BACK, STR_SELECT, STR_LOOKUP, STR_DONE, STR_DIR_LEFT, STR_DIR_RIGHT };
+#define tr(x) x
 struct Theme {
+  static Theme& getInstance() { static Theme theme; return theme; }
+  Rect getScreenSafeArea(const Renderer&, bool, bool) const { return {0,0,1000,1000}; }
+  int hints = 0;
+  int confirmLabel = -1;
+  void drawButtonHints(Renderer&, int, int confirm, int, int) { ++hints; confirmLabel = confirm; }
   void drawSelectionHandle(const Renderer&, Rect, bool) const {}
   void drawSelectionActions(const Renderer&, Rect, int = 3, int = 0) const {}
 } GUI;
-struct Input { bool hasTouch() const { return false; } };
+using UITheme = Theme;
+struct Input {
+  bool hasTouch() const { return false; }
+  struct Labels { int btn1,btn2,btn3,btn4; };
+  Labels mapLabels(int a,int b,int c,int d) const { return {a,b,c,d}; }
+};
 using GfxRenderer = Renderer;
 using TextBlock = Block;
 struct BoardConfig { static bool isEegoA4() { return false; } };
@@ -210,20 +306,22 @@ struct ClipSelectionActivity {
   int fontId = 0, lineHeight = 16, marginLeft = 0, marginTop = 0;
   int selected = 0, rangeStart = -1, currentPageOffset = 0;
   bool touchDragSelecting = false;
+  bool isLookup() const { return mode != Mode::Clip; }
+  struct Popup { bool isActive() const { return false; } } actionPopup;
+  int lastRenderedPageOffset = 0, lastRenderedSelected = 0, lastRenderedRangeStart = -1;
+  int lastRenderedTextOffset = 0, lastRenderedTextXOffset = 0;
   bool buildSelectedText(int first, int last, std::string& text) const;
   bool extractWords();
-  void drawWordClean(int, int, int) const;
-  void drawWordHighlight(int, int, int, int, int) const;
   void drawSelection() const;
-  void prewarmWord(int) const {}
-  void clearGapBetween(const WordBox&, const WordBox&, int, int) const {}
-  void ditherGapBetween(const WordBox&, const WordBox&, int, int) const {}
-  int textOffset() const { return 0; }
-  int textXOffset() const { return 0; }
+  bool renderIncremental();
+  void ditherGapBetween(const WordBox&, const WordBox&, int, int) const;
+  int testOffsetX = 0, testOffsetY = 0;
+  int textOffset() const { return testOffsetY; }
+  int textXOffset() const { return testOffsetX; }
   Rect handleRect(int, bool) const { return {}; }
   Rect actionRect() const { return {}; }
 };
-""" + build_text + extract_words + clean_draw + highlight_draw + selection_draw + r"""
+""" + build_text + extract_words + gap_draw + incremental_draw + selection_draw + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -270,6 +368,98 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
   assert(text == expected);
 }
 int main() {
+  for (bool images : {false, true}) for (auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH})
+    for (auto mode : {ClipSelectionActivity::Mode::Clip, ClipSelectionActivity::Mode::Lookup}) {
+    ClipSelectionActivity pick;
+    pick.mode = mode;
+    pick.marginLeft = 11; pick.marginTop = 7;
+    pick.testOffsetX = pick.lastRenderedTextXOffset = 7;
+    pick.testOffsetY = pick.lastRenderedTextOffset = 11;
+    auto page = std::make_unique<Page>();
+    for (int row = 0; row < 2; ++row) {
+      auto line = std::make_unique<PageLine>();
+      line->xPos = 3; line->yPos = row * 24;
+      line->block.packedText = row ? std::string("one\0two\0tri\0",12) : std::string("head\0",5);
+      line->block.positions = row ? std::vector<int>{0,40,80} : std::vector<int>{0};
+      line->block.styles = row ? std::vector<EpdFontFamily::Style>(3,decoration) : std::vector<EpdFontFamily::Style>{EpdFontFamily::REGULAR};
+      page->elements.push_back(std::move(line));
+    }
+    if (images) { auto image = std::make_unique<PageLine>(); image->tag = TAG_PageImage; page->elements.push_back(std::move(image)); }
+    pick.pages.push_back(std::move(page));
+    assert(pick.extractWords() && pick.wordCount == 4);
+    auto cleanPaint = [&] {
+      pick.renderer.ink.clear();
+      pick.pageAt(0).render(pick.renderer,0,pick.marginLeft+pick.testOffsetX,pick.marginTop+pick.testOffsetY);
+      pick.drawSelection();
+      pick.lastRenderedSelected = pick.selected;
+      pick.lastRenderedRangeStart = pick.rangeStart;
+    };
+    pick.selected = 1; // First word on a non-first source line.
+    cleanPaint();
+    auto before = pick.renderer.ink;
+    pick.rangeStart = pick.selected;
+    pick.pages[0]->renderCalls = GUI.hints = pick.renderer.displays = 0;
+    assert(pick.renderIncremental());
+    assert(pick.pages[0]->renderCalls == 0 && GUI.hints == 1 && pick.renderer.displays == 1);
+    assert(GUI.confirmLabel == (pick.isLookup() ? STR_LOOKUP : STR_DONE));
+    assert(pick.renderer.ink == before);
+    for (int next : {2,3,2,1,0,3}) {
+      pick.selected = next;
+      pick.pages[0]->renderCalls = 0;
+      const auto beforeMove = pick.renderer.ink;
+      const auto clip = pick.renderer.getClipRect();
+      bool incremental = pick.renderIncremental();
+      assert(incremental == !images);
+      assert(pick.renderer.getClipRect() == clip);
+      if (images) {
+        assert(pick.pages[0]->renderCalls == 0 && pick.renderer.ink == beforeMove);
+        cleanPaint();
+      }
+      else assert(pick.pages[0]->renderCalls == 2);
+      auto actual = pick.renderer.ink;
+      cleanPaint();
+      assert(pick.renderer.ink == actual);
+    }
+  }
+  for (auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH}) {
+    ClipSelectionActivity decorated;
+    decorated.marginLeft = 11;
+    decorated.marginTop = 7;
+    decorated.testOffsetX = 7;
+    decorated.testOffsetY = 11;
+    auto page = std::make_unique<Page>();
+    auto blank = std::make_unique<PageLine>();
+    blank->block.text = " ";
+    page->elements.push_back(std::move(blank));
+    auto line = std::make_unique<PageLine>();
+    line->xPos = 3;
+    line->yPos = 5;
+    line->block.packedText = std::string("one\0two\0", 8);
+    line->block.positions = {0, 40};
+    line->block.styles = {decoration, decoration};
+    line->block.render(decorated.renderer, 0, decorated.marginLeft + line->xPos + decorated.testOffsetX,
+                        decorated.marginTop + line->yPos + decorated.testOffsetY);
+    page->elements.push_back(std::move(line));
+    decorated.pages.push_back(std::move(page));
+    assert(decorated.extractWords());
+    const auto originalInk = decorated.renderer.ink;
+    decorated.rangeStart = 0;
+    decorated.selected = 1;
+    decorated.drawSelection();
+    auto expectedInk = originalInk;
+    const int x = decorated.words[0].x + decorated.testOffsetX;
+    const int y = decorated.words[0].y + decorated.testOffsetY;
+    const int right = decorated.words[1].x + decorated.testOffsetX + decorated.words[1].width;
+    for (int py = y; py < y + decorated.words[0].height; ++py)
+      for (int px = x; px < right; ++px)
+        if (px % 2 == 0 && py % 2 == 0) expectedInk.emplace(px, py);
+    const auto& cursor = decorated.words[1];
+    const int cx = cursor.x + decorated.testOffsetX, cy = cursor.y + decorated.testOffsetY;
+    for (int px = cx; px < cx + cursor.width; ++px) { expectedInk.emplace(px,cy); expectedInk.emplace(px,cy+cursor.height-1); }
+    for (int py = cy; py < cy + cursor.height; ++py) { expectedInk.emplace(cx,py); expectedInk.emplace(cx+cursor.width-1,py); }
+    assert(expectedInk.size() > originalInk.size());
+    assert(decorated.renderer.ink == expectedInk);
+  }
   // Returning from a definition releases the SD font caches before selection is rebuilt.
   for (const bool rtl : {false, true}) {
     ClipSelectionActivity cold;
@@ -364,20 +554,13 @@ int main() {
     activity.rangeStart = 0;
     activity.selected = 1;
     activity.drawSelection();
-    activity.drawWordClean(0, 0, 0);  // Cursor leaves the old word.
-    activity.drawWordHighlight(1, 1, 1, 0, 0);
-    assert(activity.renderer.draws.size() == 4);
-    assert(activity.renderer.fills.size() == 4);
-    for (size_t i = 0; i < 4; ++i) {
-      const auto& draw = activity.renderer.draws[i];
-      const auto& fill = activity.renderer.fills[i];
-      assert(draw.tracking == tracking);
-      assert(draw.width == 24 + 2 * tracking);
-      assert(fill.width == draw.width);
-      assert(fill.x == draw.x);
+    assert(activity.renderer.draws.empty());
+    assert(activity.renderer.fills.size() == 2);
+    for (size_t i = 0; i < 2; ++i) {
+      assert(activity.renderer.fills[i].width == activity.words[i].width);
+      assert(activity.renderer.fills[i].x == activity.words[i].x);
     }
     for (size_t i = 0; i < 2; ++i) {
-      assert(activity.words[i].characterSpacing == tracking);
       assert(activity.words[i].width == 24 + 2 * tracking);
     }
     EpubReaderActivity reader{activity.renderer};

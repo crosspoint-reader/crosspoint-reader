@@ -81,8 +81,9 @@ namespace {
 // v71: Focus split offsets follow the visual run order for RTL words.
 // v72: Make ruby rendering closer to how Chromium renders ruby by default.
 // v73: TrueType vector fonts load and advance .notdef for missing glyphs.
-// v74: Record the installed hyphenation pack identity in the layout key.
-constexpr uint8_t SECTION_FILE_VERSION = 74;
+// v74: TrueType advances defer rounding until pixel placement.
+// v75: Record the installed hyphenation pack identity in the layout key.
+constexpr uint8_t SECTION_FILE_VERSION = 75;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

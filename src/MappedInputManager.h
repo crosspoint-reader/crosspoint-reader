@@ -3,6 +3,7 @@
 #include <HalGPIO.h>
 
 #include "util/HomeButtonInput.h"
+#include "util/PowerButtonInput.h"
 #include "util/RemoteButtonInput.h"
 
 class GfxRenderer;
@@ -46,11 +47,14 @@ class MappedInputManager {
   // Home-key actions so the next main-loop pass can dispatch them, while the
   // current action remains available for immediate Home cancellation.
   void update(bool deferHomeButtonAction = false) const;
-#if FREEINK_CAP_TOUCH
-  // X4 Pro delays a single power click until its frontlight double-click window
-  // expires. The main loop supplies that one-frame event here.
-  void setPowerConfirmClickFrame(const bool clicked) { powerConfirmClickFrame = clicked; }
-#endif
+  bool powerSleepClick() const { return powerSleepFrame; }
+  bool wasPowerSingleClick() const { return powerSingleClickFrame || wasReleased(Button::Power); }
+  void resetPowerButtonInput() const {
+    powerButtonInput.reset();
+    powerSingleClickFrame = false;
+    powerSleepFrame = false;
+    deferredPowerSleepFrame = false;
+  }
   bool injectRemoteClick(RemoteButton button);
   bool hasRemoteClick() const { return remoteInput.button != RemoteButton::None; }
   bool wasPressed(Button button) const;
@@ -154,6 +158,10 @@ class MappedInputManager {
 
   mutable RemoteButtonInput remoteInput;
   mutable HomeButtonInput homeButtonInput;
+  mutable PowerButtonInput powerButtonInput;
+  mutable bool powerSingleClickFrame = false;
+  mutable bool powerSleepFrame = false;
+  mutable bool deferredPowerSleepFrame = false;
   mutable HomeButtonAction homeAction = HomeButtonAction::Ignore;
   mutable HomeButtonAction deferredHomeAction = HomeButtonAction::Ignore;
   mutable bool touchHeldOverrideValid = false;
@@ -161,7 +169,4 @@ class MappedInputManager {
   mutable unsigned long touchHeldOverrideAt = 0;
   mutable uint16_t longPressFiredButtons = 0;
   mutable uint16_t suppressedReleaseButtons = 0;
-#if FREEINK_CAP_TOUCH
-  bool powerConfirmClickFrame = false;
-#endif
 };
