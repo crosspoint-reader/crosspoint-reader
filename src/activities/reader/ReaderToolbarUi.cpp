@@ -318,7 +318,11 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   const int totalPages = pageRows > 0 ? (count + pageRows - 1) / pageRows : 0;
   if (totalPages > 1) {
     char buf[16];
-    snprintf(buf, sizeof(buf), "%d/%d", nav_.top / pageRows + 1, totalPages);
+    // The viewport stops at count - pageRows so the last page stays full; a
+    // partly-advanced top is already the next page (7 rows, 5 per page: top 2
+    // is page 2/2, not 1/2).
+    const int page = std::min(totalPages, (nav_.top + pageRows - 1) / pageRows + 1);
+    snprintf(buf, sizeof(buf), "%d/%d", page, totalPages);
     fui::TextStyle pageStyle = tokens.smallText;
     pageStyle.align = fui::TextAlign::Right;
     screen.target().text(pageIndicatorRect_, buf, pageStyle);
