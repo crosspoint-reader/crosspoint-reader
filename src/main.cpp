@@ -23,6 +23,7 @@
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
 #include <esp_heap_caps.h>
+#include <esp_timer.h>
 #include <esp_wifi.h>
 #include <time.h>
 
@@ -65,6 +66,10 @@ SET_LOOP_TASK_STACK_SIZE(24 * 1024)
 
 GfxRenderer renderer(display);
 MappedInputManager mappedInputManager(gpio, renderer);
+#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_X4PRO
+static WakeHoldWatch wakeHoldWatch;
+static esp_timer_handle_t wakeHoldTimer = nullptr;
+#endif
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
@@ -590,6 +595,29 @@ void setup() {
   const bool wakeHoldVerified = wakeupReason != HalGPIO::WakeupReason::PowerButton || BoardConfig::isMetalioEInk4() ||
                                 gpio.verifyPowerButtonWakeup();
 
+#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_X4PRO
+  // Always Long Press to Wake reads its setting further down, after the SD card. Watch the button
+  // from here so the hold is continuous and a release after kWakeHoldMs still counts as held.
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton && wakeHoldVerified && !isSilentReboot) {
+    const esp_timer_create_args_t timerArgs = {
+        .callback =
+            [](void*) {
+              wakeHoldWatch.sample(gpio.isPowerButtonDown(), millis());
+              // Nothing left to learn after the deadline; also ends it on a boot that never reads the answer.
+              if (millis() >= kWakeHoldMs) esp_timer_stop(wakeHoldTimer);
+            },
+        .arg = nullptr,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "wake_hold",
+        .skip_unhandled_events = true,
+    };
+    if (esp_timer_create(&timerArgs, &wakeHoldTimer) != ESP_OK ||
+        esp_timer_start_periodic(wakeHoldTimer, 5000) != ESP_OK) {
+      LOG_ERR("MAIN", "Wake hold timer failed to start");
+    }
+  }
+#endif
+
   // X4 Pro and X4 Classic both map BTN_UP to GPIO0 — an ESP32-S3 boot strap — so
   // gate recovery on the non-strap Down key (GPIO7) to avoid a stuck-in-recovery loop.
   const auto recoveryButton = (BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? MappedInputManager::Button::Down
@@ -666,11 +694,22 @@ void setup() {
 
 #if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_X4PRO
   // Always Long Press to Wake: with the setting on, a press that is not held goes straight back to
-  // sleep, before the light or display come up. The hold is timed from boot, so it lasts kWakeHoldMs
-  // or as long as setup() took to get here, whichever is longer.
-  if (wakeNeedsLongPress(SETTINGS.longPressWake != 0, wakeupReason == HalGPIO::WakeupReason::PowerButton,
-                         isSilentReboot)) {
-    if (!wakeHoldVerified || !gpio.powerButtonHeldUntil(kWakeHoldMs)) {
+  // sleep, before the light or display come up. The hold is timed from boot and has been watched
+  // since the wake was verified, so only the rest of kWakeHoldMs is waited out here.
+  const bool needsWakeHold = wakeNeedsLongPress(SETTINGS.longPressWake != 0,
+                                                wakeupReason == HalGPIO::WakeupReason::PowerButton, isSilentReboot);
+  // Sampled here as well, so the hold is still checked if the timer could not start.
+  while (needsWakeHold && wakeHoldVerified && wakeHoldWatch.held() && millis() < kWakeHoldMs) {
+    wakeHoldWatch.sample(gpio.isPowerButtonDown(), millis());
+    delay(5);
+  }
+  if (wakeHoldTimer) {
+    esp_timer_stop(wakeHoldTimer);  // may already have stopped itself
+    esp_timer_delete(wakeHoldTimer);
+    wakeHoldTimer = nullptr;
+  }
+  if (needsWakeHold) {
+    if (!wakeHoldVerified || !wakeHoldWatch.held()) {
       LOG_DBG("MAIN", "Power button released before the wake hold, sleeping");
       Storage.prepareForDeepSleep();
       powerManager.startDeepSleep(gpio);

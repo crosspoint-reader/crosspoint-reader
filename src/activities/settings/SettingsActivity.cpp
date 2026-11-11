@@ -90,7 +90,7 @@ bool belongsToControlsGroup(const SettingInfo& setting, ControlsGroup group) {
   const bool shared = field == &CrossPointSettings::longPressButtonBehavior;
   switch (group) {
     case ControlsGroup::Power:
-      return power || field == &CrossPointSettings::pwrBtnFootnoteBack;
+      return power || field == &CrossPointSettings::pwrBtnFootnoteBack || field == &CrossPointSettings::longPressWake;
     case ControlsGroup::Front:
       return shared || menu || field == &CrossPointSettings::frontButtonFollowOrientation ||
              field == &CrossPointSettings::backShortToFileBrowser;

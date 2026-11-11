@@ -125,9 +125,9 @@ class HalGPIO {
   // Returns true if verification succeeded, false if device should return to sleep.
   // Should only be called when wakeup reason is PowerButton.
   bool verifyPowerButtonWakeup();
-  // Long-press wake: true if the power button stays physically pressed until
-  // millis() reaches untilMs (measured from boot, so the wake itself counts).
-  bool powerButtonHeldUntil(unsigned long untilMs);
+  // The power button's pin right now, with no debounce. Safe to call from a
+  // timer callback.
+  bool isPowerButtonDown() const;
 
   // Check if USB is connected
   bool isUsbConnected() const;
