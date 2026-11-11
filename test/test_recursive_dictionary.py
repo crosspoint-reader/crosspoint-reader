@@ -796,11 +796,9 @@ int main() {
     DictionaryDefinitionActivity::PlainSelectionLine rtlFallback;
     rtlFallback.text = longLine;
     rtlFallback.layout(owner, 0, 0, true, {}, 1);
-    const int expectedLevel1 = prefixWithoutKerning;
     assert(rtlFallback.words.size() == 3);
     assert(rtlFallback.words[1] == "zb");
-    assert(rtlFallback.positions[1] == expectedLevel1);
-    assert(expectedLevel1 != expectedLevel0);
+    assert(rtlFallback.positions[1] == expectedLevel0);
   }
   // Alignment offsets are part of the selectable PageLine, including later pages.
   for (const int alignment : {CrossPointSettings::CENTER_ALIGN, CrossPointSettings::RIGHT_ALIGN}) {

@@ -461,12 +461,9 @@ struct DictionaryDefinitionActivity::PlainSelectionLine {
               }
             }
           }
-          // Both justified and non-justified LTR selection use the same
-          // rendered whole-line word origin, including space-to-glyph kerning.
+          // Include the preceding separator's kerning for both paragraph levels.
           const int advance =
-              paragraphLevel == 0
-                  ? renderedPlainWordOrigin(owner.renderer, fontId, bytes, start, ranges[n].end - offset, family)
-                  : renderedPlainPrefixWidth(owner.renderer, fontId, bytes, start, family, paragraphLevel);
+              renderedPlainWordOrigin(owner.renderer, fontId, bytes, start, ranges[n].end - offset, family);
           positions[n] = advance + (placement.gaps > 0 ? placement.justifyExtra * gapIndex / placement.gaps : 0);
         }
       }
