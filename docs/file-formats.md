@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 74
+
+Version 74 keeps the binary layout and rebuilds completed and partial sections.
+Runtime TrueType advances no longer round up before the final pixel snap, which
+can change cached line breaks and word positions. Bitmap fonts and `.cpfont`
+files are unchanged. Book metadata and saved progress are kept.
+
 ### Version 73
 
 Version 73 keeps the binary layout and rebuilds completed and partial sections.

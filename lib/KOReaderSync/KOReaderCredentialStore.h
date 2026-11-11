@@ -74,6 +74,9 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Get MD5 hash of password for API authentication
   std::string getMd5Password() const;
 
+  // HTTP Basic Authorization header value for servers that check Basic auth
+  std::string getBasicAuthorization() const;
+
   // Check if credentials are set
   bool hasCredentials() const;
 
