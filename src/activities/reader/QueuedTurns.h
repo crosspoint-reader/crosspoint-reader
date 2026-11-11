@@ -35,3 +35,11 @@ constexpr QueuedForwardTurns splitQueuedForwardTurns(const int queued, const boo
 constexpr int queuedTurnsToCarry(const int unapplied, const int held, const bool leftTheChapter) {
   return (unapplied == 0 || leftTheChapter) ? unapplied + held : 0;
 }
+
+// After a turn that left the chapter, how long queued turns may sit with no chapter loaded. The
+// render task normally takes its lock within milliseconds and then covers the whole load.
+constexpr unsigned long kQueuedTurnsSectionWaitMs = 1000;
+
+constexpr bool queuedTurnsAwaitSection(const unsigned long msSinceTurn) {
+  return msSinceTurn < kQueuedTurnsSectionWaitMs;
+}

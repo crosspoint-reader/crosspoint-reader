@@ -58,3 +58,15 @@ TEST(QueuedTurns, NothingLeftMeansNothingCarried) {
   EXPECT_EQ(queuedTurnsToCarry(0, 0, false), 0);
   EXPECT_EQ(queuedTurnsToCarry(0, 0, true), 0);
 }
+
+// Between the turn that left a chapter and the render task starting the next one, no chapter is loaded.
+TEST(QueuedTurns, CarriedTurnsWaitBrieflyForTheNextChapter) {
+  EXPECT_TRUE(queuedTurnsAwaitSection(0));
+  EXPECT_TRUE(queuedTurnsAwaitSection(250));
+  EXPECT_TRUE(queuedTurnsAwaitSection(kQueuedTurnsSectionWaitMs - 1));
+}
+
+TEST(QueuedTurns, AChapterThatNeverLoadsDropsThem) {
+  EXPECT_FALSE(queuedTurnsAwaitSection(kQueuedTurnsSectionWaitMs));
+  EXPECT_FALSE(queuedTurnsAwaitSection(60000));
+}

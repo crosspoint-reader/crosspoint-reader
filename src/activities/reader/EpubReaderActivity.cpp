@@ -1006,7 +1006,9 @@ void EpubReaderActivity::loop() {
   const bool turnGuardActive = RenderLock::peek() || (millis() - lastPageTurnTime) < kMinManualTurnGapMs;
   if (pendingManualTurn != 0 && !turnGuardActive) {
     if (!section) {
-      pendingManualTurn = 0;
+      // Turns carried across a chapter edge wait here until the render task picks up the load.
+      // Past that they are dropped, so a chapter that failed to load cannot leave them queued.
+      if (!queuedTurnsAwaitSection(millis() - lastPageTurnTime)) pendingManualTurn = 0;
       return;
     }
     // Taps queued while the panel was busy collapse into one refresh that
