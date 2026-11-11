@@ -900,6 +900,7 @@ void EpubReaderActivity::loop() {
         return;
       case CrossPointSettings::LP_MENU_SELECT_TEXT:
         automaticPageTurnActive = false;
+        pendingManualTurn = 0;
         startClipSelection(-1, -1, ClipSelectionActivity::Mode::Select);
         return;
       case CrossPointSettings::LP_MENU_CREATE_CLIPPING:
@@ -936,6 +937,7 @@ void EpubReaderActivity::loop() {
         if (!showDictionaryMessage) openDictionaryWordSelect();
         return;
       case HomeButtonAction::SelectText:
+        pendingManualTurn = 0;
         startClipSelection(-1, -1, ClipSelectionActivity::Mode::Select);
         return;
       case HomeButtonAction::CreateClipping:
