@@ -76,9 +76,9 @@ class TtfEpdFont {
   EpdFontFamily family() const;
 
   // Per-scope reset (mirrors SdCardFont::clearCache): retains resident glyph
-  // data across PrewarmScopes so build() can subset-check against f.cps to serve
-  // page turns from idle-prewarmed glyphs with zero FreeType rasterizations.
-  // Full release still happens via releaseResidentCaches().
+  // data across PrewarmScopes so build() faults only missing glyphs against
+  // f.cps and serves page turns from idle-prewarmed glyphs with zero FreeType
+  // rasterizations. Full release still happens via releaseResidentCaches().
   void clearCache();
 
   // Heap-critical teardown (mirrors SdCardFont::releaseResidentCaches): free
@@ -90,9 +90,8 @@ class TtfEpdFont {
   void releaseResidentCaches();
 
   // Batch pre-warm of a face for a render scope (defaults to regular; styles fault lazily).
-  // Retains existing glyph coverage and accumulates across scopes when headroom allows,
-  // performing a clean cache flush only when degraded or when remaining capacity cannot
-  // guarantee fitting a full new page.
+  // Retains existing glyph coverage and accumulates across scopes until capacity is
+  // reached, topping up any earlier codepoints of the page if a flush occurs mid-pass.
   bool build(const char* utf8, uint8_t style = 0);
   bool addCoverage(const char* utf8, uint8_t style = 0);
 
@@ -124,6 +123,7 @@ class TtfEpdFont {
     bool inited = false;            // init attempted (lazy)
     bool ready = false;             // FreeType face live
     bool miniMetadataOnly = false;  // bitmap allocation failed: advance-only
+    bool flushed = false;           // flushFace() ran during the current pass
     uint8_t initFailures = 0;       // consecutive failed initFace attempts
     // GSUB 'liga' resolution (fi fl ff ffi ffl), resolved once at initFace():
     // ligGid[i] is the raw glyph ID for U+FB00+i (0 = none), and ligPairs is

@@ -453,6 +453,51 @@ void EpubReaderActivity::backgroundBuildTick() {
   }
 }
 
+void EpubReaderActivity::idlePrewarmTick() {
+  RenderLock lock(RenderLock::Mode::Try);
+  if (!lock.ownsLock()) return;
+
+  constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 150;
+  if (!section || section->isBuilding() || !renderer.hasFrameBuffer() || overlay != Overlay::None ||
+      lastRenderCompleteMs == 0 || millis() - lastRenderCompleteMs <= IDLE_PREWARM_DEBOUNCE_MS ||
+      ESP.getFreeHeap() <= RENDER_MIN_FREE_HEAP || ESP.getMaxAllocHeap() <= BACKGROUND_BUILD_MIN_MAX_ALLOC) {
+    return;
+  }
+  if (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage) {
+    idlePrewarmSpine = currentSpineIndex;
+    idlePrewarmPage = section->currentPage;
+    idlePrewarmOffset = 0;
+  }
+  auto* fcm = renderer.getFontCacheManager();
+  if (!fcm) return;
+  const int maxLookahead = fcm->getIdleLookaheadPages(SETTINGS.getReaderFontId());
+  if (idlePrewarmOffset >= maxLookahead) return;
+
+  float nx = 0.0f;
+  float ny = 0.0f;
+  if (buttonContactClosed() || anyButtonPressed() || pendingManualTurn != 0 ||
+      (gpio.hasTouch() && gpio.isTouchHeldAt(nx, ny))) {
+    return;
+  }
+
+  const int targetPage = section->currentPage + idlePrewarmOffset + 1;
+  if (targetPage >= static_cast<int>(section->pageCount)) {
+    idlePrewarmOffset = maxLookahead;
+    return;
+  }
+
+  if (const auto p = section->loadPage(targetPage)) {
+    const auto t0 = millis();
+    auto scope = fcm->createPrewarmScope();
+    p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);
+    scope.endScanAndPrewarm();
+    LOG_DBG("ERS", "Idle prewarm: page %d in %lums", targetPage, millis() - t0);
+    ++idlePrewarmOffset;
+  } else {
+    idlePrewarmOffset = maxLookahead;
+  }
+}
+
 void EpubReaderActivity::openDictionaryWordSelect() {
   if (SETTINGS.dictionaryName[0] == '\0') {
     pendingLookupSelection = {};
@@ -710,52 +755,6 @@ void EpubReaderActivity::loop() {
     applyOrientation(SETTINGS.orientation);
     requestUpdate();
     return;
-  }
-
-  constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 150;
-  if (section && !section->isBuilding() && renderer.hasFrameBuffer() && lastRenderCompleteMs != 0 &&
-      millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS && ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP &&
-      ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
-      (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
-    if (auto* fcm = renderer.getFontCacheManager()) {
-      const int maxLookahead = fcm->getIdleLookaheadPages(SETTINGS.getReaderFontId());
-      int completedOffset = 0;
-      for (int offset = 1; offset <= maxLookahead; ++offset) {
-        if (offset > 1) {
-          mappedInput.update(true);
-        }
-        float nx = 0.0f;
-        float ny = 0.0f;
-        if (buttonContactClosed() || anyButtonPressed() || pendingManualTurn != 0 || gpio.wasAnyPressed() ||
-            gpio.wasAnyReleased() ||
-            (gpio.hasTouch() && (gpio.wasTouchDown(nx, ny) || gpio.wasTouchReleased() || gpio.isTouchHeldAt(nx, ny)))) {
-          break;
-        }
-        const int targetPage = section->currentPage + offset;
-        if (targetPage >= static_cast<int>(section->pageCount)) {
-          completedOffset = offset;
-          break;
-        }
-
-        RenderLock lock(RenderLock::Mode::Try);
-        if (!lock.ownsLock()) break;
-
-        if (const auto p = section->loadPage(targetPage)) {
-          const auto t0 = millis();
-          auto scope = fcm->createPrewarmScope();
-          p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);
-          scope.endScanAndPrewarm();
-          LOG_DBG("ERS", "Idle prewarm: page %d in %lums", targetPage, millis() - t0);
-          completedOffset = offset;
-        } else {
-          break;
-        }
-      }
-      if (completedOffset > 0) {
-        idlePrewarmSpine = currentSpineIndex;
-        idlePrewarmPage = section->currentPage;
-      }
-    }
   }
 
   {
@@ -1044,8 +1043,9 @@ void EpubReaderActivity::loop() {
   prevTriggered = prevTriggered || touch.prev;
   nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
-    // Nothing to act on in this frame: build more of the chapter.
+    // Nothing to act on in this frame: build more of the chapter or prewarm ahead.
     backgroundBuildTick();
+    idlePrewarmTick();
     return;
   }
 

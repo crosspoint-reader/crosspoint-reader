@@ -45,8 +45,8 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
   // TTF (vector) font prewarm path. This is the single dispatch every draw path
   // funnels through (reader endScanAndPrewarm, the settings preview, UI text),
   // so building here covers them all. For TTF, build() maintains an accumulating
-  // cache across render scopes with a headroom check, flushing only on capacity
-  // exhaustion or degradation; addCoverage() faults incremental codepoints.
+  // cache across render scopes, flushing only on capacity exhaustion or degradation;
+  // addCoverage() faults incremental codepoints.
 #if CROSSPOINT_VECTOR_FONTS
   auto tit = ttfFonts_.find(fontId);
   if (tit != ttfFonts_.end() && tit->second) {

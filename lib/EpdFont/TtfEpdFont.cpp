@@ -328,11 +328,12 @@ void TtfEpdFont::flushFace(Face& f) {
   f.kernVals.clear();
   f.used = 0;
   f.miniMetadataOnly = false;
+  f.flushed = true;
 }
 
 void TtfEpdFont::clearCache() {
   // Retain resident glyph data across PrewarmScopes (mirrors SdCardFont::resetStyleMiniData):
-  // the next prewarm subset-checks against f.cps in build(), which lets the idle
+  // build() faults only missing codepoints against f.cps, which lets the idle
   // prewarm of page N+1 serve the actual page turn with zero FreeType rasterizations.
   // Full cache release still happens on memory pressure via releaseResidentCaches().
   // If an allocation failure left incomplete glyphs (miniMetadataOnly), flush so next pass retries.
@@ -554,39 +555,13 @@ EpdFontFamily TtfEpdFont::family() const {
 bool TtfEpdFont::build(const char* utf8, const uint8_t style) {
   if (!loaded_ || style >= 4) return false;
   Face& f = faces_[style];
-  if (!f.inited || !f.ready) initFace(f);
-  if (!f.ready) return false;
-
-  // Multi-page / idle-prewarm hit: resident glyph data persists across PrewarmScopes
-  // (clearCache keeps it), so when previous pages or an idle prewarm already loaded
-  // every requested codepoint the font covers, this page needs zero FreeType rasterizations.
-  if (utf8 != nullptr && !f.cps.empty() && !f.miniMetadataOnly) {
-    bool covered = true;
-    const auto* p = reinterpret_cast<const unsigned char*>(utf8);
-    while (*p != '\0') {
-      const uint32_t cp = utf8NextCodepoint(&p);
-      const auto it = std::lower_bound(f.cps.begin(), f.cps.end(), cp);
-      if (it != f.cps.end() && *it == cp) continue;
-      const bool supported = f.ft->hasGlyph(cp) || (cp >= 0xFB00u && cp <= 0xFB04u && f.ligGid[cp - 0xFB00u] != 0);
-      if (supported) {
-        covered = false;
-        break;
-      }
-    }
-    if (covered) return true;
-  }
-
-  // Accumulate glyphs across pages until the cache is nearly full:
-  // Flush only if an allocation failure left incomplete glyphs (miniMetadataOnly)
-  // or if remaining headroom cannot guarantee fitting a full new page (~512 unique
-  // glyphs or ~64KB bitmap data). Otherwise keep previously loaded glyphs and only
-  // fault the new codepoints via addCoverage().
-  const size_t headroomGlyphs = std::min<size_t>(512, f.maxGlyphs / 2);
-  const size_t headroomBytes = std::min<size_t>(64 * 1024, f.cap / 2);
-  if (f.miniMetadataOnly || f.glyphs.size() + headroomGlyphs > f.maxGlyphs || f.used + headroomBytes > f.cap) {
-    flushFace(f);
-  }
-  return addCoverage(utf8, style);
+  if (f.miniMetadataOnly) flushFace(f);
+  f.flushed = false;
+  if (!addCoverage(utf8, style)) return false;
+  // If faultGlyph() flushed the face mid-pass on capacity exhaustion, a second
+  // pass faults back the earlier codepoints of this page while hitting the cache
+  // for the tail already loaded after the flush.
+  return (f.flushed && !f.miniMetadataOnly) ? addCoverage(utf8, style) : true;
 }
 bool TtfEpdFont::addCoverage(const char* utf8, const uint8_t style) {
   if (!loaded_ || utf8 == nullptr || style >= 4) return false;
