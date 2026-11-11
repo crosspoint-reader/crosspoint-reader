@@ -31,7 +31,7 @@ The Dictionary setting only appears when at least one usable dictionary folder e
 Two ways to start a lookup while reading:
 
 - Open the reader menu (**Confirm**) and choose **Look Up**.
-- Or set **Settings → Controls → Long-press Menu** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
+- Or set **Settings → Controls → Front buttons → Menu long press** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
 
 ### Selecting Text
 
@@ -51,7 +51,7 @@ On the very first lookup with a dictionary (and again whenever the `.idx` or `.s
 
 ### How Lookup Works
 
-1. **Direct match** — the word or phrase is searched as-is (case-insensitive) in the dictionary index. Leading and trailing punctuation and whitespace are stripped automatically. Multi-word phrases match dictionary entries containing spaces (such as idioms, phrasal verbs, or compound terms). An index may list the same headword more than once (one entry per part of speech, for example); every entry it lists is shown, each labelled with its headword.
+1. **Direct match** — the word or phrase is searched case-insensitively in the dictionary index. Leading and trailing punctuation and whitespace are stripped automatically. Hebrew niqqud and cantillation marks are removed from the search term so pointed text can match unpointed headwords. Basic Arabic vowel marks (U+064B–U+0650, U+0652) and superscript alef (U+0670) are also removed; shaddah, hamza, and maddah remain significant. Multi-word phrases match dictionary entries containing spaces (such as idioms, phrasal verbs, or compound terms). An index may list the same headword more than once (one entry per part of speech, for example); every entry it lists is shown, each labelled with its headword.
 2. **Synonyms** — on a miss, if the dictionary ships a `.syn` file, alternate spellings and irregular forms recorded there are resolved to their headword (e.g. `oxen` → `ox`, `colour` → `color`). All the headwords a synonym points at are shown. This step is skipped if the `.sidx` sidecar could not be built (e.g. transient low memory during indexing); the dictionary otherwise stays usable, and the build is retried the next time it is opened.
 3. **Stemming** — still no match: common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
 4. **Not found** — a short popup appears. Touchscreen devices return to reading; buttons-only devices return to word selection.

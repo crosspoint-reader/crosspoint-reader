@@ -161,6 +161,8 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     modeName = "Connect to Calibre";
   } else if (mode == NetworkMode::CREATE_HOTSPOT) {
     modeName = "Create Hotspot";
+  } else if (mode == NetworkMode::OPDS_BROWSER) {
+    modeName = "OPDS Browser";
 #if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
   } else if (mode == NetworkMode::LOCAL_SEND) {
     modeName = "Local Send";
@@ -171,6 +173,17 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
 #endif
   }
   LOG_DBG("WEBACT", "Network mode selected: %s", modeName);
+
+  // The OPDS browser joins Wi-Fi itself. Wi-Fi is still on if the user backed
+  // out of Join Network; turn it off so onExit does not restart to Home.
+  if (mode == NetworkMode::OPDS_BROWSER) {
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+      WiFi.disconnect(false);
+      WiFi.mode(WIFI_OFF);
+    }
+    activityManager.goToBrowser();
+    return;
+  }
 
 #if FREEINK_CAP_USB_MSC
   if (mode == NetworkMode::USB_DRIVE) {
