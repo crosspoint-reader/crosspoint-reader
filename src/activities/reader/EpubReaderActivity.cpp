@@ -457,7 +457,7 @@ void EpubReaderActivity::idlePrewarmTick() {
   RenderLock lock(RenderLock::Mode::Try);
   if (!lock.ownsLock()) return;
 
-  constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 150;
+  constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
   if (!section || section->isBuilding() || !renderer.hasFrameBuffer() || overlay != Overlay::None ||
       lastRenderCompleteMs == 0 || millis() - lastRenderCompleteMs <= IDLE_PREWARM_DEBOUNCE_MS ||
       ESP.getFreeHeap() <= RENDER_MIN_FREE_HEAP || ESP.getMaxAllocHeap() <= BACKGROUND_BUILD_MIN_MAX_ALLOC) {
