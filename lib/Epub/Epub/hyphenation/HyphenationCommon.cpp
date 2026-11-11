@@ -48,11 +48,90 @@ uint32_t toLowerCyrillicImpl(const uint32_t cp) {
   return cp;
 }
 
+// Convert Greek uppercase letters to lowercase, covering both the basic block
+// (U+0370..U+03FF, monotonic) and Greek Extended (U+1F00..U+1FFF, polytonic).
+// The polytonic hyphenation patterns are written entirely in lowercase, so
+// every capital with breathing/accent/iota-adscript must map to its small form.
+uint32_t toLowerGreekImpl(const uint32_t cp) {
+  // Basic Greek capitals Α..Ρ, Σ..Ϋ -> +0x20 (U+03A2 is unassigned).
+  if ((cp >= 0x0391 && cp <= 0x03A1) || (cp >= 0x03A3 && cp <= 0x03AB)) {
+    return cp + 0x20;
+  }
+  // Monotonic accented capitals.
+  switch (cp) {
+    case 0x0386:
+      return 0x03AC;  // Ά -> ά
+    case 0x0388:
+    case 0x0389:
+    case 0x038A:
+      return cp + 0x25;  // Έ Ή Ί -> έ ή ί
+    case 0x038C:
+      return 0x03CC;  // Ό -> ό
+    case 0x038E:
+    case 0x038F:
+      return cp + 0x3F;  // Ύ Ώ -> ύ ώ
+    default:
+      break;
+  }
+
+  if (cp >= 0x1F00 && cp <= 0x1FFF) {
+    // U+1F00..U+1F6F and U+1F80..U+1FAF: each 16-codepoint row holds lowercase at
+    // +0..+7 and the matching capitals at +8..+15 (gaps are unassigned).
+    if ((cp <= 0x1F6F || (cp >= 0x1F80 && cp <= 0x1FAF)) && (cp & 0x8)) {
+      return cp - 8;
+    }
+    switch (cp) {
+      case 0x1FB8:
+      case 0x1FB9:
+        return cp - 8;  // Ᾰ Ᾱ -> ᾰ ᾱ
+      case 0x1FBA:
+      case 0x1FBB:
+        return cp - 0x4A;  // Ὰ Ά -> ὰ ά
+      case 0x1FBC:
+        return 0x1FB3;  // ᾼ -> ᾳ
+      case 0x1FC8:
+      case 0x1FC9:
+      case 0x1FCA:
+      case 0x1FCB:
+        return cp - 0x56;  // Ὲ Έ Ὴ Ή -> ὲ έ ὴ ή
+      case 0x1FCC:
+        return 0x1FC3;  // ῌ -> ῃ
+      case 0x1FD8:
+      case 0x1FD9:
+        return cp - 8;  // Ῐ Ῑ -> ῐ ῑ
+      case 0x1FDA:
+      case 0x1FDB:
+        return cp - 0x64;  // Ὶ Ί -> ὶ ί
+      case 0x1FE8:
+      case 0x1FE9:
+        return cp - 8;  // Ῠ Ῡ -> ῠ ῡ
+      case 0x1FEA:
+      case 0x1FEB:
+        return cp - 0x70;  // Ὺ Ύ -> ὺ ύ
+      case 0x1FEC:
+        return 0x1FE5;  // Ῥ -> ῥ
+      case 0x1FF8:
+      case 0x1FF9:
+        return cp - 0x80;  // Ὸ Ό -> ὸ ό
+      case 0x1FFA:
+      case 0x1FFB:
+        return cp - 0x7E;  // Ὼ Ώ -> ὼ ώ
+      case 0x1FFC:
+        return 0x1FF3;  // ῼ -> ῳ
+      default:
+        break;
+    }
+  }
+  return cp;
+}
+
 }  // namespace
 
 uint32_t toLowerLatin(const uint32_t cp) { return toLowerLatinImpl(cp); }
 
 uint32_t toLowerCyrillic(const uint32_t cp) { return toLowerCyrillicImpl(cp); }
+
+uint32_t toLowerGreek(const uint32_t cp) { return toLowerGreekImpl(cp); }
 
 bool isLatinLetter(const uint32_t cp) {
   if ((cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z')) {
@@ -82,7 +161,83 @@ bool isLatinLetter(const uint32_t cp) {
 
 bool isCyrillicLetter(const uint32_t cp) { return (cp >= 0x0400 && cp <= 0x052F); }
 
-bool isAlphabetic(const uint32_t cp) { return isLatinLetter(cp) || isCyrillicLetter(cp); }
+// Greek and Coptic (U+0370..U+03FF) plus Greek Extended (U+1F00..U+1FFF, polytonic).
+// Spacing diacritics, Greek punctuation and unassigned code points inside these blocks
+// are excluded so they act as word boundaries rather than letters.
+bool isGreekLetter(const uint32_t cp) {
+  if (cp >= 0x0370 && cp <= 0x03FF) {
+    switch (cp) {
+      case 0x0374:  // ʹ numeral sign
+      case 0x0375:  // ͵ lower numeral sign
+      case 0x037A:  // ͺ ypogegrammeni (spacing)
+      case 0x037E:  // ; Greek question mark
+      case 0x0384:  // ΄ tonos
+      case 0x0385:  // ΅ dialytika tonos
+      case 0x0387:  // · ano teleia
+      case 0x03F6:  // ϶ reversed lunate epsilon symbol
+      case 0x0378:  // unassigned
+      case 0x0379:
+      case 0x0380:
+      case 0x0381:
+      case 0x0382:
+      case 0x0383:
+      case 0x038B:
+      case 0x038D:
+      case 0x03A2:
+        return false;
+      default:
+        return true;
+    }
+  }
+  if (cp >= 0x1F00 && cp <= 0x1FFF) {
+    switch (cp) {
+      case 0x1FBD:  // ᾽ koronis
+      case 0x1FBF:  // ᾿ psili
+      case 0x1FC0:  // ῀ perispomeni
+      case 0x1FC1:  // ῁ dialytika perispomeni
+      case 0x1FCD:
+      case 0x1FCE:
+      case 0x1FCF:  // ῍ ῎ ῏
+      case 0x1FDD:
+      case 0x1FDE:
+      case 0x1FDF:  // ῝ ῞ ῟
+      case 0x1FED:
+      case 0x1FEE:
+      case 0x1FEF:  // ῭ ΅ `
+      case 0x1FFD:  // ´ oxia
+      case 0x1FFE:  // ῾ dasia
+      case 0x1F16:  // unassigned
+      case 0x1F17:
+      case 0x1F1E:
+      case 0x1F1F:
+      case 0x1F46:
+      case 0x1F47:
+      case 0x1F4E:
+      case 0x1F4F:
+      case 0x1F58:
+      case 0x1F5A:
+      case 0x1F5C:
+      case 0x1F5E:
+      case 0x1F7E:
+      case 0x1F7F:
+      case 0x1FB5:
+      case 0x1FC5:
+      case 0x1FD4:
+      case 0x1FD5:
+      case 0x1FDC:
+      case 0x1FF0:
+      case 0x1FF1:
+      case 0x1FF5:
+      case 0x1FFF:
+        return false;
+      default:
+        return true;
+    }
+  }
+  return false;
+}
+
+bool isAlphabetic(const uint32_t cp) { return isLatinLetter(cp) || isCyrillicLetter(cp) || isGreekLetter(cp); }
 
 bool isPunctuation(const uint32_t cp) {
   switch (cp) {

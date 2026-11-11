@@ -27,3 +27,7 @@ process pl
 process pt
 process sv
 process fi
+
+# NOTE: Greek (hyph-el.trie.h) is intentionally not processed here. It is built from
+# hyph-el-polyton.tex rather than hypher's monotonic el.bin; see the "Greek is built
+# separately" section in docs/hyphenation-trie-format.md for the procedure.
