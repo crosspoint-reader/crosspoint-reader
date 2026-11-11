@@ -29,6 +29,8 @@ def method(name, next_name, text=source):
 
 extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSelectionActivity::closestInRow")
 gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "bool ClipSelectionActivity::renderIncremental")
+confirm_label = method("int ClipSelectionActivity::selectedWordCount", "// Look up / Clip modes confirm directly").replace(
+    "const char* ClipSelectionActivity::confirmLabel", "int ClipSelectionActivity::confirmLabel")
 incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void ClipSelectionActivity::drawSelection")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
 word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
@@ -44,6 +46,7 @@ harness = r"""
 #include <cstdint>
 #include <climits>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <set>
 #include <span>
@@ -56,6 +59,7 @@ harness = r"""
 #undef LOG_DBG
 #define LOG_DBG(module, ...) (void)std::snprintf(nullptr, 0, __VA_ARGS__)
 #include "clippings/ClippingText.h"
+#include "clippings/SelectionActionPolicy.h"
 #include "ClippingStore.h"
 #include <Epub/ReaderRenderSpec.h>
 namespace BidiUtils { enum class BidiBaseDir : int8_t { AUTO = -1, LTR = 0, RTL = 1 }; }
@@ -292,7 +296,7 @@ struct ClipSelectionActivity {
 """ + word_box + action_helpers + r"""
   std::unique_ptr<WordBox[]> words = makeUniqueNoThrow<WordBox[]>(240);
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
-  enum class Mode { Clip, Lookup, DefinitionLookup };
+  enum class Mode { Clip, Lookup, DefinitionLookup, Select };
   Mode mode = Mode::Clip;
   bool lookupAvailable = true;
   Renderer renderer;
@@ -307,6 +311,8 @@ struct ClipSelectionActivity {
   int selected = 0, rangeStart = -1, currentPageOffset = 0;
   bool touchDragSelecting = false;
   bool isLookup() const { return mode != Mode::Clip; }
+  int selectedWordCount() const;
+  int confirmLabel() const;
   struct Popup { bool isActive() const { return false; } } actionPopup;
   int lastRenderedPageOffset = 0, lastRenderedSelected = 0, lastRenderedRangeStart = -1;
   int lastRenderedTextOffset = 0, lastRenderedTextXOffset = 0;
@@ -321,7 +327,7 @@ struct ClipSelectionActivity {
   Rect handleRect(int, bool) const { return {}; }
   Rect actionRect() const { return {}; }
 };
-""" + build_text + extract_words + gap_draw + incremental_draw + selection_draw + r"""
+""" + build_text + extract_words + confirm_label + gap_draw + incremental_draw + selection_draw + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -369,7 +375,8 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
 }
 int main() {
   for (bool images : {false, true}) for (auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH})
-    for (auto mode : {ClipSelectionActivity::Mode::Clip, ClipSelectionActivity::Mode::Lookup}) {
+    for (auto mode : {ClipSelectionActivity::Mode::Clip, ClipSelectionActivity::Mode::Lookup,
+                      ClipSelectionActivity::Mode::Select}) {
     ClipSelectionActivity pick;
     pick.mode = mode;
     pick.marginLeft = 11; pick.marginTop = 7;
@@ -415,7 +422,14 @@ int main() {
         assert(pick.pages[0]->renderCalls == 0 && pick.renderer.ink == beforeMove);
         cleanPaint();
       }
-      else assert(pick.pages[0]->renderCalls == 2);
+      else {
+        assert(pick.pages[0]->renderCalls == 2);
+        // Select mode looks up a single word directly; longer selections confirm into the action menu.
+        const bool lookupLabel = pick.mode == ClipSelectionActivity::Mode::Select
+                                     ? std::abs(next - pick.rangeStart) == 0
+                                     : pick.isLookup();
+        assert(GUI.confirmLabel == (lookupLabel ? STR_LOOKUP : STR_DONE));
+      }
       auto actual = pick.renderer.ink;
       cleanPaint();
       assert(pick.renderer.ink == actual);
