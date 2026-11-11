@@ -7,10 +7,12 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <climits>
 #include <cstdlib>
+#include <cstring>
 
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
@@ -42,6 +44,26 @@ const char* cleanWordStart(const char* text) {
     text += static_cast<uint8_t>(text[0]) == 0xC2 ? 2 : 1;
   }
   return text;
+}
+
+bool isCjkCodepoint(const uint32_t cp) {
+  return (cp >= 0x2E80 && cp <= 0x9FFF) || (cp >= 0xAC00 && cp <= 0xD7AF) || (cp >= 0xF900 && cp <= 0xFAFF) ||
+         (cp >= 0xFF00 && cp <= 0xFFEF) || (cp >= 0x20000 && cp <= 0x2FFFF);
+}
+
+bool startsWithCjk(const char* text) {
+  text = cleanWordStart(text);
+  if (*text == '\0') return false;
+  const auto* p = reinterpret_cast<const uint8_t*>(text);
+  return isCjkCodepoint(utf8NextCodepoint(&p));
+}
+
+bool endsWithCjk(const char* text) {
+  if (!text || *text == '\0') return false;
+  const char* start = text + strlen(text) - 1;
+  while (start > text && (static_cast<uint8_t>(*start) & 0xC0) == 0x80) --start;
+  const auto* p = reinterpret_cast<const uint8_t*>(start);
+  return isCjkCodepoint(utf8NextCodepoint(&p));
 }
 
 }  // namespace
@@ -455,7 +477,10 @@ int ClipSelectionActivity::selectedWordCount() const {
   const int last = std::max(rangeStart, selected);
   int count = 1;
   for (int i = first + 1; i <= last; ++i) {
-    if (startsNewWord(words[i - 1], words[i])) ++count;
+    // CJK has no spaces, so adjacent CJK boxes count separately (text export is unaffected).
+    if (startsNewWord(words[i - 1], words[i]) || endsWithCjk(words[i - 1].text) || startsWithCjk(words[i].text)) {
+      ++count;
+    }
   }
   return count;
 }

@@ -47,6 +47,7 @@ harness = r"""
 #include <climits>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <set>
 #include <span>
@@ -634,6 +635,11 @@ int main() {
   activity.words[1].startOffset = 7;
   assert(activity.selectedWordCount() == 2);
   activity.words[1].startOffset = 6;
+  // Adjacent CJK boxes count separately for the menu decision but export without separators.
+  activity.words[0].text = "漢";
+  activity.words[1].text = "字";
+  assert(activity.selectedWordCount() == 2);
+  expect(activity, 0, 1, "漢字");
   activity.words[0].text = "Café";
   activity.words[0].endOffset = 5;
   activity.words[0].discretionaryHyphen = false;
