@@ -14,8 +14,8 @@ action_helpers = "\n".join(line for line in header.splitlines()
 clean_word = "const char* cleanWordStart" + source.split("const char* cleanWordStart", 1)[1].split(
     "}  // namespace", 1
 )[0]
-build_text = "bool ClipSelectionActivity::buildSelectedText" + source.split(
-    "bool ClipSelectionActivity::buildSelectedText", 1
+build_text = "bool ClipSelectionActivity::startsNewWord" + source.split(
+    "bool ClipSelectionActivity::startsNewWord", 1
 )[1].split("void ClipSelectionActivity::confirmSelection", 1)[0]
 confirm_source = source.split("void ClipSelectionActivity::confirmSelection", 1)[1]
 memory_guard = "  const auto heap = HalMemory::getDefaultHeap();" + confirm_source.split(
@@ -317,6 +317,7 @@ struct ClipSelectionActivity {
   int lastRenderedPageOffset = 0, lastRenderedSelected = 0, lastRenderedRangeStart = -1;
   int lastRenderedTextOffset = 0, lastRenderedTextXOffset = 0;
   bool buildSelectedText(int first, int last, std::string& text) const;
+  static bool startsNewWord(const WordBox& previous, const WordBox& current);
   bool extractWords();
   void drawSelection() const;
   bool renderIncremental();

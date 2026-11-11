@@ -360,6 +360,13 @@ void ClipSelectionActivity::moveToPage(const int pageOffset) {
   }
 }
 
+bool ClipSelectionActivity::startsNewWord(const WordBox& previous, const WordBox& current) {
+  if (current.paragraphStart) return true;
+  const bool sourceKnown = previous.endOffset != UINT32_MAX && current.startOffset != UINT32_MAX;
+  return sourceKnown ? current.startOffset > previous.endOffset
+                     : current.row != previous.row || current.x > previous.x + previous.width + 2;
+}
+
 bool ClipSelectionActivity::buildSelectedText(const int first, const int last, std::string& text) const {
   text.clear();
   text.reserve(CLIPPING_TEXT_MAX);
@@ -386,13 +393,9 @@ bool ClipSelectionActivity::buildSelectedText(const int first, const int last, s
     const char* word = cleanWordStart(current.text);
     char separator = '\0';
     if (i > 0) {
-      const WordBox& previous = words[order[i - 1]];
-      const bool sourceKnown = previous.endOffset != UINT32_MAX && current.startOffset != UINT32_MAX;
-      const bool separated = sourceKnown ? current.startOffset > previous.endOffset
-                                         : current.row != previous.row || current.x > previous.x + previous.width + 2;
       if (current.paragraphStart) {
         separator = '\n';
-      } else if (separated) {
+      } else if (startsNewWord(words[order[i - 1]], current)) {
         separator = ' ';
       }
     }
