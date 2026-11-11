@@ -488,9 +488,12 @@ void EpubReaderActivity::idlePrewarmTick() {
 
   if (const auto p = section->loadPage(targetPage)) {
     const auto t0 = millis();
-    auto scope = fcm->createPrewarmScope();
+    auto scope = fcm->createPrewarmScope(idlePrewarmOffset > 0);
     p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);
-    scope.endScanAndPrewarm();
+    if (!scope.endScanAndPrewarm()) {
+      idlePrewarmOffset = maxLookahead;
+      return;
+    }
     LOG_DBG("ERS", "Idle prewarm: page %d in %lums", targetPage, millis() - t0);
     ++idlePrewarmOffset;
   } else {
@@ -1722,6 +1725,7 @@ void EpubReaderActivity::renderBook() {
   const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight);
 
   if (!section) {
+    idlePrewarmOffset = 0;
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));

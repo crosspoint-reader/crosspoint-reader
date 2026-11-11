@@ -331,6 +331,41 @@ void TtfEpdFont::flushFace(Face& f) {
   f.flushed = true;
 }
 
+void TtfEpdFont::trimToCore(Face& f, const size_t incomingBytes) {
+  if (f.miniMetadataOnly || f.flushed) {
+    flushFace(f);
+    return;
+  }
+  const size_t maxCoreGlyphs = (static_cast<size_t>(f.maxGlyphs) * 3) / 4;
+  const size_t maxCoreBytes = (f.cap * 3) / 4;
+  size_t keep = std::min(f.glyphs.size(), maxCoreGlyphs);
+  size_t keepUsed = 0;
+  while (keep > 0) {
+    const EpdGlyph& last = f.glyphs[keep - 1];
+    keepUsed = static_cast<size_t>(last.dataOffset) + last.dataLength;
+    if (keepUsed <= maxCoreBytes && keepUsed + incomingBytes <= f.cap) break;
+    --keep;
+    keepUsed = 0;
+  }
+  if (keep == 0) {
+    flushFace(f);
+    return;
+  }
+  size_t w = 0;
+  for (size_t r = 0; r < f.cps.size(); ++r) {
+    if (f.slot[r] < keep) {
+      f.cps[w] = f.cps[r];
+      f.slot[w] = f.slot[r];
+      ++w;
+    }
+  }
+  f.cps.resize(w);
+  f.slot.resize(w);
+  f.glyphs.resize(keep);
+  f.used = keepUsed;
+  f.flushed = true;
+}
+
 void TtfEpdFont::clearCache() {
   // Retain resident glyph data across PrewarmScopes (mirrors SdCardFont::resetStyleMiniData):
   // build() faults only missing codepoints against f.cps, which lets the idle
@@ -375,7 +410,7 @@ void TtfEpdFont::releaseResidentCaches() {
   }
 }
 
-const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
+const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool allowFlush) {
   if (!f.inited || (master_ && !master_->faces_[&f - faces_].ready)) initFace(f);
   if (!f.ready) return nullptr;
   {
@@ -407,7 +442,13 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
     px = 0;
     f.miniMetadataOnly = true;
   }
-  if (f.glyphs.size() >= f.maxGlyphs || f.used + bytes > f.cap) flushFace(f);
+  if (f.glyphs.size() >= f.maxGlyphs || f.used + bytes > f.cap) {
+    if (!allowFlush) {
+      f.flushed = true;
+      return nullptr;
+    }
+    trimToCore(f, bytes);
+  }
 
   // All growth below is exact and heap-checked (see reserveChecked). On a
   // failed grow, ask the memory manager to evict rebuildable caches (render
@@ -553,20 +594,30 @@ EpdFontFamily TtfEpdFont::family() const {
 }
 
 bool TtfEpdFont::build(const char* utf8, const uint8_t style) {
-  if (!loaded_ || style >= 4) return false;
+  if (!loaded_ || utf8 == nullptr || style >= 4) return false;
   Face& f = faces_[style];
   if (f.miniMetadataOnly) flushFace(f);
   f.flushed = false;
-  if (!addCoverage(utf8, style)) return false;
+  const auto* p = reinterpret_cast<const unsigned char*>(utf8);
+  while (*p != '\0') faultGlyph(f, utf8NextCodepoint(&p), /*allowFlush=*/true);
   // If faultGlyph() flushed the face mid-pass on capacity exhaustion, a second
-  // pass faults back the earlier codepoints of this page while hitting the cache
-  // for the tail already loaded after the flush.
-  return (f.flushed && !f.miniMetadataOnly) ? addCoverage(utf8, style) : true;
+  // pass faults back the earlier codepoints of this page without flushing again.
+  if (f.flushed && !f.miniMetadataOnly) {
+    if (addCoverage(utf8, style)) return true;
+    flushFace(f);
+    return addCoverage(utf8, style);
+  }
+  return !f.miniMetadataOnly;
 }
 bool TtfEpdFont::addCoverage(const char* utf8, const uint8_t style) {
   if (!loaded_ || utf8 == nullptr || style >= 4) return false;
+  Face& f = faces_[style];
+  f.flushed = false;
   const auto* p = reinterpret_cast<const unsigned char*>(utf8);
-  while (*p != '\0') faultGlyph(faces_[style], utf8NextCodepoint(&p));
+  while (*p != '\0') {
+    faultGlyph(f, utf8NextCodepoint(&p), /*allowFlush=*/false);
+    if (f.flushed || f.miniMetadataOnly) return false;
+  }
   return true;
 }
 

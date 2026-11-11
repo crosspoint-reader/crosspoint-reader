@@ -123,7 +123,7 @@ class TtfEpdFont {
     bool inited = false;            // init attempted (lazy)
     bool ready = false;             // FreeType face live
     bool miniMetadataOnly = false;  // bitmap allocation failed: advance-only
-    bool flushed = false;           // flushFace() ran during the current pass
+    bool flushed = false;           // flushFace() or trimToCore() ran during the current pass
     uint8_t initFailures = 0;       // consecutive failed initFace attempts
     // GSUB 'liga' resolution (fi fl ff ffi ffl), resolved once at initFace():
     // ligGid[i] is the raw glyph ID for U+FB00+i (0 = none), and ligPairs is
@@ -155,9 +155,10 @@ class TtfEpdFont {
   void initFace(Face& f);          // lazy: create the FT face on first use
   void setupFace(Face& f);         // wire data handlers + metrics
   void resolveLigatures(Face& f);  // query GSUB once, build ligGid/ligPairs
-  const EpdGlyph* faultGlyph(Face& f, uint32_t codepoint);
+  const EpdGlyph* faultGlyph(Face& f, uint32_t codepoint, bool allowFlush = true);
   int8_t faultKern(Face& f, uint32_t leftCp, uint32_t rightCp);
   static void flushFace(Face& f);
+  static void trimToCore(Face& f, size_t incomingBytes);
 
   struct FaceLock {
     FaceLock(TtfEpdFont* font, const size_t idx) : font_(font), idx_(idx) {
