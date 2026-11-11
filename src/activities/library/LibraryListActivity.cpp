@@ -87,9 +87,12 @@ const char* tabLabelFor(const int tab) {
 
 LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiTabListActivity("Library", renderer, mappedInput, true) {
-  // Four short tab labels: a full-slot pill would stretch across a quarter of
-  // the screen, so cap it at the label plus padding (slots stay put).
-  tabPillMaxPad = 16;
+  // Four tab labels share the bar. Equal quarters with 16 px of padding beside
+  // each label cut "Favorites" (and the active tab's sort arrow costs more), so
+  // the pill hugs its label with a small pad and each slot is sized to its own
+  // label plus an equal share of the spare width (see tabDistributeSlots).
+  tabPillMaxPad = 6;
+  tabDistributeSlots = true;
   // Recent starts newest first; Favorites, Title and Author start A-Z.
   descendingTabs = static_cast<uint8_t>(1u << RECENT_TAB);
 }
