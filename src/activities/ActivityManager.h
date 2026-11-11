@@ -8,6 +8,7 @@
 #include <cassert>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "GfxRenderer.h"
@@ -73,6 +74,13 @@ class ActivityManager {
   // The screen visit whose frame the render task painted last.
   std::atomic<uint32_t> paintedVisit{0};
 
+#if ENABLE_SERIAL_CONTROL
+  // For the serial test API: render passes started, and whether one is running (render() may let
+  // go of the render lock before it returns).
+  std::atomic<uint32_t> renderPassesStarted{0};
+  std::atomic<bool> renderPassActive{false};
+#endif
+
  public:
   explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput);
   ~ActivityManager();
@@ -133,6 +141,18 @@ class ActivityManager {
   // Trigger a render and block until it completes.
   // Must NOT be called from the render task or while holding a RenderLock.
   void requestUpdateAndWait();
+
+#if ENABLE_SERIAL_CONTROL
+  // For the serial test API (SerialTestApi.cpp). Main loop only.
+  bool hasPendingTransition() const { return pendingAction != PendingAction::None; }
+  // A frame is requested, being drawn, or waited for.
+  bool isRenderBusy() const;
+  uint32_t renderPassCount() const { return renderPassesStarted.load(std::memory_order_relaxed); }
+  // The screen in front ("none" without one) and the screens under it, bottom first.
+  std::string_view currentActivityName() const;
+  size_t stackedActivityCount() const { return stackActivities.size(); }
+  std::string_view stackedActivityName(size_t index) const;
+#endif
 };
 
 extern ActivityManager activityManager;  // singleton, to be defined in main.cpp

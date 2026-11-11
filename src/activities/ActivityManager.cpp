@@ -87,7 +87,14 @@ void ActivityManager::renderTaskLoop() {
       // The sleep screen forces normal polarity itself (SleepActivity).
       display.setInverted(SETTINGS.screenInverted != 0);
       const uint32_t renderingVisit = screenVisit;
+#if ENABLE_SERIAL_CONTROL
+      renderPassActive.store(true, std::memory_order_release);
+      renderPassesStarted.fetch_add(1, std::memory_order_relaxed);
+#endif
       currentActivity->render(std::move(lock));
+#if ENABLE_SERIAL_CONTROL
+      renderPassActive.store(false, std::memory_order_release);
+#endif
       paintedVisit.store(renderingVisit, std::memory_order_release);
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
@@ -544,3 +551,18 @@ void RenderLock::unlock() {
  *
  */
 bool RenderLock::peek() { return xQueuePeek(activityManager.renderingMutex, NULL, 0) != pdTRUE; };
+
+#if ENABLE_SERIAL_CONTROL
+bool ActivityManager::isRenderBusy() const {
+  // A frame the render task has been told about but not started shows none of these for an
+  // instant; the quiet window of CMD:IDLE (IdleGate) is long enough to see the pass that follows.
+  return requestedUpdate.load() || renderPassActive.load(std::memory_order_acquire) || waitingTaskHandle != nullptr ||
+         RenderLock::peek();
+}
+
+std::string_view ActivityManager::currentActivityName() const {
+  return currentActivity ? std::string_view(currentActivity->name) : std::string_view("none");
+}
+
+std::string_view ActivityManager::stackedActivityName(const size_t index) const { return stackActivities[index]->name; }
+#endif

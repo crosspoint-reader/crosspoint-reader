@@ -121,6 +121,13 @@ class HalGPIO {
   bool wasTouchActivity() const;
   void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
 
+#if ENABLE_SERIAL_CONTROL
+  // Buttons the serial test API holds down (1 << BTN_*), until the next call. They enter through
+  // the SDK's board-button hook, so they pass the same debounce, hold timing and remapping as a
+  // key. False when the board's own hook occupies it: no held buttons there.
+  bool holdSyntheticButtons(uint8_t mask);
+#endif
+
   // Verify that the physical power button remains held through input debounce.
   // Returns true if verification succeeded, false if device should return to sleep.
   // Should only be called when wakeup reason is PowerButton.
