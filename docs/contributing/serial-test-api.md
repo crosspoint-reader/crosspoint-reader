@@ -86,7 +86,9 @@ ending in `\n` (or `\r`, or both). Lines that do not start with `CMD:` are ignor
 stray keys do no harm. The main loop reads at most one command per pass and acts on it before it
 reads the next. Every command answers with exactly one line (`SCREENSHOT` adds its frame), and the
 reply's first word says what it is: `BTN_OK`, `ACT_ERROR:...`, `STATE:...`. An unknown command gets
-`CMD_ERROR:unknown command <text>`, a line longer than 255 bytes `CMD_ERROR:line too long`.
+`CMD_ERROR:unknown command <text>`, a line longer than 255 bytes `CMD_ERROR:line too long`. Such a
+line does not fit the USB receive buffer, so its end is usually lost: the error then comes with the
+next line end, and the command on that line is lost with it.
 
 A reply is sent when the command has been *accepted*, not when its effect is on screen: `BTN_OK`
 means the press is queued. Send `CMD:IDLE` after a command to wait until the device has handled it
