@@ -55,7 +55,7 @@ NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer
   if (LocalSendReceiveActivity::isAvailable()) {
     fui::ListItem item;
     item.label = "Local Send";
-    item.subtitle = "Receive files from nearby devices";
+    item.subtitle = I18N.get(StrId::STR_LOCAL_SEND_DESC);
     item.icon = listIconFor(UIIcon::Wifi, 32);
     item.actionValue = static_cast<int16_t>(rowCount_);
     rowModes_[rowCount_] = NetworkMode::LOCAL_SEND;
