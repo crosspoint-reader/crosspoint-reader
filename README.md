@@ -35,7 +35,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **USB Drive mode (X4Pro)**: access the SD card as USB mass storage.
 
-- **Library workflow**: indexed title/author search, recently-added and alphabetical views, multilingual grouping, folder browser, recent books, and SD-cache management.
+- **Library workflow**: indexed title/author search, a Favorites shelf (mark books from the Library or Browse Files hold menu), recently-added and alphabetical views, multilingual grouping, folder browser, recent books, and SD-cache management.
 
 - **Wireless workflows**:
   
@@ -262,10 +262,13 @@ cache. This cache directory exists at `.crosspoint` on the SD card. The structur
 │       └── ...
 ├── settings.json        # device settings
 ├── state.json           # resume/runtime state
-└── recent.json          # recent books list
+├── recent.json          # recent books list
+└── favorites.json       # books marked as favorites (Library and Browse Files hold menus)
 ```
 
-Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. Book deletes, overwrites, and moves done through the firmware or web UI clear or re-key matching caches; manual SD-card edits may leave stale cache directories behind.
+Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. It also deletes
+your settings, recent books and favorites, which cannot be regenerated; to keep them, copy `settings.json`,
+`recent.json` and `favorites.json` aside first and put them back afterwards. Book deletes, overwrites, and moves done through the firmware or web UI clear or re-key matching caches; manual SD-card edits may leave stale cache directories behind.
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 

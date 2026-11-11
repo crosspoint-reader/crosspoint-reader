@@ -8,6 +8,7 @@
 #include <functional>
 #include <string>
 
+#include "FavoritesStore.h"
 #include "WifiPowerSaveGuard.h"
 
 extern "C" void wolfSSL_Arduino_Serial_Print(const char* const msg) { LOG_DBG("WOLFSSL", "%s", msg); }
@@ -252,6 +253,9 @@ HttpDownloader::DownloadError HttpDownloader::postToFile(const std::string& url,
   if (!Storage.replaceFile(partPath.c_str(), destPath.c_str())) {
     LOG_ERR("HTTP", "Failed to move download into place: %s", destPath.c_str());
     Storage.remove(partPath.c_str());
+    // replaceFile removes an existing file before the rename; if it is gone,
+    // so is any favorite pointing at it (a no-op while the file exists).
+    FAVORITES.forgetIfGone(destPath.c_str());
     return FILE_ERROR;
   }
   LOG_DBG("HTTP", "Downloaded %zu bytes", downloaded);
@@ -303,6 +307,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   if (!Storage.replaceFile(partPath.c_str(), destPath.c_str())) {
     LOG_ERR("HTTP", "Failed to move download into place: %s", destPath.c_str());
     Storage.remove(partPath.c_str());
+    // replaceFile removes an existing file before the rename; if it is gone,
+    // so is any favorite pointing at it (a no-op while the file exists).
+    FAVORITES.forgetIfGone(destPath.c_str());
     return FILE_ERROR;
   }
   LOG_DBG("HTTP", "Downloaded %zu bytes", downloaded);

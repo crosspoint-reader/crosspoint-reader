@@ -21,6 +21,7 @@
 
 #include "BookKey.h"
 #include "CrossPointSettings.h"
+#include "FavoritesStore.h"
 #include "LcpPassphraseStore.h"
 #include "MappedInputManager.h"
 #include "OpdsTokenStore.h"
@@ -518,6 +519,10 @@ bool OpdsBookBrowserActivity::verifyAndRegisterEpub(const std::string& filename)
   if (!(magic[0] == 'P' && magic[1] == 'K' && magic[2] == 3 && magic[3] == 4)) {
     LOG_ERR("OPDS", "Downloaded file is not an EPUB (magic %02x%02x%02x%02x)", magic[0], magic[1], magic[2], magic[3]);
     Storage.remove(filename.c_str());
+    // The rejected download may have replaced a favorited book of the same
+    // name; whatever is at that path now (nothing, or the rejected file if
+    // the remove failed) is not that book, so its favorite goes.
+    FAVORITES.removeByPath(filename);
     fail(StrId::STR_OPDS_NOT_A_BOOK);
     return false;
   }

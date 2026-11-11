@@ -37,6 +37,7 @@
 #include "EpubReaderFootnoteSelectActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
+#include "FavoritesStore.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -188,6 +189,8 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     }
     if (!Storage.rename(dstPath.c_str(), srcPath.c_str())) {
       LOG_ERR("ERS", "Failed to restore epub after sidecar move failure: %s -> %s", dstPath.c_str(), srcPath.c_str());
+      // The book stays in the Read folder; keep its favorite pointing at it.
+      FAVORITES.updatePath(srcPath.c_str(), dstPath.c_str());
     }
     return;
   }
@@ -202,6 +205,7 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
   }
 
   RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, cacheMoved ? newCachePath : oldCachePath);
+  FAVORITES.updatePath(srcPath.c_str(), dstPath.c_str());
   if (APP_STATE.openEpubPath == srcPath) {
     APP_STATE.openEpubPath = dstPath;
     APP_STATE.saveToFile();

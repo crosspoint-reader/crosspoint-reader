@@ -7,13 +7,15 @@
 #include <string>
 #include <vector>
 
+#include "FavoritesStore.h"
 #include "RecentBooksStore.h"
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
 
 // One Library screen: every indexed book on the card shown by recency, title,
-// or author. The Recent shelf orders by file modification time (when a book
-// landed on the card) and pins the recently OPENED books from RecentBooksStore
+// or author, plus a Favorites shelf listing FavoritesStore by title. The
+// Recent shelf orders by file modification time (when a book landed on the
+// card) and pins the recently OPENED books from RecentBooksStore
 // on top, so active reads and fresh arrivals share one list.
 //
 // The two-slot row is the whole point rather than a styling choice: the problem
@@ -80,8 +82,10 @@ class LibraryListActivity final : public UiTabListActivity {
   void openBookByPath(const std::string& path);
   void promptRebuildIndex();
   void resetAfterRebuild();
-  // Recent-row long-press menu: open / remove from recents / delete / rebuild.
-  void showRecentBookOptions(int entry);
+  // Row long-press menu (Recent and Favorites shelves, search results):
+  // open / add or remove favorite / remove from recents / delete / rebuild.
+  void showBookOptions(int entry);
+  void toggleFavorite(const std::string& path, const std::string& title, const std::string& author, bool resolved);
   void promptRemoveRecentBook(const std::string& path, const std::string& title);
   // Long-press delete owns the gesture where grouping does not apply: the
   // Recent sort, degraded lists, and any active search result.
@@ -141,11 +145,30 @@ class LibraryListActivity final : public UiTabListActivity {
   // Direction-space translation of the matched rows. Call on sort toggles.
   void refreshOverlap();
 
+  // --- Favorites shelf --------------------------------------------------------
+  // The unfiltered Favorites tab lists FavoritesStore entries (not index rows),
+  // ordered by folded title; a search on that tab searches the whole library.
+  bool favoritesShelf() const;
+  // Swap Browse Files' file-name titles for the index's title and author.
+  void resolveFavorites();
+  // Rebuild favOrder from the store. Call whenever the store or the direction
+  // changes.
+  void refreshFavorites();
+  // Store position of the favorites-shelf row `entry`, or -1.
+  int favoriteFor(int entry) const;
+  // Keeps the list selection inside a list that just shrank.
+  void clampSelection();
+
   library::LibraryIndexFile index;
   int activeTabIndex = 0;
   library::SortOrder sortOrder = library::SortOrder::RecentDesc;
-  // One bit per tab; Recent starts descending (newest first).
-  uint8_t descendingTabs = 1u << 0;
+  // One bit per tab, set when that tab sorts descending. The constructor sets
+  // Recent's bit (newest first); the others start A-Z.
+  uint8_t descendingTabs = 0;
+  // Favorites shelf rows as store positions, in display order. Fixed-size so
+  // rebuilding it never allocates.
+  uint16_t favOrder[FavoritesStore::MAX_FAVORITES] = {};
+  uint16_t favCount = 0;
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;

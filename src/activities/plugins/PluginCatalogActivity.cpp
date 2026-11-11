@@ -25,6 +25,7 @@
 #include <type_traits>
 
 #include "CrossPointSettings.h"
+#include "FavoritesStore.h"
 #include "MappedInputManager.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
 #include "activities/settings/PluginHubInstallActivity.h"
@@ -1349,9 +1350,18 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
     if (!Storage.replaceFile((staged[i] + ".new").c_str(), staged[i].c_str())) {
       LOG_ERR("PCAT", "bundle swap failed: %s", staged[i].c_str());
       for (size_t j = i; j < staged.size(); j++) Storage.remove((staged[j] + ".new").c_str());
+      // Bundles can land in the books folder (the catalog's dest_dir), and
+      // replaceFile removes the old file before its rename: a favorited book
+      // there may be gone now (a no-op while it exists).
+      FAVORITES.forgetIfGone(staged[i].c_str());
       complete = true;  // already-swapped files stay; the rollback must not touch them
       return HttpDownloader::FILE_ERROR;
     }
+    // A swapped-in book (new, or replacing one at the same path) changes what
+    // the Library lists and what a favorite there shows: rebuild on the next
+    // Library entry, as downloadBook does. Marked per file, so files swapped
+    // before a later failure count too.
+    if (library::isLibraryBookFile(staged[i])) library::markLibraryIndexDirty();
   }
   complete = true;
   emitBookDownloaded(manifestPath, staged.empty() ? "" : staged.front(), item.title);
