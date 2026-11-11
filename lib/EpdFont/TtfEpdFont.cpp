@@ -412,7 +412,10 @@ void TtfEpdFont::releaseResidentCaches() {
 
 const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool allowFlush) {
   if (!f.inited || (master_ && !master_->faces_[&f - faces_].ready)) initFace(f);
-  if (!f.ready) return nullptr;
+  if (!f.ready) {
+    f.miniMetadataOnly = true;
+    return nullptr;
+  }
   {
     const auto it = std::lower_bound(f.cps.begin(), f.cps.end(), cp);
     if (it != f.cps.end() && *it == cp) return &f.glyphs[f.slot[static_cast<size_t>(it - f.cps.begin())]];
@@ -469,7 +472,10 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
   };
   if (!growTables()) {
     evictOthers();
-    if (!growTables()) return nullptr;
+    if (!growTables()) {
+      f.miniMetadataOnly = true;
+      return nullptr;
+    }
   }
   if (px && !reserveChecked(f.bmp, f.used + bytes, 4096, f.cap)) {
     evictOthers();
