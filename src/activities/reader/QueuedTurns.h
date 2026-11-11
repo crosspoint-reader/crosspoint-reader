@@ -28,3 +28,10 @@ constexpr QueuedForwardTurns splitQueuedForwardTurns(const int queued, const boo
   const int now = std::min(queued, onBuiltPages + 1);
   return {now, queued - now};
 }
+
+// Turns to keep for a later pass, out of those not applied in this one and those held back. They
+// are kept when the pass ran out of chapter (the next one has to load first) or applied all it was
+// given. A turn that failed, such as one before the first page, drops what was queued behind it.
+constexpr int queuedTurnsToCarry(const int unapplied, const int held, const bool leftTheChapter) {
+  return (unapplied == 0 || leftTheChapter) ? unapplied + held : 0;
+}

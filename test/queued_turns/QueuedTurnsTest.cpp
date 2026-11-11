@@ -46,3 +46,15 @@ TEST(QueuedTurns, AlreadyPastTheBuiltPagesStillTakesOnlyOne) {
   EXPECT_EQ(turns.now, 1);
   EXPECT_EQ(turns.held, 2);
 }
+
+TEST(QueuedTurns, HeldTurnsCarryOverOnceTheRestAreApplied) { EXPECT_EQ(queuedTurnsToCarry(0, 2, false), 2); }
+
+// Four queued on a chapter's last page: one crosses into the next chapter, three follow after it loads.
+TEST(QueuedTurns, TurnsLeftAtAChapterEdgeCarryIntoTheNextChapter) { EXPECT_EQ(queuedTurnsToCarry(3, 0, true), 3); }
+
+TEST(QueuedTurns, AFailedTurnDropsTheOnesBehindIt) { EXPECT_EQ(queuedTurnsToCarry(2, 0, false), 0); }
+
+TEST(QueuedTurns, NothingLeftMeansNothingCarried) {
+  EXPECT_EQ(queuedTurnsToCarry(0, 0, false), 0);
+  EXPECT_EQ(queuedTurnsToCarry(0, 0, true), 0);
+}
