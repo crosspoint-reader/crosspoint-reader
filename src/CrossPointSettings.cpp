@@ -113,6 +113,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["longPressSideNextFunction"] = longPressSideNextFunction;
   doc["longPressSidePrevFunction"] = longPressSidePrevFunction;
   doc["shortPwrBtn"] = shortPwrBtn;
+  doc["doublePwrBtn"] = doublePwrBtn;
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -276,6 +277,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   longPressSideNextFunction = loadLongPressFunction("longPressSideNextFunction", LONG_PRESS_PAGE_FUNCTION_COUNT);
   longPressSidePrevFunction = loadLongPressFunction("longPressSidePrevFunction", LONG_PRESS_PAGE_FUNCTION_COUNT);
   shortPwrBtn = clamp(doc["shortPwrBtn"] | (uint8_t)IGNORE, (uint8_t)SHORT_PWRBTN_COUNT, (uint8_t)IGNORE);
+  doublePwrBtn =
+      clamp(doc["doublePwrBtn"] | (uint8_t)((doc["doubleClickPwrLight"] | (uint8_t)1) ? PWR_FRONTLIGHT : IGNORE),
+            (uint8_t)SHORT_PWRBTN_COUNT, (uint8_t)PWR_FRONTLIGHT);
   if (BoardConfig::hasHomeKey() && doc["homeButtonLongPressAction"].isNull() &&
       !doc["longPressMenuFunction"].isNull()) {
     static constexpr HomeButtonAction LEGACY[] = {HomeButtonAction::Sync,       HomeButtonAction::Ignore,
