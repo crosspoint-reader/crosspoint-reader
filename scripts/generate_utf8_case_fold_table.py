@@ -4,8 +4,9 @@
 Walks every Unicode codepoint whose str.casefold() yields exactly one different
 codepoint and coalesces them into [start, end] ranges that step by 1 or 2 with
 a constant (folded - codepoint) delta. Codepoints whose fold expands to several
-codepoints (e.g. U+1E9E -> "ss") are skipped: a codepoint->codepoint fold
-can't represent them.
+codepoints are skipped: a codepoint->codepoint fold can't represent them.
+The exception is U+1E9E, whose full fold is "ss" but whose simple fold is
+U+00DF, so it is mapped to that.
 
 Requires a Python whose unicodedata is Unicode 16.0.0 (e.g. Python 3.14.x) to
 match the committed table exactly (and the word char table); a different
@@ -39,10 +40,11 @@ HEADER = """// Auto-generated simple (single-codepoint) Unicode case-folding tab
 // context-sensitive final-sigma form. Plain lower() can't do this — it leaves
 // ς unchanged, since it's already "lowercase".
 //
-// Special casings that expand to multiple codepoints (e.g. German capital
-// ẞ -> "ss") are skipped: those need multi-codepoint output, which a
-// codepoint->codepoint fold can't represent, and this table only needs a
-// stable single-codepoint key.
+// Special casings that expand to multiple codepoints are skipped: those need
+// multi-codepoint output, which a codepoint->codepoint fold can't represent,
+// and this table only needs a stable single-codepoint key. The one exception
+// is German capital ẞ (U+1E9E), whose full fold is "ss" but whose simple fold
+// (CaseFolding.txt, S) is U+00DF, so it is mapped to ß.
 #pragma once
 #include <cstdint>
 
