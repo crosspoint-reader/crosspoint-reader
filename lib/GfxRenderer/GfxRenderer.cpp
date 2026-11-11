@@ -1764,6 +1764,8 @@ void GfxRenderer::invertScreen() const {
 }
 
 HalDisplay::RefreshMode GfxRenderer::applyPromotedRefresh(const HalDisplay::RefreshMode refreshMode) const {
+  // A real paint came first: nothing interim is left for it to clean up.
+  transientPromotionPending_ = false;
   if (!promotedRefreshPending_) return refreshMode;
   promotedRefreshPending_ = false;
   return strongerRefresh(refreshMode, promotedRefresh_);
@@ -1778,6 +1780,10 @@ void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
 
 void GfxRenderer::displayTransient(const HalDisplay::RefreshMode refreshMode) const {
   display.displayBuffer(refreshMode, fadingFix);
+  if (transientPromotionPending_) {
+    transientPromotionPending_ = false;
+    promoteNextRefresh(transientPromotion_);
+  }
 }
 
 void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const {
@@ -2428,6 +2434,7 @@ void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
 
 bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
+  transientPromotionPending_ = false;  // a real paint, as in applyPromotedRefresh()
   const auto baseMode = promotedRefreshPending_ ? strongerRefresh(fallback, promotedRefresh_) : fallback;
   if (!display.displayGrayscaleBase(mode, baseMode, fadingFix)) return false;
   promotedRefreshPending_ = false;

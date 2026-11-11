@@ -228,6 +228,13 @@ void ActivityManager::loop() {
           stackActivities.back()->onExit();
           stackActivities.pop_back();
         }
+        // An exit that blanked the panel spent the promotion. If the next screen
+        // then shows a progress popup before its first paint, that paint must
+        // still be clean, so a transient frame re-arms it.
+        if (pendingAction == PendingAction::Replace && SETTINGS.cleanRefreshOnScreenChange &&
+            !renderer.hasPromotedRefresh()) {
+          renderer.promoteAfterTransient(HalDisplay::HALF_REFRESH);
+        }
       } else if (pendingAction == PendingAction::Push) {
         // Move current activity to stack
         stackActivities.push_back(std::move(currentActivity));

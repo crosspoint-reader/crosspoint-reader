@@ -81,6 +81,10 @@ class GfxRenderer {
   // Display entry points are const but must consume the flag.
   mutable bool promotedRefreshPending_ = false;
   mutable HalDisplay::RefreshMode promotedRefresh_ = HalDisplay::FAST_REFRESH;
+  // promoteAfterTransient(): the next displayTransient() arms this promotion;
+  // any real paint first drops it.
+  mutable bool transientPromotionPending_ = false;
+  mutable HalDisplay::RefreshMode transientPromotion_ = HalDisplay::FAST_REFRESH;
   // Swap in (and clear) the promoted mode, if one is pending.
   HalDisplay::RefreshMode applyPromotedRefresh(HalDisplay::RefreshMode refreshMode) const;
 
@@ -254,7 +258,19 @@ class GfxRenderer {
     return a < b ? a : b;
   }
   // Drops a pending promotion (the sleep screen paints its own refresh).
-  void cancelPromotedRefresh() const { promotedRefreshPending_ = false; }
+  void cancelPromotedRefresh() const {
+    promotedRefreshPending_ = false;
+    transientPromotionPending_ = false;
+  }
+  bool hasPromotedRefresh() const { return promotedRefreshPending_; }
+  // Promote the real paint that follows an interim frame: if the next frame
+  // shown is a displayTransient() one, it arms promoteNextRefresh(mode); a real
+  // paint before that drops this instead. For a screen change whose promotion
+  // the old screen already spent on its own clean exit.
+  void promoteAfterTransient(const HalDisplay::RefreshMode mode) const {
+    transientPromotion_ = mode;
+    transientPromotionPending_ = true;
+  }
   // displayBuffer() for an interim frame that the screen's real paint will replace
   // (popups, loading progress, image placeholders): sends `refreshMode` as asked and
   // leaves a pending promotion for that real paint instead of spending it here.
