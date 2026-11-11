@@ -78,8 +78,12 @@ namespace {
 // v68: Leave text below drop caps unsplit until it is laid out at full width.
 // v69: Line spacing multiplies font size instead of advanceY.
 // v70: SD-font layout rounds each scaled glyph advance to match drawing.
-// v71: Apply visibility and image suppression before table layout and anchor selection.
-constexpr uint8_t SECTION_FILE_VERSION = 71;
+// v71: Focus split offsets follow the visual run order for RTL words.
+// v72: Make ruby rendering closer to how Chromium renders ruby by default.
+// v73: TrueType vector fonts load and advance .notdef for missing glyphs.
+// v74: TrueType advances defer rounding until pixel placement.
+// v75: Apply visibility and image suppression before table layout and anchor selection.
+constexpr uint8_t SECTION_FILE_VERSION = 75;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

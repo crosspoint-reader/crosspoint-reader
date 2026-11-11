@@ -90,13 +90,43 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 71
+### Version 75
 
 The serialized layout is unchanged. Non-visible elements, pagebreak markers, and
 suppressed images are skipped before table layout and anchor selection. In
 particular, suppressed table images no longer contribute alt text. Older
 completed and partial section caches rebuild automatically so page numbers and
 fragment destinations use the same layout. Book metadata and progress are kept.
+
+### Version 74
+
+Version 74 keeps the binary layout and rebuilds completed and partial sections.
+Runtime TrueType advances no longer round up before the final pixel snap, which
+can change cached line breaks and word positions. Bitmap fonts and `.cpfont`
+files are unchanged. Book metadata and saved progress are kept.
+
+### Version 73
+
+Version 73 keeps the binary layout and rebuilds completed and partial sections.
+TrueType vector fonts now render and advance the .notdef glyph for missing
+characters instead of omitting them. Cached line breaks and word positions change
+for text containing glyph fallbacks. Book metadata and saved progress are kept.
+
+### Version 72
+
+Version 72 makes ruby layout closer to how Chromium browser render text with
+ruby characters by default (`ruby-align: space-around; ruby-overhang: auto;`)
+Ruby annotation can overhang neighboring base text by at most the smaller of
+half the ruby edge-character width and 1/4 of the neighboring word width. When
+the ruby annotation is wider than its base text, spacing is inserted between
+every character in the base text as well as at the start and the end of the
+base text so that it becomes the same length as the ruby annotation.
+
+### Version 71
+
+Version 71 keeps the binary layout and rebuilds completed and partial sections.
+Focus split offsets now locate the bold prefix in RTL words and the regular
+suffix in LTR words. Book metadata and saved progress are kept.
 
 ### Version 70
 
@@ -663,6 +693,7 @@ build-assigned discovery counter — breaks ties and carries books whose
 filesystem reports no time. Fold version 3 introduced the timestamp key; a
 fold bump rebuilds ranks while preserving `firstSeen`.
 Fold version 4 preserves leading articles in title sort and search keys.
+Fold version 5 drops all Unicode 18.0 Hebrew combining marks, including U+05C8 and U+05C9.
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
 

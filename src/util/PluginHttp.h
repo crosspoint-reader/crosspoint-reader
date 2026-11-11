@@ -69,8 +69,8 @@ std::string inPluginDir(const std::string& pluginDir, const char* path);
 bool loadTokenFromFile(const std::string& file, const std::string& path, std::string& out);
 
 // Writes `value` at `path` into `file`, building the nesting the read path
-// expects (numeric segments unsupported). Removes the file on a short write so
-// a truncated token is never persisted.
+// expects (numeric segments unsupported). Uses Storage.writeFile to keep the
+// previous file on a short write or failed close.
 bool saveTokenToFile(const std::string& file, const std::string& path, const std::string& value);
 
 // Loads a flat JSON config file into {cfg.KEY} pairs. Missing file = empty.
@@ -88,6 +88,17 @@ void loadConfigFile(const std::string& file, Headers& out);
 int request(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
             const std::string& body, const Headers& headers, String& out, size_t maxResponse,
             Headers* responseHeaders = nullptr, const std::function<bool()>& shouldAbort = nullptr);
+
+// Same request, nothing buffered: onStart gets the status, the headers and the
+// body length (-1 if unknown) once, before the first body bytes; onData gets
+// each piece as it arrives. Either returning false stops the request. Returns
+// the status, or -1 if the request failed or onStart refused it. `complete` is
+// false if the body was cut short or a callback stopped it.
+using StreamStart = std::function<bool(int status, const Headers& headers, long contentLength)>;
+using StreamData = std::function<bool(const uint8_t* data, size_t len)>;
+int requestStream(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,
+                  const std::string& body, const Headers& headers, const StreamStart& onStart, const StreamData& onData,
+                  bool& complete, const std::function<bool()>& shouldAbort = nullptr);
 
 // Same request, body streamed to a file on SD instead of DRAM.
 int requestToFile(freeink::SecureHttpClient* session, const std::string& url, const std::string& method,

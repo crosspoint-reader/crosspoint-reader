@@ -388,6 +388,7 @@ def main():
         shutil.rmtree(output_base)
 
     output_base.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(EPDFONTS_DIR.parent.parent / "licenses/fonts.txt", output_base / "LICENSE")
 
     # Download phase (sequential — avoids hammering servers)
     print(f"\n=== Resolving {len(families)} font families ===\n")

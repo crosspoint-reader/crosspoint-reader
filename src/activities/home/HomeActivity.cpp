@@ -183,7 +183,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
         if (FsHelpers::hasReflowableBookExtension(book.path)) {
           Epub epub(book.path, "/.crosspoint");
           // Skip loading css since we only need metadata here
-          epub.load(false, true);
+          const bool cacheLoaded = epub.load(false, true);
 
           // Try to generate thumbnail image for Continue Reading card
           if (!showingLoading) {
@@ -191,7 +191,10 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
           }
           GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-          bool success = epub.generateThumbBmp(thumbHeight);
+          // Without a book cache (e.g. after "Delete Book Cache") there is no cached metadata,
+          // so read the cover location straight from the EPUB.
+          bool success =
+              cacheLoaded ? epub.generateThumbBmp(thumbHeight) : epub.generateThumbBmpFromSource(thumbHeight);
           if (!success) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
             book.coverBmpPath = "";
@@ -278,6 +281,7 @@ bool HomeActivity::storeCoverBuffer() {
     return false;
   }
   coverBufferSize = needed;
+  coverBufferInverted = display.isInverted();
   if (!renderer.copyRegionToBuffer(coverRectX, coverRectY, coverRectW, coverRectH, coverBuffer, coverBufferSize)) {
     free(coverBuffer);
     coverBuffer = nullptr;
@@ -473,33 +477,46 @@ void HomeActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
   if (coverGridUi) {
-    coverGridUi->setSelection(selectorIndex);
-    UITheme::getInstance().drawCoverGridHome(*coverGridUi);
-    // Front Left/Right walk the tabs, so their hints read Left/Right; the
-    // side page buttons (unhinted) walk the covers.
-    const auto labels = mappedInput.mapLabels(hasContinueReading ? tr(STR_RESUME) : "", tr(STR_SELECT),
-                                              tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH
-                                                                   : HalDisplay::FAST_REFRESH);
+    const auto drawGrid = [&] {
+      renderer.clearScreen();
+      coverGridUi->setSelection(selectorIndex);
+      UITheme::getInstance().drawCoverGridHome(*coverGridUi);
+      // Front Left/Right walk the tabs, so their hints read Left/Right; the
+      // side page buttons (unhinted) walk the covers.
+      const auto labels = mappedInput.mapLabels(hasContinueReading ? tr(STR_RESUME) : "", tr(STR_SELECT),
+                                                tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    };
+    drawGrid();
     // Slot heights are recorded during the draw above; a change (first layout
     // pass, orientation switch) means the paths must point at those sizes and
-    // any missing thumbs must be generated. Refreshing the paths right away
-    // lets the next pass draw already-cached thumbs before generation runs.
-    const bool coverSpecChanged = coverGridUi->takeThumbHeightChanged();
-    if (coverSpecChanged) {
+    // any missing thumbs must be generated. Resolve the covers before the
+    // panel is touched and redraw into the framebuffer, so Home paints once
+    // instead of three e-ink refreshes (placeholder, placeholder, covers).
+    if (coverGridUi->takeThumbHeightChanged()) {
       coverGridUi->refreshCoverPaths();
       recentsLoaded = false;
     }
-    if (!firstRenderDone) {
-      firstRenderDone = true;
-      requestUpdate();
-    } else if (!recentsLoaded && !recentsLoading) {
+    if (!recentsLoaded && !recentsLoading) {
       loadRecentCovers(CoverGridHomeUi::THUMB_HEIGHT);
       coverGridUi->refreshCoverPaths();
-      requestUpdate();
+      drawGrid();
+      if (coverGridUi->takeThumbHeightChanged()) {
+        coverGridUi->refreshCoverPaths();
+        recentsLoaded = false;
+        requestUpdate();
+      }
     }
+    renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH
+                                                                   : HalDisplay::FAST_REFRESH);
+    firstRenderDone = true;
     return;
+  }
+  // A cover snapshot from the other output polarity holds the other byte form (night mode keeps images pre-inverted so
+  // they stay positive): pasting it back after a theme switch showed the cover as a negative. Redraw it instead.
+  if (coverBufferStored && coverBufferInverted != display.isInverted()) {
+    freeCoverBuffer();
+    coverRendered = false;
   }
   bool bufferRestored = coverRendered && coverBufferStored && restoreCoverBuffer();
 
