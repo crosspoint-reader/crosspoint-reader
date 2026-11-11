@@ -149,11 +149,11 @@ class Dictionary {
 
   // Comparator used to bisect/scan an index. lookup() picks which one to pass:
   // diskOrderCmp (ASCII-insensitive with an exact-byte tiebreak, non-ASCII bytes compared raw
-  // — matches the .idx/.syn's actual on-disk order) for the exact-case
-  // attempt, or utf8CaseInsensitiveCmp (full Unicode fold) for the case-folded
-  // retry. Passed through explicitly rather than hardcoded so the same
-  // bisect/scan code serves both without duplicating it. Only the former
-  // matches the on-disk sort order.
+  // — matches the .idx/.syn's actual on-disk order) for the exact-case attempt
+  // and the first case-folded retry, or utf8CaseInsensitiveCmp (full Unicode
+  // fold) for the last-resort retry. Passed through explicitly rather than
+  // hardcoded so the same bisect/scan code serves all of them without
+  // duplicating it. Only diskOrderCmp matches the on-disk sort order.
   using WordCmp = int (*)(const char*, const char*);
 
   // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
