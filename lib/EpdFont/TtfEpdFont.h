@@ -122,8 +122,9 @@ class TtfEpdFont {
     bool wantItalic = false;        // request italic from the source (axis or oblique)
     bool inited = false;            // init attempted (lazy)
     bool ready = false;             // FreeType face live
-    bool miniMetadataOnly = false;  // bitmap allocation failed: advance-only
+    bool miniMetadataOnly = false;  // bitmap allocation failed: advance-only glyph inserted
     bool flushed = false;           // flushFace() or trimToCore() ran during the current pass
+    bool faultFailed = false;       // face init or table grow failed (no corrupt glyph inserted)
     uint8_t initFailures = 0;       // consecutive failed initFace attempts
     // GSUB 'liga' resolution (fi fl ff ffi ffl), resolved once at initFace():
     // ligGid[i] is the raw glyph ID for U+FB00+i (0 = none), and ligPairs is

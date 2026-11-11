@@ -328,6 +328,7 @@ void TtfEpdFont::flushFace(Face& f) {
   f.kernVals.clear();
   f.used = 0;
   f.miniMetadataOnly = false;
+  f.faultFailed = false;
   f.flushed = true;
 }
 
@@ -413,7 +414,7 @@ void TtfEpdFont::releaseResidentCaches() {
 const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool allowFlush) {
   if (!f.inited || (master_ && !master_->faces_[&f - faces_].ready)) initFace(f);
   if (!f.ready) {
-    f.miniMetadataOnly = true;
+    f.faultFailed = true;
     return nullptr;
   }
   {
@@ -473,7 +474,7 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
   if (!growTables()) {
     evictOthers();
     if (!growTables()) {
-      f.miniMetadataOnly = true;
+      f.faultFailed = true;
       return nullptr;
     }
   }
@@ -604,25 +605,28 @@ bool TtfEpdFont::build(const char* utf8, const uint8_t style) {
   Face& f = faces_[style];
   if (f.miniMetadataOnly) flushFace(f);
   f.flushed = false;
+  f.faultFailed = false;
   const auto* p = reinterpret_cast<const unsigned char*>(utf8);
   while (*p != '\0') faultGlyph(f, utf8NextCodepoint(&p), /*allowFlush=*/true);
   // If faultGlyph() flushed the face mid-pass on capacity exhaustion, a second
   // pass faults back the earlier codepoints of this page without flushing again.
-  if (f.flushed && !f.miniMetadataOnly) {
+  if (f.flushed && !f.miniMetadataOnly && !f.faultFailed) {
     if (addCoverage(utf8, style)) return true;
+    if (f.miniMetadataOnly || f.faultFailed) return false;
     flushFace(f);
     return addCoverage(utf8, style);
   }
-  return !f.miniMetadataOnly;
+  return !f.miniMetadataOnly && !f.faultFailed;
 }
 bool TtfEpdFont::addCoverage(const char* utf8, const uint8_t style) {
   if (!loaded_ || utf8 == nullptr || style >= 4) return false;
   Face& f = faces_[style];
   f.flushed = false;
+  f.faultFailed = false;
   const auto* p = reinterpret_cast<const unsigned char*>(utf8);
   while (*p != '\0') {
     faultGlyph(f, utf8NextCodepoint(&p), /*allowFlush=*/false);
-    if (f.flushed || f.miniMetadataOnly) return false;
+    if (f.flushed || f.miniMetadataOnly || f.faultFailed) return false;
   }
   return true;
 }
