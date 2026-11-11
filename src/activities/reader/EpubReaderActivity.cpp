@@ -257,7 +257,7 @@ bool EpubReaderActivity::loadBook() {
   const bool uncached = !Storage.exists((loadedEpub->getCachePath() + "/book.bin").c_str());
   if (uncached) {
     disableFastInitialRefresh();
-    GUI.drawPopup(renderer, tr(STR_INDEXING));
+    GUI.drawPopup(renderer, tr(STR_INDEXING), /*transient=*/true);
   }
 
   bool loaded;
@@ -412,7 +412,7 @@ bool EpubReaderActivity::buildTickHeapGate() {
 
 void EpubReaderActivity::showBuildPopup(GfxRenderer& renderer, int& pagesUntilFullRefresh) {
   if (!buildPopupPending || !renderer.hasFrameBuffer()) return;
-  GUI.drawPopup(renderer, tr(STR_INDEXING));
+  GUI.drawPopup(renderer, tr(STR_INDEXING), /*transient=*/true);
   pagesUntilFullRefresh = 1;
   buildPopupPending = false;
 }
@@ -1726,10 +1726,10 @@ void EpubReaderActivity::renderBook() {
 
       const bool needsFullBuild = pendingPercentJump;
       if (needsFullBuild) {
-        GUI.drawPopup(renderer, tr(STR_INDEXING));
+        GUI.drawPopup(renderer, tr(STR_INDEXING), /*transient=*/true);
         pagesUntilFullRefresh = 1;
         const auto popupFn = [this]() {
-          if (renderer.hasFrameBuffer()) GUI.drawPopup(renderer, tr(STR_INDEXING));
+          if (renderer.hasFrameBuffer()) GUI.drawPopup(renderer, tr(STR_INDEXING), /*transient=*/true);
         };
         if (!makeRoomForChapterBuild()) {
           section.reset();
@@ -1767,7 +1767,7 @@ void EpubReaderActivity::renderBook() {
                                              target > BUILD_POPUP_PAGE_THRESHOLD);
           }
           if (showPopup) {
-            GUI.drawPopup(renderer, tr(STR_INDEXING));
+            GUI.drawPopup(renderer, tr(STR_INDEXING), /*transient=*/true);
             pagesUntilFullRefresh = 1;
           }
           buildPopupPending = !showPopup;
@@ -1869,7 +1869,7 @@ void EpubReaderActivity::renderBook() {
     return;
   }
   if (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
-    GUI.drawPopup(renderer, tr(STR_INDEXING));
+    GUI.drawPopup(renderer, tr(STR_INDEXING), /*transient=*/true);
     pagesUntilFullRefresh = 1;
   }
   while (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
@@ -2154,7 +2154,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   if (pageHasImagesNeedingDecode) {
     page->renderWithImagePlaceholders(renderer, fontId, orientedMarginLeft, orientedMarginTop);
     renderStatusBar();
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    // Interim frame, replaced below within this render: leave any pending clean
+    // refresh (screen change) for the real page.
+    renderer.displayTransient(HalDisplay::FAST_REFRESH);
     renderer.clearScreen();
   }
 
@@ -2172,6 +2174,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     }
     LOG_DBG("ERS", "UC8279 image page: absolute quality waveform");
     pagesUntilFullRefresh = 1;
+  } else if (pageHasImages && SETTINGS.screenInverted) {
+    // Night mode draws inverted pages B/W only (the display driver skips the
+    // gray planes while inverted), so an image page leaves no gray residue to
+    // clean. Keep the normal cadence instead of forcing HALF on the next page:
+    // in night mode that waveform shows the page light before it settles dark.
+    if (manualRefreshPending) pagesUntilFullRefresh = 1;
+    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
   } else if (pageHasImages) {
     // Image pages use one base refresh before the grayscale pass. FAST leaves
     // the panel receptive to the gray waveform; pending cleanup still honors

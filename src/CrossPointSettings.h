@@ -330,6 +330,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepTimeoutMinutes = 10;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
+  // Clean (HALF) refresh on the first paint after a screen change, so the old
+  // screen does not ghost through the new one (1 = enabled, 0 = disabled)
+  uint8_t cleanRefreshOnScreenChange = 1;
   uint8_t hyphenationEnabled = 0;
 
   // Reader screen margin settings

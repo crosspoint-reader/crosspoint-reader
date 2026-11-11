@@ -207,6 +207,19 @@ void ActivityManager::loop() {
       // Current activity has requested a new activity to be launched
       RenderLock lock;
 
+      // A Replace is a move to a different full screen (Home, Library, Browse
+      // Files, a book, Settings). Its first paint is FAST by default, which
+      // leaves the old screen ghosting through, so promote the next real paint
+      // to a clean HALF, whichever path draws it (render task, onEnter, or a
+      // screen it pushes at once). Popups and other interim frames use
+      // GfxRenderer::displayTransient and leave the promotion pending. Armed
+      // before the old screen's onExit, so an exit that already blanks the panel
+      // with its own HALF (BmpViewer) takes it instead of a second one landing
+      // on the next screen. Push (dialogs, panels) stays FAST.
+      if (pendingAction == PendingAction::Replace && SETTINGS.cleanRefreshOnScreenChange) {
+        renderer.promoteNextRefresh(HalDisplay::HALF_REFRESH);
+      }
+
       if (pendingAction == PendingAction::Replace || pendingAction == PendingAction::ReplaceForSleep) {
         // Destroy the current activity
         exitActivity(lock);
@@ -223,6 +236,9 @@ void ActivityManager::loop() {
         HeaderBackTapTarget::clear();
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
       }
+      // The sleep screen cleans itself and must not inherit a pending promotion
+      // (Quick Resume relies on FAST).
+      if (pendingAction == PendingAction::ReplaceForSleep) renderer.cancelPromotedRefresh();
       ++screenVisit;
       pendingAction = PendingAction::None;
       currentActivity = std::move(pendingActivity);
