@@ -214,6 +214,13 @@ TEST(MixedDirection, ArabicIndicNumerals) {
             (CP{0x0661, 0x0662, 0x0663, ' ', 0xFE8F, 0xFE8E, 0xFE98, 0xFEDB}));
 }
 
+// (שלום) abc — the brackets must be mirrored while the line is still in logical order (UAX #9 L4),
+// before the visual reordering; otherwise the wrong characters get mirrored.
+TEST(MixedDirection, BracketsMirrorBeforeReordering) {
+  EXPECT_EQ(shapeVisual({'(', 0x05E9, 0x05DC, 0x05D5, 0x05DD, ')', ' ', 'a', 'b', 'c'}),
+            (CP{'a', 'b', 'c', ' ', '(', 0x05DD, 0x05D5, 0x05DC, 0x05E9, ')'}));
+}
+
 // Watch-item regression probe for the "random spaces" report from #2398
 // testing: spaces must be neither duplicated nor dropped by the pipeline.
 TEST(MixedDirection, SpaceCountPreserved) {

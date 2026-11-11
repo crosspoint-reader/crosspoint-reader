@@ -28,37 +28,164 @@
   --warning-border: #e7d4a8;
   --info-color: #487690;
   --secondary-color: #76668b;
+  --shadow-sm: 0 1px 3px #0000001a, 0 1px 2px -1px #0000001a;
+  --backdrop: rgb(0 0 0 / 50%);
 }
 
-@media (prefers-color-scheme: dark)  {
-  :root  {
-    color-scheme: dark;
-    --font-color: #fafaf9;
-    --bg: #242321;
-    --title-color: #fafaf9;
-    --card-bg: #302e2b;
-    --label-color: #d6d3d1;
-    --border-color: #504b45;
-    --control-border: #78716c;
-    --muted-color: #a8a29e;
-    --accent-color: #8fb9a6;
-    --accent-color-10: #35473d;
-    --accent-hover-color: #b3cfc2;
-    --toggle-bg: #57534e;
-    --button-bg: #8fb9a6;
-    --button-hover: #b3cfc2;
-    --button-text: #1c1917;
-    --success-color: #8fb9a6;
-    --danger-color: #fca5a5;
-    --danger-hover: #fecaca;
-    --danger-bg: #492d2b;
-    --danger-border: #81504a;
-    --warning-text: #e7d4a8;
-    --warning-bg: #403728;
-    --warning-border: #7e6940;
-    --info-color: #a3c3d5;
-    --secondary-color: #c0b2d0;
-  }
+/* Settings-style list rows and toggles, used by Settings, Fonts, and plugin cards. */
+.web-ui .setting-row,
+.web-ui .family {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+.web-ui .setting-row:last-child,
+.web-ui .family:last-child {
+  border-bottom: none;
+}
+.web-ui .setting-name {
+  font-weight: 500;
+  color: var(--label-color);
+  flex: 1;
+  min-width: 0;
+  padding-right: 12px;
+}
+.web-ui .setting-control {
+  flex-shrink: 0;
+}
+.web-ui .setting-control select {
+  min-width: 160px;
+}
+.web-ui .setting-control input[type="text"],
+.web-ui .setting-control input[type="password"] {
+  width: 220px;
+}
+.web-ui .setting-control input[type="number"] {
+  width: 80px;
+}
+/* Toggle switch */
+.web-ui .toggle-switch {
+  display: inline-block;
+  position: relative;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+}
+.web-ui .toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.web-ui .toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--toggle-bg);
+  border-radius: 26px;
+  transition: 0.3s;
+}
+.web-ui .toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--button-text);
+  border-radius: 50%;
+  transition: 0.3s;
+}
+.web-ui .toggle-switch input:checked + .toggle-slider {
+  background-color: var(--accent-color);
+}
+.web-ui .toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(22px);
+}
+
+/* SD-card plugin cards on the File Manager and Plugins pages. */
+#plugin-container {
+  display: grid;
+  gap: 15px;
+  margin: 15px 0;
+}
+#plugin-container .card {
+  margin: 0;
+  border: 1px solid var(--border-color);
+}
+#plugin-container .setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 280px);
+  gap: 16px;
+  padding: 12px 0;
+}
+#plugin-container .setting-name {
+  font-weight: 600;
+}
+#plugin-container .setting-control {
+  min-width: 0;
+}
+#plugin-container input[type="text"],
+#plugin-container input[type="password"],
+#plugin-container input[type="number"],
+#plugin-container select,
+#plugin-container textarea {
+  width: 100%;
+}
+#plugin-container textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+#plugin-container .btn-small {
+  border: 1px solid var(--accent-color);
+  border-radius: 6px;
+  background: var(--accent-color-10);
+  color: var(--accent-color);
+  font-weight: 600;
+}
+#plugin-container .btn-small:hover:not(:disabled) {
+  background: var(--border-color);
+}
+#plugin-container .btn-add {
+  border-color: var(--button-bg);
+  background: var(--button-bg);
+  color: var(--button-text);
+}
+#plugin-container .btn-add:hover:not(:disabled) {
+  background: var(--button-hover);
+}
+#plugin-container input:disabled,
+#plugin-container select:disabled,
+#plugin-container textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+#plugin-container hr {
+  margin: 18px 0;
+  border: 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.web-ui .loader-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
+}
+.web-ui .loader {
+  width: 48px;
+  height: 48px;
+  border: 5px solid var(--border-color);
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  box-sizing: border-box;
+  animation: rotation 1s linear infinite;
+}
+@keyframes rotation {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 body.web-ui  {
@@ -179,7 +306,7 @@ body.web-ui  {
   border-radius: 16px;
   padding: 32px;
   margin: 24px 0;
-  box-shadow: 0 0 0 1px #1c19170d, 0 1px 3px #0000001a, 0 1px 2px -1px #0000001a;
+  box-shadow: 0 0 0 1px #1c19170d, var(--shadow-sm);
 }
 
 .web-ui .card h2  {
@@ -187,17 +314,12 @@ body.web-ui  {
   line-height: 28px;
 }
 
-@media (prefers-color-scheme: dark)  {
-  .web-ui .card  {
-    box-shadow: 0 0 0 1px var(--border-color), 0 1px 3px #0000001a, 0 1px 2px -1px #0000001a;
-  }
-}
-
-.web-ui button, .web-ui input, .web-ui select  {
+.web-ui button, .web-ui input, .web-ui select, .web-ui textarea  {
   font-family: inherit;
 }
 
 .web-ui button  {
+  cursor: pointer;
   transition: background-color .15s, box-shadow .15s;
 }
 
@@ -206,13 +328,14 @@ body.web-ui  {
   opacity: .6;
 }
 
-.web-ui :focus-visible  {
+.web-ui :focus-visible,
+.web-ui .toggle-switch input:focus-visible + .toggle-slider  {
   outline: 3px solid var(--accent-color);
   outline-offset: 3px;
 }
 
 .web-ui .action-btn, .web-ui .save-btn, .web-ui .btn,
-.web-ui .folder-btn, .web-ui .upload-btn,
+.web-ui .folder-btn, .web-ui .upload-btn, .web-ui .delete-btn-confirm,
 .web-ui .rename-btn-confirm, .web-ui .move-btn-confirm  {
   background: var(--button-bg);
   color: var(--button-text);
@@ -223,12 +346,24 @@ body.web-ui  {
   line-height: 20px;
   font-size: 14px;
   font-weight: 600;
-  box-shadow: 0 1px 3px #0000001a, 0 1px 2px -1px #0000001a;
+  box-shadow: var(--shadow-sm);
 }
 
-.web-ui .action-btn:hover, .web-ui .save-btn:hover, .web-ui .btn-primary:hover,
-.web-ui .folder-btn:hover, .web-ui .upload-btn:hover,
-.web-ui .rename-btn-confirm:hover, .web-ui .move-btn-confirm:hover  {
+.web-ui .action-btn  {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.web-ui .action-btn:hover,
+.web-ui .save-btn:hover,
+.web-ui .btn-primary:hover,
+.web-ui .folder-btn:hover,
+.web-ui .upload-btn:hover,
+.web-ui .rename-btn-confirm:hover,
+.web-ui .move-btn-confirm:hover,
+.web-ui .btn-add:hover,
+.web-ui .btn-save-server:hover  {
   background: var(--button-hover);
 }
 
@@ -248,19 +383,19 @@ body.web-ui  {
   border-color: var(--accent-color);
 }
 
-.web-ui .delete-action-btn, .web-ui .delete-btn-confirm, .web-ui .btn-danger  {
+.web-ui .delete-action-btn,
+.web-ui .delete-btn-confirm,
+.web-ui .btn-danger,
+.web-ui .btn-delete  {
   background: var(--danger-color);
-  color: #fff;
+  color: var(--button-text);
 }
 
-.web-ui .delete-action-btn:hover, .web-ui .delete-btn-confirm:hover, .web-ui .btn-danger:hover  {
+.web-ui .delete-action-btn:hover,
+.web-ui .delete-btn-confirm:hover,
+.web-ui .btn-danger:hover,
+.web-ui .btn-delete:hover  {
   background: var(--danger-hover);
-}
-
-@media (prefers-color-scheme: dark)  {
-  .web-ui .delete-action-btn, .web-ui .delete-btn-confirm, .web-ui .btn-danger, .web-ui .btn-delete  {
-    color: #1c1917;
-  }
 }
 
 .select-all-label  {
@@ -352,16 +487,44 @@ body.web-ui  {
 }
 
 .web-ui .info-row  {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
   gap: 16px;
 }
 
 .web-ui .value  {
+  color: var(--title-color);
   overflow-wrap: anywhere;
   text-align: right;
 }
 
+.web-ui .empty-state  {
+  text-align: center;
+  color: var(--label-color);
+  padding: 20px;
+}
+
+.web-ui .move-btn, .web-ui .rename-btn, .web-ui .delete-btn  {
+  background: none;
+  border: none;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 6px;
+}
+
 .web-ui .move-btn, .web-ui .rename-btn  {
   color: var(--accent-color);
+}
+
+.web-ui .delete-btn  {
+  color: var(--label-color);
+}
+
+.web-ui .delete-btn:hover  {
+  background: var(--danger-bg);
+  color: var(--danger-color);
 }
 
 .web-ui .move-btn:hover, .web-ui .rename-btn:hover  {
@@ -374,12 +537,6 @@ body.web-ui  {
 
 .web-ui .file-table a  {
   overflow-wrap: anywhere;
-}
-
-.web-ui .move-btn, .web-ui .rename-btn, .web-ui .delete-btn  {
-  min-width: 36px;
-  min-height: 36px;
-  border-radius: 6px;
 }
 
 .web-ui .toast  {
@@ -400,41 +557,30 @@ body.web-ui  {
 
 .web-ui .toast.error  {
   background: var(--danger-color);
-  color: #fff;
+  color: var(--button-text);
 }
 
 .web-ui .status  {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.9em;
   background: var(--accent-color);
   color: var(--card-bg);
 }
 
-.web-ui .folder-badge, .web-ui .epub-badge  {
-  background: var(--accent-color-10);
-  color: var(--accent-color);
-}
-
 .web-ui .btn-small  {
+  cursor: pointer;
+  border: none;
   border-radius: 8px;
   min-height: 36px;
   padding: 8px 12px;
+  font-size: 0.9em;
 }
 
 .web-ui .btn-add, .web-ui .btn-save-server  {
   background: var(--button-bg);
   color: var(--button-text);
-}
-
-.web-ui .btn-add:hover, .web-ui .btn-save-server:hover  {
-  background: var(--button-hover);
-}
-
-.web-ui .btn-delete  {
-  background: var(--danger-color);
-  color: #fff;
-}
-
-.web-ui .btn-delete:hover  {
-  background: var(--danger-hover);
 }
 
 .web-ui input[type="file"]::file-selector-button  {
@@ -452,10 +598,181 @@ body.web-ui  {
   color: var(--button-text);
 }
 
-@media (max-width: 640px)  {
-  body.web-ui  {
-    padding: 0;
+@media (prefers-reduced-motion: reduce)  {
+  .web-ui button  {
+    transition: none;
   }
+}
+
+.web-ui input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+.web-ui select, .web-ui textarea  {
+  box-sizing: border-box;
+  background: var(--card-bg);
+  color: var(--font-color);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  min-height: 38px;
+  line-height: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Own chevron: the native arrow sits flush against the border once the select is styled. */
+.web-ui select  {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238a8f98' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+}
+
+.web-ui input::placeholder, .web-ui textarea::placeholder  {
+  color: var(--muted-color);
+  opacity: 1;
+}
+
+.web-ui input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,
+.web-ui select:focus, .web-ui textarea:focus  {
+  outline: none;
+  border-color: var(--button-bg);
+  box-shadow: 0 0 0 1px var(--button-bg), var(--shadow-sm);
+}
+
+.web-ui input[type="checkbox"], .web-ui input[type="radio"], .web-ui input[type="range"]  {
+  accent-color: var(--accent-color);
+}
+
+.web-ui .modal  {
+  background: var(--card-bg);
+  box-sizing: border-box;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+.web-ui .modal h3  {
+  margin: 0 0 15px 0;
+  font-size: 22px;
+}
+
+.web-ui .modal-close  {
+  float: right;
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  color: var(--label-color);
+  line-height: 1;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 6px;
+}
+
+.web-ui .modal-close:hover  {
+  color: var(--title-color);
+  background: var(--accent-color-10);
+}
+
+.web-ui .web-dialog {
+  width: min(420px, calc(100vw - 32px));
+  max-width: none;
+  padding: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--font-color);
+}
+
+.web-ui .web-dialog::backdrop,
+.web-ui .modal-overlay::backdrop {
+  background: var(--backdrop);
+  backdrop-filter: blur(8px);
+}
+
+.web-ui .web-dialog h2 {
+  margin: 0 0 12px;
+  font-size: 1.2em;
+}
+
+.web-ui .web-dialog p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.web-ui .web-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.web-ui .web-dialog-actions button {
+  min-width: 72px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--button-text);
+}
+
+.web-ui .web-dialog-actions button:hover {
+  background: var(--button-hover);
+}
+
+.web-ui .web-dialog-actions #webDialogCancel {
+  background: var(--card-bg);
+  color: var(--font-color);
+  border: 1px solid var(--border-color);
+}
+
+.web-ui .file-table th  {
+  color: var(--label-color);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.web-ui .retry-btn,
+.web-ui .retry-all-btn  {
+  background: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
+.web-ui .retry-btn:hover,
+.web-ui .retry-all-btn:hover  {
+  background: var(--button-hover);
+}
+
+.web-ui .retry-all-btn  {
+  font-size: 0.95em;
+}
+
+.web-ui .quality-preset, .web-ui .overlap-btn, .web-ui .rotation-btn  {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.75em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.web-ui .rotation-btn  {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 640px)  {
   .web-ui .page-content  {
     padding: 24px 16px 0;
   }
@@ -473,13 +790,8 @@ body.web-ui  {
     padding: 12px 16px;
   }
   .web-ui h1  {
-    font-size: 16px;
     min-height: 40px;
     padding-right: 52px;
-  }
-  .brand-logo  {
-    width: 28px;
-    height: 28px;
   }
   .web-ui .desktop-nav  {
     display: none;
@@ -535,9 +847,6 @@ body.web-ui  {
   .web-ui .action-buttons  {
     flex-wrap: wrap;
   }
-  .web-ui .setting-row  {
-    border-bottom: none;
-  }
   .web-ui .setting-control  {
     max-width: 100%;
   }
@@ -552,7 +861,7 @@ body.web-ui  {
     min-width: 0;
     overflow-wrap: anywhere;
   }
-  .web-ui .upload-form input[type="file"]  {
+  .web-ui .font-upload-form input[type="file"]  {
     min-width: 0;
     max-width: 100%;
   }
@@ -609,166 +918,17 @@ body.web-ui  {
   .select-all-label  {
     display: inline;
   }
-}
-
-@media (prefers-reduced-motion: reduce)  {
-  .web-ui button  {
-    transition: none;
+  .web-ui .setting-row {
+    flex-wrap: wrap;
+    gap: 6px;
+    border-bottom: none;
   }
-}
-
-.web-ui input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
-.web-ui select, .web-ui textarea  {
-  box-sizing: border-box;
-  background: var(--card-bg);
-  color: var(--font-color);
-  border: 1px solid var(--control-border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 14px;
-  min-height: 38px;
-  line-height: 20px;
-  box-shadow: 0 1px 3px #0000001a, 0 1px 2px -1px #0000001a;
-}
-
-/* Own chevron: the native arrow sits flush against the border once the select is styled. */
-.web-ui select  {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 36px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238a8f98' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  background-size: 14px;
-}
-
-.web-ui input::placeholder, .web-ui textarea::placeholder  {
-  color: var(--muted-color);
-  opacity: 1;
-}
-
-.web-ui input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,
-.web-ui select:focus, .web-ui textarea:focus  {
-  outline: none;
-  border-color: var(--button-bg);
-  box-shadow: 0 0 0 1px var(--button-bg), 0 1px 3px #0000001a, 0 1px 2px -1px #0000001a;
-}
-
-.web-ui input[type="checkbox"], .web-ui input[type="radio"], .web-ui input[type="range"]  {
-  accent-color: var(--accent-color);
-}
-
-.web-ui .toggle-switch input:focus-visible + .toggle-slider  {
-  outline: 3px solid var(--accent-color);
-  outline-offset: 3px;
-}
-
-.web-ui .modal  {
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 24px;
-}
-
-.web-ui .modal h3  {
-  font-size: 22px;
-}
-
-.web-ui .modal-close  {
-  min-width: 32px;
-  min-height: 32px;
-  border-radius: 6px;
-}
-
-.web-ui .modal-close:hover  {
-  background: var(--accent-color-10);
-}
-
-.web-ui .web-dialog {
-  width: min(420px, calc(100vw - 32px));
-  max-width: none;
-  padding: 24px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  background: var(--card-bg);
-  color: var(--font-color);
-}
-
-.web-ui .web-dialog::backdrop {
-  background: rgb(0 0 0 / 50%);
-  backdrop-filter: blur(8px);
-}
-
-.web-ui .web-dialog h2 {
-  margin: 0 0 12px;
-  color: var(--title-color);
-  font-size: 1.2em;
-}
-
-.web-ui .web-dialog p {
-  margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.web-ui .web-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 20px;
-}
-
-.web-ui .web-dialog-actions button {
-  min-width: 72px;
-  padding: 8px 14px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--button-bg);
-  color: var(--button-text);
-  cursor: pointer;
-}
-
-.web-ui .web-dialog-actions button:hover {
-  background: var(--button-hover);
-}
-
-.web-ui .web-dialog-actions #webDialogCancel {
-  background: var(--card-bg);
-  color: var(--font-color);
-  border: 1px solid var(--border-color);
-}
-
-.web-ui .file-table th  {
-  color: var(--label-color);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.web-ui .retry-btn, .web-ui .retry-all-btn, .web-ui .export-log-btn  {
-  background: var(--button-bg);
-  color: var(--button-text);
-  border-radius: 6px;
-  padding: 8px 12px;
-}
-
-.web-ui .retry-btn:hover, .web-ui .retry-all-btn:hover, .web-ui .export-log-btn:hover  {
-  background: var(--button-hover);
-}
-
-.web-ui .quality-preset, .web-ui .overlap-btn, .web-ui .rotation-btn  {
-  border-radius: 6px;
-}
-
-.web-ui .status-ok  {
-  background: var(--accent-color-10);
-  color: var(--success-color);
-}
-
-.web-ui .status-err  {
-  background: var(--danger-bg);
-  color: var(--danger-color);
-}
-
-@media (max-width: 600px)  {
+  .web-ui .setting-control select,
+  .web-ui .setting-control input[type="text"],
+  .web-ui .setting-control input[type="password"] {
+    min-width: 0;
+    width: unset;
+  }
   .web-ui .modal  {
     padding: 16px;
     margin: 0 1.5rem;
@@ -788,13 +948,62 @@ body.web-ui  {
   .web-ui .web-dialog-actions {
     flex-direction: column-reverse;
   }
+  #plugin-container {
+    gap: 10px;
+    margin: 10px 0;
+  }
+  #plugin-container .setting-row {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+  #plugin-container input[type="text"],
+  #plugin-container input[type="password"],
+  #plugin-container input[type="number"],
+  #plugin-container select,
+  #plugin-container textarea {
+    min-height: 44px;
+  }
+  #plugin-container .btn-small {
+    min-height: 48px;
+    padding: 10px 12px;
+    font-size: 1em;
+  }
 }
 
+/* Dark theme: kept last so it overrides the light rules above at equal specificity. */
 @media (prefers-color-scheme: dark)  {
-  .web-ui .delete-action-btn, .web-ui .delete-btn-confirm, .web-ui .btn-danger, .web-ui .btn-delete, .web-ui .toast.error  {
-    color: #1c1917;
+  :root  {
+    color-scheme: dark;
+    --font-color: #fafaf9;
+    --bg: #242321;
+    --title-color: #fafaf9;
+    --card-bg: #302e2b;
+    --label-color: #d6d3d1;
+    --border-color: #504b45;
+    --control-border: #78716c;
+    --muted-color: #a8a29e;
+    --accent-color: #8fb9a6;
+    --accent-color-10: #35473d;
+    --accent-hover-color: #b3cfc2;
+    --toggle-bg: #57534e;
+    --button-bg: #8fb9a6;
+    --button-hover: #b3cfc2;
+    --button-text: #1c1917;
+    --success-color: #8fb9a6;
+    --danger-color: #fca5a5;
+    --danger-hover: #fecaca;
+    --danger-bg: #492d2b;
+    --danger-border: #81504a;
+    --warning-text: #e7d4a8;
+    --warning-bg: #403728;
+    --warning-border: #7e6940;
+    --info-color: #a3c3d5;
+    --secondary-color: #c0b2d0;
   }
-  .web-ui .image-state-badge  {
-    color: var(--button-text);
+  .web-ui .card  {
+    box-shadow: 0 0 0 1px var(--border-color), var(--shadow-sm);
+  }
+  #plugin-container .card  {
+    box-shadow: none;
   }
 }

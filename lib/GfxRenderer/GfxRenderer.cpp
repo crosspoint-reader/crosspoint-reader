@@ -1038,7 +1038,9 @@ void GfxRenderer::drawPixelDither<Color::DarkGray>(const int x, const int y) con
   drawPixel(x, y, (x + y) % 2 == 0);  // TODO: maybe find a better pattern?
 }
 
-void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color) const {
+void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color,
+                                 const DitherMode mode) const {
+  if (mode == DitherMode::PreserveInk && color == Color::White) return;
   switch (color) {
     case Color::Clear:
       break;
@@ -1049,16 +1051,17 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
       fillRectImpl<Color::White>(x, y, width, height);
       break;
     case Color::LightGray:
-      fillRectImpl<Color::LightGray>(x, y, width, height);
+      fillRectImpl<Color::LightGray>(x, y, width, height, mode);
       break;
     case Color::DarkGray:
-      fillRectImpl<Color::DarkGray>(x, y, width, height);
+      fillRectImpl<Color::DarkGray>(x, y, width, height, mode);
       break;
   }
 }
 
 template <Color C>
-void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const int height) const {
+void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const int height,
+                               const DitherMode mode) const {
   if constexpr (C == Color::Clear) return;
   if (width <= 0 || height <= 0) return;
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
@@ -1202,11 +1205,21 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
       const uint8_t blackMask = blackMasks[py & 1];
       const uint8_t whiteMask = static_cast<uint8_t>(~blackMask);
 
-      // Dither writes BOTH inks (the slow path called drawPixel for every
-      // pixel — setting or clearing — so we must do the same). Inside the
-      // rect mask: write whiteMask (1s where white, 0s where black). Outside
-      // the rect mask: leave the framebuffer untouched.
       uint8_t* row = target + static_cast<int32_t>(py - originY) * panelStride;
+      switch (mode) {
+        case DitherMode::PreserveInk:
+          for (int byte = byteStart; byte <= byteEnd; ++byte) {
+            uint8_t mask = blackMask;
+            if (byte == byteStart) mask &= headMask;
+            if (byte == byteEnd) mask &= tailMask;
+            row[byte] &= static_cast<uint8_t>(~mask);
+          }
+          continue;
+        case DitherMode::Replace:
+          break;
+      }
+
+      // Replace writes both inks inside the rectangle and leaves other pixels untouched.
       if (byteStart == byteEnd) {
         const uint8_t rectMask = headMask & tailMask;
         row[byteStart] = static_cast<uint8_t>((row[byteStart] & ~rectMask) | (rectMask & whiteMask));
@@ -1222,10 +1235,10 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
   }
 }
 
-template void GfxRenderer::fillRectImpl<Color::Black>(int, int, int, int) const;
-template void GfxRenderer::fillRectImpl<Color::White>(int, int, int, int) const;
-template void GfxRenderer::fillRectImpl<Color::LightGray>(int, int, int, int) const;
-template void GfxRenderer::fillRectImpl<Color::DarkGray>(int, int, int, int) const;
+template void GfxRenderer::fillRectImpl<Color::Black>(int, int, int, int, DitherMode) const;
+template void GfxRenderer::fillRectImpl<Color::White>(int, int, int, int, DitherMode) const;
+template void GfxRenderer::fillRectImpl<Color::LightGray>(int, int, int, int, DitherMode) const;
+template void GfxRenderer::fillRectImpl<Color::DarkGray>(int, int, int, int, DitherMode) const;
 
 void GfxRenderer::maskRoundedRectOutsideCorners(const int x, const int y, const int width, const int height,
                                                 const int radius, const Color color) const {
@@ -2134,12 +2147,12 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   text = resolveVisualText(text, visual, baseDir);
 
   // Advance table fast-path for SD card fonts during layout.
-  // No kerning/ligature lookup — consistent with previous metadataOnly behavior
-  // where kern/lig data was not loaded.
+  // Snap each advance like drawText. Kerning/ligature data is not resident
+  // during layout, so kerned-pair steps can still differ.
   auto sdIt = sdCardFonts_.find(resolvedFontId);
   if (mode == TextMeasureMode::Layout && sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    int32_t widthFP = 0;
-    int trackingPx = 0;
+    int widthPx = 0;
+    int32_t prevAdvanceFP = 0;
     uint32_t prevCp = 0;
     const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
     const uint8_t styleIdx = resolveSdCardStyle(*sdIt->second, style);
@@ -2150,26 +2163,27 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     }
     const auto& font = fontIt->second;
     while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
-      // RTL vowel marks (niqqud/harakat) are zero-advance overlays in drawText — no width.
-      if (BidiUtils::isTransparentMark(cp)) {
+      // RTL vowel marks (niqqud/harakat) and combining marks are zero-advance overlays in drawText.
+      if (BidiUtils::isTransparentMark(cp) || utf8IsCombiningMark(cp)) {
         continue;
       }
       const uint32_t smallCapCp = (style & EpdFontFamily::SMALL_CAPS) ? utf8SmallCapsUpper(cp) : cp;
       const bool isSmallCap = smallCapCp != cp;
       cp = smallCapCp;
       int32_t advFP = sdIt->second->getAdvance(cp, styleIdx);
-      if (!utf8IsCombiningMark(cp)) {
-        if (advFP == 0 || (syntheticGlyph::isSolid(cp) && !font.hasCodepoint(cp, style))) {
-          EpdGlyph solidFallback;
-          const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
-          advFP = glyph ? glyph->advanceX : 0;
-        }
-        trackingPx += trackingBetween(prevCp, cp, tracking);
-        prevCp = cp;
+      if (advFP == 0 || (syntheticGlyph::isSolid(cp) && !font.hasCodepoint(cp, style))) {
+        EpdGlyph solidFallback;
+        const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
+        advFP = glyph ? glyph->advanceX : 0;
       }
-      widthFP += isSupSub ? (advFP + 1) / 2 : (isSmallCap ? scaleSmallCapAdvance(advFP) : advFP);
+      if (prevCp != 0) {
+        widthPx += fp4::toPixel(prevAdvanceFP) + trackingBetween(prevCp, cp, tracking);
+      }
+      prevAdvanceFP = isSupSub ? (advFP + 1) / 2 : (isSmallCap ? scaleSmallCapAdvance(advFP) : advFP);
+      prevCp = cp;
     }
-    return fp4::toPixel(widthFP) + trackingPx;
+    widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
+    return widthPx;
   }
 
   const auto fontIt = fontMap.find(resolvedFontId);
@@ -2306,7 +2320,12 @@ int GfxRenderer::getLineHeight(const int fontId) const {
 }
 
 int GfxRenderer::getLineHeight(const int fontId, const float compression) const {
-  return static_cast<int>(getLineHeight(fontId) * compression + 0.5f);
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return 0;
+  }
+  return static_cast<int>(fontIt->second.getSizeInPixels() * compression + 0.5f);
 }
 
 int GfxRenderer::getTextHeight(const int fontId) const {
@@ -2400,12 +2419,14 @@ size_t GfxRenderer::getBufferSize() const { return frameBufferSize; }
 
 void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
-  display.displayGrayscaleBase(fallback, fadingFix);
+  display.displayGrayscaleBase(applyPromotedRefresh(fallback), fadingFix);
 }
 
 bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
-  if (!display.displayGrayscaleBase(mode, fallback, fadingFix)) return false;
+  if (!display.displayGrayscaleBase(mode, promotedRefreshPending_ ? promotedRefresh_ : fallback, fadingFix))
+    return false;
+  promotedRefreshPending_ = false;
   absoluteGrayPlanes = mode != HalDisplay::GrayscaleMode::Overlay;
   return true;
 }
