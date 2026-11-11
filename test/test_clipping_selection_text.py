@@ -98,7 +98,9 @@ struct Block {
   uint16_t wordTextLen(uint16_t i) const { return std::char_traits<char>::length(wordText(i)); }
   EpdFontFamily::Style wordStyle(uint16_t i) const { return styles.empty() ? EpdFontFamily::REGULAR : styles[i]; }
   int wordXpos(uint16_t i) const { return positions.empty() ? 0 : positions[i]; }
+  std::vector<Range> wordRanges;  // Optional per-word source ranges.
   Range wordSourceRange(uint16_t i) const {
+    if (i < wordRanges.size()) return wordRanges[i];
     return prefixSpace && i == 0 ? Range{range.start, range.start + 1} : range;
   }
   bool wordStartsParagraph(uint16_t i) const { return paragraphStart && i == 0; }
@@ -390,6 +392,7 @@ int main() {
       line->block.packedText = row ? std::string("one\0two\0tri\0",12) : std::string("head\0",5);
       line->block.positions = row ? std::vector<int>{0,40,80} : std::vector<int>{0};
       line->block.styles = row ? std::vector<EpdFontFamily::Style>(3,decoration) : std::vector<EpdFontFamily::Style>{EpdFontFamily::REGULAR};
+      line->block.wordRanges = row ? std::vector<Block::Range>{{5,8},{9,12},{13,16}} : std::vector<Block::Range>{{0,4}};
       page->elements.push_back(std::move(line));
     }
     if (images) { auto image = std::make_unique<PageLine>(); image->tag = TAG_PageImage; page->elements.push_back(std::move(image)); }
@@ -622,6 +625,15 @@ int main() {
   activity.words[1].endOffset = 13;
   activity.words[0].discretionaryHyphen = true;
   expect(activity, 0, 1, "discretionary");
+  // Fragments of one reconstructed word count once.
+  activity.rangeStart = -1;
+  activity.selected = 1;
+  assert(activity.selectedWordCount() == 1);
+  activity.rangeStart = 0;
+  assert(activity.selectedWordCount() == 1);
+  activity.words[1].startOffset = 7;
+  assert(activity.selectedWordCount() == 2);
+  activity.words[1].startOffset = 6;
   activity.words[0].text = "Café";
   activity.words[0].endOffset = 5;
   activity.words[0].discretionaryHyphen = false;

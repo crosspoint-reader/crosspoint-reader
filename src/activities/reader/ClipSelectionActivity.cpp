@@ -448,7 +448,16 @@ void ClipSelectionActivity::confirmSelection(const ClippingResult::Action action
 }
 
 int ClipSelectionActivity::selectedWordCount() const {
-  return rangeStart < 0 ? 1 : std::abs(selected - rangeStart) + 1;
+  if (rangeStart < 0) return 1;
+  // Count reconstructed words, not fragments: adjacent fragments of one word (e.g. hyphenated or styled
+  // runs) join without a separator in buildSelectedText.
+  const int first = std::min(rangeStart, selected);
+  const int last = std::max(rangeStart, selected);
+  int count = 1;
+  for (int i = first + 1; i <= last; ++i) {
+    if (startsNewWord(words[i - 1], words[i])) ++count;
+  }
+  return count;
 }
 
 const char* ClipSelectionActivity::confirmLabel() const {
