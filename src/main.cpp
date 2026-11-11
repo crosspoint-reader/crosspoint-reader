@@ -39,6 +39,7 @@
 #include "OpdsTokenStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "WakeHold.h"
 #include "WifiCredentialStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
@@ -664,16 +665,12 @@ void setup() {
   bleturner::begin(pageturner::host, SETTINGS.ble);
 
 #if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_X4PRO
-  // Always Long Press to Wake keeps click-to-sleep but demands a hold to wake,
-  // so a bump in a bag or pocket cannot. Checked before the light or display
-  // come up. On the EEGO A4 waking also mirrors sleeping when the setting is
-  // off: a click wakes only with Short Power Button Click = Sleep, otherwise it
-  // takes the same hold. The X4 Pro keeps its stock wake when the setting is off.
-  const bool clickSleeps = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP;
-  const bool wakeNeedsHold = SETTINGS.longPressWake != 0 || (BoardConfig::isEegoA4() && !clickSleeps);
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !isSilentReboot && wakeNeedsHold) {
-    constexpr unsigned long WAKE_HOLD_MS = 500;
-    if (!wakeHoldVerified || !gpio.powerButtonHeldUntil(WAKE_HOLD_MS)) {
+  // Always Long Press to Wake: with the setting on, a press that is not held goes straight back to
+  // sleep, before the light or display come up. The hold is timed from boot, so it lasts kWakeHoldMs
+  // or as long as setup() took to get here, whichever is longer.
+  if (wakeNeedsLongPress(SETTINGS.longPressWake != 0, wakeupReason == HalGPIO::WakeupReason::PowerButton,
+                         isSilentReboot)) {
+    if (!wakeHoldVerified || !gpio.powerButtonHeldUntil(kWakeHoldMs)) {
       LOG_DBG("MAIN", "Power button released before the wake hold, sleeping");
       Storage.prepareForDeepSleep();
       powerManager.startDeepSleep(gpio);
