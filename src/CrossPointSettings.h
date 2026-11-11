@@ -178,8 +178,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SHORT_PWRBTN_COUNT
   };
 
-  // Long-press Confirm action while reading an EPUB. Persisted values are stable;
-  // SettingsList maps them to the device-specific option list shown to the user.
+  // Long-press action while reading, for Confirm and for the page buttons in
+  // CUSTOM_ACTIONS mode. Persisted values are stable; SettingsList maps them to the
+  // device-specific option list shown to the user.
   enum LONG_PRESS_MENU_FUNCTION {
     LP_MENU_KOSYNC = 0,
     LP_MENU_DISABLED = 1,
@@ -188,8 +189,15 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_READER_MENU = 4,
     LP_MENU_CREATE_CLIPPING = 5,
     LP_MENU_FOOTNOTES = 6,
-    LONG_PRESS_MENU_FUNCTION_COUNT
+    LONG_PRESS_MENU_FUNCTION_COUNT,
+    // Page buttons only: act in the held button's direction.
+    LP_PAGE_CHAPTER_SKIP = 7,
+    LP_PAGE_ORIENTATION_CHANGE = 8,
+    LONG_PRESS_PAGE_FUNCTION_COUNT
   };
+  // A new Confirm function must not renumber the saved page-button values; the
+  // page pickers also expect these values right after the Confirm functions.
+  static_assert(LONG_PRESS_MENU_FUNCTION_COUNT == LP_PAGE_CHAPTER_SKIP);
 
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
@@ -199,6 +207,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     OFF = 0,
     CHAPTER_SKIP = 1,
     ORIENTATION_CHANGE = 2,
+    CUSTOM_ACTIONS = 3,
     LONG_PRESS_BUTTON_BEHAVIOR_COUNT
   };
 
@@ -352,6 +361,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
+  // Long-press page button functions (LONG_PRESS_MENU_FUNCTION values), used in CUSTOM_ACTIONS mode.
+  uint8_t longPressFrontNextFunction = LP_MENU_DISABLED;
+  uint8_t longPressFrontPrevFunction = LP_MENU_DISABLED;
+  uint8_t longPressSideNextFunction = LP_MENU_DISABLED;
+  uint8_t longPressSidePrevFunction = LP_MENU_DISABLED;
   // UI Theme
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation

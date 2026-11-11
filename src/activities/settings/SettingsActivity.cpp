@@ -48,6 +48,15 @@ namespace {
 // (it stays in the shared list for the web settings API).
 SettingsSection sectionFor(const SettingInfo& setting);
 
+// Per-button functions of Page turn long press > Custom.
+bool isFrontCustomLongPress(const SettingInfo& setting) {
+  return setting.nameId == StrId::STR_LONG_PRESS_FRONT_NEXT || setting.nameId == StrId::STR_LONG_PRESS_FRONT_PREV;
+}
+
+bool isSideCustomLongPress(const SettingInfo& setting) {
+  return setting.nameId == StrId::STR_LONG_PRESS_SIDE_NEXT || setting.nameId == StrId::STR_LONG_PRESS_SIDE_PREV;
+}
+
 bool showOnDevice(const SettingInfo& setting) {
   if (sectionFor(setting) == SettingsSection::End || home_button::isSetting(setting.valuePtr)) return false;
   // The sunlight fading fix is a grayscale-waveform compensation that does
@@ -60,6 +69,10 @@ bool showOnDevice(const SettingInfo& setting) {
   if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
       SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
       !(BoardConfig::isX4Pro() && SETTINGS.doublePwrBtn == CrossPointSettings::FOOTNOTES)) {
+    return false;
+  }
+  if ((isFrontCustomLongPress(setting) || isSideCustomLongPress(setting)) &&
+      SETTINGS.longPressButtonBehavior != CrossPointSettings::CUSTOM_ACTIONS) {
     return false;
   }
   return true;
@@ -92,10 +105,11 @@ bool belongsToControlsGroup(const SettingInfo& setting, ControlsGroup group) {
     case ControlsGroup::Power:
       return power || field == &CrossPointSettings::pwrBtnFootnoteBack;
     case ControlsGroup::Front:
-      return shared || menu || field == &CrossPointSettings::frontButtonFollowOrientation ||
+      return shared || menu || isFrontCustomLongPress(setting) ||
+             field == &CrossPointSettings::frontButtonFollowOrientation ||
              field == &CrossPointSettings::backShortToFileBrowser;
     case ControlsGroup::Side:
-      return shared || field == &CrossPointSettings::sideButtonLayout ||
+      return shared || isSideCustomLongPress(setting) || field == &CrossPointSettings::sideButtonLayout ||
              field == &CrossPointSettings::sideButtonFollowOrientation;
     case ControlsGroup::Touch:
       return field == &CrossPointSettings::touchReaderControls || field == &CrossPointSettings::pageTurnGesture ||
@@ -177,7 +191,9 @@ void SettingsActivity::rebuildSettings() {
   }
 
   if (section == SettingsSection::Controls && controlsGroup == ControlsGroup::Front) {
-    for (const char* key : {"longPressButtonBehavior", "longPressMenuFunction"}) {
+    // The page-turn long press, its Custom rows, and the Confirm long press stay last, in that order.
+    for (const char* key : {"longPressButtonBehavior", "longPressFrontNextFunction", "longPressFrontPrevFunction",
+                            "longPressMenuFunction"}) {
       const auto row = std::find_if(settings.begin(), settings.end(), [key](const SettingInfo& setting) {
         return setting.key && std::strcmp(setting.key, key) == 0;
       });

@@ -209,6 +209,8 @@ class EpubReaderActivity final : public ReaderActivity {
   void applyProgressChange(const ProgressChangeResult& progress);
   bool launchKOReaderSync();
   unsigned long confirmLongPressThreshold() const;
+  // Runs a LONG_PRESS_MENU_FUNCTION; true when the caller must stop handling this frame.
+  bool runLongPressFunction(uint8_t function);
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();
   void addBookmark();
