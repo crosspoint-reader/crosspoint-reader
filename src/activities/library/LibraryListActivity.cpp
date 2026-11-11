@@ -716,19 +716,24 @@ void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) 
   closeSwipeDelete();
 #endif
   if (index < 0 || index >= TAB_SLOTS) return;
-  if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
-  sortOrder = orderForTab(index, descendingTabs);
-  // The filter and the overlap rows hold positions in the old order, so they
-  // must be rebuilt.
-  applyFilter();
-  activeTabIndex = index;
-  refreshOverlap();
-  refreshFavorites();
-  // Tab changes happen only while the bar owns focus. A tab's remembered row
-  // must not pull focus back into the list after the switch.
-  auto& nav = activeNav();
-  nav.selected = 0;
-  nav.top = 0;
+  {
+    // The render task reads the sort order, filter, overlap rows and favOrder;
+    // rebuild them where it cannot see them half done.
+    RenderLock lock(*this);
+    if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
+    sortOrder = orderForTab(index, descendingTabs);
+    // The filter and the overlap rows hold positions in the old order, so they
+    // must be rebuilt.
+    applyFilter();
+    activeTabIndex = index;
+    refreshOverlap();
+    refreshFavorites();
+    // Tab changes happen only while the bar owns focus. A tab's remembered row
+    // must not pull focus back into the list after the switch.
+    auto& nav = activeNav();
+    nav.selected = 0;
+    nav.top = 0;
+  }
   requestUpdate();
 }
 

@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Books the reader marked as favorites, from the Library or Browse Files row
@@ -79,12 +80,20 @@ class FavoritesStore : public PersistableStore<FavoritesStore> {
   int find(const std::string& path) const;
   // Exact size of the whole list as toJson() would write it.
   size_t memBytes() const;
-  static size_t entryBytes(const std::string& path, const std::string& title, const std::string& author, bool resolved);
+  // Views, so measuring a candidate (canAdd, setResolved) allocates nothing.
+  static size_t entryBytes(std::string_view path, std::string_view title, std::string_view author, bool resolved);
   // Sets the display fields (clamped) and the entry's cached size.
   static void setFields(FavoriteBook& book, const std::string& title, const std::string& author, bool resolved);
   // Null for an empty or oversized path, or when memory runs out.
   static std::unique_ptr<FavoriteBook> makeBook(const std::string& path, const std::string& title,
                                                 const std::string& author, bool resolved);
+  // Without exceptions a failed std::string or vector allocation aborts, so
+  // these check the heap first (the HalStorage::readFile pattern). Another task
+  // allocating between a check and its use is not covered.
+  // Room for MAX_FAVORITES pointers, taken once so the list never regrows.
+  bool reserveList();
+  // Enough heap to build one book with a path of pathLen bytes.
+  static bool roomForBook(size_t pathLen);
 
   FavoritesStore() = default;
   ~FavoritesStore() = default;

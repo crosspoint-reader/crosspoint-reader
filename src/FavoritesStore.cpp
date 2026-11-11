@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <esp_heap_caps.h>
 
 #include <algorithm>
 #include <cstring>
@@ -10,6 +11,8 @@
 namespace {
 // `{"books":[]}`: the document around the entries.
 constexpr size_t DOC_FRAME_BYTES = 12;
+// Headroom kept free beyond a load step's own worst case.
+constexpr size_t HEAP_MARGIN_BYTES = 1024;
 
 // Length of the first maxBytes of s (or all of it), not splitting a UTF-8
 // sequence. Reads at most maxBytes + 1 bytes of s.
@@ -31,11 +34,17 @@ std::string clampUtf8(const char* s, const size_t maxBytes) {
   return std::string(s, clampedLength(s, len, maxBytes));
 }
 
+// The first maxBytes of s (or all of it) as a view, not splitting a UTF-8
+// sequence: what clampUtf8 would keep, without copying it.
+std::string_view clampedView(const std::string& s, const size_t maxBytes) {
+  return std::string_view(s.data(), clampedLength(s.data(), s.size(), maxBytes));
+}
+
 // Serialized size of one JSON string value as ArduinoJson 7 writes it
 // (TextFormatter::writeChar): quotes, \" \\ \b \f \n \r \t as two bytes, NUL as
 // \u0000, everything else as is. Checked against measureJson() on 20,000
 // random entries with every escape class.
-size_t jsonStringBytes(const std::string& s) {
+size_t jsonStringBytes(const std::string_view s) {
   size_t n = 2;
   for (const char c : s) {
     switch (c) {
@@ -59,8 +68,8 @@ size_t jsonStringBytes(const std::string& s) {
 }
 }  // namespace
 
-size_t FavoritesStore::entryBytes(const std::string& path, const std::string& title, const std::string& author,
-                                  const bool resolved) {
+size_t FavoritesStore::entryBytes(const std::string_view path, const std::string_view title,
+                                  const std::string_view author, const bool resolved) {
   // Exactly what toJson() writes for one entry, computed rather than built:
   // `{"path":` `,"title":` `,"author":` `,"resolved":` `}` is 40 bytes, then
   // the three strings and true/false. No allocation, so it cannot come out
@@ -86,6 +95,23 @@ std::unique_ptr<FavoriteBook> FavoritesStore::makeBook(const std::string& path, 
   return book;
 }
 
+bool FavoritesStore::reserveList() {
+  if (favorites.capacity() >= static_cast<size_t>(MAX_FAVORITES)) return true;
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < MAX_FAVORITES * sizeof(favorites[0]) + HEAP_MARGIN_BYTES) {
+    return false;
+  }
+  favorites.reserve(MAX_FAVORITES);
+  return true;
+}
+
+bool FavoritesStore::roomForBook(const size_t pathLen) {
+  // Worst case live at once while a book is built: the path twice (the
+  // caller's temporary and the kept copy), the clamped title and author twice
+  // each, and the book itself.
+  const size_t need = 2 * (pathLen + MAX_TITLE_BYTES + MAX_AUTHOR_BYTES) + sizeof(FavoriteBook);
+  return heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) >= need + HEAP_MARGIN_BYTES;
+}
+
 size_t FavoritesStore::memBytes() const {
   size_t total = DOC_FRAME_BYTES;
   for (const auto& book : favorites) total += book->jsonBytes;
@@ -104,12 +130,17 @@ FavoritesStore::ReadResult FavoritesStore::readOnce() {
   // readFile() returns at most this many bytes; a bigger file can never load,
   // which makes it unusable rather than unlucky. This store never writes one.
   if (size > READ_LIMIT_BYTES) return ReadResult::Corrupt;
-  const String json = Storage.readFile(getFilePath());
-  // Short read: readFile() grows its String a byte at a time and stops
-  // silently when that fails, or the card hiccuped. Not the file's fault.
-  if (json.length() != size) return ReadResult::Transient;
   JsonDocument doc;
-  const DeserializationError error = deserializeJson(doc, json);
+  DeserializationError error;
+  {
+    const String json = Storage.readFile(getFilePath());
+    // Short read: readFile() grows its String a byte at a time and stops
+    // silently when that fails, or the card hiccuped. Not the file's fault.
+    if (json.length() != size) return ReadResult::Transient;
+    // The document copies the strings out of a read-only input, so the file
+    // text is freed here, before fromJson() builds the list.
+    error = deserializeJson(doc, json);
+  }
   if (error == DeserializationError::NoMemory) return ReadResult::Transient;
   if (error) {
     LOG_ERR("FAV", "favorites.json parse error: %s", error.c_str());
@@ -124,7 +155,10 @@ FavoritesStore::ReadResult FavoritesStore::readOnce() {
   std::lock_guard<std::mutex> lock(storeMutex);
   loadOom = false;
   fromJson(doc.as<JsonVariantConst>());
-  return loadOom ? ReadResult::Transient : ReadResult::Ok;
+  if (!loadOom) return ReadResult::Ok;
+  // Free the partial list now, so it does not crowd the retry's read.
+  favorites.clear();
+  return ReadResult::Transient;
 }
 
 void FavoritesStore::load() {
@@ -169,7 +203,7 @@ void FavoritesStore::load() {
 bool FavoritesStore::canAdd(const std::string& path, const std::string& title, const std::string& author) const {
   if (locked || getCount() >= MAX_FAVORITES || path.empty() || path.size() > MAX_PATH_BYTES) return false;
   const size_t entry =
-      entryBytes(path, clampUtf8(title, MAX_TITLE_BYTES), clampUtf8(author, MAX_AUTHOR_BYTES), /*resolved=*/false);
+      entryBytes(path, clampedView(title, MAX_TITLE_BYTES), clampedView(author, MAX_AUTHOR_BYTES), /*resolved=*/false);
   // +1 for the comma that joins it to the list.
   return memBytes() + entry + 1 <= ADD_FILE_BYTES;
 }
@@ -233,6 +267,11 @@ bool FavoritesStore::fromJson(JsonVariantConst doc) {
   // A missing or malformed 'books' key reads as an empty list; only a parse
   // error is fatal (reported before this runs).
   favorites.clear();
+  if (!reserveList()) {
+    LOG_ERR("FAV", "OOM reserving the favorites list");
+    loadOom = true;
+    return true;
+  }
   JsonArrayConst arr = doc["books"].as<JsonArrayConst>();
   for (JsonObjectConst obj : arr) {
     if (getCount() >= MAX_FAVORITES) break;
@@ -240,7 +279,19 @@ bool FavoritesStore::fromJson(JsonVariantConst doc) {
     const size_t pathLen = strlen(path);
     // Entries this store would never write (no path, an oversized path, a
     // duplicate) are skipped rather than allocated.
-    if (pathLen == 0 || pathLen > MAX_PATH_BYTES || isFavorite(path)) continue;
+    if (pathLen == 0 || pathLen > MAX_PATH_BYTES) continue;
+    // Compared as a view: a duplicate costs no allocation, so it is skipped
+    // before the heap check rather than failing it.
+    const std::string_view pathView(path, pathLen);
+    if (std::any_of(favorites.begin(), favorites.end(),
+                    [&](const std::unique_ptr<FavoriteBook>& book) { return book->path == pathView; })) {
+      continue;
+    }
+    if (!roomForBook(pathLen)) {
+      LOG_ERR("FAV", "OOM loading favorites after %d entries", getCount());
+      loadOom = true;
+      break;
+    }
     auto book = makeBook(path, clampUtf8(obj["title"] | "", MAX_TITLE_BYTES),
                          clampUtf8(obj["author"] | "", MAX_AUTHOR_BYTES), obj["resolved"] | false);
     if (!book) {
@@ -278,6 +329,10 @@ bool FavoritesStore::toggle(const std::string& path, const std::string& title, c
   if (!canAdd(path, title, author)) {
     LOG_ERR("FAV", "Favorites full (%d entries, %u bytes) or read-only; not adding %s", getCount(),
             static_cast<unsigned>(memBytes()), path.c_str());
+    return false;
+  }
+  if (!reserveList() || !roomForBook(path.size())) {
+    LOG_ERR("FAV", "OOM adding favorite %s", path.c_str());
     return false;
   }
   auto book = makeBook(path, title, author, resolved);
@@ -369,6 +424,7 @@ void FavoritesStore::updatePath(const char* oldPathC, const char* newPathC) {
   // nothing: neither the book itself nor (as a folder) anything under it.
   if (oldPath.size() > MAX_PATH_BYTES) return;
   refreshFromCard();
+  const bool fitBefore = memBytes() <= MAX_FILE_BYTES;
   const bool oldHasSlash = oldPath.back() == '/';
   const bool newHasSlash = newPath.back() == '/';
   const size_t oldDirLen = oldPath.size() + (oldHasSlash ? 0 : 1);
@@ -425,6 +481,23 @@ void FavoritesStore::updatePath(const char* oldPathC, const char* newPathC) {
     setFields(book, book.title, book.author, /*resolved=*/false);
     ++it;
   }
+  // Longer paths can push a full list past what a save may write; such a list
+  // could never be saved, so the next boot would load the old paths and prune
+  // every moved favorite. When this move caused that (the list fit before),
+  // drop moved favorites, newest first, until it fits: their growth is the
+  // whole excess, so dropping them always gets there. A list that was already
+  // too big is left alone; removing other favorites lets it save later.
+  size_t dropped = 0;
+  for (size_t i = favorites.size(); fitBefore && i > 0 && memBytes() > MAX_FILE_BYTES; i--) {
+    const std::string& p = favorites[i - 1]->path;
+    if (p != newPath && !under(p, newPath, newHasSlash)) continue;
+    favorites.erase(favorites.begin() + static_cast<std::ptrdiff_t>(i - 1));
+    dropped++;
+  }
+  if (dropped > 0) {
+    LOG_ERR("FAV", "Moved favorites did not fit in %u bytes; removed %u of them", static_cast<unsigned>(MAX_FILE_BYTES),
+            static_cast<unsigned>(dropped));
+  }
   // The files already moved, so memory is right; a failed save is retried by
   // flushPending() (the Library calls it on entry) rather than rolled back.
   if (changed) persist();
@@ -435,7 +508,7 @@ bool FavoritesStore::setResolved(const size_t i, const std::string& title, const
   FavoriteBook& book = *favorites[i];
   const size_t now = book.jsonBytes;
   const size_t next =
-      entryBytes(book.path, clampUtf8(title, MAX_TITLE_BYTES), clampUtf8(author, MAX_AUTHOR_BYTES), true);
+      entryBytes(book.path, clampedView(title, MAX_TITLE_BYTES), clampedView(author, MAX_AUTHOR_BYTES), true);
   // Adopting a longer title must not push the list past the add limit: the
   // space above it is reserved for path repoints, which cannot be refused.
   if (next > now && memBytes() - now + next > ADD_FILE_BYTES) return false;
