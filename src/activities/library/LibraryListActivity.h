@@ -135,6 +135,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // read order; the modification-time list follows with those books skipped.
   // Entries below pinnedCount() are store rows; the rest go through rowFor().
   int pinnedCount() const;
+  const RecentBook* pinnedBookFor(int entry) const;
   // Re-match the store against the index (chunked scan). Call whenever the
   // index or the store changes.
   void resolvePinned();
@@ -179,10 +180,11 @@ class LibraryListActivity final : public UiTabListActivity {
   std::vector<std::string> winAuthors;
   std::vector<std::string> winHeaders;
 
-  // Pinned overlay state: per store entry its RecentAsc row (0xFFFF when the
-  // book is not in the index), and the current-direction rows to skip, sorted
+  // Pinned overlay state: visible pins map to store entries and their RecentAsc
+  // rows (0xFFFF when not indexed). Current-direction rows to skip are sorted
   // ascending, so unpinned entries map to sort rows with a <=10-step walk.
   uint16_t pinnedAscRows[RecentBooksStore::MAX_RECENT_BOOKS] = {};
+  uint8_t pinnedStoreIndices[RecentBooksStore::MAX_RECENT_BOOKS] = {};
   uint16_t overlapRows[RecentBooksStore::MAX_RECENT_BOOKS] = {};
   uint8_t pinnedTotal = 0;
   uint8_t overlapCount = 0;
