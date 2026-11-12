@@ -11,6 +11,9 @@ std::string decodeUriEscapes(const std::string& path);
 
 std::string normalisePath(const std::string& path);
 
+// Locale-independent equality: folds ASCII A-Z only; other bytes compare exactly.
+bool equalsIgnoreAsciiCase(std::string_view lhs, std::string_view rhs);
+
 // Numeric-aware, case-insensitive comparison ("2" < "10"). Returns true when str1 orders
 // before str2. Same ordering sortFileList applies within the file/directory groups.
 bool naturalLess(const std::string& str1, const std::string& str2);

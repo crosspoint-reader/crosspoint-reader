@@ -70,6 +70,60 @@ TEST(LibraryBookFileTest, RejectsOtherFilesAndHiddenNames) {
   EXPECT_FALSE(isLibraryBookFile("._book.epub"));
 }
 
+TEST(LibraryBookFileTest, RejectsGeneratedTextFilesOnlyAtRoot) {
+  for (const auto* name : {"My Clippings.txt", "crash_report.txt", "MY CLIPPINGS.TXT", "CRASH_REPORT.TXT"}) {
+    for (const auto* root : {"", "/", "//", "./", "/./", "/.//./"}) {
+      EXPECT_FALSE(isLibraryBookFile(std::string(root) + name));
+    }
+    EXPECT_TRUE(isLibraryBookFile(std::string("/Books/") + name));
+    EXPECT_TRUE(isLibraryBookFile(std::string("Books/./") + name));
+  }
+  EXPECT_TRUE(isLibraryBookFile("/My Clippings.txt.epub"));
+  EXPECT_TRUE(isLibraryBookFile("/old_crash_report.txt"));
+  EXPECT_TRUE(isLibraryBookFile("/notes.txt"));
+}
+
+TEST_F(LibraryBuilderTest, SkipsGeneratedTextFilesOnlyAtRoot) {
+  fake::add("/My Clippings.txt");
+  fake::add("/crash_report.txt");
+  fake::add("/Books/My Clippings.txt");
+  fake::add("/Books/crash_report.txt");
+  fake::add("/notes.txt");
+
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  ASSERT_EQ(index.bookCount(), 5u);
+  std::vector<std::string> actual;
+  for (uint16_t row = 0; row < index.bookCount(); row++) {
+    actual.push_back(pathAt(index, SortOrder::TitleAsc, row));
+  }
+  std::sort(actual.begin(), actual.end());
+  const std::vector<std::string> expected = {"/Books/My Clippings.txt", "/Books/crash_report.txt", "/a.epub", "/b.epub",
+                                             "/notes.txt"};
+  EXPECT_EQ(actual, expected);
+}
+
+TEST_F(LibraryBuilderTest, ScansDirectoriesNamedLikeGeneratedTextFiles) {
+  fake::add("/My Clippings.txt/book.epub");
+  fake::add("/crash_report.txt/book.epub");
+
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  ASSERT_EQ(index.bookCount(), 4u);
+  std::vector<std::string> actual;
+  for (uint16_t row = 0; row < index.bookCount(); row++) {
+    actual.push_back(pathAt(index, SortOrder::TitleAsc, row));
+  }
+  std::sort(actual.begin(), actual.end());
+  const std::vector<std::string> expected = {"/My Clippings.txt/book.epub", "/a.epub", "/b.epub",
+                                             "/crash_report.txt/book.epub"};
+  EXPECT_EQ(actual, expected);
+}
+
 TEST(LibraryBookFileTest, RejectsSystemFoldersWithoutHidingOrdinaryTextBooks) {
   EXPECT_FALSE(isLibraryBookFile("/XTCache/fontPos.txt"));
   EXPECT_FALSE(isLibraryBookFile("/Backup/XTCache/epub/book/language.txt"));
