@@ -252,10 +252,12 @@ with `OUT OF STEP` and a non-zero exit, even with `--keep-going` (which otherwis
 after one failed). It stops the same way after `IDLE_ERROR:busy`, as the wait that was running will
 still answer.
 
-If the port goes away (a reboot), the tool reopens it and drops what had come in: a step whose
-command was being written fails as `DELIVERY UNCERTAIN` and is not sent again, as the device may
-have run it; a step waiting for its reply fails with `NO REPLY`. With `--keep-going` the run goes
-on from there.
+If the port goes away (the cable is pulled, the device goes into deep sleep), the tool reopens it
+and drops what had come in: a step whose command was being written fails as `DELIVERY UNCERTAIN`
+and is not sent again, as the device may have run it; a step waiting for its reply fails with
+`NO REPLY`. With `--keep-going` the run goes on from there. A reset does not take the port away
+on the ESP32-C3: its USB serial port stays up through a restart and through a reset from the host,
+so a reply outstanding when the device resets never comes, and the run stops `OUT OF STEP`.
 
 ## Limits
 

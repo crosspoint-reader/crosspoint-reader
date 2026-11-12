@@ -31,10 +31,11 @@ after IDLE_ERROR:busy: a wait started earlier will still answer.
 
 The port is opened with the default DTR/RTS lines, which does not reset the reader, and closed with
 RTS dropped before DTR: RTS high with DTR low is esptool's reset request, which a plain close on
-Windows can send. The device re-enumerates its USB port across a reboot; the tool reopens it and
-drops what had come in. A step whose command was being written then fails as DELIVERY UNCERTAIN
-and is not sent again (the device may have run it); a step waiting for its reply fails with NO
-REPLY. With --keep-going the run goes on from there.
+Windows can send. When the port goes away (the cable is pulled, the device sleeps), the tool
+reopens it and drops what had come in. A step whose command was being written then fails as
+DELIVERY UNCERTAIN and is not sent again (the device may have run it); a step waiting for its reply
+fails with NO REPLY. With --keep-going the run goes on from there. On the ESP32-C3 a restart or a
+reset keeps the port: a reply outstanding across it never comes, and the run stops OUT OF STEP.
 
 Replies carry no tag. Stopping on a missing reply keeps one run in step, but a reply still on its
 way when a run starts (from an IDLE a stopped run left waiting) can be taken by the first command
@@ -177,7 +178,7 @@ class Device:
             pass  # the port went away
 
     def _reopen(self):
-        """The port went away (reboot, sleep, re-enumeration): reopen it, without what had come in."""
+        """The port went away (unplugged, sleep, re-enumeration): reopen it, without what had come in."""
         self.close()
         time.sleep(1)
         self.buf = b""
