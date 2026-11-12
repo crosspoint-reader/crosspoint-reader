@@ -230,12 +230,19 @@ python3 scripts/devctl.py --port /dev/ttyACM0 --log run.log \
 | `btn:<NAME>[:<how>]` | `CMD:BTN:...`, then waits for `IDLE` |
 | `state` | sends `CMD:STATE` and keeps its fields |
 | `check:<key>=<regex>` | the last `state` step's field must match the regex as a whole |
-| `idle[:<ms>]` | `CMD:IDLE`; a timeout fails the step |
+| `idle[:<ms>]` | `CMD:IDLE`; an `IDLE_TIMEOUT` or `IDLE_ERROR` fails the step |
 | `shot:<file.png>` | `CMD:SCREENSHOT`, turned upright for the orientation `STATE` reports (`--rotate` overrides) |
 | `wait:<s>` / `expect:<regex>:<s>` | read the log for a while / until a line matches |
 
 `--script steps.txt` reads one step per line. `--log` keeps every device line with a timestamp, so
 a failed run comes with its serial log.
+
+A step takes only a reply to its own command: the command's name followed by `_` or `:`, or a
+`CMD_ERROR`. A command sent after a reply timed out (with `--keep-going`, which runs every step even
+after one failed) first waits until no line has come for 1 s (10 s at most), so a late reply cannot
+pass for the next one. If the port goes away while a command is written (a reboot), the tool
+reopens it and fails that step as `DELIVERY UNCERTAIN`: the command is not sent again, as the
+device may have run it.
 
 ## Limits
 

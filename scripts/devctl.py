@@ -12,7 +12,7 @@ them all and exits non-zero if any failed).
   btn:<NAME>[:<how>]    CMD:BTN:<NAME>[:<how>], then wait until the device is idle
   state                 CMD:STATE, print the reply and remember its fields for `check:`
   check:<key>=<regex>   the last STATE's <key> must match <regex> (re.fullmatch)
-  idle[:<ms>]           CMD:IDLE[:<ms>], wait for IDLE / IDLE_TIMEOUT (a timeout fails the step)
+  idle[:<ms>]           CMD:IDLE[:<ms>], wait for its answer (IDLE_TIMEOUT or IDLE_ERROR fails it)
   shot:<file.png>       CMD:SCREENSHOT, decode the 1-bit frame, rotate it, save it (needs Pillow)
   wait:<seconds>        read (and log) the device's output for a while
   expect:<regex>:<sec>  read until an output line matches (re.search), fail otherwise
@@ -23,7 +23,8 @@ Every line the device prints goes to --log with a timestamp.
 The port is opened with the default DTR/RTS lines, which does not reset the reader, and closed with
 RTS dropped before DTR: RTS high with DTR low is esptool's reset request, which a plain close on
 Windows can send. The device re-enumerates its USB port across a reboot; the tool reopens it and
-carries on.
+carries on. A command whose write failed that way fails its step as DELIVERY UNCERTAIN and is not
+sent again: the device may have run it.
 """
 import argparse
 import re
@@ -38,10 +39,12 @@ except ImportError:
 # The device takes lines of up to 255 bytes with their line end; this tool sends "\r\n" on opening the
 # port, so a first command must leave room for those two bytes as well.
 MAX_LINE = 253
-# First words of every reply the firmware sends to a command.
-REPLY = re.compile(r"^(BTN_|ACT_|STATE:|IDLE|HELP:|CMD_ERROR|SCREENSHOT_)")
 FAILED = re.compile(r"_ERROR|_TIMEOUT|^CMD_ERROR")
 IDLE_DEFAULT_MS = 10000
+# After a reply timed out, the next command waits until no line has come for RESYNC_QUIET_S (at most
+# RESYNC_MAX_S): a late reply to the old command must not pass for a reply to the new one.
+RESYNC_QUIET_S = 1.0
+RESYNC_MAX_S = 10.0
 
 # GfxRenderer draws LandscapeCounterClockwise in the panel's own frame; the others are turned.
 # Degrees for PIL's rotate() (counter-clockwise) that turn the frame upright.
@@ -81,12 +84,29 @@ def split_fields(text):
     return fields
 
 
+def reply_family(text):
+    """Replies to command `text` start with its name and '_' or ':' (IDLE:, IDLE_TIMEOUT:, ...).
+    The name is taken as the device takes it, after spaces and tabs around the command."""
+    return re.compile(re.escape(text.strip(" \t").split(":", 1)[0]) + "[_:]")
+
+
+def is_reply_to(line, family):
+    """Whether `line` answers a command of `family`. CMD_ERROR answers a line the device could not
+    take as any command."""
+    return family.match(line) is not None or line.startswith("CMD_ERROR")
+
+
+class DeliveryUncertain(Exception):
+    """Writing a command failed with the port: the device may or may not have received it."""
+
+
 class Device:
     def __init__(self, port, log_path=None):
         self.port = port
         self.log = open(log_path, "a", encoding="utf-8", errors="replace") if log_path else None
         self.t0 = time.time()
         self.buf = b""
+        self.unsynced = False  # True from a send until its reply is read: a late reply may still come
         self.ser = self._open()
 
     def note(self, line):
@@ -115,17 +135,20 @@ class Device:
                 pass  # a port without modem lines (a pty)
         self.ser.close()
 
+    def _reopen(self):
+        """The port went away (reboot, sleep, re-enumeration): reopen it."""
+        try:
+            self.close()
+        except (serial.SerialException, OSError):
+            pass
+        time.sleep(1)
+        self.ser = self._open()
+
     def _read(self, size):
         try:
             return self.ser.read(size)
         except (serial.SerialException, OSError):
-            # The port went away (reboot, sleep, re-enumeration): reopen and go on.
-            try:
-                self.close()
-            except (serial.SerialException, OSError):
-                pass
-            time.sleep(1)
-            self.ser = self._open()
+            self._reopen()
             return b""
 
     def _read_some(self):
@@ -165,20 +188,41 @@ class Device:
             line, self.buf = self.buf[:nl], self.buf[nl + 1:]
             self.note(line.decode("utf-8", errors="replace").rstrip("\r"))
 
+    def resync(self):
+        """Read (and log) until no line has come for RESYNC_QUIET_S, at most RESYNC_MAX_S."""
+        end = time.time() + RESYNC_MAX_S
+        quiet_until = time.time() + RESYNC_QUIET_S
+        while time.time() < min(end, quiet_until):
+            if self.read_line(min(end, quiet_until)) is not None:
+                quiet_until = time.time() + RESYNC_QUIET_S
+        self.unsynced = False
+
     def send(self, text):
         line = ("CMD:" + text).encode()
         if len(line) > MAX_LINE:
             raise ValueError(f"command longer than {MAX_LINE} bytes: {text[:40]}...")
+        if self.unsynced:
+            self.resync()
         self.drain()
         self.note(f">>> CMD:{text}")
-        self.ser.write(line + b"\n")
+        self.unsynced = True
+        try:
+            self.ser.write(line + b"\n")
+        except (serial.SerialException, OSError) as error:
+            self.note(f"write failed: {error}")
+            self._reopen()
+            raise DeliveryUncertain(f"CMD:{text} (port reopened, not resent)") from error
 
     def command(self, text, timeout=20):
-        """Send a command and return its reply line, or None. Log lines in between are skipped."""
+        """Send a command and return its reply line, or None. Other lines are skipped: log lines and
+        replies to other commands."""
+        family = reply_family(text)
         self.send(text)
         deadline = time.time() + timeout
         while (line := self.read_line(deadline)) is not None:
-            if REPLY.match(line):
+            if is_reply_to(line, family):
+                # A wait already running on the device still sends its own answer.
+                self.unsynced = line == "IDLE_ERROR:busy"
                 return line
         return None
 
@@ -213,8 +257,12 @@ class Device:
                     image = image.rotate(rotate, expand=True)
                 image.save(path)
                 end = self.read_line(time.time() + 5)
-                return None if end == "SCREENSHOT_END" else f"no SCREENSHOT_END (got {end!r})"
-            if line.startswith("SCREENSHOT_ERROR"):
+                if end != "SCREENSHOT_END":
+                    return f"no SCREENSHOT_END (got {end!r})"
+                self.unsynced = False
+                return None
+            if line.startswith("SCREENSHOT_ERROR") or line.startswith("CMD_ERROR"):
+                self.unsynced = False
                 return line
         return "no reply"
 
@@ -230,54 +278,65 @@ def wait_idle(device, arg=""):
     return bool(reply) and reply.startswith("IDLE:")
 
 
+def run_step(device, step, rotate, fields):
+    """Runs one step and returns whether it passed. `fields` keeps the last STATE's fields."""
+    kind, _, rest = step.partition(":")
+    if kind == "cmd":
+        timeout = idle_timeout(rest[5:]) if rest.startswith("IDLE") else 20
+        reply = device.command(rest, timeout=timeout)
+        print(reply if reply else f"NO REPLY to {rest}")
+        ok = bool(reply) and not FAILED.search(reply)
+    elif kind == "btn":
+        reply = device.command("BTN:" + rest)
+        print(reply if reply else f"NO REPLY to BTN:{rest}")
+        ok = reply == "BTN_OK" and wait_idle(device)
+    elif kind == "state":
+        reply, parsed = device.state()
+        print(reply if reply else "NO REPLY to STATE")
+        ok = parsed is not None
+        if ok:
+            fields.clear()
+            fields.update(parsed)
+    elif kind == "check":
+        key, _, pattern = rest.partition("=")
+        value = fields.get(key)
+        ok = value is not None and re.fullmatch(pattern, value) is not None
+        print(f"check {key}={value!r} ~ /{pattern}/: {'ok' if ok else 'FAILED'}")
+    elif kind == "idle":
+        ok = wait_idle(device, rest)
+    elif kind == "shot":
+        error = device.screenshot(rest, rotate)
+        print(f"screenshot -> {rest}" if error is None else f"SCREENSHOT FAILED: {error}")
+        ok = error is None
+    elif kind == "wait":
+        end = time.time() + float(rest)
+        while device.read_line(end) is not None:
+            pass
+        ok = True
+    elif kind == "expect":
+        pattern, _, seconds = rest.rpartition(":")
+        end = time.time() + float(seconds)
+        found = None
+        while (line := device.read_line(end)) is not None:
+            if re.search(pattern, line):
+                found = line
+                break
+        print(f"matched: {found}" if found else f"NOT SEEN: {pattern}")
+        ok = found is not None
+    else:
+        print(f"unknown step {step!r}")
+        ok = False
+    return ok
+
+
 def run(device, steps, rotate, keep_going=False):
     fields = {}
     all_ok = True
     for step in steps:
-        kind, _, rest = step.partition(":")
-        if kind == "cmd":
-            timeout = idle_timeout(rest[5:]) if rest.startswith("IDLE") else 20
-            reply = device.command(rest, timeout=timeout)
-            print(reply if reply else f"NO REPLY to {rest}")
-            ok = bool(reply) and not FAILED.search(reply)
-        elif kind == "btn":
-            reply = device.command("BTN:" + rest)
-            print(reply if reply else f"NO REPLY to BTN:{rest}")
-            ok = reply == "BTN_OK" and wait_idle(device)
-        elif kind == "state":
-            reply, parsed = device.state()
-            print(reply if reply else "NO REPLY to STATE")
-            ok = parsed is not None
-            if ok:
-                fields = parsed
-        elif kind == "check":
-            key, _, pattern = rest.partition("=")
-            value = fields.get(key)
-            ok = value is not None and re.fullmatch(pattern, value) is not None
-            print(f"check {key}={value!r} ~ /{pattern}/: {'ok' if ok else 'FAILED'}")
-        elif kind == "idle":
-            ok = wait_idle(device, rest)
-        elif kind == "shot":
-            error = device.screenshot(rest, rotate)
-            print(f"screenshot -> {rest}" if error is None else f"SCREENSHOT FAILED: {error}")
-            ok = error is None
-        elif kind == "wait":
-            end = time.time() + float(rest)
-            while device.read_line(end) is not None:
-                pass
-            ok = True
-        elif kind == "expect":
-            pattern, _, seconds = rest.rpartition(":")
-            end = time.time() + float(seconds)
-            found = None
-            while (line := device.read_line(end)) is not None:
-                if re.search(pattern, line):
-                    found = line
-                    break
-            print(f"matched: {found}" if found else f"NOT SEEN: {pattern}")
-            ok = found is not None
-        else:
-            print(f"unknown step {step!r}")
+        try:
+            ok = run_step(device, step, rotate, fields)
+        except DeliveryUncertain as error:
+            print(f"DELIVERY UNCERTAIN: {error}")
             ok = False
         if not ok:
             print(f"step failed: {step}")
