@@ -18,10 +18,8 @@ bool isEscaped(const char c) { return c == '"' || c == '\\'; }
 
 // The bytes appendField() writes for `value`, quotes and escapes included.
 size_t valueSize(const std::string_view value) {
-  const bool quoted = needsQuotes(value);
-  size_t size = quoted ? 2 : 0;
-  for (const char c : value) size += quoted && isEscaped(c) ? 2 : 1;
-  return size;
+  if (!needsQuotes(value)) return value.size();
+  return 2 + value.size() + static_cast<size_t>(std::count_if(value.begin(), value.end(), isEscaped));
 }
 
 }  // namespace
