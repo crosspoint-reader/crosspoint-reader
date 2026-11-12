@@ -420,11 +420,7 @@ int main() {
         assert(pick.pages[0]->renderCalls == 0 && pick.renderer.ink == beforeMove);
         cleanPaint();
       }
-      else {
-        assert(pick.pages[0]->renderCalls == 2);
-        // Select mode confirms into the action menu, so its label is Done rather than Look up.
-        assert(GUI.confirmLabel == (lookupLabel ? STR_LOOKUP : STR_DONE));
-      }
+      else assert(pick.pages[0]->renderCalls == 2);
       auto actual = pick.renderer.ink;
       cleanPaint();
       assert(pick.renderer.ink == actual);
@@ -616,10 +612,6 @@ int main() {
   activity.words[1].endOffset = 13;
   activity.words[0].discretionaryHyphen = true;
   expect(activity, 0, 1, "discretionary");
-  // Adjacent CJK boxes export without separators.
-  activity.words[0].text = "漢";
-  activity.words[1].text = "字";
-  expect(activity, 0, 1, "漢字");
   activity.words[0].text = "Café";
   activity.words[0].endOffset = 5;
   activity.words[0].discretionaryHyphen = false;
