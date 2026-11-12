@@ -231,17 +231,18 @@ python3 scripts/devctl.py --port /dev/ttyACM0 --log run.log \
 
 | Step | Does |
 | --- | --- |
-| `cmd:<TEXT>` | sends `CMD:<TEXT>`, prints the reply, fails on an `_ERROR`/`_TIMEOUT` reply |
+| `cmd:<TEXT>` | sends `CMD:<TEXT>`, prints the reply, fails when the reply's type (before the first `:`) ends in `_ERROR` or `_TIMEOUT`; `cmd:SCREENSHOT` reads the frame off the line without saving it |
 | `btn:<NAME>[:<how>]` | `CMD:BTN:...`, then `CMD:IDLE` with the default 10 s plus the hold |
 | `state` | sends `CMD:STATE` and keeps its fields |
 | `check:<key>=<regex>` | the last `state` step's field must match the regex as a whole |
 | `idle[:<ms>]` | `CMD:IDLE`; an `IDLE_TIMEOUT` or `IDLE_ERROR` fails the step |
-| `shot:<file.png>` | `CMD:SCREENSHOT`, turned upright for the orientation `STATE` reports (`--rotate` overrides) |
-| `wait:<s>` / `expect:<regex>:<s>` | read the log for a while / until a line matches |
+| `shot:<file.png>` | `CMD:SCREENSHOT`, turned upright for the orientation `STATE` reports, and failed when `STATE` reports none; `--rotate <degrees>` overrides, and a release build, which answers no `STATE`, needs it |
+| `wait:<s>` / `expect:<regex>:<s>` | read the log for a while / until a line matches (`<s>`: finite, not negative) |
 
 `--script steps.txt` reads one step per line. `--log` keeps every device line with a timestamp, so
 a failed run comes with its serial log. A step that cannot be run as written (a pattern or number
-that does not parse, a command longer than a line may be) fails like any other.
+that does not parse, a duration that is not a finite number of seconds, a command longer than a
+line may be) or whose screenshot cannot be saved fails like any other.
 
 A step takes only a reply to its own command: the command's name followed by `_` or `:`, or a
 `CMD_ERROR`. It waits for it as long as the device may take: an `IDLE` its own timeout and 5 s, a

@@ -37,10 +37,15 @@ finally:
 class FakePort:
     """Bytes arrive at their scheduled time. `replies` maps a written line to (bytes, delay)."""
 
-    def __init__(self, replies=None, fail_writes=0, fail_reads=0):
+    def __init__(self, replies=None, fail_writes=0, fail_reads=0, fail_next_read=False, fail_after_bytes=None,
+                 fail_open_write=False):
         self.replies = replies or {}
         self.fail_writes = fail_writes  # commands whose write raises, as on a port that went away
         self.fail_reads = fail_reads  # reads after a command that raise, likewise
+        self.fail_next_read = fail_next_read  # the very next read raises
+        self.fail_after_bytes = fail_after_bytes  # a read raises once this many bytes went out
+        self.fail_open_write = fail_open_write  # the "\r\n" written on opening raises
+        self.delivered = 0
         self.incoming = []  # (time, bytes)
         self.written = []
         self.is_open = True
@@ -63,23 +68,37 @@ class FakePort:
         self._due()
 
     def read(self, size):
-        if self.fail_reads and len(self.written) > 1:
-            self.fail_reads -= 1
+        failing = self.fail_next_read or (self.fail_reads and len(self.written) > 1)
+        if self.fail_after_bytes is not None and self.delivered >= self.fail_after_bytes:
+            self.fail_after_bytes = None
+            failing = True
+        if failing:
+            if self.fail_next_read:
+                self.fail_next_read = False
+            elif self.fail_reads and len(self.written) > 1:
+                self.fail_reads -= 1
             raise SerialException("read failed: device reports readiness to read but returned no data")
         now, data = self._due()
         if len(data) > size:
             self.incoming.insert(0, (now, data[size:]))
         elif not data:
             time.sleep(0.005)
+        self.delivered += min(len(data), size)
         return data[:size]
 
     def write(self, data):
+        if data == b"\r\n" and self.fail_open_write:
+            self.fail_open_write = False
+            raise SerialException("write failed: [Errno 5] Input/output error")
         if data != b"\r\n" and self.fail_writes:
             self.fail_writes -= 1
             raise SerialException("write failed: [Errno 5] Input/output error")
         self.written.append(data)
         if data in self.replies:
-            self.arrive(*self.replies[data])
+            reply = self.replies[data]
+            if isinstance(reply, list):  # one per write, the last one kept
+                reply = reply.pop(0) if len(reply) > 1 else reply[0]
+            self.arrive(*reply)
         return len(data)
 
     def close(self):
@@ -92,10 +111,10 @@ def open_device(*ports):
     return devctl.Device("/dev/fake")
 
 
-def run(device, steps):
+def run(device, steps, rotate=0):
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        ok = devctl.run(device, steps, rotate=0, keep_going=True)
+        ok = devctl.run(device, steps, rotate=rotate, keep_going=True)
     return ok, out.getvalue()
 
 
@@ -197,6 +216,117 @@ class DevctlTest(unittest.TestCase):
         self.assertEqual(devctl.press_ms("BACK:LONG"), 1100)
         self.assertEqual(devctl.press_ms("POWER:DOUBLE"), 120)
         self.assertEqual(devctl.press_ms("CONFIRM"), 60)
+
+    # The reopened port stays silent: the wait ends with the reopen, not at the reply deadline.
+    @patch.object(devctl, "REPLY_TIMEOUT_S", 5)
+    def test_a_reopen_ends_the_wait_for_a_reply_at_once(self):
+        device = open_device(FakePort(fail_reads=1), FakePort())
+        start = time.time()
+        self.assertIsNone(device.command("STATE"))
+        self.assertLess(time.time() - start, 3)
+
+    @patch.object(devctl, "SCREENSHOT_START_S", 5)
+    def test_a_reopen_ends_the_wait_for_a_frame_at_once(self):
+        device = open_device(FakePort(fail_reads=1), FakePort())
+        start = time.time()
+        self.assertEqual(device.screenshot("unused.png", 0), "no reply: the port was reopened")
+        self.assertLess(time.time() - start, 3)
+
+    @patch.object(devctl, "SCREENSHOT_START_S", 1)
+    def test_auto_rotation_without_an_orientation_fails_the_shot(self):
+        port = FakePort(replies={b"CMD:STATE\n": (b"STATE_ERROR:reply too long\n", 0)})
+        device = open_device(port)
+        ok, out = run(device, ["shot:unused.png"], rotate="auto")
+        self.assertFalse(ok)
+        self.assertIn("SCREENSHOT FAILED: no orientation to turn it by", out)
+        self.assertEqual(port.written, [b"\r\n", b"CMD:STATE\n"], "no frame is asked for")
+
+    def test_an_error_word_in_a_reply_body_is_no_failure(self):
+        state = b'STATE: activity=EpubReader title="NETWORK_ERROR and IDLE_TIMEOUT"\n'
+        port = FakePort(replies={b"CMD:STATE\n": (state, 0)})
+        device = open_device(port)
+        ok, out = run(device, ["cmd:STATE"])
+        self.assertTrue(ok, out)
+        self.assertTrue(devctl.is_failure("IDLE_TIMEOUT:render"))
+        self.assertTrue(devctl.is_failure("CMD_ERROR:unknown command X"))
+        self.assertFalse(devctl.is_failure("IDLE:250"))
+
+    def test_a_failed_state_leaves_no_fields_for_check(self):
+        replies = [(b"STATE: activity=Home\n", 0), (b"STATE_ERROR:reply too long\n", 0)]
+        port = FakePort(replies={b"CMD:STATE\n": replies})
+        device = open_device(port)
+        ok, out = run(device, ["state", "state", "check:activity=Home"])
+        self.assertFalse(ok)
+        self.assertIn("check activity=None ~ /Home/: FAILED", out)
+
+    # send()'s drain finds the old port gone and reopens it; the command goes to the new port, whose
+    # reply is the one to take.
+    def test_a_reopen_before_the_write_still_takes_the_reply(self):
+        old = FakePort(fail_next_read=True)
+        new = FakePort(replies={b"CMD:STATE\n": (b"STATE: activity=Home\n", 0)})
+        device = open_device(old, new)
+        old.arrive(b"I (100) a log line\n")  # after the open, which drops what came before
+        self.assertEqual(device.command("STATE"), "STATE: activity=Home")
+        self.assertEqual(new.written, [b"\r\n", b"CMD:STATE\n"])
+
+    # Opened, then the first write fails: that handle must be closed before the next try.
+    def test_a_port_that_fails_while_opening_is_closed(self):
+        first = FakePort(fail_open_write=True)
+        second = FakePort()
+        device = open_device(first, second)
+        self.assertFalse(first.is_open)
+        self.assertIs(device.ser, second)
+
+    @patch.object(devctl, "FRAME_STALL_S", 5)
+    def test_a_reopen_in_the_middle_of_a_frame_ends_it_at_once(self):
+        head = b"SCREENSHOT_START:100:8:100\n"
+        old = FakePort(replies={b"CMD:SCREENSHOT\n": (head + bytes(40), 0)}, fail_after_bytes=len(head) + 40)
+        device = open_device(old, FakePort())
+        start = time.monotonic()
+        self.assertEqual(device.screenshot("unused.png", 0), "the port was reopened during the frame")
+        self.assertLess(time.monotonic() - start, 3)
+
+    def test_durations_must_be_finite_and_not_negative(self):
+        port = FakePort(replies={b"CMD:STATE\n": (b"STATE: activity=Home\n", 0)})
+        device = open_device(port)
+        ok, out = run(device, ["wait:nan", "wait:-1", "expect:x:nan", "state"])
+        self.assertFalse(ok)
+        self.assertEqual(out.count("step failed:"), 3)
+        self.assertIn("STATE: activity=Home", out)
+        self.assertRaises(ValueError, devctl.seconds, "inf")
+
+    def test_cmd_screenshot_reads_the_frame_off_the_line(self):
+        frame = (b"SCREENSHOT_START:8:8:8\n" + bytes(8) + b"SCREENSHOT_END\n", 0)
+        port = FakePort(replies={
+            b"CMD:SCREENSHOT\n": frame,
+            b"CMD:STATE\n": (b"STATE: activity=Home\n", 0),
+        })
+        device = open_device(port)
+        ok, out = run(device, ["cmd:SCREENSHOT", "state"])
+        self.assertTrue(ok, out)
+        self.assertIn("frame read, not saved", out)
+
+    @unittest.skipUnless(importlib.util.find_spec("PIL"), "needs Pillow")
+    def test_a_screenshot_that_cannot_be_saved_fails_its_step(self):
+        frame = (b"SCREENSHOT_START:8:8:8\n" + bytes(8) + b"SCREENSHOT_END\n", 0)
+        port = FakePort(replies={
+            b"CMD:SCREENSHOT\n": frame,
+            b"CMD:STATE\n": (b"STATE: activity=Home\n", 0),
+        })
+        device = open_device(port)
+        ok, out = run(device, ["shot:/nonexistent-folder/x.png", "state"])
+        self.assertFalse(ok)
+        self.assertIn("SCREENSHOT FAILED: cannot save /nonexistent-folder/x.png", out)
+        self.assertIn("STATE: activity=Home", out)
+
+    def test_only_ascii_digits_are_numbers(self):
+        self.assertEqual(devctl.press_ms("DOWN:١٠٠٠"), 60)
+        self.assertEqual(devctl.reply_timeout("IDLE:٣٠٠٠٠"), 15)
+        head = "SCREENSHOT_START:١٠:8:10\n".encode()
+        port = FakePort(replies={b"CMD:SCREENSHOT\n": (head + bytes(10), 0)})
+        device = open_device(port)
+        with self.assertRaisesRegex(devctl.OutOfStep, "gives no frame size"):
+            device.screenshot("unused.png", 0)
 
     def test_the_idle_reply_timeout_follows_the_device_timeout(self):
         self.assertEqual(devctl.reply_timeout("IDLE"), 15)

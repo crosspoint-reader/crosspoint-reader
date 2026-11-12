@@ -8,19 +8,22 @@ Steps run in order; the run stops at the first failed step and exits non-zero (-
 them all and exits non-zero if any failed). Either way it stops when it is OUT OF STEP (below).
 
   cmd:<TEXT>            send "CMD:<TEXT>", wait for its reply line, print it
-                        (fails on a *_ERROR / *_TIMEOUT reply)
+                        (fails on a *_ERROR / *_TIMEOUT reply); cmd:SCREENSHOT reads the frame
+                        off the line without saving it
   btn:<NAME>[:<how>]    CMD:BTN:<NAME>[:<how>], then wait until the device is idle (CMD:IDLE with
                         the default 10 s plus the hold)
   state                 CMD:STATE, print the reply and remember its fields for `check:`
   check:<key>=<regex>   the last STATE's <key> must match <regex> (re.fullmatch)
   idle[:<ms>]           CMD:IDLE[:<ms>], wait for its answer (IDLE_TIMEOUT or IDLE_ERROR fails it)
-  shot:<file.png>       CMD:SCREENSHOT, decode the 1-bit frame, rotate it, save it (needs Pillow)
-  wait:<seconds>        read (and log) the device's output for a while
+  shot:<file.png>       CMD:SCREENSHOT, decode the 1-bit frame, rotate it, save it (needs Pillow);
+                        --rotate auto takes the orientation from STATE and fails without one
+  wait:<seconds>        read (and log) the device's output for a while (finite, not negative)
   expect:<regex>:<sec>  read until an output line matches (re.search), fail otherwise
 
 A --script file holds one step per line; blank lines and lines starting with # are skipped.
 Every line the device prints goes to --log with a timestamp. A step that cannot be run as written
-(a pattern or number that does not parse, a command too long to send) fails like any other.
+(a pattern or number that does not parse, a duration that is not a finite number of seconds, a
+command too long to send) or whose screenshot cannot be saved fails like any other.
 
 A step takes only a reply to its own command (its name and '_' or ':', or a CMD_ERROR) and waits for
 it as long as the device may take: an IDLE its own timeout and 5 s, a screenshot 30 s to start,
@@ -42,6 +45,7 @@ way when a run starts (from an IDLE a stopped run left waiting) can be taken by 
 of its name, if it arrives just as that command is sent.
 """
 import argparse
+import math
 import re
 import sys
 import time
@@ -54,7 +58,6 @@ except ImportError:
 # The device takes lines of up to 255 bytes with their line end; this tool sends "\r\n" on opening the
 # port, so a first command must leave room for those two bytes as well.
 MAX_LINE = 253
-FAILED = re.compile(r"_ERROR|_TIMEOUT|^CMD_ERROR")
 # How long to wait for a reply. The device answers a command in the loop pass that reads it, and
 # CMD:IDLE when its wait ends (IDLE_DEFAULT_MS, at most IDLE_MAX_MS); it gives up on a frame the
 # host has not taken for 15 s.
@@ -118,16 +121,28 @@ def is_reply_to(line, family):
     return family.match(line) is not None or line.startswith("CMD_ERROR")
 
 
+def is_failure(reply):
+    """Whether a reply reports a failure: its type (before the first ':') ends in _ERROR or _TIMEOUT.
+    The rest of the line is data, such as a book title."""
+    return reply.split(":", 1)[0].endswith(("_ERROR", "_TIMEOUT"))
+
+
 def reply_timeout(text):
     """Seconds to wait for the reply to CMD:<text>: as long as the device may take to send it."""
     name, _, arg = text.strip(" \t").partition(":")
     if name != "IDLE":
         return REPLY_TIMEOUT_S
-    try:
-        ms = int(arg) if arg else IDLE_DEFAULT_MS
-    except ValueError:
-        ms = IDLE_DEFAULT_MS  # the device refuses it at once
+    # The device reads ASCII digits with an optional sign; it refuses anything else at once.
+    ms = int(arg) if re.fullmatch(r"[+-]?[0-9]+", arg) else IDLE_DEFAULT_MS
     return max(0, min(ms, IDLE_MAX_MS)) / 1000 + IDLE_MARGIN_S
+
+
+def seconds(text):
+    """A wait:/expect: duration: a finite number of seconds, not negative."""
+    value = float(text)
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"not a duration in seconds: {text!r}")
+    return value
 
 
 class DeliveryUncertain(Exception):
@@ -142,24 +157,30 @@ class Device:
     def __init__(self, port, log_path=None):
         self.port = port
         self.log = open(log_path, "a", encoding="utf-8", errors="replace") if log_path else None
-        self.t0 = time.time()
+        self.t0 = time.monotonic()
         self.buf = b""
         self.reopens = 0  # replies to commands sent before a reopen went with the old connection
         self.ser = self._open()
 
     def note(self, line):
         if self.log:
-            self.log.write(f"[{time.time() - self.t0:8.2f}] {line}\n")
+            self.log.write(f"[{time.monotonic() - self.t0:8.2f}] {line}\n")
             self.log.flush()
 
     def _open(self):
         for _ in range(60):
+            s = None
             try:
                 s = serial.Serial(self.port, 115200, timeout=0.2)
                 s.reset_input_buffer()
                 s.write(b"\r\n")  # some hosts get no output before they have written something
                 return s
             except (serial.SerialException, OSError):
+                if s is not None:  # opened, then failed: a port left open cannot be opened again
+                    try:
+                        s.close()
+                    except (serial.SerialException, OSError):
+                        pass
                 time.sleep(0.5)
         sys.exit(f"cannot open {self.port}")
 
@@ -199,8 +220,10 @@ class Device:
             waiting = 0
         return self._read(min(max(waiting, 1), 65536))
 
-    def read_line(self, deadline):
-        while time.time() < deadline:
+    def read_line(self, deadline, reopens=None):
+        """The next line, or None at `deadline`. Given the reopen count a wait started at, None as
+        soon as the port has been reopened since: what it waits for went with the old connection."""
+        while time.monotonic() < deadline and (reopens is None or self.reopens == reopens):
             nl = self.buf.find(b"\n")
             if nl >= 0:
                 line, self.buf = self.buf[:nl], self.buf[nl + 1:]
@@ -210,14 +233,17 @@ class Device:
             self.buf += self._read_some()
         return None
 
-    def read_exact(self, size, stall_s):
-        """`size` bytes, or fewer when none have come for `stall_s` seconds."""
-        last = time.time()
-        while len(self.buf) < size and time.time() - last < stall_s:
+    def read_exact(self, size, stall_s, reopens=None):
+        """`size` bytes, or fewer when none have come for `stall_s` seconds, or (as read_line()) once
+        the port has been reopened."""
+        last = time.monotonic()
+        while len(self.buf) < size and time.monotonic() - last < stall_s:
+            if reopens is not None and self.reopens != reopens:
+                break
             have = len(self.buf)
             self.buf += self._read(min(65536, size - len(self.buf)))
             if len(self.buf) > have:
-                last = time.time()
+                last = time.monotonic()
         data, self.buf = self.buf[:size], self.buf[size:]
         return data
 
@@ -252,10 +278,10 @@ class Device:
         old connection. OutOfStep when no reply came in time, or after IDLE_ERROR:busy."""
         family = reply_family(text)
         timeout = reply_timeout(text)
-        reopens = self.reopens
         self.send(text)
-        deadline = time.time() + timeout
-        while self.reopens == reopens and (line := self.read_line(deadline)) is not None:
+        reopens = self.reopens  # after send(): its drain may have reopened the port before the write
+        deadline = time.monotonic() + timeout
+        while (line := self.read_line(deadline, reopens)) is not None:
             if not is_reply_to(line, family):
                 continue
             if line == "IDLE_ERROR:busy":
@@ -271,33 +297,39 @@ class Device:
         return reply, fields
 
     def screenshot(self, path, rotate):
-        if rotate == "auto":
-            _, fields = self.state()
-            rotate = ROTATION.get((fields or {}).get("orientation", ""), -90)
-        reopens = self.reopens
+        """CMD:SCREENSHOT, its frame saved to `path` (None: read and dropped). None, or what failed."""
+        if path is not None and rotate == "auto":
+            reply, fields = self.state()
+            orientation = (fields or {}).get("orientation")
+            if orientation not in ROTATION:
+                return f"no orientation to turn it by (STATE gave {reply!r}); pass --rotate"
+            rotate = ROTATION[orientation]
         self.send("SCREENSHOT")
-        deadline = time.time() + SCREENSHOT_START_S
-        while self.reopens == reopens and (line := self.read_line(deadline)) is not None:
+        reopens = self.reopens  # after send(), as in command()
+        deadline = time.monotonic() + SCREENSHOT_START_S
+        while (line := self.read_line(deadline, reopens)) is not None:
             if line.startswith("SCREENSHOT_START:"):
                 parts = line.split(":")
-                if not parts[1].isdigit():
+                if not re.fullmatch(r"[0-9]+", parts[1]):
                     raise OutOfStep(f"{line!r} gives no frame size, so the frame cannot be skipped")
                 size = int(parts[1])
-                data = self.read_exact(size, FRAME_STALL_S)
+                data = self.read_exact(size, FRAME_STALL_S, reopens)
                 if self.reopens != reopens:
                     return "the port was reopened during the frame"
                 if len(data) != size:
                     raise OutOfStep(f"the frame stopped after {len(data)} of {size} bytes")
-                end_deadline = time.time() + REPLY_TIMEOUT_S
-                end = self.read_line(end_deadline)
-                while end is not None and self.reopens == reopens and not end.startswith("SCREENSHOT_"):
-                    end = self.read_line(end_deadline)
+                end_deadline = time.monotonic() + REPLY_TIMEOUT_S
+                end = self.read_line(end_deadline, reopens)
+                while end is not None and not end.startswith("SCREENSHOT_"):
+                    end = self.read_line(end_deadline, reopens)
                 if self.reopens != reopens:
                     return "the port was reopened after the frame"
                 if end is None:
                     raise OutOfStep(f"no SCREENSHOT_END within {REPLY_TIMEOUT_S} s of the frame")
                 if end != "SCREENSHOT_END":
                     return end
+                if path is None:
+                    return None
                 if len(parts) >= 4:
                     width, height = int(parts[2]), int(parts[3])
                 elif size in PANELS:
@@ -309,7 +341,10 @@ class Device:
                 image = Image.frombytes("1", (width, height), data)
                 if rotate:
                     image = image.rotate(rotate, expand=True)
-                image.save(path)
+                try:
+                    image.save(path)
+                except OSError as error:
+                    return f"cannot save {path}: {error}"
                 return None
             if line.startswith("SCREENSHOT_ERROR") or line.startswith("CMD_ERROR"):
                 return line
@@ -329,7 +364,7 @@ def press_ms(arg):
         return LONG_HOLD_MS
     if how == "DOUBLE":
         return 2 * SHORT_HOLD_MS
-    return int(how) if how.isdigit() else SHORT_HOLD_MS
+    return int(how) if re.fullmatch(r"[0-9]+", how) else SHORT_HOLD_MS
 
 
 def wait_idle(device, arg=""):
@@ -342,21 +377,27 @@ def wait_idle(device, arg=""):
 def run_step(device, step, rotate, fields):
     """Runs one step and returns whether it passed. `fields` keeps the last STATE's fields."""
     kind, _, rest = step.partition(":")
-    if kind == "cmd":
+    if kind == "cmd" and rest.strip(" \t").split(":", 1)[0] == "SCREENSHOT":
+        # The frame after SCREENSHOT_START must be read off the line, not left there as log noise.
+        error = device.screenshot(None, 0)
+        print("SCREENSHOT_END (frame read, not saved; shot:<file.png> saves it)" if error is None else
+              f"SCREENSHOT FAILED: {error}")
+        ok = error is None
+    elif kind == "cmd":
         reply = device.command(rest)
         print(reply if reply else no_reply(rest))
-        ok = bool(reply) and not FAILED.search(reply)
+        ok = bool(reply) and not is_failure(reply)
     elif kind == "btn":
         reply = device.command("BTN:" + rest)
         print(reply if reply else no_reply("BTN:" + rest))
         # The device's default wait would run out under a long hold: the hold comes on top.
         ok = reply == "BTN_OK" and wait_idle(device, str(IDLE_DEFAULT_MS + press_ms(rest)))
     elif kind == "state":
+        fields.clear()  # a failed STATE leaves nothing for check: to match
         reply, parsed = device.state()
         print(reply if reply else no_reply("STATE"))
         ok = parsed is not None
         if ok:
-            fields.clear()
             fields.update(parsed)
     elif kind == "check":
         key, _, pattern = rest.partition("=")
@@ -370,13 +411,13 @@ def run_step(device, step, rotate, fields):
         print(f"screenshot -> {rest}" if error is None else f"SCREENSHOT FAILED: {error}")
         ok = error is None
     elif kind == "wait":
-        end = time.time() + float(rest)
+        end = time.monotonic() + seconds(rest)
         while device.read_line(end) is not None:
             pass
         ok = True
     elif kind == "expect":
-        pattern, _, seconds = rest.rpartition(":")
-        end = time.time() + float(seconds)
+        pattern, _, duration = rest.rpartition(":")
+        end = time.monotonic() + seconds(duration)
         found = None
         while (line := device.read_line(end)) is not None:
             if re.search(pattern, line):
@@ -426,7 +467,8 @@ def main():
     ap.add_argument("--log", default=None, help="append the device's output here, timestamped")
     ap.add_argument("--rotate", type=rotation, default="auto",
                     help="degrees to turn screenshots (counter-clockwise), or auto (default): upright for "
-                         "the orientation STATE reports")
+                         "the orientation STATE reports. A release build answers no STATE: pass "
+                         "degrees with it")
     ap.add_argument("--script", default=None, help="read steps from this file, one per line")
     ap.add_argument("--keep-going", action="store_true", help="run every step even after one failed")
     ap.add_argument("steps", nargs="*")
