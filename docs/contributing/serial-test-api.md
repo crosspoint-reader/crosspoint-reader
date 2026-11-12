@@ -53,7 +53,7 @@ build_flags =
   -DENABLE_SERIAL_CONTROL=1
 ```
 
-The full set costs about 6 KB of flash and 680 B of static RAM on the `default` (ESP32-C3) build:
+The full set costs about 7 KB of flash and 680 B of static RAM on the `default` (ESP32-C3) build:
 the command line and reply buffers, the press queue and the idle check. Nothing stays allocated on
 the heap.
 
@@ -143,11 +143,16 @@ screen could not be created: a book the reader refuses, or no memory),
 
 ```text
 CMD:STATE
-STATE: activity=EpubReader stack="" reader=epub title="Alice's Adventures" spine=3 page=4 pages=12 progress=17 orientation=portrait visit=7 heap=104232 maxblock=81908 minheap=61440 uptime=812345
+STATE: activity=EpubReader reader=epub spine=3 page=4 pages=12 progress=17 orientation=portrait visit=7 heap=104232 maxblock=81908 minheap=61440 uptime=812345 stack="" title="Alice's Adventures"
 ```
 
 Space-separated `key=value` fields. A value that is empty or holds a space, `"`, `\` or `=` is in
 double quotes, with `"` and `\` escaped by a backslash.
+
+A reply line holds at most 319 bytes. `stack` and `title` come last and are cut to the room left,
+before a UTF-8 character and with their quotes kept, so the other fields always arrive whole; a
+cut field is named in a last field, `clipped=title` (or `stack`, or `stack,title`). A line that
+would still not fit is answered `STATE_ERROR:reply too long` instead.
 
 | Field | Meaning |
 | --- | --- |
@@ -159,6 +164,7 @@ double quotes, with `"` and `\` escaped by a backslash.
 | `heap` `maxblock` `minheap` | internal heap: free bytes, largest free block, lowest free since boot |
 | `uptime` | milliseconds since boot |
 | `btn_dropped` | only when not 0: presses the input manager never took in (see [Limits](#limits)) |
+| `clipped` | only when `stack` or `title` was cut: their names, comma-separated |
 
 New fields may be added; a host should ignore keys it does not know.
 

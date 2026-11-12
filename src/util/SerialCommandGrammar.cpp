@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 namespace SerialCommandGrammar {
 
@@ -11,6 +12,16 @@ bool needsQuotes(const std::string_view value) {
   return value.empty() || std::any_of(value.begin(), value.end(), [](const char c) {
            return c == ' ' || c == '"' || c == '\\' || c == '=' || static_cast<unsigned char>(c) < 0x20;
          });
+}
+
+bool isEscaped(const char c) { return c == '"' || c == '\\'; }
+
+// The bytes appendField() writes for `value`, quotes and escapes included.
+size_t valueSize(const std::string_view value) {
+  const bool quoted = needsQuotes(value);
+  size_t size = quoted ? 2 : 0;
+  for (const char c : value) size += quoted && isEscaped(c) ? 2 : 1;
+  return size;
 }
 
 }  // namespace
@@ -95,10 +106,48 @@ void ReplyLine::appendField(const char* key, const std::string_view value) {
       put(' ');
       continue;
     }
-    if (quoted && (c == '"' || c == '\\')) put('\\');
+    if (quoted && isEscaped(c)) put('\\');
     put(c);
   }
   if (quoted) put('"');
+}
+
+bool ReplyLine::appendFieldClipped(const char* key, const std::string_view value, const size_t reserve) {
+  const size_t keySize = 2 + strlen(key);  // " <key>="
+  const size_t left = capacity - length;
+  const size_t room = left > reserve + keySize ? left - reserve - keySize : 0;
+  if (valueSize(value) <= room) {
+    appendField(key, value);
+    return true;
+  }
+  // The longest start that fits, counted as if quoted, ending before a character's first byte.
+  size_t used = 2;
+  size_t end = 0;
+  for (size_t i = 0; i < value.size(); ++i) {
+    if ((static_cast<unsigned char>(value[i]) & 0xC0) != 0x80) end = i;
+    used += isEscaped(value[i]) ? 2 : 1;
+    if (used > room) break;
+  }
+  appendField(key, value.substr(0, end));
+  return false;
+}
+
+bool appendClippedTail(ReplyLine& line, TailField* fields, const size_t count) {
+  size_t markerSize = strlen(" clipped=") + (count > 0 ? count - 1 : 0);  // with the commas
+  for (size_t i = 0; i < count; ++i) markerSize += strlen(fields[i].key);
+  for (size_t i = 0; i < count; ++i) {
+    size_t reserve = markerSize;
+    for (size_t j = i + 1; j < count; ++j) reserve += strlen(fields[j].key) + 4;  // ` key=""`
+    if (!line.appendFieldClipped(fields[i].key, fields[i].value, reserve)) fields[i].cut = true;
+  }
+  const char* separator = " clipped=";
+  for (size_t i = 0; i < count; ++i) {
+    if (!fields[i].cut) continue;
+    line.append(separator);
+    line.append(fields[i].key);
+    separator = ",";
+  }
+  return !line.truncated();
 }
 
 void ReplyLine::appendField(const char* key, const long value) {

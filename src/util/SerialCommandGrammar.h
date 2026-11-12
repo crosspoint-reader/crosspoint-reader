@@ -37,6 +37,10 @@ class ReplyLine {
   // quotes. Control characters become spaces: the reply must stay one line.
   void appendField(const char* key, std::string_view value);
   void appendField(const char* key, long value);
+  // appendField(), with the value cut short if needed so that `reserve` bytes stay free. The cut
+  // falls before a UTF-8 character and leaves the quotes whole. False when the value was cut. At
+  // least ` key=""` is written; when even that does not fit, the line is truncated().
+  bool appendFieldClipped(const char* key, std::string_view value, size_t reserve);
 
   std::string_view view() const { return {buffer, length}; }
   bool truncated() const { return cut; }
@@ -49,5 +53,17 @@ class ReplyLine {
   size_t length = 0;
   bool cut = false;
 };
+
+// A free-text field put last on a reply line (STATE's stack and title).
+struct TailField {
+  const char* key;
+  std::string_view value;
+  bool cut = false;  // set when the value was cut, here or before (a list cut by its own buffer)
+};
+
+// Appends `fields` as the line's last fields, each clipped so that the fields after it keep room
+// for an empty value and for a last field "clipped=<key>[,<key>...]" naming the cut ones. False
+// when the line overflowed anyway: it must not be sent.
+bool appendClippedTail(ReplyLine& line, TailField* fields, size_t count);
 
 }  // namespace SerialCommandGrammar

@@ -202,19 +202,12 @@ const char* orientationName(const GfxRenderer::Orientation orientation) {
 void cmdState(std::string_view /*arg*/) {
   ReplyLine line = startReply("STATE:");
   line.appendField("activity", activityManager.currentActivityName());
-  char names[128];
-  ReplyLine stack(names, sizeof(names));  // longer stacks are cut
-  for (size_t i = 0; i < activityManager.stackedActivityCount(); ++i) {
-    if (i > 0) stack.append(",");
-    stack.append(activityManager.stackedActivityName(i));
-  }
-  line.appendField("stack", stack.view());
+  ScreenshotInfo info;
   {
     RenderLock lock;  // the reader's position is also written by the render task
-    const ScreenshotInfo info = activityManager.getScreenshotInfo();
+    info = activityManager.getScreenshotInfo();
     if (info.readerType != ScreenshotInfo::ReaderType::None) {
       line.appendField("reader", readerTypeName(info.readerType));
-      line.appendField("title", info.title);
       if (info.spineIndex >= 0) line.appendField("spine", static_cast<long>(info.spineIndex + 1));
       line.appendField("page", static_cast<long>(info.currentPage));
       line.appendField("pages", static_cast<long>(info.totalPages));
@@ -229,6 +222,21 @@ void cmdState(std::string_view /*arg*/) {
   line.appendField("minheap", static_cast<long>(heap.minFreeBytes));
   line.appendField("uptime", static_cast<long>(millis()));
   if (presses.droppedPresses() > 0) line.appendField("btn_dropped", static_cast<long>(presses.droppedPresses()));
+
+  // The free text goes last, cut to the room left, so the fields above always arrive whole.
+  char names[128];
+  ReplyLine stack(names, sizeof(names));
+  for (size_t i = 0; i < activityManager.stackedActivityCount(); ++i) {
+    if (i > 0) stack.append(",");
+    stack.append(activityManager.stackedActivityName(i));
+  }
+  SerialCommandGrammar::TailField tail[] = {{"stack", stack.view(), stack.truncated()},
+                                            {"title", std::string_view(info.title)}};
+  const size_t tailCount = info.readerType != ScreenshotInfo::ReaderType::None ? 2 : 1;
+  if (!SerialCommandGrammar::appendClippedTail(line, tail, tailCount)) {
+    reply("STATE_ERROR:reply too long");
+    return;
+  }
   send(line);
 }
 

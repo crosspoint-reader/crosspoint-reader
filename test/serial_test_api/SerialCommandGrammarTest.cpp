@@ -5,10 +5,12 @@
 
 #include "util/SerialCommandGrammar.h"
 
+using SerialCommandGrammar::appendClippedTail;
 using SerialCommandGrammar::parseButtonArg;
 using SerialCommandGrammar::parseInt;
 using SerialCommandGrammar::PressKind;
 using SerialCommandGrammar::ReplyLine;
+using SerialCommandGrammar::TailField;
 
 namespace {
 
@@ -137,4 +139,95 @@ TEST(SerialCommandGrammar, ReplyLineStopsAtItsCapacity) {
   line.append(" STATE");
   EXPECT_TRUE(line.truncated());
   EXPECT_EQ(line.view(), "HELP: ST");
+}
+
+TEST(SerialCommandGrammar, AClippedFieldThatFitsIsWrittenWhole) {
+  char buffer[32];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.append("S:");
+  EXPECT_TRUE(line.appendFieldClipped("t", "a b", 0));
+  EXPECT_EQ(line.view(), "S: t=\"a b\"");
+}
+
+// 5 bytes left for the value: the 2-byte character would end at 6, so the cut comes before it.
+TEST(SerialCommandGrammar, AClippedFieldIsCutBeforeAUtf8Character) {
+  char buffer[10];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.append("S:");
+  EXPECT_FALSE(line.appendFieldClipped("t", "x \xC3\xA9y", 0));
+  EXPECT_EQ(line.view(), "S: t=\"x \"");
+  EXPECT_FALSE(line.truncated());
+}
+
+// An escaped character is kept whole or left out: no lone backslash before the closing quote.
+TEST(SerialCommandGrammar, AClippedFieldKeepsEscapesWhole) {
+  char buffer[11];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.append("S:");
+  EXPECT_FALSE(line.appendFieldClipped("t", "a b\"c", 0));
+  EXPECT_EQ(line.view(), "S: t=\"a b\"");
+}
+
+TEST(SerialCommandGrammar, AClippedFieldLeavesTheReserveFree) {
+  char buffer[24];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.append("S:");
+  EXPECT_FALSE(line.appendFieldClipped("t", "abcdefghijklmnop", 10));
+  line.append(" clipped=t");
+  EXPECT_FALSE(line.truncated());
+  EXPECT_EQ(line.view(), "S: t=abcdefg clipped=t");
+}
+
+TEST(SerialCommandGrammar, AClippedFieldWithNoRoomLeftTruncatesTheLine) {
+  char buffer[6];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.append("S:");
+  line.appendFieldClipped("title", "abc", 0);
+  EXPECT_TRUE(line.truncated());
+}
+
+TEST(SerialCommandGrammar, AClippedTailThatFitsHasNoMarker) {
+  char buffer[64];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.append("STATE: page=4");
+  TailField tail[] = {{"stack", "Home"}, {"title", "A b"}};
+  EXPECT_TRUE(appendClippedTail(line, tail, 2));
+  EXPECT_EQ(line.view(), "STATE: page=4 stack=Home title=\"A b\"");
+}
+
+// The title is cut so that `clipped=stack,title` would still fit after it.
+TEST(SerialCommandGrammar, AClippedTailNamesTheFieldItCut) {
+  char buffer[64];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.append("STATE: page=4");
+  TailField tail[] = {{"stack", "Home"}, {"title", "A long title here"}};
+  EXPECT_TRUE(appendClippedTail(line, tail, 2));
+  EXPECT_EQ(line.view(), "STATE: page=4 stack=Home title=\"A long titl\" clipped=title");
+}
+
+// The stack keeps room for the title's empty field: both are cut, both named, the line full.
+TEST(SerialCommandGrammar, AClippedTailCanCutEveryField) {
+  char buffer[56];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.append("STATE: page=4");
+  TailField tail[] = {{"stack", "Home,FileBrowser"}, {"title", "A long title here"}};
+  EXPECT_TRUE(appendClippedTail(line, tail, 2));
+  EXPECT_EQ(line.view(), "STATE: page=4 stack=Home, title=\"A \" clipped=stack,title");
+}
+
+TEST(SerialCommandGrammar, AClippedTailNamesAFieldCutBefore) {
+  char buffer[64];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.append("STATE: page=4");
+  TailField tail[] = {{"stack", "Home", true}};
+  EXPECT_TRUE(appendClippedTail(line, tail, 1));
+  EXPECT_EQ(line.view(), "STATE: page=4 stack=Home clipped=stack");
+}
+
+TEST(SerialCommandGrammar, AClippedTailWithoutRoomIsRefused) {
+  char buffer[30];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.append("STATE: page=4");
+  TailField tail[] = {{"stack", "Home"}, {"title", "A b"}};
+  EXPECT_FALSE(appendClippedTail(line, tail, 2));
 }
