@@ -137,9 +137,10 @@ CMD:ACT:LIBRARY
 CMD:ACT:SETTINGS
 ```
 
-Replies: `ACT_OK`, or `ACT_ERROR:no such file <path>`, `ACT_ERROR:cannot open <argument>` (the
-screen could not be created: a book the reader refuses, or no memory),
-`ACT_ERROR:unknown screen <name>`. The screen changes after the reply; wait for it with `IDLE`.
+Replies: `ACT_OK`, or `ACT_ERROR:no such file <path>`, `ACT_ERROR:cannot open <argument>` (no
+memory for the screen), `ACT_ERROR:unknown screen <name>`. The screen changes after the reply;
+wait for it with `IDLE`. A file the reader cannot read still gets `ACT_OK`: it fails when the
+reader opens it, which `STATE` and a screenshot show.
 
 ### What is on screen: `STATE`
 
@@ -160,7 +161,7 @@ would still not fit is answered `STATE_ERROR:reply too long` instead.
 | --- | --- |
 | `activity` | the screen in front (`Home`, `FileBrowser`, `EpubReader`, `SettingsList`, ...) |
 | `stack` | screens under it, bottom first, comma-separated |
-| `reader` `title` `spine` `page` `pages` `progress` | only in a reader: `epub`, `txt` or `xtc`; the title, cut at 63 bytes; `spine` (EPUB only) and `page` count from 1; `pages` is the chapter's page count for EPUB and the book's for TXT and XTC; `progress` is the book's percentage |
+| `reader` `title` `spine` `page` `pages` `progress` | only in a reader: `epub` (also for TXT and Markdown books, which the EPUB reader shows) or `xtc`; the title, cut at 63 bytes; `spine` (EPUB reader only) and `page` count from 1; `pages` is the chapter's page count in the EPUB reader and the book's in XTC; `progress` is the book's percentage |
 | `orientation` | `portrait`, `landscape_cw`, `portrait_inverted` or `landscape_ccw` |
 | `visit` | counts screen changes: a new value means a new screen, even one with the same name |
 | `heap` `maxblock` `minheap` | internal heap: free bytes, largest free block, lowest free since boot |
@@ -266,9 +267,17 @@ on from there.
 - Touch is not covered; the touch boards' buttons are.
 - `IDLE` looks at the frame buffer, not the panel: on screens that refresh the panel in the
   background (the reader's overlays), the waveform may still be running when `IDLE` answers.
+- A press does not reach code that reads the key contacts directly (`gpio.rawInputActive()`): a
+  real key cuts a chapter build short, a `BTN` press waits until that step of the build is done.
 - No command is read while the USB Drive mode owns the card, or while a screen runs a transfer that
   holds the main loop (a download, an upload, a catalog fetch). A `BTN:BACK` sent to cancel one
   arrives after it.
+- Replies carry no tag that ties them to a command. A host that stops when a reply does not come
+  stays in step within a run (as `devctl.py` does), but a reply still on its way when a run starts,
+  such as the answer of an `IDLE` a stopped run left waiting, is taken by the first command of its
+  name.
+- Log lines written by another task while a `SCREENSHOT` frame is sent land inside the frame and
+  garble the picture; the logging has no way to hold them.
 
 ## Adding a command
 
