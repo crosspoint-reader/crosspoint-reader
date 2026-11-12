@@ -267,17 +267,19 @@ on from there.
 - Touch is not covered; the touch boards' buttons are.
 - `IDLE` looks at the frame buffer, not the panel: on screens that refresh the panel in the
   background (the reader's overlays), the waveform may still be running when `IDLE` answers.
-- A press does not reach code that reads the key contacts directly (`gpio.rawInputActive()`): a
-  real key cuts a chapter build short, a `BTN` press waits until that step of the build is done.
+- A press does not reach code that reads the key contacts directly (`gpio.rawInputActive()`): on
+  the Xteink boards a real key (on any board, the power key) cuts a background chapter-build step
+  short; a `BTN` press waits for the step to end.
 - No command is read while the USB Drive mode owns the card, or while a screen runs a transfer that
   holds the main loop (a download, an upload, a catalog fetch). A `BTN:BACK` sent to cancel one
   arrives after it.
 - Replies carry no tag that ties them to a command. A host that stops when a reply does not come
   stays in step within a run (as `devctl.py` does), but a reply still on its way when a run starts,
-  such as the answer of an `IDLE` a stopped run left waiting, is taken by the first command of its
-  name.
-- Log lines written by another task while a `SCREENSHOT` frame is sent land inside the frame and
-  garble the picture; the logging has no way to hold them.
+  such as the answer of an `IDLE` a stopped run left waiting, can be taken by the first command of
+  its name, if it arrives just as that command is sent.
+- Log lines written by another task while a `SCREENSHOT` frame is sent land inside the frame; the
+  logging has no way to hold them. `SCREENSHOT_END` then no longer starts a line, so `devctl.py`
+  usually stops with `OUT OF STEP` after 20 s rather than save a garbled picture.
 
 ## Adding a command
 

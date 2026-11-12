@@ -37,8 +37,8 @@ and is not sent again (the device may have run it); a step waiting for its reply
 REPLY. With --keep-going the run goes on from there.
 
 Replies carry no tag. Stopping on a missing reply keeps one run in step, but a reply still on its
-way when a run starts (from an IDLE a stopped run left waiting) is taken by the first command of
-its name.
+way when a run starts (from an IDLE a stopped run left waiting) can be taken by the first command
+of its name, if it arrives just as that command is sent.
 """
 import argparse
 import re

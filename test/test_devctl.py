@@ -179,11 +179,12 @@ class DevctlTest(unittest.TestCase):
     def test_a_step_that_does_not_parse_fails_and_the_run_goes_on(self):
         port = FakePort(replies={b"CMD:STATE\n": (b"STATE: activity=Home\n", 0)})
         device = open_device(port)
-        ok, out = run(device, ["check:activity=(", "wait:abc", "expect:(:1", "cmd:" + "A" * 300, "state"])
+        # check: compiles its pattern only once a STATE has given it a field to match.
+        ok, out = run(device, ["state", "check:activity=(", "wait:abc", "cmd:" + "A" * 300, "state"])
         self.assertFalse(ok)
-        self.assertEqual(out.count("step failed:"), 4)
-        self.assertIn("STATE: activity=Home", out)
-        self.assertEqual(port.written, [b"\r\n", b"CMD:STATE\n"])
+        self.assertIn("missing ), unterminated subpattern", out)
+        self.assertEqual(out.count("step failed:"), 3)
+        self.assertEqual(port.written, [b"\r\n", b"CMD:STATE\n", b"CMD:STATE\n"])
 
     def test_a_held_press_waits_its_hold_on_top_of_the_default_idle(self):
         port = FakePort(replies={

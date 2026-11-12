@@ -124,7 +124,8 @@ TEST(SerialCommandGrammar, ReplyFieldsQuoteWhatWouldBreakSplitting) {
   EXPECT_FALSE(line.truncated());
 }
 
-// uptime is millis(): past 24.8 days it no longer fits a signed 32-bit long.
+// A range check of the unsigned field (STATE's uptime). The host's long is 64 bits, so the signed
+// overload would print this value too: the device's 32-bit long is not reproduced here.
 TEST(SerialCommandGrammar, AnUnsignedFieldKeepsItsFullRange) {
   char buffer[32];
   ReplyLine line(buffer, sizeof(buffer));
