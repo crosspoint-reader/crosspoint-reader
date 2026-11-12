@@ -275,11 +275,9 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   listProps_.toggleCheckbox = true;
   listProps_.toggleWidth = 28;
   listProps_.toggleHeight = 28;
-  // The label column starts flush with the panel title (no list-side padding
-  // on top of the sheet's own inset). Body-size text: small reads condensed
-  // and the taller row doubles as the tap target.
+  // Keep labels and values inside the theme's selection shape.
   listProps_.labelText = tokens.bodyText;
-  listProps_.sidePadding = 0;
+  listProps_.sidePadding = tokens.listSidePadding;
   // The list band spans the sheet's full width -- the scroll track hugs the
   // panel edge (theme bezel inset included) exactly like a full-screen list.
   // rowInset pulls the rows back to the title's spaceLg alignment.
@@ -320,7 +318,11 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   const int totalPages = pageRows > 0 ? (count + pageRows - 1) / pageRows : 0;
   if (totalPages > 1) {
     char buf[16];
-    snprintf(buf, sizeof(buf), "%d/%d", nav_.top / pageRows + 1, totalPages);
+    // The viewport stops at count - pageRows so the last page stays full; a
+    // partly-advanced top is already the next page (7 rows, 5 per page: top 2
+    // is page 2/2, not 1/2).
+    const int page = std::min(totalPages, (nav_.top + pageRows - 1) / pageRows + 1);
+    snprintf(buf, sizeof(buf), "%d/%d", page, totalPages);
     fui::TextStyle pageStyle = tokens.smallText;
     pageStyle.align = fui::TextAlign::Right;
     screen.target().text(pageIndicatorRect_, buf, pageStyle);

@@ -85,7 +85,7 @@ class OptionPopup {
           // Tap released on an option: select it, fire, dismiss.
           selectedIndex = event.value;
           active = false;
-          if (onSelectCallback) onSelectCallback(selectedIndex);
+          if (onSelectCallback) onSelectCallback(selectedIndex.load());
           haptic_feedback::touchAction();
           requestUpdate();
           return true;
@@ -115,6 +115,14 @@ class OptionPopup {
           }
         }
       }
+      if (!snap.touchReleased || snap.touchX >= 0) return true;
+    }
+
+    const auto swipe = input.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+      const int rows = visibleOptions.load();
+      pendingScroll.fetch_add(swipe == MappedInputManager::SwipeDir::Up ? rows : -rows);
+      requestUpdate();
       return true;
     }
 
@@ -130,15 +138,19 @@ class OptionPopup {
     const int count = std::min<int>(ownedStrings.size(), MAX_OPTIONS);
     if (previous) {
       selectedIndex = (selectedIndex - 1 + count) % count;
+      pendingScroll = 0;
+      followSelection = true;
       requestUpdate();
       return true;
     } else if (next) {
       selectedIndex = (selectedIndex + 1) % count;
+      pendingScroll = 0;
+      followSelection = true;
       requestUpdate();
       return true;
     } else if (confirm) {
       active = false;
-      if (onSelectCallback) onSelectCallback(selectedIndex);
+      if (onSelectCallback) onSelectCallback(selectedIndex.load());
       requestUpdate();
       return true;
     } else if (back) {
@@ -183,75 +195,17 @@ class OptionPopup {
     fui::Frame<INTERACTION_CAPACITY> frame(target, device, noInput, interactions);
 
     const auto& metrics = UITheme::getInstance().getMetrics();
-    fui::DialogOption options[MAX_OPTIONS];
-    fui::OptionDialogProps props = layoutProps(target, options);
-    // Rounded invert-fill themes use a black pill, not the default gray focus cursor.
-    if (theme.listSelectionStyle == fui::SelectionStyle::InvertFill && theme.listRowRadius > 0) {
-      props.buttonStyles = fui::defaultButtonStyles();
-      props.buttonStyles.focused = props.buttonStyles.selected;
-      fui::setStyleRadius(props.buttonStyles, theme.listRowRadius);
-    }
-    // defaultPopupStyles() has no border, so opt in using the per-theme frame metrics.
-    props.styles = fui::defaultPopupStyles();
-    props.styles.normal.border = fui::Paint::solid(fui::Color::Black);
-    props.styles.normal.borderWidth = static_cast<uint8_t>(metrics.popupFrameThickness);
-    props.styles.normal.radius = static_cast<uint8_t>(metrics.popupCornerRadius);
-    props.styles.selected = props.styles.normal;
-    props.styles.focused = props.styles.normal;
-    props.styles.active = props.styles.normal;
-    props.styles.disabled = props.styles.normal;
-
-    const fui::Rect screen = device.screen();
-    const int16_t width = dialogWidth(screen);
-    const int16_t height = fui::clampI16(fui::optionDialogHeight(target, props, width), 0, screen.height);
-    const fui::Rect dialogRect = fui::centeredRect(screen, fui::Size{width, height});
-
-    // Chrome guard first, options after: route() scans newest-first, so the
-    // option buttons win inside the dialog and the guard absorbs the rest.
-    frame.hit(dialogRect, ACTION_CHROME, 0, fui::InputTouch);
-    fui::optionDialog(frame, dialogRect, props);
-    // Atomically make this generation the one handleInput() reads, now that
-    // every hit() call for this frame is done.
-    interactions.publish();
-    uiReady = true;
-  }
-
-  // True when the dialog shown by show() fits the screen with every option
-  // visible; it cannot scroll, so a caller with a long list offers another screen.
-  // Measures text: call under RenderLock. Stack use matches render()'s.
-  bool fitsScreen(const GfxRenderer& renderer) const {
-    namespace fui = freeink::ui;
-    if (ownedStrings.size() > MAX_OPTIONS) return false;
-    const fui::GfxRendererTarget target = makeUiTarget(renderer);
-    fui::DialogOption options[MAX_OPTIONS];
-    const fui::OptionDialogProps props = layoutProps(target, options);
-    const fui::Rect screen = target.deviceContext().screen();
-    return fui::optionDialogHeight(target, props, dialogWidth(screen)) <= screen.height;
-  }
-
-  bool isActive() const { return active; }
-
-  // Close without firing the callback (the surface under the popup is going
-  // away, e.g. its host screen closes from outside the popup's own input).
-  void dismiss() {
-    active = false;
-    onSelectCallback = nullptr;
-  }
-
- private:
-  // Everything that sets the dialog's size, shared by render() and fitsScreen().
-  // Fills `options` (MAX_OPTIONS entries) and points the props at it.
-  freeink::ui::OptionDialogProps layoutProps(const freeink::ui::GfxRendererTarget& target,
-                                             freeink::ui::DialogOption* options) const {
-    namespace fui = freeink::ui;
-    const auto& metrics = UITheme::getInstance().getMetrics();
     const int totalOptions = static_cast<int>(ownedStrings.size());
     const uint8_t count = static_cast<uint8_t>(totalOptions > MAX_OPTIONS ? MAX_OPTIONS : totalOptions);
+
+    const bool follow = followSelection.exchange(false);
+    const int selected = selectedIndex.load();
+    fui::DialogOption options[MAX_OPTIONS];
     for (uint8_t i = 0; i < count; ++i) {
       options[i].label = ownedStrings[i].c_str();
       options[i].action = ACTION_OPTION;
       options[i].value = static_cast<int16_t>(i);
-      options[i].state = (i == selectedIndex) ? fui::StateFocused : fui::StateNormal;
+      options[i].state = (i == selected) ? fui::StateFocused : fui::StateNormal;
     }
 
     fui::OptionDialogProps props;
@@ -282,22 +236,72 @@ class OptionPopup {
     const int16_t innerPadding = static_cast<int16_t>(metrics.optionPopupInnerPadding);
     props.padding = fui::Insets{innerPadding, innerPadding, innerPadding, innerPadding};
     props.gap = static_cast<int16_t>(metrics.optionPopupItemSpacing);
+    // Rounded invert-fill themes use a black pill, not the default gray focus cursor.
+    if (theme.listSelectionStyle == fui::SelectionStyle::InvertFill && theme.listRowRadius > 0) {
+      props.buttonStyles = fui::defaultButtonStyles();
+      props.buttonStyles.focused = props.buttonStyles.selected;
+      fui::setStyleRadius(props.buttonStyles, theme.listRowRadius);
+    }
+    // defaultPopupStyles() has no border, so opt in using the per-theme frame metrics.
+    props.styles = fui::defaultPopupStyles();
+    props.styles.normal.border = fui::Paint::solid(fui::Color::Black);
+    props.styles.normal.borderWidth = static_cast<uint8_t>(metrics.popupFrameThickness);
+    props.styles.normal.radius = static_cast<uint8_t>(metrics.popupCornerRadius);
+    props.styles.selected = props.styles.normal;
+    props.styles.focused = props.styles.normal;
+    props.styles.active = props.styles.normal;
+    props.styles.disabled = props.styles.normal;
     props.buttonHeight =
         fui::clampI16(target.lineHeight(fui::GfxRendererTarget::FONT_BODY) + metrics.optionPopupSelectionVPadding * 2);
-    return props;
+
+    // Fixed fraction of the screen, clamped by the theme's side margins; the
+    // old max-text-width sizing is gone, long labels wrap inside the buttons.
+    const auto safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+    const fui::Rect screen{fui::clampI16(safe.x), fui::clampI16(safe.y), fui::clampI16(safe.width),
+                           fui::clampI16(safe.height)};
+    const int16_t width =
+        fui::clampI16(std::min<int>(screen.width * 3 / 4, screen.width - metrics.optionPopupDialogSideMargin * 2));
+    props.visibleOptions = 1;
+    const int singleOptionHeight = fui::optionDialogHeight(target, props, width);
+    const int maxHeight = screen.height - metrics.optionPopupDialogSideMargin * 2;
+    const int visibleCount =
+        std::clamp(1 + (maxHeight - singleOptionHeight) / (props.buttonHeight + props.gap), 1, static_cast<int>(count));
+    if (follow) {
+      firstOption = fui::listTopIndexFor(selected, firstOption, visibleCount, count);
+    }
+    const int scroll = std::clamp(pendingScroll.exchange(0), -static_cast<int>(count), static_cast<int>(count));
+    firstOption = std::clamp(firstOption + scroll, 0, count - visibleCount);
+    visibleOptions = visibleCount;
+    props.firstOption = static_cast<uint8_t>(firstOption);
+    props.visibleOptions = static_cast<uint8_t>(visibleCount);
+    const int16_t height = fui::optionDialogHeight(target, props, width);
+    const fui::Rect dialogRect = fui::centeredRect(screen, fui::Size{width, height});
+
+    // Chrome guard first, options after: route() scans newest-first, so the
+    // option buttons win inside the dialog and the guard absorbs the rest.
+    frame.hit(dialogRect, ACTION_CHROME, 0, fui::InputTouch);
+    fui::optionDialog(frame, dialogRect, props);
+    // Atomically make this generation the one handleInput() reads, now that
+    // every hit() call for this frame is done.
+    interactions.publish();
+    uiReady = true;
   }
 
-  // Fixed fraction of the screen, clamped by the theme's side margins; the
-  // old max-text-width sizing is gone, long labels wrap inside the buttons.
-  static int16_t dialogWidth(const freeink::ui::Rect& screen) {
-    const auto& metrics = UITheme::getInstance().getMetrics();
-    return freeink::ui::clampI16(
-        std::min<int>(screen.width * 3 / 4, screen.width - metrics.optionPopupDialogSideMargin * 2));
+  bool isActive() const { return active; }
+
+  // False when show() got more options than the popup lists (MAX_OPTIONS);
+  // a caller with a longer list offers another screen.
+  bool holdsAllOptions() const { return ownedStrings.size() <= MAX_OPTIONS; }
+
+  // Close without firing the callback (the surface under the popup is going
+  // away, e.g. its host screen closes from outside the popup's own input).
+  void dismiss() {
+    active = false;
+    onSelectCallback = nullptr;
   }
 
-  // The dialog has no scrolling, so options past MAX_OPTIONS would render off
-  // screen anyway; a fixed cap keeps the DialogOption array on the stack and
-  // the interaction table small. +1 slot for the chrome guard rect.
+ private:
+  // Bound the option array and touch table; +1 slot for the chrome guard.
   static constexpr int MAX_OPTIONS = 16;
   static constexpr size_t INTERACTION_CAPACITY = MAX_OPTIONS + 1;
   static constexpr freeink::ui::ActionId ACTION_OPTION = 1;
@@ -306,6 +310,10 @@ class OptionPopup {
   void activate(int currentIndex, std::function<void(int)> onSelect) {
     const int count = std::min<int>(ownedStrings.size(), MAX_OPTIONS);
     selectedIndex = currentIndex >= 0 && currentIndex < count ? currentIndex : 0;
+    firstOption = 0;
+    visibleOptions = 1;
+    pendingScroll = 0;
+    followSelection = true;
     onSelectCallback = std::move(onSelect);
     message.clear();
     uiReady = false;
@@ -317,7 +325,12 @@ class OptionPopup {
   std::string headline;
   std::string message;
   std::vector<std::string> ownedStrings;
-  int selectedIndex = 0;
+  std::atomic<int> selectedIndex{0};
+  // Only rendering moves the viewport; input queues scroll/follow requests.
+  mutable int firstOption = 0;
+  mutable std::atomic<int> visibleOptions{1};
+  mutable std::atomic<int> pendingScroll{0};
+  mutable std::atomic<bool> followSelection{true};
   std::function<void(int)> onSelectCallback;
   // Written by the render task (frame registration), routed by the loop task;
   // uiReady closes the rebuild window exactly like UiListActivity::uiReady.

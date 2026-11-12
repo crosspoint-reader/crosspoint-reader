@@ -35,7 +35,7 @@ inline uint32_t readerRenderSpecSignature(const ReaderRenderSpec& spec) {
     signature *= 16777619U;
   };
   // Bump when the same spec values lay out differently, so old clipping word ranges stop matching.
-  constexpr uint32_t LAYOUT_SIGNATURE_VERSION = 1;
+  constexpr uint32_t LAYOUT_SIGNATURE_VERSION = 2;
   mix(LAYOUT_SIGNATURE_VERSION);
   mix(static_cast<uint32_t>(spec.fontId));
   mix(static_cast<uint32_t>(spec.lineCompression * 1000.0f));

@@ -1,5 +1,6 @@
 // Auto-generated canonical composition (NFC) table for the Latin / Vietnamese
 // range (combining marks U+0300-U+036F). Generated from Python unicodedata.
+// Unicode license and copyright notices: licenses/borrowed-code.txt.
 // Used by utf8ComposeNfc() to precompose decomposed (NFD) text so the device
 // fonts (which lack combining-mark positioning) render it correctly.
 #pragma once

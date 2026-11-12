@@ -174,6 +174,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     PWR_BOOKMARK = 7,
     PWR_SYNC = 8,
     PWR_READER_MENU = 9,
+    PWR_FRONTLIGHT = 10,
     SHORT_PWRBTN_COUNT
   };
 
@@ -298,9 +299,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
-  // X4 Pro: double-click power toggles the frontlight. Disabling frees the
-  // power button for shortPwrBtn actions without the double-click wait.
-  uint8_t doubleClickPwrLight = 1;
+  // X4 Pro double click; Ignore disables the single-click delay.
+  uint8_t doublePwrBtn = PWR_FRONTLIGHT;
   uint8_t homeButtonTapAction = static_cast<uint8_t>(HomeButtonAction::Home);
   uint8_t homeButtonDoubleTapAction = static_cast<uint8_t>(HomeButtonAction::ToggleFrontlight);
   uint8_t homeButtonLongPressAction = static_cast<uint8_t>(HomeButtonAction::ReaderMenu);
@@ -311,6 +311,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
   uint8_t sideButtonLayout = PREV_NEXT;
   uint8_t frontButtonFollowOrientation = 0;
+  uint8_t sideButtonFollowOrientation = 0;
   // Front button remap (logical -> hardware)
   // Used by MappedInputManager to translate logical buttons into physical front buttons.
   uint8_t frontButtonBack = FRONT_HW_BACK;
@@ -366,6 +367,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
+  // Save successful dictionary lookups to vocabulary history (default off).
+  uint8_t vocabularyHistoryEnabled = 0;
   // Master switch for all SD-card plugin discovery/execution. New installs keep
   // this disabled; settings migration enables it when pre-existing plugin files
   // are found so a firmware update never silently disables an existing setup.
@@ -374,6 +377,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t pluginHubPromptHidden = 0;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // Show each file's extension at the end of its row in the file browser (0 = hide, 1 = show)
+  uint8_t showFileExtensions = 1;
   // Show the title and author read from inside each book rather than its
   // filename. Users can disable this to make index rebuilds skip EPUB parsing.
   uint8_t libraryUseMetadata = 1;

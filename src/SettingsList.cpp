@@ -5,7 +5,7 @@
 
 void forEachBaseSetting(SettingVisitor visit, void* context) {
   // Load and save walk this list, so every condition here must be fixed before
-  // settings load. Runtime probes belong in getSettingsList().
+  // settings load. Runtime probes belong in isHiddenOnDevice().
 
   // Enum settings are persisted as numeric values. Assign these labels by enum
   // value so a reordered menu or enum cannot silently swap their behavior.
@@ -57,11 +57,6 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
 #if FREEINK_CAP_FRONTLIGHT
   emit(SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                            "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));
-#endif
-#if FREEINK_DEVICE_PICCO
-  emit(SettingInfo::Enum(StrId::STR_SLIDE_SWITCH, &CrossPointSettings::slideSwitchAction,
-                         {StrId::STR_FRONTLIGHT, StrId::STR_NIGHT_MODE, StrId::STR_TOUCH_READER_CONTROLS},
-                         "slideSwitchAction", StrId::STR_CAT_DISPLAY));
 #endif
   // Night mode = inverted output polarity everywhere (ActivityManager
   // applies it to every activity), so it lives in the Display category.
@@ -131,6 +126,8 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(SettingInfo::Enum(StrId::STR_READER_MENU_STYLE, &CrossPointSettings::readerMenuStyle,
                          {StrId::STR_MENU_STYLE_LIST, StrId::STR_MENU_STYLE_TOOLBAR}, "readerMenuStyle",
                          StrId::STR_CAT_READER));
+  emit(SettingInfo::Toggle(StrId::STR_SAVE_VOCABULARY_LOOKUPS, &CrossPointSettings::vocabularyHistoryEnabled,
+                           "vocabularyHistoryEnabled", StrId::STR_CAT_READER));
   // --- Controls ---
 #if FREEINK_CAP_HAPTIC
   emit(SettingInfo::Enum(StrId::STR_VIBRATION, &CrossPointSettings::vibration,
@@ -144,6 +141,11 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
       StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
       {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED, StrId::STR_NEXT_NEXT, StrId::STR_PREV_PREV},
       "sideButtonLayout", StrId::STR_CAT_CONTROLS));
+#if FREEINK_DEVICE_PICCO
+  emit(SettingInfo::Enum(StrId::STR_SLIDE_SWITCH, &CrossPointSettings::slideSwitchAction,
+                         {StrId::STR_FRONTLIGHT, StrId::STR_NIGHT_MODE, StrId::STR_TOUCH_READER_CONTROLS},
+                         "slideSwitchAction", StrId::STR_CAT_CONTROLS));
+#endif
   // The reader menu style stays available on button boards (the toolbar
   // chrome is button-navigable); only the touch controls are hidden.
   if (BoardConfig::hasTouch()) {
@@ -171,17 +173,17 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   if (!BoardConfig::hasTouch())
     emit(SettingInfo::Toggle(StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION, &CrossPointSettings::frontButtonFollowOrientation,
                              "frontButtonFollowOrientation", StrId::STR_CAT_CONTROLS));
+  emit(SettingInfo::Toggle(StrId::STR_SIDE_BTN_FOLLOW_ORIENTATION, &CrossPointSettings::sideButtonFollowOrientation,
+                           "sideButtonFollowOrientation", StrId::STR_CAT_CONTROLS));
   emit(SettingInfo::Enum(StrId::STR_LONG_PRESS_BEHAVIOR, &CrossPointSettings::longPressButtonBehavior,
                          {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
                           StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
                          "longPressButtonBehavior", StrId::STR_CAT_CONTROLS));
   emit(buildLongPressMenuSetting());
   // Double-click power frontlight shortcut only exists on the X4 Pro.
-  if (BoardConfig::isX4Pro())
-    emit(SettingInfo::Toggle(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
-                             "doubleClickPwrLight", StrId::STR_CAT_CONTROLS));
+  if (BoardConfig::isX4Pro()) emit(buildDoublePowerButtonSetting());
   emit(buildShortPowerButtonSetting());
-  // Always persisted; getSettingsList() hides it when the IMU probe fails.
+  // Always persisted; isHiddenOnDevice() hides it when the IMU probe fails.
   emit(SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
                          {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED}, "tiltPageTurn",
                          StrId::STR_CAT_CONTROLS));
@@ -203,6 +205,8 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
       "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
                            StrId::STR_CAT_SYSTEM));
+  emit(SettingInfo::Toggle(StrId::STR_SHOW_FILE_EXTENSIONS, &CrossPointSettings::showFileExtensions,
+                           "showFileExtensions", StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_LIBRARY_USE_METADATA, &CrossPointSettings::libraryUseMetadata,
                            "libraryUseMetadata", StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS, &CrossPointSettings::removeReadBooksFromRecents,
@@ -349,13 +353,16 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   // LEGACY: retired quarter-hour UTC offset (biased by 48). Persisted so
   // timezones::activeIndex() can migrate it into clockTimezone.
   emit(SettingInfo::Value(StrId::STR_CLOCK, &CrossPointSettings::clockUtcOffsetQ, {0, 104, 1}, "clockUtcOffsetQ",
-                          StrId::STR_CUSTOMISE_STATUS_BAR));
+                          StrId::STR_CUSTOMISE_STATUS_BAR)
+           .withWebHidden());
   emit(SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat,
                          {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H}, "clockFormat",
                          StrId::STR_CUSTOMISE_STATUS_BAR));
   // Index into the append-only table in src/util/Timezones.cpp; 255 = unset.
+  // Web-hidden: a raw index is unusable there; the device has a picker.
   emit(SettingInfo::Value(StrId::STR_TIMEZONE, &CrossPointSettings::clockTimezone, {0, 255, 1}, "clockTimezone",
-                          StrId::STR_CUSTOMISE_STATUS_BAR));
+                          StrId::STR_CUSTOMISE_STATUS_BAR)
+           .withWebHidden());
   emit(SettingInfo::Enum(StrId::STR_CLOCK_DST, &CrossPointSettings::clockDst,
                          {StrId::STR_CLOCK_DST_AUTO, StrId::STR_STATE_ON, StrId::STR_STATE_OFF}, "clockDst",
                          StrId::STR_CUSTOMISE_STATUS_BAR));
@@ -373,16 +380,8 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   }
 }
 
-std::vector<SettingInfo> getBaseSettingsList(const size_t extraCapacity) {
-  // Count first so the one contiguous block is sized exactly.
+size_t countBaseSettings() {
   size_t count = 0;
   forEachBaseSetting([](void* context, SettingInfo&) { ++*static_cast<size_t*>(context); }, &count);
-  std::vector<SettingInfo> v;
-  v.reserve(count + extraCapacity);
-  forEachBaseSetting(
-      [](void* context, SettingInfo& info) {
-        static_cast<std::vector<SettingInfo>*>(context)->push_back(std::move(info));
-      },
-      &v);
-  return v;
+  return count;
 }
