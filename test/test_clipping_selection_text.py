@@ -405,7 +405,8 @@ int main() {
     pick.pages[0]->renderCalls = GUI.hints = pick.renderer.displays = 0;
     assert(pick.renderIncremental());
     assert(pick.pages[0]->renderCalls == 0 && GUI.hints == 1 && pick.renderer.displays == 1);
-    assert(GUI.confirmLabel == (pick.isLookup() ? STR_LOOKUP : STR_DONE));
+    const bool lookupLabel = pick.mode != ClipSelectionActivity::Mode::Select && pick.isLookup();
+    assert(GUI.confirmLabel == (lookupLabel ? STR_LOOKUP : STR_DONE));
     assert(pick.renderer.ink == before);
     for (int next : {2,3,2,1,0,3}) {
       pick.selected = next;
@@ -422,7 +423,6 @@ int main() {
       else {
         assert(pick.pages[0]->renderCalls == 2);
         // Select mode confirms into the action menu, so its label is Done rather than Look up.
-        const bool lookupLabel = pick.mode != ClipSelectionActivity::Mode::Select && pick.isLookup();
         assert(GUI.confirmLabel == (lookupLabel ? STR_LOOKUP : STR_DONE));
       }
       auto actual = pick.renderer.ink;
