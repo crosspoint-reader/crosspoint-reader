@@ -31,7 +31,7 @@ The Dictionary setting only appears when at least one usable dictionary folder e
 Two ways to start a lookup while reading:
 
 - Open the reader menu (**Confirm**) and choose **Look Up**.
-- Or set **Settings → Controls → Long-press Menu** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
+- Or set **Settings → Controls → Front buttons → Menu long press** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
 
 ### Selecting Text
 
@@ -51,10 +51,18 @@ On the very first lookup with a dictionary (and again whenever the `.idx` or `.s
 
 ### How Lookup Works
 
-1. **Direct match** — the word or phrase is searched as-is (case-insensitive) in the dictionary index. Leading and trailing punctuation and whitespace are stripped automatically. Multi-word phrases match dictionary entries containing spaces (such as idioms, phrasal verbs, or compound terms). An index may list the same headword more than once (one entry per part of speech, for example); every entry it lists is shown, each labelled with its headword.
+1. **Direct match** — the word or phrase is searched case-insensitively in the dictionary index. Leading and trailing punctuation and whitespace are stripped automatically. Hebrew niqqud and cantillation marks are removed from the search term so pointed text can match unpointed headwords. Basic Arabic vowel marks (U+064B–U+0650, U+0652) and superscript alef (U+0670) are also removed; shaddah, hamza, and maddah remain significant. Multi-word phrases match dictionary entries containing spaces (such as idioms, phrasal verbs, or compound terms). An index may list the same headword more than once (one entry per part of speech, for example); every entry it lists is shown, each labelled with its headword.
 2. **Synonyms** — on a miss, if the dictionary ships a `.syn` file, alternate spellings and irregular forms recorded there are resolved to their headword (e.g. `oxen` → `ox`, `colour` → `color`). All the headwords a synonym points at are shown. This step is skipped if the `.sidx` sidecar could not be built (e.g. transient low memory during indexing); the dictionary otherwise stays usable, and the build is retried the next time it is opened.
 3. **Stemming** — still no match: common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
 4. **Not found** — a short popup appears. Touchscreen devices return to reading; buttons-only devices return to word selection.
+
+## Vocabulary History
+
+Successful lookups started from a book page are appended to `/Vocabulary.txt` at the root of the SD card. This is separate from `My Clippings.txt`; looking up a word does not create a highlight. Failed lookups are not recorded, and an SD-card write failure does not interrupt the dictionary.
+
+The file uses UTF-8 **JSON Lines**: one JSON object per line, versioned with `"v":1`. Each record has a random `id`, `word` (selected text), `headword` (dictionary match), `definition` (plain text), and `timestamp` (Unix seconds, or `null` when the clock is unavailable). It also includes `title`, `author`, `series`, `series_index`, `chapter`, `page` (1-based chapter page), `spine` (0-based EPUB spine index), and `start_offset` (EPUB source offset, or `null` when unavailable). Missing series information is represented by an empty name and a `null` index. Definitions are limited to 2 KiB, looked-up words and matched headwords to 160 UTF-8 bytes each, and book fields to bounded lengths. The `definition_truncated` boolean indicates whether the definition (but not the word or headword) was shortened; when possible the saved definition ends at a complete line. HTML dictionary definitions are converted to plain text.
+
+Repeated lookups are recorded separately. Positions reflect the reader layout at lookup time and may change when the book is reflowed. The `chapter` title is resolved from the selected word's rendered page, not its exact offset: if two TOC chapter boundaries share a page, the title may refer to the later chapter rather than the one containing the word. Lookups made from inside a dictionary definition are not currently included.
 
 ## The Definition Screen
 

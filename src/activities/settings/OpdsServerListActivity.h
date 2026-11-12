@@ -9,7 +9,7 @@
  * Activity showing the list of configured OPDS servers.
  * Allows adding new servers and editing/deleting existing ones.
  * When pickerMode is true, selecting a server navigates to the OPDS browser
- * instead of opening the editor (used from the home screen).
+ * instead of opening the editor (used from File Transfer).
  */
 class OpdsServerListActivity final : public UiListActivity {
  public:

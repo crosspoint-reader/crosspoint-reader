@@ -63,6 +63,8 @@
       const el = document.getElementById('families');
       try {
         const res = await fetch('/api/fonts');
+        // Non-OK replies have no families; report a failed load, not "No fonts installed".
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         allowVector = !!data.vectorFonts;
         // Build rows with DOM APIs and textContent so on-device family names

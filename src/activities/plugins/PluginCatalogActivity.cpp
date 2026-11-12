@@ -17,6 +17,7 @@
 #include <strings.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -163,6 +164,30 @@ std::string pluginNameFromManifestPath(const std::string& manifestPath) {
   return manifestPath.substr(parent + 1, slash - parent - 1);
 }
 
+std::string persistentNoticeId(JsonVariantConst notice) {
+  if (!notice["once"].is<bool>() || !notice["once"].as<bool>() || !notice["id"].is<const char*>()) return {};
+  const char* id = notice["id"].as<const char*>();
+  if (!id) return {};
+  constexpr size_t MAX_NOTICE_ID = 64;
+  for (size_t i = 0; i <= MAX_NOTICE_ID; ++i) {
+    const unsigned char c = static_cast<unsigned char>(id[i]);
+    if (!c) return i ? std::string(id, i) : std::string{};
+    if (c > 127 || (!std::isalnum(c) && c != '-' && c != '_' && c != '.')) return {};
+  }
+  return {};
+}
+
+std::string noticeMarkerDir(const std::string& pluginDir) {
+  if (pluginDir.empty()) return {};
+  return "/.crosspoint/notice_" + md5Hex(pluginDir);
+}
+
+std::string noticeMarkerPath(const std::string& manifestPath, const std::string& noticeId) {
+  if (noticeId.empty() || pluginNameFromManifestPath(manifestPath).empty()) return {};
+  const size_t slash = manifestPath.rfind('/');
+  return noticeMarkerDir(manifestPath.substr(0, slash)) + "/" + md5Hex(noticeId) + ".ok";
+}
+
 // book.downloaded plugin event, fired after a catalog download lands on SD.
 void emitBookDownloaded(const std::string& manifestPath, const std::string& path, const std::string& title) {
   if (!pluginevents::anySubscriber(pluginevents::Event::BookDownloaded)) return;
@@ -211,6 +236,21 @@ void readPluginMetadata(const std::string& path, PluginRef& ref, const bool clas
     const bool hasEvents = !doc["events"].as<JsonObjectConst>().isNull() && doc["events"].size() > 0;
     ref.deviceKind = PluginLocations::classifyDeviceManifest(browseUrl[0] != '\0', hasEvents);
   }
+}
+// Use the same installed-version semantics as the catalog's Update badge,
+// without retaining catalog entries or installed manifests in heap memory.
+bool catalogItemHasUpdate(const std::string& id, const std::string& version) {
+  if (id.empty() || version.empty()) return false;
+  const std::string dir = PluginLocations::findPluginDir(id.c_str());
+  std::string raw;
+  if (dir.empty() || !Storage.readFileToString("PCAT", dir + "/manifest.json", MAX_MANIFEST_SIZE, raw)) return false;
+  JsonDocument filter;
+  filter["version"] = true;
+  JsonDocument doc;
+  std::string installed;
+  if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) == DeserializationError::Ok)
+    installed = doc["version"] | "";
+  return PluginLocations::isNewerVersion(version, installed);
 }
 }  // namespace
 
@@ -308,6 +348,7 @@ bool PluginCatalogActivity::loadManifest() {
     entry.noticeMessage = notice["message"] | "";
     entry.noticeConfirm = notice["confirm"] | "";
     entry.noticeCancel = notice["cancel"] | "";
+    entry.noticeId = persistentNoticeId(notice);
     if (!entry.title.empty()) manifest.browseLists.push_back(std::move(entry));
   }
   manifest.fixedListCount = manifest.browseLists.size();
@@ -410,6 +451,7 @@ bool PluginCatalogActivity::loadBrowseListIndex(int& status) {
     entry.noticeMessage = notice["message"] | "";
     entry.noticeConfirm = notice["confirm"] | "";
     entry.noticeCancel = notice["cancel"] | "";
+    entry.noticeId = persistentNoticeId(notice);
     // An entry with only an id browses the shared browse url through {list_id}.
     const bool browsable = !entry.url.empty() || !entry.id.empty();
     if (!entry.title.empty() && browsable) manifest.browseLists.push_back(std::move(entry));
@@ -497,10 +539,8 @@ std::string PluginCatalogActivity::downloadDir() const {
 }
 
 PluginCatalogActivity::PluginCatalogActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             const bool showOpds, const bool rootMode)
-    : CatalogActivity("PluginCatalog", renderer, mappedInput, /*wantsTouchLongPress=*/true),
-      showOpds(showOpds),
-      rootMode(rootMode) {}
+                                             const bool rootMode)
+    : CatalogActivity("PluginCatalog", renderer, mappedInput, /*wantsTouchLongPress=*/true), rootMode(rootMode) {}
 
 PluginCatalogActivity::~PluginCatalogActivity() = default;
 
@@ -555,7 +595,7 @@ void PluginCatalogActivity::enterPluginPicker() {
   state = State::PLUGIN_PICKER;
   for (size_t i = 0; i < installedPlugins.size(); ++i) {
     if (installedPlugins[i].name != pickerReturnName) continue;
-    const int prefixRows = (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
+    const int prefixRows = showPluginHubInstallRow ? 1 : 0;
     moveSelectionTo(prefixRows + static_cast<int>(i));
     break;
   }
@@ -564,7 +604,7 @@ void PluginCatalogActivity::enterPluginPicker() {
 
 void PluginCatalogActivity::confirmUninstallPlugin(const int pickerIndex) {
   if (state != State::PLUGIN_PICKER) return;
-  const int offset = (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
+  const int offset = showPluginHubInstallRow ? 1 : 0;
   const int pluginIndex = pickerIndex - offset;
   if (pluginIndex < 0 || pluginIndex >= static_cast<int>(installedPlugins.size())) return;
 
@@ -606,7 +646,12 @@ void PluginCatalogActivity::confirmUninstallPlugin(const int pickerIndex) {
     if (result.isCancelled) return;
     const bool removed = !Storage.exists(plugin.dir.c_str()) || Storage.removeDir(plugin.dir.c_str());
     if (!removed) LOG_ERR("PCAT", "Failed to recursively uninstall plugin: %s", plugin.dir.c_str());
-    if (removed) pickerReturnName = returnPluginName;
+    if (removed) {
+      const std::string markerDir = noticeMarkerDir(plugin.dir);
+      if (Storage.exists(markerDir.c_str()) && !Storage.removeDir(markerDir.c_str()))
+        LOG_ERR("PCAT", "Failed to clear plugin notices: %s", markerDir.c_str());
+      pickerReturnName = returnPluginName;
+    }
     enterPluginPicker();
   });
 }
@@ -648,7 +693,8 @@ void PluginCatalogActivity::resetBrowse() {
 // picker, or leaves the catalog when this list is the only one.
 void PluginCatalogActivity::openList(const int index) {
   const auto& list = manifest.browseLists[index];
-  if (!list.hasNotice()) {
+  const std::string marker = noticeMarkerPath(manifestPath, list.noticeId);
+  if (!list.hasNotice() || (!marker.empty() && Storage.exists(marker.c_str()))) {
     currentList = index;
     startBrowse();
     return;
@@ -667,6 +713,13 @@ void PluginCatalogActivity::openList(const int index) {
     if (result.isCancelled) {
       if (manifest.browseLists.size() == 1) exitCatalog();
       return;
+    }
+    const std::string marker = noticeMarkerPath(manifestPath, manifest.browseLists[index].noticeId);
+    if (!marker.empty()) {
+      const std::string markerDir = marker.substr(0, marker.rfind('/'));
+      if (!Storage.ensureDirectoryExists("/.crosspoint") || !Storage.ensureDirectoryExists(markerDir.c_str()) ||
+          !Storage.writeFile(marker.c_str(), String("1")))
+        LOG_ERR("PCAT", "Failed to persist browse-list notice: %s", marker.c_str());
     }
     currentList = index;
     startBrowse();
@@ -852,7 +905,7 @@ bool PluginCatalogActivity::nextRowVisible() const {
 
 int PluginCatalogActivity::rowCount() const {
   if (state == State::PLUGIN_PICKER)
-    return static_cast<int>(installedPlugins.size()) + (showOpds ? 1 : 0) + (showPluginHubInstallRow ? 1 : 0);
+    return static_cast<int>(installedPlugins.size()) + (showPluginHubInstallRow ? 1 : 0);
   if (state == State::LIST_PICKER) return static_cast<int>(manifest.browseLists.size());
   if (state != State::BROWSING) return 0;
   return static_cast<int>(items.size()) + (prevRowVisible() ? 1 : 0) + (nextRowVisible() ? 1 : 0);
@@ -883,8 +936,125 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
   requestUpdate();
 }
 
+// Static version-tracked feeds can put Update entries before all other rows,
+// even when an update occurs on a later page. Stream the existing SD response
+// three times: count eligible updates, select only this page's source row
+// indexes, then decode its complete items. Peak row storage stays <= 16.
+bool PluginCatalogActivity::parseUpdateFirstBrowseResponse(const size_t pageOffset) {
+  const std::string unused;
+  // The six parser slots also carry compatibility metadata during ranking.
+  const std::string* const rankingFields[] = {&manifest.titlePath,   &manifest.compatFamilyPath,
+                                              &manifest.idPath,      &manifest.compatRequiresPath,
+                                              &manifest.versionPath, &manifest.compatApiMinPath};
+  const auto eligible = [this](const JsonListParser::Row& row) {
+    return !row.field[JsonListParser::F_TITLE].empty() &&
+           (!manifest.filtersCompatibility() ||
+            catalogEntryCompatible(row.field[JsonListParser::F_AUTHOR], row.field[JsonListParser::F_BASE],
+                                   row.field[JsonListParser::F_URL]));
+  };
+
+  size_t eligibleCount = 0;
+  size_t updateCount = 0;
+  auto count = [&](JsonListParser::Row& row) {
+    if (!eligible(row)) return;
+    ++eligibleCount;
+    if (catalogItemHasUpdate(row.field[JsonListParser::F_ID], row.field[JsonListParser::F_VERSION])) ++updateCount;
+  };
+  {
+    auto parser = makeUniqueNoThrow<JsonListParser>(
+        manifest.itemsPath, rankingFields, unused,
+        [](void* context, JsonListParser::Row& row) { (*static_cast<decltype(count)*>(context))(row); }, &count);
+    if (!streamBrowseFile(parser.get())) {
+      fail(StrId::STR_PARSE_FEED_FAILED);
+      return false;
+    }
+  }
+
+  releaseRows();
+  items.clear();
+  const size_t visibleCount =
+      pageOffset < eligibleCount ? std::min<size_t>(manifest.pageSize, eligibleCount - pageOffset) : 0;
+  if (!visibleCount) {
+    hasMore = false;
+    return true;
+  }
+
+  struct RankedRow {
+    size_t sourceIndex;
+    size_t displayIndex;
+  };
+  RankedRow chosen[MAX_PAGE_SIZE] = {};
+  bool usedSlots[MAX_PAGE_SIZE] = {};
+  bool inconsistentRanking = false;
+  size_t chosenCount = 0;
+  size_t sourceIndex = 0;
+  size_t seenUpdates = 0;
+  size_t seenOthers = 0;
+  auto choose = [&](JsonListParser::Row& row) {
+    const size_t thisRow = sourceIndex++;
+    if (!eligible(row)) return;
+    const bool update = catalogItemHasUpdate(row.field[JsonListParser::F_ID], row.field[JsonListParser::F_VERSION]);
+    const size_t rank = update ? seenUpdates++ : updateCount + seenOthers++;
+    if (rank >= pageOffset && rank - pageOffset < visibleCount) {
+      const size_t slot = rank - pageOffset;
+      if (chosenCount >= visibleCount || usedSlots[slot]) {
+        inconsistentRanking = true;
+        return;
+      }
+      usedSlots[slot] = true;
+      chosen[chosenCount++] = {thisRow, slot};
+    }
+  };
+  {
+    auto parser = makeUniqueNoThrow<JsonListParser>(
+        manifest.itemsPath, rankingFields, unused,
+        [](void* context, JsonListParser::Row& row) { (*static_cast<decltype(choose)*>(context))(row); }, &choose);
+    if (!streamBrowseFile(parser.get()) || inconsistentRanking || chosenCount != visibleCount ||
+        seenUpdates + seenOthers != eligibleCount) {
+      fail(StrId::STR_PARSE_FEED_FAILED);
+      return false;
+    }
+  }
+
+  // The selected source indexes are in feed order; the display indexes place
+  // updates first while retaining the original order within each group.
+  items.resize(visibleCount);
+  size_t parsedIndex = 0;
+  size_t chosenIndex = 0;
+  auto append = [&](JsonListParser::Row& row) {
+    const size_t thisRow = parsedIndex++;
+    if (chosenIndex >= chosenCount || chosen[chosenIndex].sourceIndex != thisRow) return;
+    Item& item = items[chosen[chosenIndex++].displayIndex];
+    item.title = std::move(row.field[JsonListParser::F_TITLE]);
+    item.author = std::move(row.field[JsonListParser::F_AUTHOR]);
+    item.id = std::move(row.field[JsonListParser::F_ID]);
+    item.url = std::move(row.field[JsonListParser::F_URL]);
+    item.version = std::move(row.field[JsonListParser::F_VERSION]);
+    item.base = std::move(row.field[JsonListParser::F_BASE]);
+    item.files = std::move(row.files);
+  };
+  const std::string* const itemFields[] = {&manifest.titlePath, &manifest.authorPath,  &manifest.idPath,
+                                           &manifest.urlPath,   &manifest.versionPath, &manifest.bundleBasePath};
+  {
+    auto parser = makeUniqueNoThrow<JsonListParser>(
+        manifest.itemsPath, itemFields, manifest.bundleFilesPath,
+        [](void* context, JsonListParser::Row& row) { (*static_cast<decltype(append)*>(context))(row); }, &append);
+    if (!streamBrowseFile(parser.get()) || chosenIndex != chosenCount) {
+      fail(StrId::STR_PARSE_FEED_FAILED);
+      return false;
+    }
+  }
+  hasMore = eligibleCount > pageOffset + visibleCount;
+  computeInstallStatus();
+  return true;
+}
+
 bool PluginCatalogActivity::parseBrowseResponse() {
   if (manifest.isXmlList()) return parseXmlList();
+  if (manifest.tracksInstalls() && browsePaging() == plugincatalogpaging::Paging::Static) {
+    const size_t offset = static_cast<size_t>(std::max(0, page - 1)) * manifest.pageSize;
+    return parseUpdateFirstBrowseResponse(offset);
+  }
 
   // Requests with {page} or {offset} are already sliced server-side. Static
   // JSON files need a bounded client-side page window into the streamed response.
@@ -1081,9 +1251,24 @@ void PluginCatalogActivity::downloadItem(const int itemIndex) {
   requestUpdateAndWait();
   const auto result = manifest.isBundle() && !item.files.empty() ? downloadBundle(item) : downloadBook(item);
   session.reset();
+  const std::string selectedId = std::move(item.id);
   item = {};
   // Reuse the SD response without another network request or resetting navigation.
   if (!parseBrowseResponse()) return;
+  // An updated plugin can move down the list. Reselect only when its ID
+  // identifies exactly one row on this page; otherwise retain the highlight.
+  if (result == HttpDownloader::OK && !selectedId.empty()) {
+    size_t matchCount = 0;
+    size_t matchIndex = 0;
+    for (size_t i = 0; i < items.size(); ++i) {
+      if (items[i].id != selectedId) continue;
+      ++matchCount;
+      matchIndex = i;
+      if (matchCount > 1) break;
+    }
+    if (matchCount == 1)
+      nav.requestSelection(static_cast<int>(matchIndex) + (!manifest.isXmlList() && page > 1 ? 1 : 0));
+  }
   session = makeUniqueNoThrow<freeink::SecureHttpClient>();
   if (!session) LOG_ERR("PCAT", "OOM: browse client; using per-request connections");
   finishDownload(result);
@@ -1398,13 +1583,7 @@ void PluginCatalogActivity::onBackButton() {
 void PluginCatalogActivity::activateIndex(const int index) {
   if (state == State::PLUGIN_PICKER) {
     if (index < 0 || index >= rowCount()) return;
-    if (showOpds && index == 0) {
-      app.clearTapFlash();            // the row leaves this screen
-      activityManager.goToBrowser();  // replaces this screen with the OPDS browser
-      return;
-    }
-    const int pluginStart = showOpds ? 1 : 0;
-    if (showPluginHubInstallRow && index == pluginStart) {
+    if (showPluginHubInstallRow && index == 0) {
       static constexpr StrId OPTIONS[] = {StrId::STR_INSTALL, StrId::STR_HIDE, StrId::STR_CANCEL};
       pluginHubPopup.show(StrId::STR_PLUGIN_HUB, OPTIONS, 3, 0, [this](const int selected) {
         if (selected == 0) {
@@ -1428,7 +1607,7 @@ void PluginCatalogActivity::activateIndex(const int index) {
       return;
     }
     const int syntheticHubRows = showPluginHubInstallRow ? 1 : 0;
-    const PluginRef& plugin = installedPlugins[index - pluginStart - syntheticHubRows];
+    const PluginRef& plugin = installedPlugins[index - syntheticHubRows];
     const auto action = PluginLocations::pickerAction(plugin.deviceKind, !plugin.readmePath.empty());
     if (action == PluginLocations::PickerAction::Readme) {
       // A plain paged text view, not the book reader: viewing instructions must
@@ -1766,7 +1945,6 @@ void PluginCatalogActivity::rebuildRowItems() {
     rowItems.push_back(row);
   };
   if (state == State::PLUGIN_PICKER) {
-    if (showOpds) addRow(tr(STR_OPDS_BROWSER), tr(STR_OPDS_SERVERS));
     if (showPluginHubInstallRow) addRow(tr(STR_PLUGIN_HUB), tr(STR_PLUGIN_HUB_DESCRIPTION), ">");
     for (const auto& plugin : installedPlugins) {
       //   None       -> web-only hint; chevron only with a readme

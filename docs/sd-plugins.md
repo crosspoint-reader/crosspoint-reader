@@ -96,6 +96,12 @@ endpoints (`/api/relay`, `/api/crypto`, `/api/fetch`, `/api/plugin-fs`). See
 `docs/webserver-endpoints.md` for the endpoints and the sd-plugins repository
 for the JS contract.
 
+`plugin.js` must call `CrossPoint.registerPlugin(fn)` while the script runs,
+not after an `await` or from a timer; a later call is ignored. A script that has
+not loaded after 30 seconds, or an `fn` that throws or returns a rejected
+promise, shows "Failed to load plugin." A script that arrives after the 30
+seconds still renders.
+
 ## Surface 2: the plugin job queue (external automation)
 
 External systems (a companion app, a script) can trigger plugin actions
@@ -107,7 +113,7 @@ the browser context, and posts the result back.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/plugin-jobs` | enqueue `{plugin, action, args?}` → `{id}` (503 when the pool is full) |
+| `POST /api/plugin-jobs` | enqueue `{plugin, action, args?}` → `{id}` (503 when the pool is full or the device is out of memory) |
 | `GET /api/plugin-jobs/claim?plugin=` | executor claims the next pending job |
 | `POST /api/plugin-jobs/complete` | executor posts `{id, claim, ok, result?}` (`claim` from the claim response; 409 when stale) |
 | `GET /api/plugin-jobs/status?id=` | caller polls: `{id, state, result}`; states: `pending`, `running`, `done`, `error`, `unknown` (recycled) |
@@ -136,8 +142,9 @@ Plugins register handlers in `plugin.js`:
 
 ```js
 api.registerAction('myaction', async (args) => {
-  // runs in the hosting page; throw -> state "error" with {error: message}
-  return { anything: 'small' };  // -> state "done" with this result
+  // runs in the hosting page; throw, or return a value JSON.stringify throws
+  // on (BigInt, circular structure), -> state "error" with {error: message}
+  return { anything: 'small' };  // -> state "done" with this result ({} for undefined/null)
 });
 ```
 
@@ -300,7 +307,9 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
           "title": "Community content",        // defaults to the list title
           "message": "Review this notice before continuing.",
           "confirm": "Continue",               // defaults to translated Confirm
-          "cancel": "Go Back"                  // defaults to translated Cancel
+          "cancel": "Go Back",                 // defaults to translated Cancel
+          "id": "content-guidance",           // stable ID shared by related lists
+          "once": true                       // remember Continue across restarts
         } }
     ],                                      // omitted keys fall back to browse's
                                             // an "id" fills {list_id} and {list_id_enc},
@@ -413,6 +422,15 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   defaults to the list title, and omitted button labels use the firmware's
   translated Cancel/Confirm defaults. Back from the book list returns to the
   picker.
+- **Named-list notices (`notice`)**: optionally include `once: true` (boolean) and
+  a stable `id` of 1–64 ASCII letters, digits, hyphens, underscores, or dots.
+  The firmware remembers **Continue** per plugin installation directory and
+  notice ID on the SD card, across reboots and plugin updates. Lists sharing
+  the same ID within a plugin share the acknowledgement; uninstalling the
+  plugin clears its acknowledgements. **Go Back** never acknowledges. Missing,
+  invalid, or mistyped `id`/`once` fields keep the normal per-visit notice.
+  If the SD write fails, Continue still opens the list, but the notice returns
+  on a later visit.
 - **Dynamic lists** (json): `browse.lists_url` is fetched with a GET once per
   catalog visit. The request carries `lists_headers` and no other headers, so
   a token reaches the lists server only when the manifest says so. The answer
@@ -581,6 +599,7 @@ browser-side.
 | The plugin's own folder (keep its data here) | `api.dir` |
 | Crypto (hash, HMAC via SHA, AES, RSA) | `api.crypto(op, fields)` or browser `crypto.subtle` |
 | Create / delete / move SD files | same-origin `/mkdir`, `/delete`, `/move` |
+| Read a few reader settings | same-origin `GET /api/settings?keys=a,b` (returns only the settings you ask for) |
 | On-device catalog/browse/download | `device.json` (this document) |
 | External app triggers an action | `api.registerAction(name, fn)` + `/api/plugin-jobs` |
 
