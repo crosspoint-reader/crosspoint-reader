@@ -554,9 +554,12 @@ bool RenderLock::peek() { return xQueuePeek(activityManager.renderingMutex, NULL
 
 #if ENABLE_SERIAL_CONTROL
 bool ActivityManager::isRenderBusy() const {
+  taskENTER_CRITICAL(&activityManagerSpinlock);  // waitingTaskHandle's writers take this lock too
+  const bool renderWaitedFor = waitingTaskHandle != nullptr;
+  taskEXIT_CRITICAL(&activityManagerSpinlock);
   // A frame the render task has been told about but not started shows none of these for an
   // instant; the quiet window of CMD:IDLE (IdleGate) is long enough to see the pass that follows.
-  return requestedUpdate.load() || renderPassActive.load(std::memory_order_acquire) || waitingTaskHandle != nullptr ||
+  return requestedUpdate.load() || renderPassActive.load(std::memory_order_acquire) || renderWaitedFor ||
          RenderLock::peek();
 }
 
