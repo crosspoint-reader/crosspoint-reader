@@ -475,7 +475,7 @@ struct DedupFrame {
 
 void walk(WalkState& st, const std::string& path, const int depth) {
   if (st.failed || depth > LIBRARY_MAX_DEPTH || st.books >= CLIX_MAX_RECORDS) return;
-  if (isLibrarySkipped(path, true)) return;
+  if (isLibrarySkipped(path, /*isDirectory=*/true)) return;
 
   const uint16_t dedupBase = st.activeDedupCount;
   const DedupFrame dedupFrame{st, dedupBase};
@@ -1097,7 +1097,7 @@ const char* libraryIndexPath() { return INDEX_PATH; }
 bool isLibraryBookFile(const std::string_view path) {
   // Match the walk's exclusions in every path component. A lone "." names the folder itself.
   const std::string_view relativePath = normalizeLibraryRootAliases(path);
-  if (isLibrarySkipped(relativePath, false, true)) return false;
+  if (isLibrarySkipped(relativePath, /*isDirectory=*/false, /*isNormalizedPath=*/true)) return false;
   size_t start = 0;
   while (start < relativePath.size()) {
     const size_t slash = relativePath.find('/', start);

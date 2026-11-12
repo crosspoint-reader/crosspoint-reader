@@ -41,6 +41,19 @@ TEST_F(NextBookFinderTest, AppliesLibraryResourceDirectoryExclusions) {
   EXPECT_TRUE(NextBookFinder::findNextBooks("/fonts/A.txt", 5).empty());
 }
 
+TEST_F(NextBookFinderTest, ExcludesHiddenFileNames) {
+  fake::add("/Books/!current.txt");
+  fake::add("/Books/.hidden.txt");
+  fake::add("/Books/Z.txt");
+  EXPECT_EQ(NextBookFinder::findNextBooks("/Books/!current.txt", 5), std::vector<std::string>{"Z.txt"});
+}
+
+TEST_F(NextBookFinderTest, ExcludesFilesInsideHiddenDirectories) {
+  fake::add("/.Books/A.txt");
+  fake::add("/.Books/B.txt");
+  EXPECT_TRUE(NextBookFinder::findNextBooks("/.Books/A.txt", 5).empty());
+}
+
 TEST_F(NextBookFinderTest, PreservesNaturalOrderAndLimit) {
   for (const auto* path : {"/A1.txt", "/A10.txt", "/A3.txt", "/A2.txt", "/A2.bmp"}) {
     fake::add(path);
