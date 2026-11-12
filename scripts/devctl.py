@@ -9,7 +9,8 @@ them all and exits non-zero if any failed). Either way it stops when it is OUT O
 
   cmd:<TEXT>            send "CMD:<TEXT>", wait for its reply line, print it
                         (fails on a *_ERROR / *_TIMEOUT reply)
-  btn:<NAME>[:<how>]    CMD:BTN:<NAME>[:<how>], then wait until the device is idle
+  btn:<NAME>[:<how>]    CMD:BTN:<NAME>[:<how>], then wait until the device is idle (CMD:IDLE with
+                        the default 10 s plus the hold)
   state                 CMD:STATE, print the reply and remember its fields for `check:`
   check:<key>=<regex>   the last STATE's <key> must match <regex> (re.fullmatch)
   idle[:<ms>]           CMD:IDLE[:<ms>], wait for its answer (IDLE_TIMEOUT or IDLE_ERROR fails it)
@@ -18,7 +19,8 @@ them all and exits non-zero if any failed). Either way it stops when it is OUT O
   expect:<regex>:<sec>  read until an output line matches (re.search), fail otherwise
 
 A --script file holds one step per line; blank lines and lines starting with # are skipped.
-Every line the device prints goes to --log with a timestamp.
+Every line the device prints goes to --log with a timestamp. A step that cannot be run as written
+(a pattern or number that does not parse, a command too long to send) fails like any other.
 
 A step takes only a reply to its own command (its name and '_' or ':', or a CMD_ERROR) and waits for
 it as long as the device may take: an IDLE its own timeout and 5 s, a screenshot 30 s to start,
@@ -29,10 +31,14 @@ after IDLE_ERROR:busy: a wait started earlier will still answer.
 
 The port is opened with the default DTR/RTS lines, which does not reset the reader, and closed with
 RTS dropped before DTR: RTS high with DTR low is esptool's reset request, which a plain close on
-Windows can send. The device re-enumerates its USB port across a reboot; the tool reopens it, drops
-what had come in, and carries on. A step whose command was being written then fails as DELIVERY
-UNCERTAIN and is not sent again (the device may have run it); a step waiting for its reply fails
-with NO REPLY.
+Windows can send. The device re-enumerates its USB port across a reboot; the tool reopens it and
+drops what had come in. A step whose command was being written then fails as DELIVERY UNCERTAIN
+and is not sent again (the device may have run it); a step waiting for its reply fails with NO
+REPLY. With --keep-going the run goes on from there.
+
+Replies carry no tag. Stopping on a missing reply keeps one run in step, but a reply still on its
+way when a run starts (from an IDLE a stopped run left waiting) is taken by the first command of
+its name.
 """
 import argparse
 import re
@@ -57,6 +63,9 @@ IDLE_MAX_MS = 600000
 IDLE_MARGIN_S = 5
 SCREENSHOT_START_S = 30
 FRAME_STALL_S = 20
+# The holds of CMD:BTN:<name> and :LONG (ButtonPressQueue::SHORT_HOLD_MS, LONG_HOLD_MS).
+SHORT_HOLD_MS = 60
+LONG_HOLD_MS = 1100
 
 # GfxRenderer draws LandscapeCounterClockwise in the panel's own frame; the others are turned.
 # Degrees for PIL's rotate() (counter-clockwise) that turn the frame upright.
@@ -162,14 +171,14 @@ class Device:
                 self.ser.dtr = False
             except (serial.SerialException, OSError):
                 pass  # a port without modem lines (a pty)
-        self.ser.close()
+        try:
+            self.ser.close()
+        except (serial.SerialException, OSError):
+            pass  # the port went away
 
     def _reopen(self):
         """The port went away (reboot, sleep, re-enumeration): reopen it, without what had come in."""
-        try:
-            self.close()
-        except (serial.SerialException, OSError):
-            pass
+        self.close()
         time.sleep(1)
         self.buf = b""
         self.reopens += 1
@@ -270,6 +279,8 @@ class Device:
         while self.reopens == reopens and (line := self.read_line(deadline)) is not None:
             if line.startswith("SCREENSHOT_START:"):
                 parts = line.split(":")
+                if not parts[1].isdigit():
+                    raise OutOfStep(f"{line!r} gives no frame size, so the frame cannot be skipped")
                 size = int(parts[1])
                 data = self.read_exact(size, FRAME_STALL_S)
                 if self.reopens != reopens:
@@ -310,6 +321,16 @@ def no_reply(text):
     return f"NO REPLY to {text}: the port was reopened"
 
 
+def press_ms(arg):
+    """How long CMD:BTN:<arg> holds its button, as the device plays it (ButtonPressQueue)."""
+    how = arg.strip(" \t").partition(":")[2]
+    if how == "LONG":
+        return LONG_HOLD_MS
+    if how == "DOUBLE":
+        return 2 * SHORT_HOLD_MS
+    return int(how) if how.isdigit() else SHORT_HOLD_MS
+
+
 def wait_idle(device, arg=""):
     text = "IDLE" + (":" + arg if arg else "")
     reply = device.command(text)
@@ -327,7 +348,8 @@ def run_step(device, step, rotate, fields):
     elif kind == "btn":
         reply = device.command("BTN:" + rest)
         print(reply if reply else no_reply("BTN:" + rest))
-        ok = reply == "BTN_OK" and wait_idle(device)
+        # The device's default wait would run out under a long hold: the hold comes on top.
+        ok = reply == "BTN_OK" and wait_idle(device, str(IDLE_DEFAULT_MS + press_ms(rest)))
     elif kind == "state":
         reply, parsed = device.state()
         print(reply if reply else no_reply("STATE"))
@@ -376,6 +398,11 @@ def run(device, steps, rotate, keep_going=False):
         except DeliveryUncertain as error:
             print(f"DELIVERY UNCERTAIN: {error}")
             ok = False
+        except (ValueError, re.error, ImportError) as error:
+            # A bad step (a number or pattern that does not parse, a command too long, Pillow
+            # missing) or a frame of the wrong size, found with the link still in step.
+            print(f"{type(error).__name__}: {error}")
+            ok = False
         except OutOfStep as error:
             print(f"OUT OF STEP: {error}; a reply may still come, so the run stops")
             print(f"step failed: {step}")
@@ -416,9 +443,6 @@ def main():
     device = Device(args.port, args.log)
     try:
         ok = run(device, steps, args.rotate, args.keep_going)
-    except ValueError as error:
-        print(f"step failed: {error}")
-        ok = False
     finally:
         # Whatever went wrong, the port closes RTS before DTR (see close()).
         device.close()

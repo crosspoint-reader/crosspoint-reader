@@ -231,7 +231,7 @@ python3 scripts/devctl.py --port /dev/ttyACM0 --log run.log \
 | Step | Does |
 | --- | --- |
 | `cmd:<TEXT>` | sends `CMD:<TEXT>`, prints the reply, fails on an `_ERROR`/`_TIMEOUT` reply |
-| `btn:<NAME>[:<how>]` | `CMD:BTN:...`, then waits for `IDLE` |
+| `btn:<NAME>[:<how>]` | `CMD:BTN:...`, then `CMD:IDLE` with the default 10 s plus the hold |
 | `state` | sends `CMD:STATE` and keeps its fields |
 | `check:<key>=<regex>` | the last `state` step's field must match the regex as a whole |
 | `idle[:<ms>]` | `CMD:IDLE`; an `IDLE_TIMEOUT` or `IDLE_ERROR` fails the step |
@@ -239,19 +239,22 @@ python3 scripts/devctl.py --port /dev/ttyACM0 --log run.log \
 | `wait:<s>` / `expect:<regex>:<s>` | read the log for a while / until a line matches |
 
 `--script steps.txt` reads one step per line. `--log` keeps every device line with a timestamp, so
-a failed run comes with its serial log.
+a failed run comes with its serial log. A step that cannot be run as written (a pattern or number
+that does not parse, a command longer than a line may be) fails like any other.
 
 A step takes only a reply to its own command: the command's name followed by `_` or `:`, or a
 `CMD_ERROR`. It waits for it as long as the device may take: an `IDLE` its own timeout and 5 s, a
 screenshot 30 s for its first line, then until no part of the frame has come for 20 s, then 20 s
-for its last line; any other command 20 s. When no reply has come by then, it could still come, and nothing would tell it
-from the reply to the next command of that name: the run stops there with `OUT OF STEP` and a
-non-zero exit, even with `--keep-going` (which otherwise runs every step after one failed). It
-stops the same way after `IDLE_ERROR:busy`, as the wait that was running will still answer.
+for its last line; any other command 20 s. When no reply has come by then, it could still come,
+and nothing would tell it from the reply to the next command of that name: the run stops there
+with `OUT OF STEP` and a non-zero exit, even with `--keep-going` (which otherwise runs every step
+after one failed). It stops the same way after `IDLE_ERROR:busy`, as the wait that was running will
+still answer.
 
-If the port goes away (a reboot), the tool reopens it, drops what had come in, and goes on: a step
-whose command was being written fails as `DELIVERY UNCERTAIN` and is not sent again, as the device
-may have run it; a step waiting for its reply fails with `NO REPLY`.
+If the port goes away (a reboot), the tool reopens it and drops what had come in: a step whose
+command was being written fails as `DELIVERY UNCERTAIN` and is not sent again, as the device may
+have run it; a step waiting for its reply fails with `NO REPLY`. With `--keep-going` the run goes
+on from there.
 
 ## Limits
 

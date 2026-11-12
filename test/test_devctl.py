@@ -166,6 +166,37 @@ class DevctlTest(unittest.TestCase):
         self.assertIn("OUT OF STEP: the frame stopped after 40 of 100 bytes", out)
         self.assertEqual(port.written, [b"\r\n", b"CMD:SCREENSHOT\n"])
 
+    # Its size unreadable, the frame that follows cannot be skipped: the link is out of step.
+    def test_a_frame_without_a_size_stops_the_run(self):
+        port = FakePort(replies={b"CMD:SCREENSHOT\n": (b"SCREENSHOT_START:x:8:100\n" + bytes(100), 0)})
+        device = open_device(port)
+        ok, out = run(device, ["shot:unused.png", "state"])
+        self.assertFalse(ok)
+        self.assertIn("OUT OF STEP: 'SCREENSHOT_START:x:8:100' gives no frame size", out)
+        self.assertEqual(port.written, [b"\r\n", b"CMD:SCREENSHOT\n"])
+
+    # Steps that cannot be run as written fail on their own; --keep-going still runs the next.
+    def test_a_step_that_does_not_parse_fails_and_the_run_goes_on(self):
+        port = FakePort(replies={b"CMD:STATE\n": (b"STATE: activity=Home\n", 0)})
+        device = open_device(port)
+        ok, out = run(device, ["check:activity=(", "wait:abc", "expect:(:1", "cmd:" + "A" * 300, "state"])
+        self.assertFalse(ok)
+        self.assertEqual(out.count("step failed:"), 4)
+        self.assertIn("STATE: activity=Home", out)
+        self.assertEqual(port.written, [b"\r\n", b"CMD:STATE\n"])
+
+    def test_a_held_press_waits_its_hold_on_top_of_the_default_idle(self):
+        port = FakePort(replies={
+            b"CMD:BTN:DOWN:10000\n": (b"BTN_OK\n", 0),
+            b"CMD:IDLE:20000\n": (b"IDLE:10400\n", 0),
+        })
+        device = open_device(port)
+        ok, out = run(device, ["btn:DOWN:10000"])
+        self.assertTrue(ok, out)
+        self.assertEqual(devctl.press_ms("BACK:LONG"), 1100)
+        self.assertEqual(devctl.press_ms("POWER:DOUBLE"), 120)
+        self.assertEqual(devctl.press_ms("CONFIRM"), 60)
+
     def test_the_idle_reply_timeout_follows_the_device_timeout(self):
         self.assertEqual(devctl.reply_timeout("IDLE"), 15)
         self.assertEqual(devctl.reply_timeout("IDLE:30000"), 35)
