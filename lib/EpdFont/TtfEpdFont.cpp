@@ -124,8 +124,15 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
     f.ft = &f.ftStorage_;
     f.twoBit = twoBit;
     f.sizePx = sizePx;
-    f.cap = glyphCacheBytes;
-    f.maxGlyphs = maxGlyphs;
+    // Regular (style 0) owns the full novel cache budget; styled variants
+    // (bold/italic) only hold occasional emphasis words, capped at 64KB/512 glyphs.
+    if (i == 0) {
+      f.cap = glyphCacheBytes;
+      f.maxGlyphs = maxGlyphs;
+    } else {
+      f.cap = std::min<size_t>(glyphCacheBytes, 64 * 1024);
+      f.maxGlyphs = std::min<uint16_t>(maxGlyphs, 512);
+    }
     f.inited = false;
     f.ready = false;
     f.initFailures = 0;
@@ -165,8 +172,13 @@ bool TtfEpdFont::loadVariantOf(TtfEpdFont& master, const uint16_t pointSize, con
     f.wantItalic = mf.wantItalic;
     f.twoBit = twoBit;
     f.sizePx = sizePx;
-    f.cap = glyphCacheBytes;
-    f.maxGlyphs = maxGlyphs;
+    if (i == 0) {
+      f.cap = glyphCacheBytes;
+      f.maxGlyphs = maxGlyphs;
+    } else {
+      f.cap = std::min<size_t>(glyphCacheBytes, 64 * 1024);
+      f.maxGlyphs = std::min<uint16_t>(maxGlyphs, 512);
+    }
     f.inited = false;
     f.ready = false;
     f.initFailures = 0;
@@ -451,7 +463,13 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
       f.flushed = true;
       return nullptr;
     }
-    trimToCore(f, bytes);
+    // Only Regular face (style 0) uses the 3:1 core-retention window;
+    // auxiliary styles (bold/italic) flush completely on overflow.
+    if (&f == &faces_[0]) {
+      trimToCore(f, bytes);
+    } else {
+      flushFace(f);
+    }
   }
 
   // All growth below is exact and heap-checked (see reserveChecked). On a
