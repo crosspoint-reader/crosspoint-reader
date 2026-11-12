@@ -20,6 +20,7 @@
 #include "activities/RenderLock.h"
 #include "util/ButtonPressQueue.h"
 #include "util/IdleGate.h"
+#include "util/LineFraming.h"
 #include "util/ScreenshotInfo.h"
 #include "util/SerialCommandGrammar.h"
 
@@ -62,22 +63,20 @@ ReplyLine startReply(const std::string_view head) {
   return line;
 }
 
-// Output given up part way (a reply, or a frame) leaves its line open: the next reply first ends it,
-// so it arrives on a line of its own.
-bool lineLeftOpen = false;
+LineFraming framing;
 
-void send(const ReplyLine& line) {
-  static constexpr uint8_t LINE_END = '\n';
-  if (lineLeftOpen && writeAll(&LINE_END, 1, REPLY_STALL_MS)) lineLeftOpen = false;
+// False when the line was not sent whole.
+bool send(const ReplyLine& line) {
   const size_t length = line.view().size();
   replyBuffer[length] = '\n';
-  if (!writeAll(reinterpret_cast<const uint8_t*>(replyBuffer), length + 1, REPLY_STALL_MS)) lineLeftOpen = true;
+  return framing.sendLine([](const uint8_t* data, const size_t len) { return writeAll(data, len, REPLY_STALL_MS); },
+                          reinterpret_cast<const uint8_t*>(replyBuffer), length + 1);
 }
 
-void reply(const std::string_view head, const std::string_view tail = {}) {
+bool reply(const std::string_view head, const std::string_view tail = {}) {
   ReplyLine line = startReply(head);
   line.append(tail);
-  send(line);
+  return send(line);
 }
 
 void replyNumber(const std::string_view head, const unsigned long value) {
@@ -274,12 +273,12 @@ void cmdScreenshot(std::string_view /*arg*/) {
   char head[48];
   snprintf(head, sizeof(head), "SCREENSHOT_START:%u:%u:%u", static_cast<unsigned>(size),
            static_cast<unsigned>(screen->getDisplayWidth()), static_cast<unsigned>(screen->getDisplayHeight()));
-  reply(head);
+  if (!reply(head)) return;  // no frame without the line that announces it
   // A frame cut short must not be followed by SCREENSHOT_END: the host would take it as complete.
   if (writeAll(screen->getFrameBuffer(), size, FRAME_STALL_MS)) {
     reply("SCREENSHOT_END");
   } else {
-    lineLeftOpen = true;
+    framing.markOpen();  // the frame was cut: the error line must start a line of its own
     reply("SCREENSHOT_ERROR:transfer stalled");
   }
 }

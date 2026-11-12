@@ -90,7 +90,9 @@ frame and a last line), and the reply's first word says what it is: `BTN_OK`, `A
 bytes `CMD_ERROR:line too long`. Such a line does not fit the USB receive buffer, so its end is
 usually lost: the error then comes with the next line end, and the command on that line is lost
 with it. When the host stops reading, the device gives up on a reply after 2 s (on a frame after
-15 s); the next reply then starts with a line end, so it arrives on a line of its own.
+15 s); the next reply then starts with a line end, so it arrives on a line of its own, and is
+dropped if that line end cannot be sent either. A `SCREENSHOT` whose first line could not be sent
+sends no frame.
 
 A reply is sent when the command has been *accepted*, not when its effect is on screen: `BTN_OK`
 means the press is queued. Send `CMD:IDLE` after a command to wait until the device has handled it

@@ -2,6 +2,7 @@ add_executable(SerialTestApiTest
   SerialCommandGrammarTest.cpp
   IdleGateTest.cpp
   ButtonPressQueueTest.cpp
+  LineFramingTest.cpp
   ${REPO_ROOT}/src/util/SerialCommandGrammar.cpp
 )
 
