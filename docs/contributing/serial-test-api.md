@@ -84,8 +84,8 @@ CMD:<NAME>[:<argument>]
 
 ending in `\n` (or `\r`, or both). Lines that do not start with `CMD:` are ignored, so a terminal's
 stray keys do no harm. The main loop reads at most one command per pass and acts on it before it
-reads the next. Every command answers with exactly one line (`SCREENSHOT` adds its frame), and the
-reply's first word says what it is: `BTN_OK`, `ACT_ERROR:...`, `STATE:...`. An unknown command gets
+reads the next. Every command answers with exactly one line (`SCREENSHOT` with its first line, the
+frame and a last line), and the reply's first word says what it is: `BTN_OK`, `ACT_ERROR:...`, `STATE:...`. An unknown command gets
 `CMD_ERROR:unknown command <text>`, a line longer than 255 bytes `CMD_ERROR:line too long`. Such a
 line does not fit the USB receive buffer, so its end is usually lost: the error then comes with the
 next line end, and the command on that line is lost with it.
@@ -121,9 +121,9 @@ board`.
 
 Presses are queued and played one after the other. Each is held until the input manager has
 debounced it, then for its hold time, then released; the next starts once the release has gone
-through. A press waits for its button to read up first: if a real key holds it down, the press
-is given up after about 1 s (see `btn_dropped` and `IDLE`). A long `POWER` press puts the device
-to sleep, as the key does.
+through. A press is given up after about 1 s when its button does not read up first (a real key
+holds it down), or when the input manager does not take in the press or its release (see
+`btn_dropped` and `IDLE`). A long `POWER` press puts the device to sleep, as the key does.
 
 ### Screens: `ACT`
 
@@ -163,7 +163,7 @@ would still not fit is answered `STATE_ERROR:reply too long` instead.
 | `visit` | counts screen changes: a new value means a new screen, even one with the same name |
 | `heap` `maxblock` `minheap` | internal heap: free bytes, largest free block, lowest free since boot |
 | `uptime` | milliseconds since boot |
-| `btn_dropped` | only when not 0: presses the input manager never took in (see [Limits](#limits)) |
+| `btn_dropped` | only when not 0: presses given up, as their press or release was not taken in or their button did not read up (see [Limits](#limits)) |
 | `clipped` | only when `stack` or `title` was cut: their names, comma-separated |
 
 New fields may be added; a host should ignore keys it does not know.
@@ -185,8 +185,9 @@ changed nothing). All of that for 250 ms in a row.
 The `<reason>` of a timeout names the last thing that kept the device busy (`transition`, `render`,
 `input`), or `settling` if nothing did.
 
-If a `BTN` press was given up since the last `IDLE` answer (the input manager never took it in),
-the wait ends with `IDLE_ERROR:press dropped` instead: the screen did not get that press.
+If a `BTN` press was given up since the last `IDLE` answer (see `BTN`), the wait ends with
+`IDLE_ERROR:press dropped` instead: the screen did not get that press, or not its release. An
+`IDLE` right after it waits for a frame only when a press since then was taken in.
 
 One wait runs at a time: an `IDLE` sent while another is waiting gets `IDLE_ERROR:busy` at once,
 and the first wait goes on to its own answer. A wait outlives the script that sent it: after a run
@@ -205,8 +206,9 @@ The frame buffer as the panel takes it: 1 bit per pixel, rows of `<width>` pixel
 bit first, 1 = white. It is in the panel's native orientation, which `STATE` calls `landscape_ccw`;
 in another orientation, turn it by what `STATE` reports to see it upright. The size comes first, as
 in release builds, so `scripts/debugging_monitor.py` reads both. Errors:
-`SCREENSHOT_ERROR:framebuffer lent` (a chapter build has borrowed it),
-`SCREENSHOT_ERROR:transfer stalled` (the host stopped reading).
+`SCREENSHOT_ERROR:framebuffer lent` (a chapter build has borrowed it; in place of the first line),
+`SCREENSHOT_ERROR:transfer stalled` (the host stopped reading for 15 s; in place of the last line,
+after the part of the frame that was sent).
 
 ### `HELP`
 

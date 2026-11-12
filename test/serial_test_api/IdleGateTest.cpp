@@ -20,6 +20,7 @@ struct Device {
   bool handled = true;
   uint32_t passes = 0;
   uint32_t dropped = 0;
+  uint32_t taken = 0;
 
   Verdict pass() {
     now += 10;
@@ -29,6 +30,7 @@ struct Device {
     sample.effectHandled = handled;
     sample.renderPasses = passes;
     sample.droppedPresses = dropped;
+    sample.takenPresses = taken;
     return gate.step(sample);
   }
 
@@ -70,7 +72,7 @@ TEST(IdleGate, BusyRestartsTheQuietWindow) {
 // However long that takes, IDLE must not answer before it is handled and its frame drawn.
 TEST(IdleGate, AnUnhandledPressKeepsTheDeviceBusy) {
   Device d;
-  d.gate.noteEffect();
+  d.gate.noteEffect(d.taken);
   d.handled = false;
   d.gate.begin(d.now, 10000);
   for (int i = 0; i < 60; ++i) ASSERT_EQ(d.pass(), Verdict::Waiting) << "600 ms, the press still queued";
@@ -88,7 +90,7 @@ TEST(IdleGate, AnUnhandledPressKeepsTheDeviceBusy) {
 // Handled, but the screen acts on it a few passes later: wait for that render pass.
 TEST(IdleGate, AHandledPressWaitsForTheFrameItCauses) {
   Device d;
-  d.gate.noteEffect();
+  d.gate.noteEffect(d.taken);
   d.gate.begin(d.now, 10000);
   for (int i = 0; i < 40; ++i) ASSERT_EQ(d.pass(), Verdict::Waiting) << "no pass has started since";
   d.passes++;  // the page turn's render pass starts...
@@ -101,7 +103,7 @@ TEST(IdleGate, AHandledPressWaitsForTheFrameItCauses) {
 // A press that changes nothing on screen (a key with no action here) must not hang IDLE.
 TEST(IdleGate, APressThatDrawsNothingIsDoneAfterTheGrace) {
   Device d;
-  d.gate.noteEffect();
+  d.gate.noteEffect(d.taken);
   d.gate.begin(d.now, 10000);
   const uint32_t start = d.now;
   EXPECT_EQ(d.runUntilDone(), Verdict::Idle);
@@ -112,7 +114,7 @@ TEST(IdleGate, APressThatDrawsNothingIsDoneAfterTheGrace) {
 // A render pass that started before the press was handled belongs to something else.
 TEST(IdleGate, APassBeforeThePressWasHandledDoesNotCount) {
   Device d;
-  d.gate.noteEffect();
+  d.gate.noteEffect(d.taken);
   d.handled = false;
   d.gate.begin(d.now, 10000);
   d.passes++;  // e.g. the reader's pre-render of the page before
@@ -126,7 +128,7 @@ TEST(IdleGate, APassBeforeThePressWasHandledDoesNotCount) {
 // An effect followed to its end before the host asks: IDLE then needs only the quiet window.
 TEST(IdleGate, AnEffectSeenThroughBeforeTheWaitCostsNothingLater) {
   Device d;
-  d.gate.noteEffect();
+  d.gate.noteEffect(d.taken);
   d.busy = "render";
   EXPECT_TRUE(d.gate.active());
   d.pass();  // handled, its render under way
@@ -157,7 +159,7 @@ TEST(IdleGate, ATimeoutWithNothingBusyIsSettling) {
 
 TEST(IdleGate, AnUnhandledPressIsNamedInTheTimeout) {
   Device d;
-  d.gate.noteEffect();
+  d.gate.noteEffect(d.taken);
   d.handled = false;
   d.gate.begin(d.now, 300);
   EXPECT_EQ(d.runUntilDone(), Verdict::TimedOut);
@@ -198,4 +200,51 @@ TEST(IdleGate, ADroppedPressFailsTheNextAnswer) {
   d.dropped = 2;  // given up between two waits
   d.gate.begin(d.now, 10000);
   EXPECT_EQ(d.runUntilDone(), Verdict::PressDropped);
+}
+
+// The press is given up near the deadline, inside the wait for a frame it would have caused. A
+// retry right away must not wait out that frame: the press drew nothing.
+TEST(IdleGate, ARetryAfterADroppedPressDoesNotWaitForItsFrame) {
+  Device d;
+  d.gate.noteEffect(d.taken);
+  d.handled = false;
+  d.gate.begin(d.now, 500);
+  for (int i = 0; i < 40; ++i) ASSERT_EQ(d.pass(), Verdict::Waiting);
+  d.dropped = 1;  // given up, the queue empty
+  d.handled = true;
+  EXPECT_EQ(d.runUntilDone(), Verdict::PressDropped);
+  d.gate.begin(d.now, 300);
+  EXPECT_EQ(d.runUntilDone(), Verdict::Idle) << "not IDLE_TIMEOUT:" << d.gate.reason();
+}
+
+// Presses still queued after the dropped one: the next wait goes on following them.
+TEST(IdleGate, ARetryAfterADroppedPressStillFollowsTheRest) {
+  Device d;
+  d.gate.noteEffect(d.taken);
+  d.handled = false;
+  d.gate.begin(d.now, 500);
+  for (int i = 0; i < 20; ++i) ASSERT_EQ(d.pass(), Verdict::Waiting);
+  d.dropped = 1;  // given up, another press still queued
+  EXPECT_EQ(d.runUntilDone(), Verdict::PressDropped);
+  d.gate.begin(d.now, 300);
+  EXPECT_EQ(d.runUntilDone(), Verdict::TimedOut);
+  EXPECT_STREQ(d.gate.reason(), "input");
+}
+
+// One press dropped, another taken in whose screen acts on it later (a single click held back for
+// a double-click window). The retry still waits for that frame.
+TEST(IdleGate, ARetryStillWaitsForTheFrameOfAPressTakenIn) {
+  Device d;
+  d.gate.noteEffect(d.taken);
+  d.handled = false;
+  d.gate.begin(d.now, 500);
+  for (int i = 0; i < 20; ++i) ASSERT_EQ(d.pass(), Verdict::Waiting);
+  d.dropped = 1;
+  d.taken = 1;
+  d.handled = true;
+  EXPECT_EQ(d.runUntilDone(), Verdict::PressDropped);
+  d.gate.begin(d.now, 2000);
+  for (int i = 0; i < 40; ++i) ASSERT_EQ(d.pass(), Verdict::Waiting) << "the taken press has drawn nothing yet";
+  d.passes++;  // its frame starts
+  EXPECT_EQ(d.runUntilDone(), Verdict::Idle);
 }

@@ -28,10 +28,12 @@ class IdleGate {
     bool effectHandled = true;    // the input path is done with the last effect
     uint32_t renderPasses = 0;    // render passes started so far
     uint32_t droppedPresses = 0;  // presses given up so far (ButtonPressQueue::droppedPresses())
+    uint32_t takenPresses = 0;    // presses taken in so far (ButtonPressQueue::takenPresses())
   };
 
-  // A command that should change the screen ran.
-  void noteEffect() {
+  // A command that should change the screen ran; `takenPresses` as in Sample, at that moment.
+  void noteEffect(const uint32_t takenPresses) {
+    if (!effectPending) effectTakenBase = takenPresses;  // an effect already followed keeps its own
     effectPending = true;
     effectHandledSeen = false;
   }
@@ -75,6 +77,9 @@ class IdleGate {
     // A press given up since the last answer never reached the screen, whatever it shows now.
     if (sample.droppedPresses != droppedAnswered) {
       droppedAnswered = sample.droppedPresses;
+      // No press left to play and none taken in: no frame can follow, so the next wait must not
+      // wait for one. A press taken in may still draw (a deferred single click).
+      if (sample.effectHandled && sample.takenPresses == effectTakenBase) effectPending = false;
       return Verdict::PressDropped;
     }
     return expired ? Verdict::TimedOut : Verdict::Idle;
@@ -111,6 +116,7 @@ class IdleGate {
 
   bool effectPending = false;
   bool effectHandledSeen = false;
+  uint32_t effectTakenBase = 0;  // takenPresses when the effect began
   uint32_t effectRenderPasses = 0;
   uint32_t effectHandledAtMs = 0;
 };

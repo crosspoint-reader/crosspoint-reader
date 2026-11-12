@@ -10,7 +10,9 @@
 // committed as down and returns the buttons to hold until the next sample. A press starts once its
 // button reads up, is held until the input layer has committed it, then for its hold time, then
 // released; the next press starts once that release is committed. So each press goes through the
-// same debounce and hold timing as a real key, however long the loop passes take.
+// same debounce and hold timing as a real key, however long the loop passes take. A press whose
+// button never reads up, or whose press or release the input layer does not commit, is given up and
+// counted once.
 class ButtonPressQueue {
  public:
   static constexpr uint16_t SHORT_HOLD_MS = 60;
@@ -38,8 +40,11 @@ class ButtonPressQueue {
   // committed.
   bool idle() const { return phase == Phase::Idle && count == 0; }
 
-  // Presses given up: the input layer never committed them, or their button never read up first.
+  // Presses given up: their button never read up first, or the input layer never committed the
+  // press or its release.
   uint32_t droppedPresses() const { return dropped; }
+  // Presses the input layer committed as down, whatever became of their release.
+  uint32_t takenPresses() const { return taken; }
 
   uint8_t step(const uint32_t nowMs, const uint8_t committed) {
     if (phase == Phase::Idle) {
@@ -67,12 +72,14 @@ class ButtonPressQueue {
         return bit;
       case Phase::Pressing:
         if (committed & bit) {
+          ++taken;
           enter(Phase::Holding, nowMs);  // the hold counts from the committed press
           return bit;
         }
         if (commitTimedOut(nowMs)) {
+          // Never taken in, so no release to wait for; a press that reads down later is Starting's.
           ++dropped;
-          enter(Phase::Releasing, nowMs);
+          enter(Phase::Idle, nowMs);
           return 0;
         }
         return bit;
@@ -83,7 +90,10 @@ class ButtonPressQueue {
         }
         return bit;
       case Phase::Releasing:
-        if (!(committed & bit) || commitTimedOut(nowMs)) {
+        if (!(committed & bit)) {
+          enter(Phase::Idle, nowMs);
+        } else if (commitTimedOut(nowMs)) {
+          ++dropped;  // the release never went through: whatever acts on it has not run
           enter(Phase::Idle, nowMs);
         }
         return 0;
@@ -117,4 +127,5 @@ class ButtonPressQueue {
   uint32_t phaseSinceMs = 0;
   uint8_t phaseSamples = 0;
   uint32_t dropped = 0;
+  uint32_t taken = 0;
 };

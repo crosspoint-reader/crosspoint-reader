@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "util/ButtonPressQueue.h"
+#include "util/IdleGate.h"
 
 namespace {
 
@@ -133,7 +134,8 @@ TEST(ButtonPressQueue, PressesPlayInOrder) {
   Loop loop;
   ASSERT_TRUE(loop.queue.push(BACK, ButtonPressQueue::SHORT_HOLD_MS));
   ASSERT_TRUE(loop.queue.push(CONFIRM, ButtonPressQueue::SHORT_HOLD_MS));
-  while (loop.presses[BACK] == 0) loop.pass();
+  for (int i = 0; i < 20 && loop.presses[BACK] == 0; ++i) loop.pass();
+  ASSERT_EQ(loop.presses[BACK], 1);
   EXPECT_EQ(loop.presses[CONFIRM], 0);
   ASSERT_TRUE(loop.runUntilIdle());
   EXPECT_EQ(loop.presses[CONFIRM], 1);
@@ -155,6 +157,7 @@ TEST(ButtonPressQueue, AnUncommittedPressIsGivenUp) {
   ASSERT_TRUE(loop.queue.push(BACK, ButtonPressQueue::SHORT_HOLD_MS));
   ASSERT_TRUE(loop.runUntilIdle());
   EXPECT_EQ(loop.queue.droppedPresses(), 2u);
+  EXPECT_EQ(loop.queue.takenPresses(), 0u);
   EXPECT_EQ(loop.held, 0);
 }
 
@@ -178,7 +181,9 @@ TEST(ButtonPressQueue, AStalledPassDoesNotDropThePress) {
 TEST(ButtonPressQueue, NotIdleUntilTheReleaseIsCommitted) {
   Loop loop;
   ASSERT_TRUE(loop.queue.push(CONFIRM, ButtonPressQueue::SHORT_HOLD_MS));
-  while (loop.held != 0 || loop.presses[CONFIRM] == 0) loop.pass();
+  for (int i = 0; i < 50 && (loop.held != 0 || loop.presses[CONFIRM] == 0); ++i) loop.pass();
+  ASSERT_EQ(loop.presses[CONFIRM], 1);
+  ASSERT_EQ(loop.held, 0);
   // Released by the queue, but the input layer still reports the button down.
   EXPECT_TRUE(loop.input.currentState & (1u << CONFIRM));
   EXPECT_FALSE(loop.queue.idle());
@@ -192,7 +197,8 @@ TEST(ButtonPressQueue, TheNextPressWaitsForAReleaseNeverCommitted) {
   Loop loop;
   ASSERT_TRUE(loop.queue.push(CONFIRM, ButtonPressQueue::SHORT_HOLD_MS));
   ASSERT_TRUE(loop.queue.push(CONFIRM, ButtonPressQueue::SHORT_HOLD_MS));
-  while (loop.presses[CONFIRM] == 0) loop.pass();
+  for (int i = 0; i < 20 && loop.presses[CONFIRM] == 0; ++i) loop.pass();
+  ASSERT_EQ(loop.presses[CONFIRM], 1) << "the first press is committed before the key goes down";
   loop.input.realKeys = 1u << CONFIRM;
   for (int i = 0; i < 150; ++i) loop.pass();  // past the first release's 1 s timeout
   EXPECT_EQ(loop.presses[CONFIRM], 1);
@@ -201,7 +207,41 @@ TEST(ButtonPressQueue, TheNextPressWaitsForAReleaseNeverCommitted) {
   ASSERT_TRUE(loop.runUntilIdle());
   EXPECT_EQ(loop.presses[CONFIRM], 2) << "the second press has its own press edge";
   EXPECT_EQ(loop.releases[CONFIRM], 2);
-  EXPECT_EQ(loop.queue.droppedPresses(), 0u);
+  EXPECT_EQ(loop.queue.droppedPresses(), 1u) << "the first press: its release was never taken in";
+}
+
+// One press, its release never taken in (a real key held over its end), nothing queued after it.
+TEST(ButtonPressQueue, AReleaseNeverTakenInIsGivenUp) {
+  Loop loop;
+  ASSERT_TRUE(loop.queue.push(CONFIRM, ButtonPressQueue::SHORT_HOLD_MS));
+  for (int i = 0; i < 20 && loop.presses[CONFIRM] == 0; ++i) loop.pass();
+  ASSERT_EQ(loop.presses[CONFIRM], 1);
+  loop.input.realKeys = 1u << CONFIRM;
+  ASSERT_TRUE(loop.runUntilIdle());
+  EXPECT_EQ(loop.queue.droppedPresses(), 1u);
+  EXPECT_EQ(loop.queue.takenPresses(), 1u);
+  EXPECT_EQ(loop.releases[CONFIRM], 0);
+}
+
+// The same press through CMD:IDLE's decision: the wait must fail, not answer idle.
+TEST(ButtonPressQueue, AReleaseNeverTakenInFailsTheIdleThatFollows) {
+  Loop loop;
+  IdleGate gate;
+  ASSERT_TRUE(loop.queue.push(CONFIRM, ButtonPressQueue::SHORT_HOLD_MS));
+  gate.noteEffect(loop.queue.takenPresses());
+  ASSERT_TRUE(gate.begin(loop.now, 10000));
+  IdleGate::Verdict verdict = IdleGate::Verdict::Waiting;
+  for (int i = 0; i < 1100 && verdict == IdleGate::Verdict::Waiting; ++i) {
+    loop.pass();
+    if (loop.presses[CONFIRM] == 1) loop.input.realKeys = 1u << CONFIRM;  // held from here on
+    IdleGate::Sample sample;
+    sample.nowMs = loop.now;
+    sample.effectHandled = loop.queue.idle();
+    sample.droppedPresses = loop.queue.droppedPresses();
+    sample.takenPresses = loop.queue.takenPresses();
+    verdict = gate.step(sample);
+  }
+  EXPECT_EQ(verdict, IdleGate::Verdict::PressDropped);
 }
 
 // The key never comes up: the press is given up and counted, not reported as played.

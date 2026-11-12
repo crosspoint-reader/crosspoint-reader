@@ -132,7 +132,7 @@ void cmdButton(const std::string_view arg) {
   if (kind == PressKind::Hold) hold = static_cast<uint16_t>(holdMs);
   presses.push(button->index, hold);
   if (kind == PressKind::Double) presses.push(button->index, hold);
-  idleGate.noteEffect();
+  idleGate.noteEffect(presses.takenPresses());
   reply("BTN_OK");
 }
 
@@ -351,6 +351,7 @@ void serviceIdle() {
   sample.effectHandled = presses.idle();
   sample.renderPasses = activityManager.renderPassCount();
   sample.droppedPresses = presses.droppedPresses();
+  sample.takenPresses = presses.takenPresses();
   switch (idleGate.step(sample)) {
     case IdleGate::Verdict::Waiting:
       break;
