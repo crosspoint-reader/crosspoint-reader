@@ -156,4 +156,10 @@ void ReplyLine::appendField(const char* key, const long value) {
   appendField(key, std::string_view(number, n > 0 ? static_cast<size_t>(n) : 0));
 }
 
+void ReplyLine::appendField(const char* key, const unsigned long value) {
+  char number[24];
+  const int n = snprintf(number, sizeof(number), "%lu", value);
+  appendField(key, std::string_view(number, n > 0 ? static_cast<size_t>(n) : 0));
+}
+
 }  // namespace SerialCommandGrammar

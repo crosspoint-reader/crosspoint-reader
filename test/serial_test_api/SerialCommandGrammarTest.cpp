@@ -124,6 +124,14 @@ TEST(SerialCommandGrammar, ReplyFieldsQuoteWhatWouldBreakSplitting) {
   EXPECT_FALSE(line.truncated());
 }
 
+// uptime is millis(): past 24.8 days it no longer fits a signed 32-bit long.
+TEST(SerialCommandGrammar, AnUnsignedFieldKeepsItsFullRange) {
+  char buffer[32];
+  ReplyLine line(buffer, sizeof(buffer));
+  line.appendField("uptime", 4294967295UL);
+  EXPECT_EQ(line.view(), " uptime=4294967295");
+}
+
 TEST(SerialCommandGrammar, ReplyFieldsKeepTheReplyOnOneLine) {
   char buffer[64];
   ReplyLine line(buffer, sizeof(buffer));

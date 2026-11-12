@@ -226,7 +226,7 @@ void cmdState(std::string_view /*arg*/) {
   line.appendField("heap", static_cast<long>(heap.freeBytes));
   line.appendField("maxblock", static_cast<long>(heap.largestBlockBytes));
   line.appendField("minheap", static_cast<long>(heap.minFreeBytes));
-  line.appendField("uptime", static_cast<long>(millis()));
+  line.appendField("uptime", static_cast<unsigned long>(millis()));
   if (presses.droppedPresses() > 0) line.appendField("btn_dropped", static_cast<long>(presses.droppedPresses()));
 
   // The free text goes last, cut to the room left, so the fields above always arrive whole.

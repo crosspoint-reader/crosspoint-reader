@@ -37,6 +37,7 @@ class ReplyLine {
   // quotes. Control characters become spaces: the reply must stay one line.
   void appendField(const char* key, std::string_view value);
   void appendField(const char* key, long value);
+  void appendField(const char* key, unsigned long value);
   // appendField(), with the value cut short if needed so that `reserve` bytes stay free. The cut
   // falls before a UTF-8 character and leaves the quotes whole. False when the value was cut. At
   // least ` key=""` is written; when even that does not fit, the line is truncated().
