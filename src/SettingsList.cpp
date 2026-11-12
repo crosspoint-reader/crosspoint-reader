@@ -181,9 +181,7 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                          "longPressButtonBehavior", StrId::STR_CAT_CONTROLS));
   emit(buildLongPressMenuSetting());
   // Double-click power frontlight shortcut only exists on the X4 Pro.
-  if (BoardConfig::isX4Pro())
-    emit(SettingInfo::Toggle(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
-                             "doubleClickPwrLight", StrId::STR_CAT_CONTROLS));
+  if (BoardConfig::isX4Pro()) emit(buildDoublePowerButtonSetting());
   emit(buildShortPowerButtonSetting());
   // Always persisted; isHiddenOnDevice() hides it when the IMU probe fails.
   emit(SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
@@ -207,6 +205,8 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
       "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles, "showHiddenFiles",
                            StrId::STR_CAT_SYSTEM));
+  emit(SettingInfo::Toggle(StrId::STR_SHOW_FILE_EXTENSIONS, &CrossPointSettings::showFileExtensions,
+                           "showFileExtensions", StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_LIBRARY_USE_METADATA, &CrossPointSettings::libraryUseMetadata,
                            "libraryUseMetadata", StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS, &CrossPointSettings::removeReadBooksFromRecents,

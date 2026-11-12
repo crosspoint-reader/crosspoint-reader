@@ -249,6 +249,32 @@ inline SettingInfo buildShortPowerButtonSetting() {
                                   setShortPowerButtonFromDisplayValue, "shortPwrBtn", StrId::STR_CAT_CONTROLS);
 }
 
+inline std::vector<ShortPowerButtonOption> doublePowerButtonOptions() {
+  auto options = shortPowerButtonOptions();
+  options.push_back({StrId::STR_FRONTLIGHT, CrossPointSettings::PWR_FRONTLIGHT});
+  return options;
+}
+
+inline SettingInfo buildDoublePowerButtonSetting() {
+  std::vector<StrId> labels;
+  labels.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
+  for (const auto& option : doublePowerButtonOptions()) labels.push_back(option.label);
+  return SettingInfo::DynamicEnum(
+      StrId::STR_POWER_DOUBLE_CLICK, std::move(labels),
+      []() -> uint8_t {
+        const auto options = doublePowerButtonOptions();
+        for (size_t i = 0; i < options.size(); ++i) {
+          if (options[i].value == SETTINGS.doublePwrBtn) return static_cast<uint8_t>(i);
+        }
+        return 0;
+      },
+      [](uint8_t value) {
+        const auto options = doublePowerButtonOptions();
+        SETTINGS.doublePwrBtn = value < options.size() ? options[value].value : CrossPointSettings::IGNORE;
+      },
+      "doublePwrBtn", StrId::STR_CAT_CONTROLS);
+}
+
 inline std::vector<StrId> homeThemeValues() {
   static constexpr StrId VALUES[] = {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
                                      StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_COVER_GRID};
