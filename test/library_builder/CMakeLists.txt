@@ -1,5 +1,7 @@
 add_executable(LibraryBuilderTest
   LibraryBuilderTest.cpp
+  NextBookFinderTest.cpp
+  ${REPO_ROOT}/src/util/NextBookFinder.cpp
   ${REPO_ROOT}/lib/FsHelpers/FsHelpers.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryBuilder.cpp
   ${REPO_ROOT}/lib/LibraryIndex/LibraryIndexFile.cpp
@@ -14,6 +16,7 @@ target_include_directories(LibraryBuilderTest PRIVATE
   ${REPO_ROOT}/lib/LibraryIndex
   ${REPO_ROOT}/lib/Serialization
   ${REPO_ROOT}/lib/Utf8
+  ${REPO_ROOT}/src/util
 )
 target_link_libraries(LibraryBuilderTest PRIVATE crosspoint_test_common GTest::gtest_main)
 gtest_discover_tests(LibraryBuilderTest)
