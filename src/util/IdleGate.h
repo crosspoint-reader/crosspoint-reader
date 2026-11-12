@@ -20,13 +20,14 @@ class IdleGate {
   static constexpr uint32_t QUIET_MS = 250;
   static constexpr uint32_t NO_RENDER_GRACE_MS = 1000;
 
-  enum class Verdict : uint8_t { Waiting, Idle, TimedOut };
+  enum class Verdict : uint8_t { Waiting, Idle, TimedOut, PressDropped };
 
   struct Sample {
     uint32_t nowMs = 0;
-    const char* busy = nullptr;  // the device's own busy reason, nullptr when it looks idle
-    bool effectHandled = true;   // the input path is done with the last effect
-    uint32_t renderPasses = 0;   // render passes started so far
+    const char* busy = nullptr;   // the device's own busy reason, nullptr when it looks idle
+    bool effectHandled = true;    // the input path is done with the last effect
+    uint32_t renderPasses = 0;    // render passes started so far
+    uint32_t droppedPresses = 0;  // presses given up so far (ButtonPressQueue::droppedPresses())
   };
 
   // A command that should change the screen ran.
@@ -35,13 +36,16 @@ class IdleGate {
     effectHandledSeen = false;
   }
 
-  // Starts a wait (CMD:IDLE); a wait already running is replaced.
-  void begin(const uint32_t nowMs, const uint32_t limitMs) {
+  // Starts a wait (CMD:IDLE). False while one is running, which goes on unchanged: each wait gets
+  // its own answer.
+  bool begin(const uint32_t nowMs, const uint32_t limitMs) {
+    if (waiting) return false;
     waiting = true;
     startMs = nowMs;
     timeoutMs = limitMs;
     quiet = false;
     lastBusy = "settling";
+    return true;
   }
 
   bool isWaiting() const { return waiting; }
@@ -63,15 +67,17 @@ class IdleGate {
       quiet = true;
       quietSinceMs = sample.nowMs;
     }
-    if (quiet && sample.nowMs - quietSinceMs >= QUIET_MS) {
-      waiting = false;
-      return Verdict::Idle;
+    // The deadline wins: a pass that comes late (a stalled loop) must not make an expired wait Idle.
+    const bool expired = sample.nowMs - startMs >= timeoutMs;
+    const bool settled = quiet && sample.nowMs - quietSinceMs >= QUIET_MS;
+    if (!expired && !settled) return Verdict::Waiting;
+    waiting = false;
+    // A press given up since the last answer never reached the screen, whatever it shows now.
+    if (sample.droppedPresses != droppedAnswered) {
+      droppedAnswered = sample.droppedPresses;
+      return Verdict::PressDropped;
     }
-    if (sample.nowMs - startMs >= timeoutMs) {
-      waiting = false;
-      return Verdict::TimedOut;
-    }
-    return Verdict::Waiting;
+    return expired ? Verdict::TimedOut : Verdict::Idle;
   }
 
  private:
@@ -101,6 +107,7 @@ class IdleGate {
   uint32_t timeoutMs = 0;
   uint32_t quietSinceMs = 0;
   const char* lastBusy = "settling";
+  uint32_t droppedAnswered = 0;  // droppedPresses at the last answer
 
   bool effectPending = false;
   bool effectHandledSeen = false;

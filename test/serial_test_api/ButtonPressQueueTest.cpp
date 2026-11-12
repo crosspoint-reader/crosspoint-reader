@@ -20,9 +20,11 @@ struct InputModel {
   uint32_t pressStart = 0;
   uint32_t pressFinish = 0;
   bool ignoresHook = false;  // a board whose input path never reads the hook
+  uint8_t realKeys = 0;      // keys a person holds down, read along with the hook
 
   void update(const uint32_t now, uint8_t raw) {
     if (ignoresHook) raw = 0;
+    raw |= realKeys;
     pressedEvents = 0;
     releasedEvents = 0;
     if (raw != lastState) {
@@ -182,4 +184,34 @@ TEST(ButtonPressQueue, NotIdleUntilTheReleaseIsCommitted) {
   EXPECT_FALSE(loop.queue.idle());
   ASSERT_TRUE(loop.runUntilIdle());
   EXPECT_EQ(loop.input.currentState, 0);
+}
+
+// A real key held over the end of a press: its release is never committed. The next press of that
+// button must wait for the key to come up, or the input layer would see no new press.
+TEST(ButtonPressQueue, TheNextPressWaitsForAReleaseNeverCommitted) {
+  Loop loop;
+  ASSERT_TRUE(loop.queue.push(CONFIRM, ButtonPressQueue::SHORT_HOLD_MS));
+  ASSERT_TRUE(loop.queue.push(CONFIRM, ButtonPressQueue::SHORT_HOLD_MS));
+  while (loop.presses[CONFIRM] == 0) loop.pass();
+  loop.input.realKeys = 1u << CONFIRM;
+  for (int i = 0; i < 150; ++i) loop.pass();  // past the first release's 1 s timeout
+  EXPECT_EQ(loop.presses[CONFIRM], 1);
+  EXPECT_EQ(loop.held, 0) << "the second press is not held while the key is down";
+  loop.input.realKeys = 0;
+  ASSERT_TRUE(loop.runUntilIdle());
+  EXPECT_EQ(loop.presses[CONFIRM], 2) << "the second press has its own press edge";
+  EXPECT_EQ(loop.releases[CONFIRM], 2);
+  EXPECT_EQ(loop.queue.droppedPresses(), 0u);
+}
+
+// The key never comes up: the press is given up and counted, not reported as played.
+TEST(ButtonPressQueue, APressWhoseButtonStaysDownIsGivenUp) {
+  Loop loop;
+  loop.input.realKeys = 1u << CONFIRM;
+  for (int i = 0; i < 3; ++i) loop.pass();  // the key is committed as down
+  ASSERT_TRUE(loop.queue.push(CONFIRM, ButtonPressQueue::SHORT_HOLD_MS));
+  ASSERT_TRUE(loop.runUntilIdle());
+  EXPECT_EQ(loop.queue.droppedPresses(), 1u);
+  EXPECT_EQ(loop.presses[CONFIRM], 1) << "only the real key's press";
+  EXPECT_EQ(loop.held, 0);
 }

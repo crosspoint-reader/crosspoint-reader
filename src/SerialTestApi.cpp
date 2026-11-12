@@ -240,8 +240,11 @@ void cmdIdle(const std::string_view arg) {
     reply("IDLE_ERROR:bad timeout ", arg);
     return;
   }
-  // Answered by service() once the device is idle or the time is up.
-  idleGate.begin(millis(), static_cast<uint32_t>(std::min(timeout, IDLE_MAX_TIMEOUT_MS)));
+  // Answered by service() once the device is idle or the time is up. One wait at a time, so that
+  // each IDLE gets its own answer.
+  if (!idleGate.begin(millis(), static_cast<uint32_t>(std::min(timeout, IDLE_MAX_TIMEOUT_MS)))) {
+    reply("IDLE_ERROR:busy");
+  }
 }
 
 // ---- SCREENSHOT -----------------------------------------------------------------------------
@@ -339,6 +342,7 @@ void serviceIdle() {
   sample.busy = busyReason();
   sample.effectHandled = presses.idle();
   sample.renderPasses = activityManager.renderPassCount();
+  sample.droppedPresses = presses.droppedPresses();
   switch (idleGate.step(sample)) {
     case IdleGate::Verdict::Waiting:
       break;
@@ -347,6 +351,9 @@ void serviceIdle() {
       break;
     case IdleGate::Verdict::TimedOut:
       reply("IDLE_TIMEOUT:", idleGate.reason());
+      break;
+    case IdleGate::Verdict::PressDropped:
+      reply("IDLE_ERROR:press dropped");
       break;
   }
 }

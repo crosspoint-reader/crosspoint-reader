@@ -121,7 +121,9 @@ board`.
 
 Presses are queued and played one after the other. Each is held until the input manager has
 debounced it, then for its hold time, then released; the next starts once the release has gone
-through. A long `POWER` press puts the device to sleep, as the key does.
+through. A press waits for its button to read up first: if a real key holds it down, the press
+is given up after about 1 s (see `btn_dropped` and `IDLE`). A long `POWER` press puts the device
+to sleep, as the key does.
 
 ### Screens: `ACT`
 
@@ -177,7 +179,12 @@ changed nothing). All of that for 250 ms in a row.
 The `<reason>` of a timeout names the last thing that kept the device busy (`transition`, `render`,
 `input`), or `settling` if nothing did.
 
-A second `IDLE` replaces a wait that is still running; the first gets no answer.
+If a `BTN` press was given up since the last `IDLE` answer (the input manager never took it in),
+the wait ends with `IDLE_ERROR:press dropped` instead: the screen did not get that press.
+
+One wait runs at a time: an `IDLE` sent while another is waiting gets `IDLE_ERROR:busy` at once,
+and the first wait goes on to its own answer. A wait outlives the script that sent it: after a run
+stopped during a long `IDLE`, a new `IDLE` is busy until that wait's timeout.
 
 ### Screenshots: `SCREENSHOT`
 
@@ -229,7 +236,8 @@ a failed run comes with its serial log.
 - A press enters through the SDK's board-button hook (`InputManager::setButtonHook`). On a board
   whose own key uses that hook (LilyGo T5S3), `BTN` answers `BTN_ERROR:not supported on this
   board`. Where the input code does not read the hook (M5Stack PaperColor), `BTN` answers `BTN_OK`
-  but the press is given up after 1 s and nothing happens; `STATE` then shows `btn_dropped`.
+  but the press is given up after 1 s and nothing happens; the next `IDLE` answers
+  `IDLE_ERROR:press dropped` and `STATE` shows `btn_dropped`.
 - Touch is not covered; the touch boards' buttons are.
 - `IDLE` looks at the frame buffer, not the panel: on screens that refresh the panel in the
   background (the reader's overlays), the waveform may still be running when `IDLE` answers.

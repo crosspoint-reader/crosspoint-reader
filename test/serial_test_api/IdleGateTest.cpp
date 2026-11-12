@@ -19,6 +19,7 @@ struct Device {
   const char* busy = nullptr;
   bool handled = true;
   uint32_t passes = 0;
+  uint32_t dropped = 0;
 
   Verdict pass() {
     now += 10;
@@ -27,6 +28,7 @@ struct Device {
     sample.busy = busy;
     sample.effectHandled = handled;
     sample.renderPasses = passes;
+    sample.droppedPresses = dropped;
     return gate.step(sample);
   }
 
@@ -160,4 +162,40 @@ TEST(IdleGate, AnUnhandledPressIsNamedInTheTimeout) {
   d.gate.begin(d.now, 300);
   EXPECT_EQ(d.runUntilDone(), Verdict::TimedOut);
   EXPECT_STREQ(d.gate.reason(), "input");
+}
+
+// A second CMD:IDLE while one waits: refused, so the first still gets its answer, on its own time.
+TEST(IdleGate, ASecondWaitIsRefusedAndTheFirstGoesOn) {
+  Device d;
+  d.busy = "render";
+  ASSERT_TRUE(d.gate.begin(d.now, 500));
+  for (int i = 0; i < 20; ++i) ASSERT_EQ(d.pass(), Verdict::Waiting);
+  EXPECT_FALSE(d.gate.begin(d.now, 10000));
+  EXPECT_EQ(d.runUntilDone(), Verdict::TimedOut) << "the first wait's 500 ms, not the second's 10 s";
+  EXPECT_TRUE(d.gate.begin(d.now, 10000)) << "a new wait once the first was answered";
+}
+
+// A loop pass that comes late: the wait expired meanwhile, although the device looks quiet.
+TEST(IdleGate, APassAfterTheDeadlineTimesOutEvenIfQuiet) {
+  Device d;
+  d.gate.begin(d.now, 500);
+  EXPECT_EQ(d.pass(), Verdict::Waiting);  // quiet from here
+  d.now += 990;                           // the loop stalls
+  EXPECT_EQ(d.pass(), Verdict::TimedOut);
+}
+
+// A press the input layer never took must fail the IDLE answer that follows it, once.
+TEST(IdleGate, ADroppedPressFailsTheNextAnswer) {
+  Device d;
+  d.gate.begin(d.now, 10000);
+  for (int i = 0; i < 5; ++i) ASSERT_EQ(d.pass(), Verdict::Waiting);
+  d.dropped = 1;  // given up during the wait
+  EXPECT_EQ(d.runUntilDone(), Verdict::PressDropped);
+
+  d.gate.begin(d.now, 10000);
+  EXPECT_EQ(d.runUntilDone(), Verdict::Idle) << "reported once";
+
+  d.dropped = 2;  // given up between two waits
+  d.gate.begin(d.now, 10000);
+  EXPECT_EQ(d.runUntilDone(), Verdict::PressDropped);
 }
