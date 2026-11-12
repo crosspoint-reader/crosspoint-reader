@@ -446,8 +446,12 @@ void ClipSelectionActivity::confirmSelection(const ClippingResult::Action action
 // Look up / Clip modes confirm directly. Select mode always asks which action to run, unless there is no
 // dictionary and Clip is the only option.
 void ClipSelectionActivity::confirmWithButtons() {
-  if (mode != Mode::Select || rangeStart < 0 || !lookupAvailable) {
-    confirmSelection(isLookup() && lookupAvailable ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
+  if (mode != Mode::Select || rangeStart < 0) {
+    confirmSelection(isLookup() ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
+    return;
+  }
+  if (!lookupAvailable) {
+    confirmSelection(ClippingResult::Action::Clip);
     return;
   }
   static constexpr StrId OPTIONS[] = {StrId::STR_LOOKUP, StrId::STR_CLIP};
