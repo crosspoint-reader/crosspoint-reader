@@ -457,10 +457,9 @@ void EpubReaderActivity::idlePrewarmTick() {
   RenderLock lock(RenderLock::Mode::Try);
   if (!lock.ownsLock()) return;
 
-  constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
   if (!section || section->isBuilding() || !renderer.hasFrameBuffer() || overlay != Overlay::None ||
-      lastRenderCompleteMs == 0 || millis() - lastRenderCompleteMs <= IDLE_PREWARM_DEBOUNCE_MS ||
-      ESP.getFreeHeap() <= RENDER_MIN_FREE_HEAP || ESP.getMaxAllocHeap() <= BACKGROUND_BUILD_MIN_MAX_ALLOC) {
+      lastRenderCompleteMs == 0 || ESP.getFreeHeap() <= RENDER_MIN_FREE_HEAP ||
+      ESP.getMaxAllocHeap() <= BACKGROUND_BUILD_MIN_MAX_ALLOC) {
     return;
   }
   if (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage) {
