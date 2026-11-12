@@ -8,6 +8,7 @@
 #include <Memory.h>
 #include <SecureHttpClient.h>
 #include <Utf8.h>
+#include <strings.h>
 
 #include <cstring>
 
@@ -33,11 +34,16 @@ bool request(freeink::SecureHttpClient& http, const std::string& url, char* buff
     LOG_ERR("CLIP", "Invalid sync URL");
     return false;
   }
+  // addHeader() appends, so a configured Authorization header replaces Basic auth instead of duplicating it.
+  bool customAuthorization = false;
   for (const auto& header : KOREADER_STORE.getCustomHeaders()) {
-    if (!header.name.empty()) http.addHeader(header.name, header.value);
+    if (header.name.empty()) continue;
+    http.addHeader(header.name, header.value);
+    if (strcasecmp(header.name.c_str(), "Authorization") == 0) customAuthorization = true;
   }
   http.addHeader("x-auth-user", KOREADER_STORE.getUsername());
   http.addHeader("x-auth-key", KOREADER_STORE.getMd5Password());
+  if (!customAuthorization) http.addHeader("Authorization", KOREADER_STORE.getBasicAuthorization());
   http.addHeader("Content-Type", "application/json");
   size_t received = 0;
   const int status = http.sendRequest(upload ? "PUT" : "GET", reinterpret_cast<const uint8_t*>(buffer), payloadSize,
