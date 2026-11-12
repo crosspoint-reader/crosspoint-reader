@@ -90,6 +90,14 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 77
+
+Completed and partial sections rebuild for the combined heading and anchor
+layout changes. Headings no longer hyphenate. This uses the existing binary
+formats for sections, book metadata, and reading progress. Clippings with
+source offsets can still highlight their text. Older page-local positions
+remain saved but do not highlight in the new layout.
+
 ### Version 76
 
 Completed and partial sections rebuild to refresh fragment destinations and
@@ -98,6 +106,9 @@ letters and anchors on displayed images and horizontal rules resolve to the
 page where they are placed. Book metadata and reading progress are kept.
 
 ### Version 75
+
+Develop used version 75 to rebuild headings without hyphenation. Earlier
+footnote builds used the same version for the visibility and image changes below.
 
 The serialized layout is unchanged. Non-visible elements, pagebreak markers, and
 suppressed images are skipped before table layout and anchor selection. In

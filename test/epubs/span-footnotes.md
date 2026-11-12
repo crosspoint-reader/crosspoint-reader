@@ -48,9 +48,12 @@ byte `0x01` followed by the missing ID. The marker certifies only the requested
 fragment for that cache; rebuilding for another fragment or render settings may
 replace it.
 
-For the v76 update, keep both a completed and a suspended v75 cache. After the
-update, each should rebuild with the reading position preserved. Reopen cached
-TXT and Markdown books and verify the saved position too.
+For the v77 update, keep completed and suspended caches from develop v75 and
+from the earlier footnote build v76. After the update, each should rebuild with
+the reading position preserved. Reopen cached TXT and Markdown books and verify
+the saved position too.
+In the same book, verify that an old clipping with source offsets highlights its
+text and that an old page-local clipping is still listed without a highlight.
 
 Use EPUBs with the relevant markup in addition to the generated fixture. Check
 links to drop caps, list text that starts on the next page, and horizontal rules

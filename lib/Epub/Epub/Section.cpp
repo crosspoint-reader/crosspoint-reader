@@ -82,9 +82,10 @@ namespace {
 // v72: Make ruby rendering closer to how Chromium renders ruby by default.
 // v73: TrueType vector fonts load and advance .notdef for missing glyphs.
 // v74: TrueType advances defer rounding until pixel placement.
-// v75: Apply visibility and image suppression before table layout and anchor selection.
+// v75: Develop disables heading hyphenation. Earlier PR builds changed anchor layout.
 // v76: Correct fragment destinations and use empty source ranges for list markers.
-constexpr uint8_t SECTION_FILE_VERSION = 76;
+// v77: Rebuild sections for the combined heading and anchor layout changes.
+constexpr uint8_t SECTION_FILE_VERSION = 77;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
