@@ -7,19 +7,16 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
-#include <Utf8.h>
 
 #include <algorithm>
 #include <climits>
 #include <cstdlib>
-#include <cstring>
 
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/ActivityResult.h"
 #include "clippings/ClippingText.h"
-#include "clippings/SelectionActionPolicy.h"
 #include "clippings/SelectionGeometry.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -44,26 +41,6 @@ const char* cleanWordStart(const char* text) {
     text += static_cast<uint8_t>(text[0]) == 0xC2 ? 2 : 1;
   }
   return text;
-}
-
-bool isCjkCodepoint(const uint32_t cp) {
-  return (cp >= 0x2E80 && cp <= 0x9FFF) || (cp >= 0xAC00 && cp <= 0xD7AF) || (cp >= 0xF900 && cp <= 0xFAFF) ||
-         (cp >= 0xFF00 && cp <= 0xFFEF) || (cp >= 0x20000 && cp <= 0x2FFFF);
-}
-
-bool startsWithCjk(const char* text) {
-  text = cleanWordStart(text);
-  if (*text == '\0') return false;
-  const auto* p = reinterpret_cast<const uint8_t*>(text);
-  return isCjkCodepoint(utf8NextCodepoint(&p));
-}
-
-bool endsWithCjk(const char* text) {
-  if (!text || *text == '\0') return false;
-  const char* start = text + strlen(text) - 1;
-  while (start > text && (static_cast<uint8_t>(*start) & 0xC0) == 0x80) --start;
-  const auto* p = reinterpret_cast<const uint8_t*>(start);
-  return isCjkCodepoint(utf8NextCodepoint(&p));
 }
 
 }  // namespace
@@ -382,49 +359,39 @@ void ClipSelectionActivity::moveToPage(const int pageOffset) {
   }
 }
 
-bool ClipSelectionActivity::startsNewWord(const WordBox& previous, const WordBox& current) {
-  if (current.paragraphStart) return true;
-  const bool sourceKnown = previous.endOffset != UINT32_MAX && current.startOffset != UINT32_MAX;
-  return sourceKnown ? current.startOffset > previous.endOffset
-                     : current.row != previous.row || current.x > previous.x + previous.width + 2;
-}
-
-std::unique_ptr<uint16_t[]> ClipSelectionActivity::logicalOrder(const int first, const int last) const {
+bool ClipSelectionActivity::buildSelectedText(const int first, const int last, std::string& text) const {
+  text.clear();
+  text.reserve(CLIPPING_TEXT_MAX);
   const size_t count = last - first + 1;
   auto order = makeUniqueNoThrow<uint16_t[]>(count);
-  if (!order) return order;
+  if (!order) {
+    LOG_ERR("CLIP", "OOM: selection export order");
+    return false;
+  }
   bool allSourcesKnown = true;
   for (size_t i = 0; i < count; ++i) {
     order[i] = static_cast<uint16_t>(first + i);
     allSourcesKnown &= words[order[i]].startOffset != UINT32_MAX && words[order[i]].endOffset != UINT32_MAX;
   }
-  // Keep navigation in visual order and use logical source order for export and word counting.
+  // Keep navigation in visual order and export in logical source order.
   if (allSourcesKnown) {
     std::sort(order.get(), order.get() + count, [this](const uint16_t a, const uint16_t b) {
       if (words[a].startOffset == words[b].startOffset) return a < b;
       return words[a].startOffset < words[b].startOffset;
     });
   }
-  return order;
-}
-
-bool ClipSelectionActivity::buildSelectedText(const int first, const int last, std::string& text) const {
-  text.clear();
-  text.reserve(CLIPPING_TEXT_MAX);
-  const size_t count = last - first + 1;
-  auto order = logicalOrder(first, last);
-  if (!order) {
-    LOG_ERR("CLIP", "OOM: selection export order");
-    return false;
-  }
   for (size_t i = 0; i < count; ++i) {
     const WordBox& current = words[order[i]];
     const char* word = cleanWordStart(current.text);
     char separator = '\0';
     if (i > 0) {
+      const WordBox& previous = words[order[i - 1]];
+      const bool sourceKnown = previous.endOffset != UINT32_MAX && current.startOffset != UINT32_MAX;
+      const bool separated = sourceKnown ? current.startOffset > previous.endOffset
+                                         : current.row != previous.row || current.x > previous.x + previous.width + 2;
       if (current.paragraphStart) {
         separator = '\n';
-      } else if (startsNewWord(words[order[i - 1]], current)) {
+      } else if (separated) {
         separator = ' ';
       }
     }
@@ -476,54 +443,22 @@ void ClipSelectionActivity::confirmSelection(const ClippingResult::Action action
   finish();
 }
 
-int ClipSelectionActivity::selectedWordCount() const {
-  if (rangeStart < 0) return 1;
-  // Count reconstructed words, not fragments: adjacent fragments of one word (e.g. hyphenated or styled
-  // runs) join without a separator in buildSelectedText.
-  const int first = std::min(rangeStart, selected);
-  const int last = std::max(rangeStart, selected);
-  // Walk logical source order, as buildSelectedText does, so mixed-direction selections count correctly.
-  const auto order = logicalOrder(first, last);
-  int count = 1;
-  for (int i = first + 1; i <= last; ++i) {
-    const WordBox& previous = words[order ? order[i - first - 1] : i - 1];
-    const WordBox& current = words[order ? order[i - first] : i];
-    // CJK has no spaces, so adjacent CJK boxes count separately (text export is unaffected).
-    if (startsNewWord(previous, current) || endsWithCjk(previous.text) || startsWithCjk(current.text)) {
-      ++count;
-    }
-  }
-  return count;
-}
-
-const char* ClipSelectionActivity::confirmLabel() const {
-  if (mode != Mode::Select) return isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE);
-  return selectionAction::runsWithoutMenu(selectedWordCount(), lookupAvailable) && lookupAvailable ? tr(STR_LOOKUP)
-                                                                                                   : tr(STR_DONE);
-}
-
-// Look up / Clip modes confirm directly. Select mode: a single word looks up at once; longer selections pick
-// Look up / Clip from a menu.
+// Look up / Clip modes confirm directly. Select mode always asks which action to run, unless there is no
+// dictionary and Clip is the only option.
 void ClipSelectionActivity::confirmWithButtons() {
-  if (mode != Mode::Select) {
-    confirmSelection(isLookup() ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
-    return;
-  }
-  if (rangeStart < 0) {
-    confirmSelection(lookupAvailable ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
-    return;
-  }
-  const int count = selectedWordCount();
-  if (selectionAction::runsWithoutMenu(count, lookupAvailable)) {
-    confirmSelection(lookupAvailable ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
+  if (mode != Mode::Select || rangeStart < 0 || !lookupAvailable) {
+    confirmSelection(isLookup() && lookupAvailable ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
     return;
   }
   static constexpr StrId OPTIONS[] = {StrId::STR_LOOKUP, StrId::STR_CLIP};
-  const int defaultIndex = selectionAction::defaultAction(count, true) == selectionAction::Kind::Lookup ? 0 : 1;
-  actionPopup.show(StrId::STR_SELECT, OPTIONS, 2, defaultIndex, [this](const int index) {
+  actionPopup.show(StrId::STR_SELECT, OPTIONS, 2, 0, [this](const int index) {
     confirmSelection(index == 0 ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
   });
   requestUpdate();
+}
+
+const char* ClipSelectionActivity::confirmLabel() const {
+  return mode != Mode::Select && isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE);
 }
 
 void ClipSelectionActivity::cancel() {
@@ -869,8 +804,8 @@ bool ClipSelectionActivity::renderIncremental() {
     drawSelection();
     renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
   }
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(),
-                                            tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  const auto labels = mappedInput.mapLabels(
+      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   lastRenderedSelected = selected;
@@ -928,8 +863,8 @@ void ClipSelectionActivity::render(RenderLock&&) {
   if (wordCount != 0) drawSelection();
   renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(),
-                                            tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  const auto labels = mappedInput.mapLabels(
+      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 

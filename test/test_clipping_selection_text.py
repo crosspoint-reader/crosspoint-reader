@@ -14,8 +14,8 @@ action_helpers = "\n".join(line for line in header.splitlines()
 clean_word = "const char* cleanWordStart" + source.split("const char* cleanWordStart", 1)[1].split(
     "}  // namespace", 1
 )[0]
-build_text = "bool ClipSelectionActivity::startsNewWord" + source.split(
-    "bool ClipSelectionActivity::startsNewWord", 1
+build_text = "bool ClipSelectionActivity::buildSelectedText" + source.split(
+    "bool ClipSelectionActivity::buildSelectedText", 1
 )[1].split("void ClipSelectionActivity::confirmSelection", 1)[0]
 confirm_source = source.split("void ClipSelectionActivity::confirmSelection", 1)[1]
 memory_guard = "  const auto heap = HalMemory::getDefaultHeap();" + confirm_source.split(
@@ -29,7 +29,7 @@ def method(name, next_name, text=source):
 
 extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSelectionActivity::closestInRow")
 gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "bool ClipSelectionActivity::renderIncremental")
-confirm_label = method("int ClipSelectionActivity::selectedWordCount", "// Look up / Clip modes confirm directly").replace(
+confirm_label = method("const char* ClipSelectionActivity::confirmLabel", "void ClipSelectionActivity::cancel").replace(
     "const char* ClipSelectionActivity::confirmLabel", "int ClipSelectionActivity::confirmLabel")
 incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void ClipSelectionActivity::drawSelection")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
@@ -46,8 +46,6 @@ harness = r"""
 #include <cstdint>
 #include <climits>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <memory>
 #include <set>
 #include <span>
@@ -60,7 +58,6 @@ harness = r"""
 #undef LOG_DBG
 #define LOG_DBG(module, ...) (void)std::snprintf(nullptr, 0, __VA_ARGS__)
 #include "clippings/ClippingText.h"
-#include "clippings/SelectionActionPolicy.h"
 #include "ClippingStore.h"
 #include <Epub/ReaderRenderSpec.h>
 namespace BidiUtils { enum class BidiBaseDir : int8_t { AUTO = -1, LTR = 0, RTL = 1 }; }
@@ -99,9 +96,7 @@ struct Block {
   uint16_t wordTextLen(uint16_t i) const { return std::char_traits<char>::length(wordText(i)); }
   EpdFontFamily::Style wordStyle(uint16_t i) const { return styles.empty() ? EpdFontFamily::REGULAR : styles[i]; }
   int wordXpos(uint16_t i) const { return positions.empty() ? 0 : positions[i]; }
-  std::vector<Range> wordRanges;  // Optional per-word source ranges.
   Range wordSourceRange(uint16_t i) const {
-    if (i < wordRanges.size()) return wordRanges[i];
     return prefixSpace && i == 0 ? Range{range.start, range.start + 1} : range;
   }
   bool wordStartsParagraph(uint16_t i) const { return paragraphStart && i == 0; }
@@ -314,14 +309,11 @@ struct ClipSelectionActivity {
   int selected = 0, rangeStart = -1, currentPageOffset = 0;
   bool touchDragSelecting = false;
   bool isLookup() const { return mode != Mode::Clip; }
-  int selectedWordCount() const;
   int confirmLabel() const;
   struct Popup { bool isActive() const { return false; } } actionPopup;
   int lastRenderedPageOffset = 0, lastRenderedSelected = 0, lastRenderedRangeStart = -1;
   int lastRenderedTextOffset = 0, lastRenderedTextXOffset = 0;
-  std::unique_ptr<uint16_t[]> logicalOrder(int first, int last) const;
   bool buildSelectedText(int first, int last, std::string& text) const;
-  static bool startsNewWord(const WordBox& previous, const WordBox& current);
   bool extractWords();
   void drawSelection() const;
   bool renderIncremental();
@@ -394,7 +386,6 @@ int main() {
       line->block.packedText = row ? std::string("one\0two\0tri\0",12) : std::string("head\0",5);
       line->block.positions = row ? std::vector<int>{0,40,80} : std::vector<int>{0};
       line->block.styles = row ? std::vector<EpdFontFamily::Style>(3,decoration) : std::vector<EpdFontFamily::Style>{EpdFontFamily::REGULAR};
-      line->block.wordRanges = row ? std::vector<Block::Range>{{5,8},{9,12},{13,16}} : std::vector<Block::Range>{{0,4}};
       page->elements.push_back(std::move(line));
     }
     if (images) { auto image = std::make_unique<PageLine>(); image->tag = TAG_PageImage; page->elements.push_back(std::move(image)); }
@@ -430,10 +421,8 @@ int main() {
       }
       else {
         assert(pick.pages[0]->renderCalls == 2);
-        // Select mode looks up a single word directly; longer selections confirm into the action menu.
-        const bool lookupLabel = pick.mode == ClipSelectionActivity::Mode::Select
-                                     ? std::abs(next - pick.rangeStart) == 0
-                                     : pick.isLookup();
+        // Select mode confirms into the action menu, so its label is Done rather than Look up.
+        const bool lookupLabel = pick.mode != ClipSelectionActivity::Mode::Select && pick.isLookup();
         assert(GUI.confirmLabel == (lookupLabel ? STR_LOOKUP : STR_DONE));
       }
       auto actual = pick.renderer.ink;
@@ -602,10 +591,6 @@ int main() {
     expect(activity, 1, 2, "alpha beta");
     expect(activity, 2, 2, "alpha");
     assert(activity.words[1].text == visualSecond);  // Export must not change navigation order.
-    // Word count follows logical order too: four space-separated words despite reversed visual order.
-    activity.rangeStart = 0;
-    activity.selected = 3;
-    assert(activity.selectedWordCount() == 4);
   }
   const std::vector<std::string> ltr{"alpha", "אחד", "שני", "beta"};
   loadLine(activity, ltr, false);
@@ -631,19 +616,9 @@ int main() {
   activity.words[1].endOffset = 13;
   activity.words[0].discretionaryHyphen = true;
   expect(activity, 0, 1, "discretionary");
-  // Fragments of one reconstructed word count once.
-  activity.rangeStart = -1;
-  activity.selected = 1;
-  assert(activity.selectedWordCount() == 1);
-  activity.rangeStart = 0;
-  assert(activity.selectedWordCount() == 1);
-  activity.words[1].startOffset = 7;
-  assert(activity.selectedWordCount() == 2);
-  activity.words[1].startOffset = 6;
-  // Adjacent CJK boxes count separately for the menu decision but export without separators.
+  // Adjacent CJK boxes export without separators.
   activity.words[0].text = "漢";
   activity.words[1].text = "字";
-  assert(activity.selectedWordCount() == 2);
   expect(activity, 0, 1, "漢字");
   activity.words[0].text = "Café";
   activity.words[0].endOffset = 5;

@@ -1,4 +1,0 @@
-add_executable(SelectionActionPolicyTest SelectionActionPolicyTest.cpp)
-target_link_libraries(SelectionActionPolicyTest PRIVATE crosspoint_test_common GTest::gtest_main)
-target_include_directories(SelectionActionPolicyTest PRIVATE ${REPO_ROOT}/src)
-gtest_discover_tests(SelectionActionPolicyTest)
