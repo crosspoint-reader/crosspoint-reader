@@ -527,7 +527,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
     requestUpdate();
     return;
   }
-  startActivityForResult(std::move(activity), [this, spineIndex, pageNumber, pageCount, layoutSignature,
+  startActivityForResult(std::move(activity), [this, mode, spineIndex, pageNumber, pageCount, layoutSignature,
                                                bookTitle = std::move(bookTitle), author = std::move(author),
                                                chapterTitle = std::move(chapterTitle)](const ActivityResult& result) {
     if (result.isCancelled) {
@@ -590,10 +590,15 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         return;
       }
       lookupReturnSelection = lookupReturnSelectionFor(clipping);
-      startActivityForResult(std::move(lookup), [this](const ActivityResult& result) {
+      startActivityForResult(std::move(lookup), [this, mode](const ActivityResult& result) {
         if (!result.isCancelled && !mappedInput.hasTouch()) {
           pendingLookupSelection = lookupReturnSelection;
-          openDictionaryWordSelect();
+          // Select mode returns to Select so the user can choose Look up or Clip again.
+          if (mode == ClipSelectionActivity::Mode::Select) {
+            startClipSelection(-1, -1, mode);
+          } else {
+            openDictionaryWordSelect();
+          }
         }
       });
       return;
