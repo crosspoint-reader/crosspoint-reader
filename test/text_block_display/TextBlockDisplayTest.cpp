@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "blocks/TextBlock.h"
@@ -126,3 +127,38 @@ TEST(TextBlockDisplay, RenderDrawsTheStoredDisplayForm) {
   EXPECT_EQ(renderer.textDraws[0].text, "hello");
   EXPECT_EQ(renderer.textDraws[1].text, kShaped);
 }
+
+class TextBlockDisplayLayout : public testing::TestWithParam<std::tuple<uint16_t, bool>> {};
+
+TEST_P(TextBlockDisplayLayout, RoundTripsDisplayFormsWithOptionalFocusArrays) {
+  const auto [count, hasFocus] = GetParam();
+  const std::vector<std::string> words(count, "abcdef");
+  std::vector<std::string> display(count);
+  std::vector<int16_t> positions(count);
+  const std::vector<EpdFontFamily::Style> styles(count, EpdFontFamily::BOLD);
+  const std::vector<uint8_t> boundaries(hasFocus ? count : 0, 0);
+  const std::vector<uint16_t> splits(hasFocus ? count : 0, 12);
+  for (uint16_t i = 0; i < count; ++i) {
+    if (i % 2 == 0) display[i] = kShaped + std::to_string(i);
+    positions[i] = i * 20;
+  }
+  TextBlock block(words, positions, styles, boundaries, splits, BlockStyle(), {}, {}, {}, UINT16_MAX, display);
+  ASSERT_TRUE(block.valid());
+  const std::string name = "display-layout-" + std::to_string(count) + (hasFocus ? "-focus.bin" : ".bin");
+  const auto restored = roundTrip(block, name.c_str());
+  ASSERT_NE(restored, nullptr);
+  ASSERT_EQ(restored->wordCount(), count);
+  for (const TextBlock* candidate : {&block, restored.get()}) {
+    for (uint16_t i = 0; i < count; ++i) {
+      EXPECT_STREQ(candidate->wordText(i), words[i].c_str());
+      EXPECT_STREQ(candidate->displayForm(i), display[i].empty() ? nullptr : display[i].c_str());
+      EXPECT_EQ(candidate->wordXpos(i), positions[i]);
+      EXPECT_EQ(candidate->wordStyle(i), styles[i]);
+      EXPECT_EQ(candidate->focusBoundary(i), 0);
+      EXPECT_EQ(candidate->focusSplitX(i), hasFocus ? 12 : 0);
+    }
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(WordCounts, TextBlockDisplayLayout,
+                         testing::Combine(testing::Values<uint16_t>(1, 2, 3, 4), testing::Bool()));

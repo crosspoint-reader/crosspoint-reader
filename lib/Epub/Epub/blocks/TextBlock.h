@@ -88,11 +88,9 @@ class TextBlock final : public Block {
   const uint16_t* textOffArr = nullptr;
   const int16_t* xposArr = nullptr;
   const uint16_t* focusSplitXArr = nullptr;  // null when !focusPresent
-  const uint16_t* displayOffArr = nullptr;   // null when !displayPresent
   const uint8_t* stylesArr = nullptr;
   const uint8_t* focusBoundaryArr = nullptr;  // null when !focusPresent
   const char* textArr = nullptr;
-  const char* displayArr = nullptr;  // null when !displayPresent
   std::vector<std::string> rubyTexts;
   // Words sized apart from the line (CSS font-size spans): MAX_WORD_FONTS int32 font ids,
   // then one slot per word (0 = block font, n = font n-1). Null when every word uses the
@@ -106,6 +104,11 @@ class TextBlock final : public Block {
   static size_t arenaSize(uint16_t wordCount, bool hasFocus, uint16_t textBytes, bool hasDisplay,
                           uint16_t displayBytes);
   void bindArenaPointers();
+  // Valid when displayPresent: offsets precede styles, and display text follows logical text.
+  const uint16_t* displayOffsets() const {
+    return reinterpret_cast<const uint16_t*>(stylesArr - static_cast<size_t>(numWords) * sizeof(uint16_t));
+  }
+  const char* displayText() const { return textArr + textBytes; }
 
  public:
   // Flatten-on-construct: copies the layout-time vectors into the arena; the
@@ -152,7 +155,9 @@ class TextBlock final : public Block {
   // nullptr when it measured wordText(i) and needs no stored form, or layout
   // dropped a form that measured differently.
   const char* displayForm(const uint16_t i) const {
-    return displayPresent && displayOffArr[i] != NO_DISPLAY ? displayArr + displayOffArr[i] : nullptr;
+    if (!displayPresent) return nullptr;
+    const uint16_t offset = displayOffsets()[i];
+    return offset != NO_DISPLAY ? displayText() + offset : nullptr;
   }
   // Word i as layout measured it, for measuring and drawing. A focus boundary
   // indexes the logical text: ParsedText never splits a word that has a

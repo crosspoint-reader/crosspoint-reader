@@ -40,7 +40,6 @@ void TextBlock::bindArenaPointers() {
     off += wc * 2;
   }
   if (displayPresent) {
-    displayOffArr = reinterpret_cast<const uint16_t*>(base + off);
     off += wc * 2;
   }
   stylesArr = base + off;
@@ -50,9 +49,6 @@ void TextBlock::bindArenaPointers() {
     off += wc;
   }
   textArr = reinterpret_cast<const char*>(base + off);
-  if (displayPresent) {
-    displayArr = textArr + textBytes;
-  }
 }
 
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
@@ -168,8 +164,8 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
     }
   }
   if (displayPresent) {
-    auto* displayOff = const_cast<uint16_t*>(displayOffArr);
-    auto* display = const_cast<char*>(displayArr);
+    auto* displayOff = const_cast<uint16_t*>(displayOffsets());
+    auto* display = const_cast<char*>(displayText());
     uint16_t dOff = 0;
     for (uint16_t i = 0; i < numWords; i++) {
       if (displayWords[i].empty()) {
@@ -642,8 +638,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
     // Display offsets: each either absent or the start of a NUL-terminated
     // entry inside the display region.
     if (hasDisplay) {
-      const uint16_t* displayOff = block->displayOffArr;
-      const char* display = block->displayArr;
+      const uint16_t* displayOff = block->displayOffsets();
+      const char* display = block->displayText();
       if (displayBytes == 0 || display[displayBytes - 1] != '\0') {
         LOG_ERR("TXB", "Deserialization failed: corrupt display layout");
         return nullptr;
