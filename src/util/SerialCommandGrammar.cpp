@@ -35,17 +35,18 @@ bool parseInt(const std::string_view text, int& out) {
     i = 1;
   }
   if (i >= text.size()) return false;
-  // Checked before each step: value * 10 + digit could wrap back into range first.
-  constexpr uint32_t MAX_VALUE = 0x7fffffffu;
+  // Checked before each step: value * 10 + digit could wrap back into range first. The negative
+  // range reaches one further (-2147483648).
+  const uint32_t maxValue = negative ? 0x80000000u : 0x7fffffffu;
   uint32_t value = 0;
   for (; i < text.size(); ++i) {
     const char c = text[i];
     if (c < '0' || c > '9') return false;
     const auto digit = static_cast<uint32_t>(c - '0');
-    if (value > (MAX_VALUE - digit) / 10) return false;
+    if (value > (maxValue - digit) / 10) return false;
     value = value * 10 + digit;
   }
-  out = negative ? -static_cast<int>(value) : static_cast<int>(value);
+  out = static_cast<int>(negative ? -static_cast<int64_t>(value) : static_cast<int64_t>(value));
   return true;
 }
 

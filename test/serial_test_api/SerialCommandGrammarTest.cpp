@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <string>
 
 #include "util/SerialCommandGrammar.h"
@@ -56,6 +57,8 @@ TEST(SerialCommandGrammar, ParseIntTakesSignedDecimalsInRange) {
   EXPECT_EQ(v, 7);
   EXPECT_TRUE(parseInt("2147483647", v));
   EXPECT_EQ(v, 2147483647);
+  EXPECT_TRUE(parseInt("-2147483648", v));
+  EXPECT_EQ(v, std::numeric_limits<int>::min());
 }
 
 TEST(SerialCommandGrammar, ParseIntRefusesJunkAndOverflow) {
@@ -65,6 +68,7 @@ TEST(SerialCommandGrammar, ParseIntRefusesJunkAndOverflow) {
   EXPECT_FALSE(parseInt("12a", v));
   EXPECT_FALSE(parseInt(" 12", v));
   EXPECT_FALSE(parseInt("2147483648", v));
+  EXPECT_FALSE(parseInt("-2147483649", v));
   // Would wrap back into range if the overflow were checked after the step.
   EXPECT_FALSE(parseInt("9999999999", v));
   EXPECT_EQ(v, 5);
