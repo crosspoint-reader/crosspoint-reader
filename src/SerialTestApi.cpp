@@ -62,10 +62,16 @@ ReplyLine startReply(const std::string_view head) {
   return line;
 }
 
+// Output given up part way (a reply, or a frame) leaves its line open: the next reply first ends it,
+// so it arrives on a line of its own.
+bool lineLeftOpen = false;
+
 void send(const ReplyLine& line) {
+  static constexpr uint8_t LINE_END = '\n';
+  if (lineLeftOpen && writeAll(&LINE_END, 1, REPLY_STALL_MS)) lineLeftOpen = false;
   const size_t length = line.view().size();
   replyBuffer[length] = '\n';
-  writeAll(reinterpret_cast<const uint8_t*>(replyBuffer), length + 1, REPLY_STALL_MS);
+  if (!writeAll(reinterpret_cast<const uint8_t*>(replyBuffer), length + 1, REPLY_STALL_MS)) lineLeftOpen = true;
 }
 
 void reply(const std::string_view head, const std::string_view tail = {}) {
@@ -273,6 +279,7 @@ void cmdScreenshot(std::string_view /*arg*/) {
   if (writeAll(screen->getFrameBuffer(), size, FRAME_STALL_MS)) {
     reply("SCREENSHOT_END");
   } else {
+    lineLeftOpen = true;
     reply("SCREENSHOT_ERROR:transfer stalled");
   }
 }
