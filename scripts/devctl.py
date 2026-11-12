@@ -5,10 +5,10 @@
     scripts/devctl.py [--port P] --script steps.txt
 
 Steps run in order; the run stops at the first failed step and exits non-zero (--keep-going runs
-them all and exits non-zero if any failed).
+them all and exits non-zero if any failed). Either way it stops when it is OUT OF STEP (below).
 
   cmd:<TEXT>            send "CMD:<TEXT>", wait for its reply line, print it
-                        (fails on a *_ERROR / *_TIMEOUT reply or none at all)
+                        (fails on a *_ERROR / *_TIMEOUT reply)
   btn:<NAME>[:<how>]    CMD:BTN:<NAME>[:<how>], then wait until the device is idle
   state                 CMD:STATE, print the reply and remember its fields for `check:`
   check:<key>=<regex>   the last STATE's <key> must match <regex> (re.fullmatch)
@@ -20,11 +20,19 @@ them all and exits non-zero if any failed).
 A --script file holds one step per line; blank lines and lines starting with # are skipped.
 Every line the device prints goes to --log with a timestamp.
 
+A step takes only a reply to its own command (its name and '_' or ':', or a CMD_ERROR) and waits for
+it as long as the device may take: an IDLE its own timeout and 5 s, a screenshot 30 s to start,
+then until no part of the frame has come for 20 s, then 20 s for its end; any other command 20 s.
+A reply that has not come by then may still come, and nothing would tell it from the reply to the
+next command of its name, so the run stops there, OUT OF STEP, even with --keep-going. So it does
+after IDLE_ERROR:busy: a wait started earlier will still answer.
+
 The port is opened with the default DTR/RTS lines, which does not reset the reader, and closed with
 RTS dropped before DTR: RTS high with DTR low is esptool's reset request, which a plain close on
-Windows can send. The device re-enumerates its USB port across a reboot; the tool reopens it and
-carries on. A command whose write failed that way fails its step as DELIVERY UNCERTAIN and is not
-sent again: the device may have run it.
+Windows can send. The device re-enumerates its USB port across a reboot; the tool reopens it, drops
+what had come in, and carries on. A step whose command was being written then fails as DELIVERY
+UNCERTAIN and is not sent again (the device may have run it); a step waiting for its reply fails
+with NO REPLY.
 """
 import argparse
 import re
@@ -40,11 +48,15 @@ except ImportError:
 # port, so a first command must leave room for those two bytes as well.
 MAX_LINE = 253
 FAILED = re.compile(r"_ERROR|_TIMEOUT|^CMD_ERROR")
+# How long to wait for a reply. The device answers a command in the loop pass that reads it, and
+# CMD:IDLE when its wait ends (IDLE_DEFAULT_MS, at most IDLE_MAX_MS); it gives up on a frame the
+# host has not taken for 15 s.
+REPLY_TIMEOUT_S = 20
 IDLE_DEFAULT_MS = 10000
-# After a reply timed out, the next command waits until no line has come for RESYNC_QUIET_S (at most
-# RESYNC_MAX_S): a late reply to the old command must not pass for a reply to the new one.
-RESYNC_QUIET_S = 1.0
-RESYNC_MAX_S = 10.0
+IDLE_MAX_MS = 600000
+IDLE_MARGIN_S = 5
+SCREENSHOT_START_S = 30
+FRAME_STALL_S = 20
 
 # GfxRenderer draws LandscapeCounterClockwise in the panel's own frame; the others are turned.
 # Degrees for PIL's rotate() (counter-clockwise) that turn the frame upright.
@@ -96,8 +108,24 @@ def is_reply_to(line, family):
     return family.match(line) is not None or line.startswith("CMD_ERROR")
 
 
+def reply_timeout(text):
+    """Seconds to wait for the reply to CMD:<text>: as long as the device may take to send it."""
+    name, _, arg = text.strip(" \t").partition(":")
+    if name != "IDLE":
+        return REPLY_TIMEOUT_S
+    try:
+        ms = int(arg) if arg else IDLE_DEFAULT_MS
+    except ValueError:
+        ms = IDLE_DEFAULT_MS  # the device refuses it at once
+    return max(0, min(ms, IDLE_MAX_MS)) / 1000 + IDLE_MARGIN_S
+
+
 class DeliveryUncertain(Exception):
     """Writing a command failed with the port: the device may or may not have received it."""
+
+
+class OutOfStep(Exception):
+    """A reply may still come that nothing would tell from the reply to a next command: stop."""
 
 
 class Device:
@@ -106,7 +134,7 @@ class Device:
         self.log = open(log_path, "a", encoding="utf-8", errors="replace") if log_path else None
         self.t0 = time.time()
         self.buf = b""
-        self.unsynced = False  # True from a send until its reply is read: a late reply may still come
+        self.reopens = 0  # replies to commands sent before a reopen went with the old connection
         self.ser = self._open()
 
     def note(self, line):
@@ -118,6 +146,7 @@ class Device:
         for _ in range(60):
             try:
                 s = serial.Serial(self.port, 115200, timeout=0.2)
+                s.reset_input_buffer()
                 s.write(b"\r\n")  # some hosts get no output before they have written something
                 return s
             except (serial.SerialException, OSError):
@@ -136,12 +165,14 @@ class Device:
         self.ser.close()
 
     def _reopen(self):
-        """The port went away (reboot, sleep, re-enumeration): reopen it."""
+        """The port went away (reboot, sleep, re-enumeration): reopen it, without what had come in."""
         try:
             self.close()
         except (serial.SerialException, OSError):
             pass
         time.sleep(1)
+        self.buf = b""
+        self.reopens += 1
         self.ser = self._open()
 
     def _read(self, size):
@@ -169,15 +200,19 @@ class Device:
             self.buf += self._read_some()
         return None
 
-    def read_exact(self, size, deadline):
-        while len(self.buf) < size and time.time() < deadline:
+    def read_exact(self, size, stall_s):
+        """`size` bytes, or fewer when none have come for `stall_s` seconds."""
+        last = time.time()
+        while len(self.buf) < size and time.time() - last < stall_s:
+            have = len(self.buf)
             self.buf += self._read(min(65536, size - len(self.buf)))
+            if len(self.buf) > have:
+                last = time.time()
         data, self.buf = self.buf[:size], self.buf[size:]
         return data
 
     def drain(self):
-        """Log and drop the lines already received, so a late reply to an earlier command (one that
-        timed out here) cannot pass for the reply to the next. A partial line is kept."""
+        """Log and drop the lines already received (the log). A partial line is kept."""
         try:
             waiting = self.ser.in_waiting
         except (serial.SerialException, OSError):
@@ -188,24 +223,12 @@ class Device:
             line, self.buf = self.buf[:nl], self.buf[nl + 1:]
             self.note(line.decode("utf-8", errors="replace").rstrip("\r"))
 
-    def resync(self):
-        """Read (and log) until no line has come for RESYNC_QUIET_S, at most RESYNC_MAX_S."""
-        end = time.time() + RESYNC_MAX_S
-        quiet_until = time.time() + RESYNC_QUIET_S
-        while time.time() < min(end, quiet_until):
-            if self.read_line(min(end, quiet_until)) is not None:
-                quiet_until = time.time() + RESYNC_QUIET_S
-        self.unsynced = False
-
     def send(self, text):
         line = ("CMD:" + text).encode()
         if len(line) > MAX_LINE:
             raise ValueError(f"command longer than {MAX_LINE} bytes: {text[:40]}...")
-        if self.unsynced:
-            self.resync()
         self.drain()
         self.note(f">>> CMD:{text}")
-        self.unsynced = True
         try:
             self.ser.write(line + b"\n")
         except (serial.SerialException, OSError) as error:
@@ -213,18 +236,24 @@ class Device:
             self._reopen()
             raise DeliveryUncertain(f"CMD:{text} (port reopened, not resent)") from error
 
-    def command(self, text, timeout=20):
-        """Send a command and return its reply line, or None. Other lines are skipped: log lines and
-        replies to other commands."""
+    def command(self, text):
+        """Send a command and return its reply line. Other lines are skipped: log lines and replies to
+        commands of another name. None when the port was reopened meanwhile: the reply went with the
+        old connection. OutOfStep when no reply came in time, or after IDLE_ERROR:busy."""
         family = reply_family(text)
+        timeout = reply_timeout(text)
+        reopens = self.reopens
         self.send(text)
         deadline = time.time() + timeout
-        while (line := self.read_line(deadline)) is not None:
-            if is_reply_to(line, family):
-                # A wait already running on the device still sends its own answer.
-                self.unsynced = line == "IDLE_ERROR:busy"
-                return line
-        return None
+        while self.reopens == reopens and (line := self.read_line(deadline)) is not None:
+            if not is_reply_to(line, family):
+                continue
+            if line == "IDLE_ERROR:busy":
+                raise OutOfStep(f"CMD:{text} answered {line}: a wait started earlier will still answer")
+            return line
+        if self.reopens != reopens:
+            return None
+        raise OutOfStep(f"no reply to CMD:{text} within {timeout:g} s")
 
     def state(self):
         reply = self.command("STATE")
@@ -235,46 +264,56 @@ class Device:
         if rotate == "auto":
             _, fields = self.state()
             rotate = ROTATION.get((fields or {}).get("orientation", ""), -90)
+        reopens = self.reopens
         self.send("SCREENSHOT")
-        deadline = time.time() + 30
-        while (line := self.read_line(deadline)) is not None:
+        deadline = time.time() + SCREENSHOT_START_S
+        while self.reopens == reopens and (line := self.read_line(deadline)) is not None:
             if line.startswith("SCREENSHOT_START:"):
                 parts = line.split(":")
                 size = int(parts[1])
+                data = self.read_exact(size, FRAME_STALL_S)
+                if self.reopens != reopens:
+                    return "the port was reopened during the frame"
+                if len(data) != size:
+                    raise OutOfStep(f"the frame stopped after {len(data)} of {size} bytes")
+                end_deadline = time.time() + REPLY_TIMEOUT_S
+                end = self.read_line(end_deadline)
+                while end is not None and self.reopens == reopens and not end.startswith("SCREENSHOT_"):
+                    end = self.read_line(end_deadline)
+                if self.reopens != reopens:
+                    return "the port was reopened after the frame"
+                if end is None:
+                    raise OutOfStep(f"no SCREENSHOT_END within {REPLY_TIMEOUT_S} s of the frame")
+                if end != "SCREENSHOT_END":
+                    return end
                 if len(parts) >= 4:
                     width, height = int(parts[2]), int(parts[3])
                 elif size in PANELS:
                     width, height = PANELS[size]
                 else:
                     return f"unknown panel for a {size}-byte frame"
-                data = self.read_exact(size, time.time() + 30)
-                if len(data) != size:
-                    return f"short frame: {len(data)} of {size} bytes"
                 from PIL import Image  # only shot: needs Pillow
 
                 image = Image.frombytes("1", (width, height), data)
                 if rotate:
                     image = image.rotate(rotate, expand=True)
                 image.save(path)
-                end = self.read_line(time.time() + 5)
-                if end != "SCREENSHOT_END":
-                    return f"no SCREENSHOT_END (got {end!r})"
-                self.unsynced = False
                 return None
             if line.startswith("SCREENSHOT_ERROR") or line.startswith("CMD_ERROR"):
-                self.unsynced = False
                 return line
-        return "no reply"
+        if self.reopens != reopens:
+            return "no reply: the port was reopened"
+        raise OutOfStep(f"no reply to CMD:SCREENSHOT within {SCREENSHOT_START_S} s")
 
 
-def idle_timeout(arg):
-    """Seconds to wait for the reply to CMD:IDLE[:<arg>]: the device's own timeout and some slack."""
-    return (int(arg) if arg.isdigit() else IDLE_DEFAULT_MS) / 1000 + 5
+def no_reply(text):
+    return f"NO REPLY to {text}: the port was reopened"
 
 
 def wait_idle(device, arg=""):
-    reply = device.command("IDLE" + (":" + arg if arg else ""), timeout=idle_timeout(arg))
-    print(reply if reply else "NO REPLY to IDLE")
+    text = "IDLE" + (":" + arg if arg else "")
+    reply = device.command(text)
+    print(reply if reply else no_reply(text))
     return bool(reply) and reply.startswith("IDLE:")
 
 
@@ -282,17 +321,16 @@ def run_step(device, step, rotate, fields):
     """Runs one step and returns whether it passed. `fields` keeps the last STATE's fields."""
     kind, _, rest = step.partition(":")
     if kind == "cmd":
-        timeout = idle_timeout(rest[5:]) if rest.startswith("IDLE") else 20
-        reply = device.command(rest, timeout=timeout)
-        print(reply if reply else f"NO REPLY to {rest}")
+        reply = device.command(rest)
+        print(reply if reply else no_reply(rest))
         ok = bool(reply) and not FAILED.search(reply)
     elif kind == "btn":
         reply = device.command("BTN:" + rest)
-        print(reply if reply else f"NO REPLY to BTN:{rest}")
+        print(reply if reply else no_reply("BTN:" + rest))
         ok = reply == "BTN_OK" and wait_idle(device)
     elif kind == "state":
         reply, parsed = device.state()
-        print(reply if reply else "NO REPLY to STATE")
+        print(reply if reply else no_reply("STATE"))
         ok = parsed is not None
         if ok:
             fields.clear()
@@ -338,6 +376,10 @@ def run(device, steps, rotate, keep_going=False):
         except DeliveryUncertain as error:
             print(f"DELIVERY UNCERTAIN: {error}")
             ok = False
+        except OutOfStep as error:
+            print(f"OUT OF STEP: {error}; a reply may still come, so the run stops")
+            print(f"step failed: {step}")
+            return False
         if not ok:
             print(f"step failed: {step}")
             all_ok = False
