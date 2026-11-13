@@ -2321,6 +2321,37 @@ int GfxRenderer::getFontGlyphHeight(const int fontId) const {
   return data->ascender + std::abs(data->descender);
 }
 
+GfxRenderer::InkBounds GfxRenderer::getFontInkBounds(const int fontId) const {
+  if (inkBoundsCached_ && inkBoundsFontId_ == fontId) return {inkTop_, inkBottom_};
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return {};
+  }
+  const auto* data = fontIt->second.getData(EpdFontFamily::REGULAR);
+  // Measure real letters; the ascender metric usually reserves room for accents above them.
+  int above = 0, below = 0;
+  for (const char cp : {'d', 'H', 'l'}) {
+    if (const EpdGlyph* glyph = fontIt->second.getGlyph(cp)) above = std::max<int>(above, glyph->top);
+  }
+  for (const char cp : {'p', 'g', 'y'}) {
+    if (const EpdGlyph* glyph = fontIt->second.getGlyph(cp)) below = std::max(below, glyph->height - glyph->top);
+  }
+  // Glyphs may not be loaded yet (SD fonts): fall back to metrics and don't cache, so a later call can measure.
+  // Descender sign differs between font sources.
+  const bool measured = above > 0 && below > 0;
+  if (above <= 0) above = data->ascender;
+  if (below <= 0) below = std::abs(data->descender);
+  const InkBounds bounds{data->ascender - above, data->ascender + below};
+  if (measured) {
+    inkBoundsCached_ = true;
+    inkBoundsFontId_ = fontId;
+    inkTop_ = bounds.top;
+    inkBottom_ = bounds.bottom;
+  }
+  return bounds;
+}
+
 int GfxRenderer::getLineHeight(const int fontId) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
