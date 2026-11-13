@@ -94,6 +94,7 @@ Band lineBand(const Renderer& renderer, const int fontId, const PageT& page, con
     const auto* block = other.getBlock();
     if (!block || !block->valid() || block->wordCount() == 0) continue;
     const Band neighbour = naturalBand(renderer, fontId, other);
+    if (neighbour.bottom <= neighbour.top) continue;  // no visible words
     if (neighbour.bottom <= natural.top || neighbour.top >= natural.bottom) continue;  // no vertical overlap
     if (!hasExtent) {
       extent = horizontalExtent(renderer, fontId, line);
