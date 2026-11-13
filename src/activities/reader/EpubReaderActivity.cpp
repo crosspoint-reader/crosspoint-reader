@@ -819,6 +819,7 @@ void EpubReaderActivity::loop() {
   }
 
   switch (mappedInput.homeButtonAction()) {
+    case HomeButtonAction::FileBrowser:
     case HomeButtonAction::ReaderMenu:
     case HomeButtonAction::Bookmark:
     case HomeButtonAction::Sync:
@@ -1686,14 +1687,13 @@ void EpubReaderActivity::renderBook() {
   if (automaticPageTurnActive &&
       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
     orientedMarginBottom +=
-        std::max(SETTINGS.screenMargin,
-                 static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
+        SETTINGS.screenMargin + statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin;
   } else {
     // statusBarOffsetY lowers the status line toward the edge; the text follows it down.
     const int statusLane = SETTINGS.statusBarSpec().textLaneVisible(true)
                                ? std::max(0, statusBarHeight - BoardConfig::ACTIVE.statusBarOffsetY)
                                : statusBarHeight;
-    orientedMarginBottom += std::max(static_cast<int>(SETTINGS.screenMargin), statusLane);
+    orientedMarginBottom += SETTINGS.screenMargin + statusLane;
   }
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
