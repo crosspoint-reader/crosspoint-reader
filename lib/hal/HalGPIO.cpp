@@ -121,18 +121,7 @@ void HalGPIO::begin() {
 }
 
 void HalGPIO::update() {
-#if FREEINK_DEVICE_PAPERMONO
-  // InputManager's Power clock can inherit a single side-button hold, not just a chord.
-  constexpr uint32_t PAPER_MONO_CHORD_MS = 650;  // InputManager::TWO_BUTTON_HOLD_MS (private).
-  const bool chordHeld =
-      digitalRead(BoardConfig::ACTIVE.input.up) == LOW && digitalRead(BoardConfig::ACTIVE.input.down) == LOW;
-#endif
   inputMgr.update();
-#if FREEINK_DEVICE_PAPERMONO
-  if (inputMgr.wasPressed(BTN_POWER)) powerButtonClick = true;
-  if (inputMgr.isPressed(BTN_POWER) && chordHeld && inputMgr.getPowerButtonHeldTime() >= PAPER_MONO_CHORD_MS)
-    powerButtonClick = false;
-#endif
   const uint8_t pageButtons = inputMgr.capacitivePageButtonMask();
   capacitivePagePressed = (pageButtons & ~previousCapacitivePageButtons) != 0;
   previousCapacitivePageButtons = pageButtons;
@@ -171,9 +160,7 @@ bool HalGPIO::rawInputActive() {
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
-unsigned long HalGPIO::getPowerButtonHeldTime() const {
-  return powerButtonClick ? 0 : inputMgr.getPowerButtonHeldTime();
-}
+unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
 
 bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 

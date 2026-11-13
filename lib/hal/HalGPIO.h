@@ -47,7 +47,6 @@ class HalGPIO {
   bool usbStateChanged = false;
   uint8_t previousCapacitivePageButtons = 0;
   bool capacitivePagePressed = false;
-  bool powerButtonClick = false;
 
  public:
   enum class DeviceType : uint8_t { X4, X3 };

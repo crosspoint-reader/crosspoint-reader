@@ -56,21 +56,12 @@ namespace BoardConfig {
   enum class InputStyle { DigitalButtons, DigitalConfirmPowerHold };
   struct {
     InputStyle inputStyle = InputStyle::DigitalButtons;
-    struct { int up = 2, down = 3; } input;
   } ACTIVE;
   bool x4Pro = false;
   bool isX4Pro() { return x4Pro; }
-  bool paperMono = false;
-  bool isPaperMono() { return paperMono; }
 }
 unsigned long clockMs = 1000;
 unsigned long millis() { return clockMs; }
-uint32_t testNow = 1000;
-constexpr int LOW = 0;
-uint8_t sideButtons = 0;
-int digitalRead(int pin) {
-  return (sideButtons & (pin == BoardConfig::ACTIVE.input.up ? 1 : 2)) ? LOW : 1;
-}
 constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
 struct CrossPointSettings {
   enum { VIBRATION_OFF, VIBRATION_TOUCH_PAGE };
@@ -428,107 +419,15 @@ void checkSleepDispatch(MappedInputManager& input, HalGPIO& gpio) {
 }
 """
 harness = harness.replace("void checkRemoteButtons() {", dispatch_harness + "void checkRemoteButtons() {")
-hal_source = (ROOT / "lib/hal/HalGPIO.cpp").read_text()
-hal_methods = []
-for signature, following in (
-    ("void HalGPIO::update()", "bool HalGPIO::wasUsbStateChanged()"),
-    ("unsigned long HalGPIO::getPowerButtonHeldTime() const", "bool HalGPIO::hasTouch() const"),
-):
-    hal_methods.append((signature + hal_source.split(signature, 1)[1].split(following, 1)[0]).replace(
-        "HalGPIO::", "PowerClockHarness::"))
-clock_harness = r"""
-struct PowerClockHarness {
-  static constexpr uint8_t BTN_POWER = HalGPIO::BTN_POWER;
-  struct {
-    bool pressed = false;
-    uint32_t powerMs = 0, buttonMs = 0;
-    bool held = true;
-    void update() {}
-    bool wasPressed(uint8_t) const { return pressed; }
-    bool isPressed(uint8_t) const { return held; }
-    uint8_t capacitivePageButtonMask() const { return 0; }
-    uint32_t getPowerButtonHeldTime() const { return powerMs; }
-    uint32_t getHeldTime() const { return buttonMs; }
-  } inputMgr;
-  bool powerButtonClick = false, capacitivePagePressed = false;
-  bool usbStateChanged = false, lastUsbConnected = false;
-  uint8_t previousCapacitivePageButtons = 0;
-  bool isUsbConnected() const { return false; }
-  void update();
-  unsigned long getPowerButtonHeldTime() const;
-};
-""" + "\n".join(hal_methods) + r"""
-void checkPowerClocks() {
-  PowerClockHarness gpio;
-  PowerButtonInput input;
-#if FREEINK_DEVICE_PAPERMONO
-  BoardConfig::paperMono = true;
-  // A PMIC pulse remains a click even with an inherited side-button timestamp.
-  for (uint8_t sides : {0, 1, 2, 3}) {
-    gpio = {};
-    sideButtons = sides;
-    testNow = 0;
-    gpio.inputMgr = {false, 0, 0, false};
-    gpio.update();
-    input.begin(false, false);
-    testNow = sides == 1 ? 1000 : 100;
-    gpio.inputMgr = {true, sides ? testNow : 0u, 0};
-    gpio.update();
-    input.update(true, false, gpio.getPowerButtonHeldTime(), 400);
-    assert(!input.shouldSleep());
-    testNow += sides == 0 ? 1000 : 500;
-    gpio.inputMgr = {false, testNow, 500, false};
-    gpio.update();
-    input.update(false, true, gpio.getPowerButtonHeldTime(), 400);
-    assert(input.wasShortReleased() && !input.wasReleaseConsumed());
-  }
-
-  // An early PMIC pulse must not hide the chord that matures on the next poll.
-  for (bool earlyClick : {false, true}) {
-    gpio = {};
-    input.begin(false, false);
-    sideButtons = 3;
-    testNow = 0;
-    gpio.inputMgr = {false, 0, 0, false};
-    gpio.update();
-    if (earlyClick) {
-      testNow = 100;
-      gpio.inputMgr = {true, 100, 0};
-      gpio.update();
-      input.update(true, false, gpio.getPowerButtonHeldTime(), 400);
-      assert(!input.shouldSleep());
-    }
-    testNow = 650;
-    gpio.inputMgr = {!earlyClick, 650, 0};
-    gpio.update();
-    input.update(true, false, gpio.getPowerButtonHeldTime(), 400);
-    assert(input.shouldSleep());
-    sideButtons = 0;
-    testNow = 1000;
-    gpio.inputMgr = {false, 1000, 350, false};
-    gpio.update();
-    input.update(false, true, gpio.getPowerButtonHeldTime(), 400);
-    assert(input.wasReleaseConsumed() && !input.wasShortReleased());
-  }
-#else
-  BoardConfig::paperMono = false;
-  gpio.inputMgr = {true, 300, 300};
-  gpio.update();
-  assert(gpio.getPowerButtonHeldTime() == 300);
-#endif
-}
-"""
-harness = harness.replace("int main() {", clock_harness + "int main() {\n  checkPowerClocks();")
 with tempfile.TemporaryDirectory() as directory:
     directory = Path(directory)
     (directory / "HalGPIO.h").write_text(stub)
     cpp = directory / "remote_input.cpp"
     executable = directory / "remote_input"
     cpp.write_text("#include <initializer_list>\n" + harness)
-    for touch, paper_mono in ((0, 0), (1, 0), (0, 1), (1, 1)):
+    for touch in (0, 1):
         subprocess.run([
-            "c++", "-std=c++20", f"-DFREEINK_CAP_TOUCH={touch}",
-            f"-DFREEINK_DEVICE_PAPERMONO={paper_mono}", "-I", str(directory),
+            "c++", "-std=c++20", f"-DFREEINK_CAP_TOUCH={touch}", "-I", str(directory),
             "-I", str(ROOT / "src"), str(cpp), "-o", str(executable),
         ], check=True)
         subprocess.run([str(executable)], check=True)

@@ -153,14 +153,4 @@ TEST(HomeButtonInput, PowerDurationAndConsumedGesturesHaveOneMeaning) {
   EXPECT_FALSE(afterRestart.shouldSleep());
   EXPECT_TRUE(afterRestart.wasReleaseConsumed());
   EXPECT_FALSE(afterRestart.wasShortReleased());
-
-  // PMIC click pulses and held two-button chords must retain distinct meanings.
-  input.begin(false, false);
-  input.update(true, false, 0, 400);
-  input.update(false, true, 20, 400);
-  EXPECT_TRUE(input.wasShortReleased());
-  input.update(true, false, 650, 400);
-  EXPECT_TRUE(input.shouldSleep());
-  input.update(false, true, 700, 400);
-  EXPECT_FALSE(input.wasShortReleased());
 }
