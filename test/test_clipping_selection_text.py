@@ -31,8 +31,8 @@ extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSele
 gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "bool ClipSelectionActivity::renderIncremental")
 incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void ClipSelectionActivity::drawSelection")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
-word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
-word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
+word_rect_source = (ROOT / "src/clippings/ClippingWordRect.h").read_text()
+word_rect_helpers = word_rect_source[word_rect_source.rfind("\n", 0, word_rect_source.index("inline int clippingWordFont")) + 1:]
 saved_hit = method("int EpubReaderActivity::clippingAtPoint", "void EpubReaderActivity::drawClippingHighlights", reader_source)
 saved_draw = method("void EpubReaderActivity::drawClippingHighlights", "void EpubReaderActivity::renderStatusBar", reader_source)
 
@@ -335,7 +335,7 @@ struct EpubReaderActivity {
   int clippingAtPoint(const Page&, int, int) const;
   void drawClippingHighlights(const Page&, int, int, int) const;
 };
-""" + word_font + word_rect + saved_hit + saved_draw + r"""
+""" + word_rect_helpers + saved_hit + saved_draw + r"""
 int loadLine(ClipSelectionActivity& activity, const std::vector<std::string>& logical,
              bool rtl, int first = 0, uint32_t offset = 0, uint16_t row = 0) {
   std::vector<uint16_t> visual;
