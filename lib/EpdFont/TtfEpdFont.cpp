@@ -11,6 +11,8 @@
 
 namespace {
 
+static constexpr uint32_t kTailFlag = 0x80000000u;
+
 // Cache growth policy: PsramAlloc ABORTS when fiFontMalloc fails, and vector
 // doubling transiently needs old+new blocks, so every cache expansion must be
 // an exact, heap-checked reserve. On no-PSRAM boards the block lands in
@@ -124,14 +126,23 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
     f.ft = &f.ftStorage_;
     f.twoBit = twoBit;
     f.sizePx = sizePx;
-    // Regular (style 0) owns the full novel cache budget; styled variants
-    // (bold/italic) only hold occasional emphasis words, capped at 64KB/512 glyphs.
+    // Regular (style 0) owns the full novel cache budget split into 75% core / 25% tail;
+    // styled variants (bold/italic) only hold occasional emphasis words, capped at 64KB/512 glyphs
+    // with no separate tail buffer.
     if (i == 0) {
       f.cap = glyphCacheBytes;
       f.maxGlyphs = maxGlyphs;
+      f.coreCap = (glyphCacheBytes * 3) / 4;
+      f.tailCap = glyphCacheBytes - f.coreCap;
+      f.maxCoreGlyphs = (maxGlyphs * 3) / 4;
+      f.maxTailGlyphs = maxGlyphs - f.maxCoreGlyphs;
     } else {
       f.cap = std::min<size_t>(glyphCacheBytes, 64 * 1024);
       f.maxGlyphs = std::min<uint16_t>(maxGlyphs, 512);
+      f.coreCap = f.cap;
+      f.tailCap = 0;
+      f.maxCoreGlyphs = f.maxGlyphs;
+      f.maxTailGlyphs = 0;
     }
     f.inited = false;
     f.ready = false;
@@ -338,35 +349,23 @@ void TtfEpdFont::flushFace(Face& f) {
   f.slot.clear();
   f.kernKeys.clear();
   f.kernVals.clear();
-  f.used = 0;
+  f.coreUsed = 0;
+  f.tailUsed = 0;
+  f.coreCount = 0;
+  f.coreFull = false;
   f.miniMetadataOnly = false;
   f.faultFailed = false;
   f.flushed = true;
 }
 
-void TtfEpdFont::trimToCore(Face& f, const size_t incomingBytes) {
-  if (f.miniMetadataOnly || f.flushed) {
-    flushFace(f);
-    return;
-  }
-  const size_t maxCoreGlyphs = (static_cast<size_t>(f.maxGlyphs) * 3) / 4;
-  const size_t maxCoreBytes = (f.cap * 3) / 4;
-  size_t keep = std::min(f.glyphs.size(), maxCoreGlyphs);
-  size_t keepUsed = 0;
-  while (keep > 0) {
-    const EpdGlyph& last = f.glyphs[keep - 1];
-    keepUsed = static_cast<size_t>(last.dataOffset) + last.dataLength;
-    if (keepUsed <= maxCoreBytes && keepUsed + incomingBytes <= f.cap) break;
-    --keep;
-    keepUsed = 0;
-  }
-  if (keep == 0) {
+void TtfEpdFont::trimTail(Face& f) {
+  if (f.miniMetadataOnly || f.flushed || f.tailCap == 0) {
     flushFace(f);
     return;
   }
   size_t w = 0;
   for (size_t r = 0; r < f.cps.size(); ++r) {
-    if (f.slot[r] < keep) {
+    if (f.slot[r] < f.coreCount) {
       f.cps[w] = f.cps[r];
       f.slot[w] = f.slot[r];
       ++w;
@@ -374,8 +373,8 @@ void TtfEpdFont::trimToCore(Face& f, const size_t incomingBytes) {
   }
   f.cps.resize(w);
   f.slot.resize(w);
-  f.glyphs.resize(keep);
-  f.used = keepUsed;
+  f.glyphs.resize(f.coreCount);
+  f.tailUsed = 0;
   f.flushed = true;
 }
 
@@ -398,7 +397,8 @@ void TtfEpdFont::releaseResidentCaches() {
     // Actually RELEASE the caches (swap-with-empty frees capacity; clear() alone
     // would not).
     flushFace(f);
-    freeink::font::PsramVector<uint8_t>().swap(f.bmp);
+    freeink::font::PsramVector<uint8_t>().swap(f.coreBmp);
+    freeink::font::PsramVector<uint8_t>().swap(f.tailBmp);
     freeink::font::PsramVector<EpdGlyph>().swap(f.glyphs);
     freeink::font::PsramVector<uint32_t>().swap(f.cps);
     freeink::font::PsramVector<uint16_t>().swap(f.slot);
@@ -458,17 +458,42 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
     px = 0;
     f.miniMetadataOnly = true;
   }
-  if (f.glyphs.size() >= f.maxGlyphs || f.used + bytes > f.cap) {
-    if (!allowFlush) {
-      f.flushed = true;
-      return nullptr;
+  // Determine whether this glyph routes to coreBmp or tailBmp
+  if (!f.coreFull) {
+    if (f.coreCount >= f.maxCoreGlyphs || f.coreUsed + bytes > f.coreCap) {
+      f.coreFull = true;
     }
-    // Only Regular face (style 0) uses the 3:1 core-retention window;
-    // auxiliary styles (bold/italic) flush completely on overflow.
-    if (&f == &faces_[0]) {
-      trimToCore(f, bytes);
-    } else {
+  }
+
+  bool isTail = f.coreFull && f.tailCap > 0;
+  if (!isTail) {
+    // Auxiliary style without tail, or core overflowed with no tail
+    if (f.coreFull) {
+      if (!allowFlush) {
+        f.flushed = true;
+        return nullptr;
+      }
       flushFace(f);
+      if (bytes > f.coreCap) {
+        bytes = 0;
+        px = 0;
+        f.miniMetadataOnly = true;
+      }
+    }
+  } else {
+    // Route to tail buffer: trim tail on overflow
+    const size_t tailGlyphs = f.glyphs.size() - f.coreCount;
+    if (tailGlyphs >= f.maxTailGlyphs || f.tailUsed + bytes > f.tailCap) {
+      if (!allowFlush) {
+        f.flushed = true;
+        return nullptr;
+      }
+      trimTail(f);
+      if (bytes > f.tailCap) {
+        bytes = 0;
+        px = 0;
+        f.miniMetadataOnly = true;
+      }
     }
   }
 
@@ -496,9 +521,14 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
       return nullptr;
     }
   }
-  if (px && !reserveChecked(f.bmp, f.used + bytes, 4096, f.cap)) {
+
+  auto& bmpVec = isTail ? f.tailBmp : f.coreBmp;
+  size_t& bmpUsed = isTail ? f.tailUsed : f.coreUsed;
+  const size_t bmpCap = isTail ? f.tailCap : f.coreCap;
+
+  if (px && !reserveChecked(bmpVec, bmpUsed + bytes, 4096, bmpCap)) {
     evictOthers();
-    if (!reserveChecked(f.bmp, f.used + bytes, 4096, f.cap)) {
+    if (!reserveChecked(bmpVec, bmpUsed + bytes, 4096, bmpCap)) {
       bytes = 0;
       px = 0;
       f.miniMetadataOnly = true;
@@ -511,10 +541,10 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
   eg.advanceX = static_cast<uint16_t>(adv12_4 < 0 ? 0 : adv12_4);
   if (px && g && g->pixels) {
     // Grow the byte arena on demand toward the book's page high-water mark.
-    // flush above guarantees f.used + bytes <= f.cap, so this never exceeds the
-    // ceiling; capacity is retained across page turns (clearCache keeps it).
-    if (f.bmp.size() < f.used + bytes) f.bmp.resize(f.used + bytes, 0);
-    uint8_t* dst = f.bmp.data() + f.used;
+    // flush/trim above guarantees bmpUsed + bytes <= bmpCap, so this never exceeds
+    // the ceiling; capacity is retained across page turns (clearCache keeps it).
+    if (bmpVec.size() < bmpUsed + bytes) bmpVec.resize(bmpUsed + bytes, 0);
+    uint8_t* dst = bmpVec.data() + bmpUsed;
     for (size_t i = 0; i < bytes; ++i) dst[i] = 0;
     for (uint32_t i = 0; i < px; ++i) {
       const uint8_t a = g->pixels[i];
@@ -538,15 +568,18 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
     // EpdGlyph.top is positive-above (renderer computes screen Y = cursorY - top,
     // matching the .cpfont converter's top = FreeType bitmap_top). Flip the sign.
     eg.top = static_cast<int16_t>(-g->yoff);
-    eg.dataOffset = static_cast<uint32_t>(f.used);
+    eg.dataOffset = static_cast<uint32_t>(bmpUsed) | (isTail ? kTailFlag : 0u);
     eg.dataLength = static_cast<uint16_t>(bytes);
-    f.used += bytes;
+    bmpUsed += bytes;
   } else {
-    eg.dataOffset = static_cast<uint32_t>(f.used);
+    eg.dataOffset = static_cast<uint32_t>(bmpUsed) | (isTail ? kTailFlag : 0u);
     eg.dataLength = 0;
   }
 
   f.glyphs.push_back(eg);
+  if (!isTail) {
+    f.coreCount++;
+  }
   const uint16_t newIdx = static_cast<uint16_t>(f.glyphs.size() - 1);
   const auto it = std::lower_bound(f.cps.begin(), f.cps.end(), cp);
   const size_t pos = static_cast<size_t>(it - f.cps.begin());
@@ -603,7 +636,11 @@ int8_t TtfEpdFont::kernThunk(void* ctx, const uint32_t leftCp, const uint32_t ri
 }
 const uint8_t* TtfEpdFont::bitmapThunk(void* ctx, const EpdGlyph* glyph) {
   if (glyph == nullptr || glyph->dataLength == 0) return nullptr;
-  return static_cast<Face*>(ctx)->bmp.data() + glyph->dataOffset;
+  Face* f = static_cast<Face*>(ctx);
+  if (glyph->dataOffset & kTailFlag) {
+    return f->tailBmp.data() + (glyph->dataOffset & ~kTailFlag);
+  }
+  return f->coreBmp.data() + glyph->dataOffset;
 }
 bool TtfEpdFont::coverageThunk(void* ctx, const uint32_t codepoint) {
   // All styles share one file → coverage comes from the always-live regular face.

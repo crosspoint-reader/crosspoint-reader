@@ -111,8 +111,18 @@ class TtfEpdFont {
     TtfEpdFont* owner = nullptr;
     freeink::font::FtFont ftStorage_;
     freeink::font::FtFont* ft = &ftStorage_;
-    freeink::font::PsramVector<uint8_t> bmp;
-    size_t used = 0;
+    freeink::font::PsramVector<uint8_t> coreBmp;
+    size_t coreUsed = 0;
+    size_t coreCap = 0;
+    uint16_t maxCoreGlyphs = 0;
+    uint16_t coreCount = 0;
+    bool coreFull = false;
+
+    freeink::font::PsramVector<uint8_t> tailBmp;
+    size_t tailUsed = 0;
+    size_t tailCap = 0;
+    uint16_t maxTailGlyphs = 0;
+
     size_t cap = 0;
     uint16_t maxGlyphs = 0;
     bool twoBit = true;
@@ -159,7 +169,7 @@ class TtfEpdFont {
   const EpdGlyph* faultGlyph(Face& f, uint32_t codepoint, bool allowFlush = true);
   int8_t faultKern(Face& f, uint32_t leftCp, uint32_t rightCp);
   static void flushFace(Face& f);
-  static void trimToCore(Face& f, size_t incomingBytes);
+  static void trimTail(Face& f);
 
   struct FaceLock {
     FaceLock(TtfEpdFont* font, const size_t idx) : font_(font), idx_(idx) {
