@@ -272,7 +272,7 @@ void TtfEpdFont::initFace(Face& f) {
 #endif
     resolveLigatures(f);
   }
-  // Caches are NOT pre-reserved: the byte arena (f.bmp) and the glyph tables
+  // Caches are NOT pre-reserved: the byte arenas (f.coreBmp / f.tailBmp) and the glyph tables
   // grow on demand in faultGlyph and converge on the book's page needs (see the
   // header's memory note). f.cap is only the hard ceiling that triggers a flush.
   setupFace(f);

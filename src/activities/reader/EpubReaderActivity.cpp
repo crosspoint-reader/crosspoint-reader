@@ -472,6 +472,14 @@ void EpubReaderActivity::idlePrewarmTick() {
   const int maxLookahead = fcm->getIdleLookaheadPages(SETTINGS.getReaderFontId());
   if (idlePrewarmOffset >= maxLookahead) return;
 
+  // Single-page SD (.cpfont) reader fonts use a 400ms post-render debounce to protect
+  // the SD card and avoid bus contention during rapid page turns (especially backward).
+  // Multi-page TTF vector fonts on PSRAM prewarm immediately (0ms).
+  const unsigned long debounceMs = (maxLookahead > 1) ? 0UL : 400UL;
+  if (debounceMs > 0 && millis() - lastRenderCompleteMs <= debounceMs) {
+    return;
+  }
+
   float nx = 0.0f;
   float ny = 0.0f;
   if (buttonContactClosed() || anyButtonPressed() || pendingManualTurn != 0 ||
@@ -487,7 +495,7 @@ void EpubReaderActivity::idlePrewarmTick() {
 
   if (const auto p = section->loadPage(targetPage)) {
     const auto t0 = millis();
-    auto scope = fcm->createPrewarmScope(idlePrewarmOffset > 0);
+    auto scope = fcm->createPrewarmScope(true);
     p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);
     if (!scope.endScanAndPrewarm()) {
       idlePrewarmOffset = maxLookahead;
