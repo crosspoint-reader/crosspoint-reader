@@ -11,8 +11,6 @@
 
 namespace {
 
-static constexpr uint32_t kTailFlag = 0x80000000u;
-
 // Cache growth policy: PsramAlloc ABORTS when fiFontMalloc fails, and vector
 // doubling transiently needs old+new blocks, so every cache expansion must be
 // an exact, heap-checked reserve. On no-PSRAM boards the block lands in
@@ -270,12 +268,17 @@ void TtfEpdFont::initFace(Face& f) {
     if (!f.ft->setRenderOptions(ro)) {
       LOG_ERR("TTF", "Auto hinting unavailable (FREEINK_FONT_ENABLE_AUTOHINT not compiled)");
     }
-    // GPOS kerning for RESIDENT faces only (they borrow a view into the font
-    // bytes — free). Unlike GSUB, GPOS must stay resident for render-time
-    // pair queries, and a STREAMED face would need an owned DRAM copy exactly
-    // when the C3 is poorest (a font big enough to stream, i.e. CJK, where
-    // Latin pair kerning barely matters). Budget 0 = streamed faces skip it.
+    // GPOS kerning: modern variable fonts (e.g. Merriweather VF) ship pair kerning
+    // exclusively in GPOS. Memory-backed (resident) faces borrow a zero-copy view.
+    // For streamed faces on PSRAM-equipped boards, allow FtFont to fetch and own
+    // only the exact GPOS table (allocated via fiFontMalloc into PSRAM), keeping it
+    // bounded (256 KB) so multi-megabyte CJK GPOS tables won't allocate.
+    // On boards without PSRAM (C3), keep budget 0 to protect tight DRAM.
+#if defined(BOARD_HAS_PSRAM)
+    f.ft->setGposByteBudget(256 * 1024);
+#else
     f.ft->setGposByteBudget(0);
+#endif
     resolveLigatures(f);
   }
   // Caches are NOT pre-reserved: the byte arena (f.bmp) and the glyph tables
@@ -568,11 +571,11 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
     // EpdGlyph.top is positive-above (renderer computes screen Y = cursorY - top,
     // matching the .cpfont converter's top = FreeType bitmap_top). Flip the sign.
     eg.top = static_cast<int16_t>(-g->yoff);
-    eg.dataOffset = static_cast<uint32_t>(bmpUsed) | (isTail ? kTailFlag : 0u);
+    eg.dataOffset = static_cast<uint32_t>(bmpUsed);
     eg.dataLength = static_cast<uint16_t>(bytes);
     bmpUsed += bytes;
   } else {
-    eg.dataOffset = static_cast<uint32_t>(bmpUsed) | (isTail ? kTailFlag : 0u);
+    eg.dataOffset = static_cast<uint32_t>(bmpUsed);
     eg.dataLength = 0;
   }
 
@@ -637,8 +640,8 @@ int8_t TtfEpdFont::kernThunk(void* ctx, const uint32_t leftCp, const uint32_t ri
 const uint8_t* TtfEpdFont::bitmapThunk(void* ctx, const EpdGlyph* glyph) {
   if (glyph == nullptr || glyph->dataLength == 0) return nullptr;
   Face* f = static_cast<Face*>(ctx);
-  if (glyph->dataOffset & kTailFlag) {
-    return f->tailBmp.data() + (glyph->dataOffset & ~kTailFlag);
+  if (glyph >= f->glyphs.data() + f->coreCount) {
+    return f->tailBmp.data() + glyph->dataOffset;
   }
   return f->coreBmp.data() + glyph->dataOffset;
 }
