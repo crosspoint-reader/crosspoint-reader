@@ -887,8 +887,11 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     return;
   }
   if (absolute) {
-    // Full-screen modes already cleaned to white in onEnter.
-    if (preserveBackground) cleanBeforeAbsoluteGray(renderer);
+    // Full-screen modes already cleaned to white in onEnter; Cover + Transparent
+    // skips that clean, so its plain-cover fallback cleans here.
+    if (preserveBackground || SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT) {
+      cleanBeforeAbsoluteGray(renderer);
+    }
     if (!renderer.displayGrayscaleBase(sleepGrayscaleMode(renderer))) return;
   } else if (hasGreyscale) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is

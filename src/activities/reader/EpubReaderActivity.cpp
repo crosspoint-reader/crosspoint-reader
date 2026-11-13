@@ -2275,6 +2275,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
           // page reaches the panel even without its grays.
           renderer.cleanupGrayscaleWithFrameBuffer();
         }
+        if (absoluteImageGrayscale) {
+          // The absolute base may not have shown the page; cancel it and show B/W.
+          renderer.setRenderMode(GfxRenderer::BW);
+          ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+        }
       } else {
         renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
         for (int y = 0; y < gh; y += STRIP_ROWS) {
@@ -2317,7 +2322,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     if (needsAnyGrayscale) {
       if (!renderer.storeBwBuffer()) {
         LOG_ERR("ERS", "Failed to store BW buffer for grayscale render; skipping grayscale this page");
-        if (absoluteImageGrayscale) renderer.setRenderMode(GfxRenderer::BW);
+        if (absoluteImageGrayscale) {
+          renderer.setRenderMode(GfxRenderer::BW);
+          ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+        }
         return;
       }
       const auto tBwStore = millis();
