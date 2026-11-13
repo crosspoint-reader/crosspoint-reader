@@ -556,7 +556,7 @@ int main() {
     cold.borrowedPages = cold.pages;
     HalMemory::stats = {1024 * 1024, 1024 * 1024};
     assert(cold.extractWords());
-    assert(cold.wordCount == 360 && cold.words[359].pageOffset == 2);
+    assert(cold.wordCount == 361 && cold.words[360].pageOffset == 2);  // includes the neighbour line
     assert(cold.pages[0] && cold.pages[1] && cold.pages[2]);
     HalMemory::stats = {8192, 4096};
     assert(!cold.extractWords());
