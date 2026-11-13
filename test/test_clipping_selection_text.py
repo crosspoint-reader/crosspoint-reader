@@ -159,6 +159,8 @@ struct Renderer {
   int getFontAscenderSize(int) const { return 12; }
   int getLineHeight(int) const { return 16; }
   int getFontGlyphHeight(int) const { return 14; }
+  int linePitch = 16;
+  int getLineHeight(int, float) const { return linePitch; }
   RenderMode getRenderMode() const { return BW; }
   void getOrientedViewableTRBL(int* top, int* right, int* bottom, int* left) const {
     *top = *right = *bottom = *left = 0;
@@ -264,6 +266,7 @@ unsigned long millis() { return 0; }
 struct Settings {
   int screenMargin = 0;
   int getReaderFontId() const { return 0; }
+  float getReaderLineCompression() const { return 1.0f; }
   ReaderRenderSpec readerRenderSpec(int width, int height) const {
     ReaderRenderSpec spec;
     spec.viewportWidth = width;
@@ -445,6 +448,12 @@ int main() {
     assert(decorated.extractWords());
     // Selection box hugs the glyphs (ascender + descender), not the full line advance.
     assert(decorated.words[0].height == decorated.renderer.getFontGlyphHeight(0));
+    // Tight line spacing: the box must not exceed the line pitch.
+    decorated.renderer.linePitch = 10;
+    assert(decorated.extractWords());
+    assert(decorated.words[0].height == 10);
+    decorated.renderer.linePitch = 16;
+    assert(decorated.extractWords());
     const auto originalInk = decorated.renderer.ink;
     decorated.rangeStart = 0;
     decorated.selected = 1;
