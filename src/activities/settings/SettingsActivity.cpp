@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <HalPowerManager.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
@@ -53,6 +54,10 @@ bool showOnDevice(const SettingInfo& setting) {
   // The sunlight fading fix is a grayscale-waveform compensation that does
   // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
   if (setting.valuePtr == &CrossPointSettings::fadingFix && (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
+    return false;
+  }
+  // Plug-in wake needs a charge-status line that can wake deep sleep.
+  if (setting.valuePtr == &CrossPointSettings::wakeOnUsbPlugIn && !HalPowerManager::supportsChargeWake()) {
     return false;
   }
   // Merged into the Text Settings screen.

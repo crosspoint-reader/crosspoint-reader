@@ -379,6 +379,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t showHiddenFiles = 0;
   // Show each file's extension at the end of its row in the file browser (0 = hide, 1 = show)
   uint8_t showFileExtensions = 1;
+  // Wake from sleep when a USB cable is plugged in, so the reader appears on the computer (0 = off, 1 = on).
+  // X4 Pro only; it relies on the charger's status line, so a cable that never starts a charge does not wake it.
+  uint8_t wakeOnUsbPlugIn = 0;
   // Show the title and author read from inside each book rather than its
   // filename. Users can disable this to make index rebuilds skip EPUB parsing.
   uint8_t libraryUseMetadata = 1;

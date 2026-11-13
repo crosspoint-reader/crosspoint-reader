@@ -1,5 +1,6 @@
 #include <BatteryMonitor.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <Logging.h>
 #include <PowerManager.h>
 #include <Preferences.h>
@@ -275,6 +276,13 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
 
   const bool usbConnected = isUsbConnected();
 
+  // ext0 is armed only by HalPowerManager's plug-in wake, on the charger's status line starting to charge: a
+  // cable was plugged in, however briefly the charge then ran (a full battery stops at once). It is also armed
+  // beside the held-button wake that ends a charging hold with a press; that wake is a button wake, so the
+  // usual hold check decides it.
+  if (resetReason == ESP_RST_DEEPSLEEP && wakeupCause == ESP_SLEEP_WAKEUP_EXT0) {
+    return HalPowerManager::lastSleepEndedByPress() ? WakeupReason::PowerButton : WakeupReason::AfterUSBPower;
+  }
   if (resetReason == ESP_RST_DEEPSLEEP &&
       (wakeupCause == ESP_SLEEP_WAKEUP_GPIO || wakeupCause == ESP_SLEEP_WAKEUP_EXT1)) {
     return WakeupReason::PowerButton;

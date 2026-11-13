@@ -23,6 +23,11 @@ class HalPowerManager {
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
+  bool chargeWake = false;                // see setChargeWake()
+
+  static bool isCharging();
+  static bool holdWhileCharging();
+  static void armChargeWake();
 
  public:
 #if BOARD_HAS_PSRAM
@@ -44,6 +49,15 @@ class HalPowerManager {
   // release, so a press that is still down wakes the device straight back up
   // through the normal power-button wake path.
   void startDeepSleep(HalGPIO& gpio, bool wakeOnHeldButton = false) const;
+
+  // Wake on USB plug-in, so the native USB comes up without the power button. The charger's status line is the
+  // only sign of a cable: deep sleep also wakes when it starts charging. A sleep that begins while charging holds
+  // in light sleep instead, until the cable comes out (or charging ends), then deep sleeps watching for the next
+  // plug-in; the power button wakes the hold as usual. Only boards where supportsChargeWake() honor it.
+  void setChargeWake(bool enabled) { chargeWake = enabled; }
+  static bool supportsChargeWake();
+  // True when the last deep sleep began because a power-button press ended a charging hold.
+  static bool lastSleepEndedByPress();
 
 #if FREEINK_DEVICE_PICCO
   // While USB powers the device, light-sleep instead of deep sleep (deep sleep

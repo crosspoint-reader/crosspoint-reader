@@ -23,6 +23,13 @@
 #include <M5Pm1.h>
 #endif
 
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
+#include <HalFrontlight.h>
+#include <driver/gpio.h>
+#include <driver/rtc_io.h>
+#endif
+#include <esp_rtc_time.h>
+
 HalPowerManager powerManager;  // Singleton instance
 
 // GPIO13 controls the X4 battery latch and the X3 SD power rail on the C3
@@ -79,6 +86,119 @@ void HalPowerManager::setPowerSaving(bool enabled) {
 
   // Otherwise, no change needed
   xSemaphoreGive(modeMutex);
+}
+
+// Whether the last deep sleep was entered because a press ended a charging hold, and when (RTC time, which
+// runs through deep sleep). Such a sleep wakes at once, from the held button or from the plug-in wake while
+// the cable still charges, and that wake is the press, so the usual hold check decides it. A wake well after
+// it is a real plug-in. RTC_DATA_ATTR survives deep sleep and starts false on a cold boot.
+static RTC_DATA_ATTR bool pressEndedHold = false;
+static RTC_DATA_ATTR uint64_t pressSleepAtUs = 0;
+
+bool HalPowerManager::lastSleepEndedByPress() {
+  constexpr uint64_t PRESS_WAKE_WINDOW_US = 2000000;  // the immediate wake plus boot, with room to spare
+  return pressEndedHold && esp_rtc_get_time_us() - pressSleepAtUs < PRESS_WAKE_WINDOW_US;
+}
+
+bool HalPowerManager::supportsChargeWake() {
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
+  // Only the X4 Pro's charge-status line is known well enough: GPIO21, driven HIGH while charging and read
+  // with no pull by the stock firmware. Other boards' STAT lines are open-drain or shared, so they stay out.
+  const int8_t pin = BoardConfig::ACTIVE.batteryChargeStatus;
+  return BoardConfig::isX4Pro() && pin >= 0 && pin != BoardConfig::ACTIVE.input.power &&
+         BoardConfig::ACTIVE.input.power >= 0 && rtc_gpio_is_valid_gpio(static_cast<gpio_num_t>(pin));
+#else
+  return false;
+#endif
+}
+
+bool HalPowerManager::isCharging() {
+  const int8_t pin = BoardConfig::ACTIVE.batteryChargeStatus;
+  const bool activeHigh = BoardConfig::ACTIVE.batteryChargeStatusActiveHigh;
+  // A weak pull to the idle level, so a line the charger leaves floating reads as not charging.
+  pinMode(pin, activeHigh ? INPUT_PULLDOWN : INPUT_PULLUP);
+  return (digitalRead(pin) == HIGH) == activeHigh;
+}
+
+// Light-sleeps while the battery charges, so an unplug or a press is seen at once (deep sleep would have to boot
+// to look). Returns true when the power button ended the hold, false when charging stopped or never ran.
+bool HalPowerManager::holdWhileCharging() {
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
+  if (!isCharging()) return false;
+  const auto power = static_cast<gpio_num_t>(BoardConfig::ACTIVE.input.power);
+  const bool powerHigh = BoardConfig::ACTIVE.input.powerActiveHigh;
+  const int pressed = powerHigh ? HIGH : LOW;
+  pinMode(power, powerHigh ? INPUT_PULLDOWN : INPUT_PULLUP);
+  // The press that asked for sleep may still be down; it must not end the hold.
+  while (digitalRead(power) == pressed) delay(10);
+  // The LED PWM can keep running through light sleep.
+  Frontlight.setOn(false);
+  // Deep sleep isolates every pad; light sleep does not. With the touch rail cut, release the controller's
+  // reset and interrupt lines so they cannot back-feed it. The hold always ends in deep sleep and a fresh
+  // boot, which sets them up again.
+  const auto& touch = BoardConfig::ACTIVE.touch;
+  if (touch.powerEnable >= 0) {
+    for (const int8_t pin : {touch.reset, touch.irq}) {
+      if (pin >= 0) pinMode(pin, INPUT);
+    }
+  }
+  const auto stat = static_cast<gpio_num_t>(BoardConfig::ACTIVE.batteryChargeStatus);
+  const bool statHigh = BoardConfig::ACTIVE.batteryChargeStatusActiveHigh;
+  LOG_INF("PWR", "Charging: holding in light sleep until unplugged");
+  // Charging has stopped only when the line stays idle for a moment: VBUS can bounce or sag through the
+  // charger's lockout as a cable comes out, and STAT flickers with it.
+  constexpr unsigned long STOP_SETTLE_MS = 500;
+  const auto chargingStopped = [] {
+    const unsigned long start = millis();
+    while (millis() - start < STOP_SETTLE_MS) {
+      if (isCharging()) return false;
+      delay(5);
+    }
+    return true;
+  };
+  while (isCharging() || !chargingStopped()) {
+    // Level wakes: a change between the check above and sleep entry wakes straight away.
+    gpio_wakeup_enable(stat, statHigh ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
+    gpio_wakeup_enable(power, powerHigh ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+    esp_light_sleep_start();
+    gpio_wakeup_disable(stat);
+    gpio_wakeup_disable(power);
+    // gpio_wakeup_disable() keeps the level type, and a later pinMode() would enable it as an interrupt that
+    // storms while the level holds.
+    gpio_set_intr_type(stat, GPIO_INTR_DISABLE);
+    gpio_set_intr_type(power, GPIO_INTR_DISABLE);
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
+    if (digitalRead(power) == pressed) {
+      delay(20);  // a press, not a glitch
+      if (digitalRead(power) == pressed) return true;
+    }
+  }
+#endif
+  return false;
+}
+
+// Deep sleep also wakes when the line starts charging: a cable was plugged in. If it is already charging, that
+// wakes at once, which is right, since a cable is in.
+void HalPowerManager::armChargeWake() {
+#if SOC_PM_SUPPORT_EXT0_WAKEUP
+  const auto g = static_cast<gpio_num_t>(BoardConfig::ACTIVE.batteryChargeStatus);
+  const bool activeHigh = BoardConfig::ACTIVE.batteryChargeStatusActiveHigh;
+  if (esp_sleep_enable_ext0_wakeup(g, activeHigh ? 1 : 0) != ESP_OK) {
+    LOG_ERR("PWR", "Plug-in wake: ext0 on GPIO%d refused", static_cast<int>(g));
+    return;
+  }
+  // ext0 needs the RTC peripherals powered through sleep, and the line held at its idle level by a weak pull,
+  // since nothing confirms the charger drives it without a cable. A charging STAT drives past the pull.
+  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+  if (activeHigh) {
+    rtc_gpio_pullup_dis(g);
+    rtc_gpio_pulldown_en(g);
+  } else {
+    rtc_gpio_pulldown_dis(g);
+    rtc_gpio_pullup_en(g);
+  }
+#endif
 }
 
 void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton) const {
@@ -154,7 +274,20 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton)
   freeink::metalio::powerOff();
 #endif
 
-  if (wakeOnHeldButton) {
+  bool armHeldButton = wakeOnHeldButton;
+  if (chargeWake && supportsChargeWake()) {
+    // A press that ends the charging hold wakes the device straight back as a power-button wake. The plug-in
+    // wake is armed either way, so no path sleeps without it: if the press is let go before sleep, a cable
+    // still charging wakes it.
+    pressEndedHold = !armHeldButton && holdWhileCharging();
+    pressSleepAtUs = esp_rtc_get_time_us();
+    armHeldButton = armHeldButton || pressEndedHold;
+    armChargeWake();
+  } else {
+    pressEndedHold = false;
+  }
+
+  if (armHeldButton) {
     freeink::PowerManager::armPowerButtonWakeup();
     freeink::PowerManager::deepSleep();
   }

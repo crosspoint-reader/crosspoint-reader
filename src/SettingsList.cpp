@@ -207,6 +207,8 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                            StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_SHOW_FILE_EXTENSIONS, &CrossPointSettings::showFileExtensions,
                            "showFileExtensions", StrId::STR_CAT_SYSTEM));
+  emit(SettingInfo::Toggle(StrId::STR_WAKE_ON_USB_PLUG_IN, &CrossPointSettings::wakeOnUsbPlugIn, "wakeOnUsbPlugIn",
+                           StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_LIBRARY_USE_METADATA, &CrossPointSettings::libraryUseMetadata,
                            "libraryUseMetadata", StrId::STR_CAT_SYSTEM));
   emit(SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS, &CrossPointSettings::removeReadBooksFromRecents,

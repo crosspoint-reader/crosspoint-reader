@@ -23,6 +23,7 @@
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
 #include <esp_heap_caps.h>
+#include <esp_sleep.h>
 #include <esp_wifi.h>
 #include <time.h>
 
@@ -492,6 +493,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   Storage.prepareForDeepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
+  powerManager.setChargeWake(SETTINGS.wakeOnUsbPlugIn != 0);
   powerManager.startDeepSleep(gpio, wakeOnHeldButton);
 }
 
@@ -634,6 +636,8 @@ void setup() {
     SETTINGS.readerMenuStyle = CrossPointSettings::READER_MENU_TOOLBAR;
   }
   SETTINGS.loadFromFile();
+  // The sleeps below (an unverified button wake, a USB-power boot) honor the plug-in wake too.
+  powerManager.setChargeWake(SETTINGS.wakeOnUsbPlugIn != 0);
   // Push the saved timezone's POSIX rule into the clock (migrating the legacy
   // UTC-offset setting on first boot after the update).
   timezones::applyToClock();
@@ -668,10 +672,13 @@ void setup() {
   // reboots replay the live state captured at restart, so they neither go dark
   // nor light up against the user's wake preference. A slide switch bound to
   // the light decides it from its position instead.
-  const bool restoreLightOn = isSilentReboot ? silentRebootLightOn
-                              : slideSwitchOwnsLight()
-                                  ? gpio.isToggleSwitchOn()
-                                  : (SETTINGS.frontlightOn != 0 && SETTINGS.frontlightRestoreOnWake != 0);
+  // A plug-in wake (Wake on USB Plug-In) is not the reader being picked up to read, so it leaves the light off.
+  const bool plugInWake =
+      wakeupReason == HalGPIO::WakeupReason::AfterUSBPower && esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
+  const bool restoreLightOn =
+      isSilentReboot           ? silentRebootLightOn
+      : slideSwitchOwnsLight() ? gpio.isToggleSwitchOn()
+                               : (SETTINGS.frontlightOn != 0 && SETTINGS.frontlightRestoreOnWake != 0 && !plugInWake);
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
 
   switch (wakeupReason) {
