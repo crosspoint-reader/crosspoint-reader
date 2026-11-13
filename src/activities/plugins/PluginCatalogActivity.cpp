@@ -1966,7 +1966,7 @@ void PluginCatalogActivity::rebuildRowItems() {
   } else if (state == State::LIST_PICKER) {
     for (const auto& list : manifest.browseLists) addRow(list.title.c_str());
   } else {
-    if (prevRowVisible()) addRow(tr(STR_PREV_PAGE), nullptr, ">");
+    if (prevRowVisible()) addRow(tr(STR_PREV_PAGE), nullptr, "<");
     for (const auto& entry : items) {
       addRow(entry.title.c_str(), entry.author.c_str(), entry.isDir ? ">" : entry.status.c_str());
     }
