@@ -20,6 +20,18 @@
 // Reader enforcement: SdCardFont::load().
 #define CPFONT_VERSION 4
 
+// One glyph entry in a .cpfont file (16 bytes, little-endian). Unlike EpdGlyph it stores the
+// bitmap length, which loading checks against the dimensions to reject corrupt entries.
+struct CpfontGlyphRecord {
+  uint8_t width;
+  uint8_t height;
+  uint16_t advanceX;
+  int16_t left;
+  int16_t top;
+  uint16_t dataLength;
+  uint32_t dataOffset;  // offset 12, after 2 bytes of padding
+};
+
 class SdCardFont {
  public:
   static constexpr uint16_t MAX_PAGE_GLYPHS = 512;
@@ -349,9 +361,10 @@ class SdCardFont {
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
   // Drops this style's reference to its interval table and frees the table with the last one.
   static void releaseIntervals(PerStyle& s);
-  // False for a glyph entry the file cannot back (a corrupt .cpfont): its data length must be the
-  // packed size of its pixels and its bitmap must lie inside the file. Logs the first few per font.
-  bool glyphEntryValid(const PerStyle& s, const EpdGlyph& glyph, uint32_t codepoint);
+  // Converts a .cpfont glyph record. Returns an empty glyph if the record is corrupt: its data
+  // length must match the packed pixel size and its bitmap must lie inside the file. Logs the
+  // first few per font.
+  EpdGlyph decodeGlyphRecord(const PerStyle& s, const CpfontGlyphRecord& record, uint32_t codepoint);
   int fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCount, uint8_t styleMask);
   int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly, bool loadKernLig,
                    bool accumulate);

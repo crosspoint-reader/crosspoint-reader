@@ -4,8 +4,8 @@
 Font licenses and copyright notices are in licenses/fonts.txt.
 
 Outputs binary .cpfont files containing glyph metadata and uncompressed
-2-bit bitmaps, matching the EpdFontData/EpdGlyph/EpdUnicodeInterval struct
-layout on the ESP32-C3 (little-endian, RISC-V).
+2-bit bitmaps, matching the CpfontGlyphRecord/EpdUnicodeInterval struct
+layouts on the ESP32-C3 (little-endian, RISC-V).
 
 Usage:
     # Single file with specific presets
@@ -776,7 +776,7 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
 
 # --- Binary packing helpers ---
 
-# EpdGlyph struct: 16 bytes, little-endian
+# CpfontGlyphRecord struct (SdCardFont.h): 16 bytes, little-endian
 GLYPH_STRUCT_FORMAT = "<BBHhhH2xI"
 assert struct.calcsize(GLYPH_STRUCT_FORMAT) == 16
 
