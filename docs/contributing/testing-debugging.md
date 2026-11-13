@@ -34,6 +34,17 @@ python3 -m pip install pyserial colorama matplotlib
 python3 scripts/debugging_monitor.py
 ```
 
+## Drive the device from a script
+
+Development builds take commands over the same serial port: press buttons, open a book, read the
+screen and the reader's position, wait until drawing is done, take screenshots. See
+[Serial Test API](./serial-test-api.md) and `scripts/devctl.py` (add `--port` if the reader is not
+`/dev/ttyACM0`):
+
+```sh
+python3 scripts/devctl.py cmd:ACT:HOME idle state shot:home.png
+```
+
 ## Useful bug report contents
 
 - Firmware version and build environment

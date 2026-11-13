@@ -39,6 +39,7 @@
 #include "OpdsTokenStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SerialTestApi.h"
 #include "WifiCredentialStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
@@ -884,6 +885,10 @@ void loop() {
     lastMemPrint = millis();
   }
 
+#if ENABLE_SERIAL_CONTROL
+  // The serial test API (docs/contributing/serial-test-api.md). A command counts as user activity.
+  const bool serialActed = SerialTestApi::poll(renderer);
+#else
   // Handle incoming serial commands,
   // nb: we use logSerial from logging to avoid deprecation warnings
   if (logSerial.available() > 0) {
@@ -900,11 +905,13 @@ void loop() {
       }
     }
   }
+  constexpr bool serialActed = false;
+#endif
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() || halTiltSensor.hadActivity() ||
-      remoteActed || activityManager.preventAutoSleep()) {
+      remoteActed || serialActed || activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
@@ -1022,6 +1029,9 @@ void loop() {
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
+#if ENABLE_SERIAL_CONTROL
+  if (SerialTestApi::service()) lastActivityTime = millis();
+#endif
 
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {

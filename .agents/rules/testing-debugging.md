@@ -70,8 +70,11 @@ the change before handoff.
 ### Serial Monitor Options
 
 Use `python3 scripts/debugging_monitor.py` for enhanced logs or
-`pio device monitor` / the IDE monitor. Device access and measurements remain
-within the authorized task.
+`pio device monitor` / the IDE monitor. Development builds also take scripted
+commands (presses, screens, state, screenshots): see
+[Serial Test API](../../docs/contributing/serial-test-api.md) and
+`scripts/devctl.py`. Device access and measurements remain within the
+authorized task.
 
 ### Live Debugging Patterns
 

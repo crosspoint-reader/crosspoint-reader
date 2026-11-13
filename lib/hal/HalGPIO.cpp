@@ -7,6 +7,8 @@
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 
+#include <atomic>
+
 #if FREEINK_DEVICE_LILYGO
 #include <BoardT5S3.h>
 #endif
@@ -83,6 +85,13 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
   return HalGPIO::DeviceType::X4;
 }
 
+#if ENABLE_SERIAL_CONTROL
+// Written by the main loop, read inside InputManager::update() through the hook.
+std::atomic<uint8_t> syntheticButtons{0};
+bool syntheticHookInstalled = false;
+uint8_t syntheticButtonHook() { return syntheticButtons.load(std::memory_order_relaxed); }
+#endif
+
 }  // namespace
 
 void HalGPIO::begin() {
@@ -116,6 +125,12 @@ void HalGPIO::begin() {
     BoardT5S3::setPca9535PinMode(PCA9535_IO12_BUTTON, INPUT);
     InputManager::setButtonHook(
         []() -> uint8_t { return BoardT5S3::readButton() ? static_cast<uint8_t>(1U << InputManager::BTN_DOWN) : 0; });
+  }
+#endif
+#if ENABLE_SERIAL_CONTROL
+  if (!InputManager::hasButtonHook()) {
+    InputManager::setButtonHook(&syntheticButtonHook);
+    syntheticHookInstalled = true;
   }
 #endif
 }
@@ -203,6 +218,14 @@ bool HalGPIO::wasTouchActivity() const { return inputMgr.wasTouchActivity(); }
 void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
   InputManager::setSharedConfirmPowerShortPressEmitsPower(enabled);
 }
+
+#if ENABLE_SERIAL_CONTROL
+bool HalGPIO::holdSyntheticButtons(const uint8_t mask) {
+  if (!syntheticHookInstalled) return false;
+  syntheticButtons.store(mask, std::memory_order_relaxed);
+  return true;
+}
+#endif
 
 bool HalGPIO::hasEdgeSideButtons() const {
   return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||
