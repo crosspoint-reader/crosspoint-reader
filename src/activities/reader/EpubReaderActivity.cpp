@@ -9,6 +9,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -505,6 +506,7 @@ void EpubReaderActivity::idlePrewarmTick() {
     return;
   }
 
+  HalPowerManager::Lock powerLock;
   if (const auto p = section->loadPage(targetPage)) {
     const auto t0 = millis();
     auto scope = fcm->createPrewarmScope(true);
