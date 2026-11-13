@@ -393,25 +393,25 @@ int main() {
     Page spaced;
     const auto* first = addLine(spaced, 0, 0);
     const auto* last = addLine(spaced, 0, 40);
-    assert(lineBand(bandRenderer, 0, spaced, *first).top == 0 && height(lineBand(bandRenderer, 0, spaced, *first)) == 16);
-    assert(lineBand(bandRenderer, 0, spaced, *last).top == 40 && height(lineBand(bandRenderer, 0, spaced, *last)) == 16);
+    assert(lineBand(bandRenderer, 0, spaced, *first).top == 1 && height(lineBand(bandRenderer, 0, spaced, *first)) == 15);
+    assert(lineBand(bandRenderer, 0, spaced, *last).top == 41 && height(lineBand(bandRenderer, 0, spaced, *last)) == 15);
 
-    // Tight spacing: glyph bands [0,16) and [10,26) split at one shared boundary, without overlap or gap.
+    // Tight spacing: glyph bands [1,16) and [11,26) split at the upper line's bottom, keeping its descenders whole.
     Page tight;
     const auto* upper = addLine(tight, 0, 0);
     const auto* lower = addLine(tight, 0, 10);
     const auto upperBand = lineBand(bandRenderer, 0, tight, *upper);
     const auto lowerBand = lineBand(bandRenderer, 0, tight, *lower);
-    assert(upperBand.top == 0 && upperBand.bottom == 13 && lowerBand.top == 13 && lowerBand.bottom == 26);
-    for (int y = 0; y < 26; ++y)  // every row belongs to exactly one line, so a tap selects one clipping
+    assert(upperBand.top == 1 && upperBand.bottom == 16 && lowerBand.top == 16 && lowerBand.bottom == 26);
+    for (int y = 1; y < 26; ++y)  // every row belongs to exactly one line, so a tap selects one clipping
       assert((y >= upperBand.top && y < upperBand.bottom) + (y >= lowerBand.top && y < lowerBand.bottom) == 1);
 
     // A small line above a larger heading must not shrink the heading to the small line's pitch.
     Page heading;
     const auto* body = addLine(heading, 0, 0);
     const auto* title = addLine(heading, 0, 16, 2);
-    assert(height(lineBand(bandRenderer, 0, heading, *body)) == 16);
-    assert(lineBand(bandRenderer, 0, heading, *title).top == 16 && height(lineBand(bandRenderer, 0, heading, *title)) == 30);
+    assert(height(lineBand(bandRenderer, 0, heading, *body)) == 15);
+    assert(lineBand(bandRenderer, 0, heading, *title).top == 19 && height(lineBand(bandRenderer, 0, heading, *title)) == 27);
 
     // Table cells in separate columns, one pixel apart, do not constrain each other.
     Page table;
@@ -419,7 +419,7 @@ int main() {
     const auto* right = addLine(table, 200, 1);
     addLine(table, 0, 24);
     addLine(table, 200, 25);
-    assert(height(lineBand(bandRenderer, 0, table, *left)) == 16 && height(lineBand(bandRenderer, 0, table, *right)) == 16);
+    assert(height(lineBand(bandRenderer, 0, table, *left)) == 15 && height(lineBand(bandRenderer, 0, table, *right)) == 15);
 
     // A whitespace-only line has no band and cannot constrain the visible line it overlaps.
     Page blank;
@@ -430,6 +430,7 @@ int main() {
     spaces->block.styles.push_back(EpdFontFamily::REGULAR);
     assert(height(clippingLineBand::naturalBand(bandRenderer, 0, *spaces)) == 0);
     assert(lineBand(bandRenderer, 0, blank, *visible).bottom == 16);
+    assert(lineBand(bandRenderer, 0, blank, *visible).top == 1);
   }
   for (bool images : {false, true}) for (auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH})
     for (auto mode : {ClipSelectionActivity::Mode::Clip, ClipSelectionActivity::Mode::Lookup}) {

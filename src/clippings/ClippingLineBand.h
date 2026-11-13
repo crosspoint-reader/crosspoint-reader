@@ -16,7 +16,8 @@
 // Each line starts from its glyph band (ascender + descender of each word's own font). The layout spaces lines by
 // font size x line spacing, not by the font's advanceY, so bands can overlap at tight spacing. Only overlapping
 // lines in the same horizontal flow (e.g. the same table column) constrain each other, and each overlapping pair
-// splits at one shared boundary, so neighbouring highlights never overlap and never leave a gap.
+// splits at one shared boundary (the upper line's bottom, so descenders stay whole), so neighbouring highlights never
+// overlap and never leave a gap.
 namespace clippingLineBand {
 
 struct Band {
@@ -38,7 +39,10 @@ Band wordBand(const Renderer& renderer, const int fontId, const Line& line, cons
   const int font = wordFont(renderer, fontId, block, i);
   const int top =
       line.yPos + block.getRubyShift(renderer.getFontAscenderSize(lineFont)) + block.wordYOffset(renderer, fontId, i);
-  return {top, top + renderer.getFontAscenderSize(font) + std::abs(renderer.getFontDescenderSize(font))};
+  // The font ascender includes empty headroom above the tallest glyphs; skip an eighth of it so lines look alike
+  // whether or not a neighbour overlaps them, while the descender stays whole for g, j, p, q, y.
+  const int ascender = renderer.getFontAscenderSize(font);
+  return {top + ascender / 8, top + ascender + std::abs(renderer.getFontDescenderSize(font))};
 }
 
 // Union of the visible words' bands; empty (top == bottom) for a line without visible words, so whitespace-only
@@ -106,7 +110,9 @@ Band lineBand(const Renderer& renderer, const int fontId, const PageT& page, con
     const bool otherAbove = neighbour.top < natural.top || (neighbour.top == natural.top && !selfSeen);
     const Band& upper = otherAbove ? neighbour : natural;
     const Band& lower = otherAbove ? natural : neighbour;
-    const int boundary = (lower.top + upper.bottom) / 2;  // same value from both sides of the pair
+    // Keep the upper line's descenders whole; the lower line only gives up its empty headroom. Same value from both
+    // sides of the pair.
+    const int boundary = std::clamp(upper.bottom, lower.top, std::max(lower.top, lower.bottom - 1));
     if (otherAbove) {
       band.top = std::max(band.top, boundary);
     } else {
