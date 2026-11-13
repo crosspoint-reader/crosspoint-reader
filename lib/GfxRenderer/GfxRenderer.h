@@ -370,6 +370,8 @@ class GfxRenderer {
                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const;
   int getFontAscenderSize(int fontId) const;
+  // Ascender + descender: the vertical extent of the glyphs, excluding the line gap.
+  int getFontGlyphHeight(int fontId) const;
   int getLineHeight(int fontId) const;
   // Explicit line spacing scales font size; the one-argument form returns font metrics.
   int getLineHeight(int fontId, float compression) const;
