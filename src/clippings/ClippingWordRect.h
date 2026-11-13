@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "CrossPointSettings.h"
 #include "clippings/ClippingText.h"
 #include "components/themes/BaseTheme.h"
 
@@ -28,8 +29,11 @@ inline Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, cons
     width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i) - skipX));
   }
   const int lineFont = TextBlock::renderFontId(renderer, block->blockFontId(fontId), fontId);
+  // Glyph extent, capped at the laid-out line pitch so tight line spacing doesn't overlap adjacent lines.
+  const int height = std::min(renderer.getFontGlyphHeight(wordFont),
+                              renderer.getLineHeight(lineFont, SETTINGS.getReaderLineCompression()));
   return Rect{left + line.xPos + block->wordXpos(i) + skipX,
               top + line.yPos + block->getRubyShift(renderer.getFontAscenderSize(lineFont)) +
                   block->wordYOffset(renderer, fontId, i),
-              width, renderer.getLineHeight(wordFont)};
+              width, height};
 }

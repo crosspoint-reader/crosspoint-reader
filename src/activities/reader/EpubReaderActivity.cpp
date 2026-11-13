@@ -2428,11 +2428,11 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
         const int highlightRight = x + width;
         const int previousHighlightRight = previousHighlightX + previousHighlightWidth;
         if (hasPreviousHighlight && previousHighlightRight < x) {
-          fillHighlight(previousHighlightRight, y, x - previousHighlightRight, renderer.getLineHeight(fontId));
+          fillHighlight(previousHighlightRight, y, x - previousHighlightRight, rect.height);
         } else if (hasPreviousHighlight && highlightRight < previousHighlightX) {
-          fillHighlight(highlightRight, y, previousHighlightX - highlightRight, renderer.getLineHeight(fontId));
+          fillHighlight(highlightRight, y, previousHighlightX - highlightRight, rect.height);
         }
-        fillHighlight(x, y, width, renderer.getLineHeight(fontId));
+        fillHighlight(x, y, width, rect.height);
         previousHighlightX = x;
         previousHighlightWidth = width;
         hasPreviousHighlight = true;
