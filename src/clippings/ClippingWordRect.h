@@ -29,11 +29,12 @@ inline Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, cons
     width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i) - skipX));
   }
   const int lineFont = TextBlock::renderFontId(renderer, block->blockFontId(fontId), fontId);
-  // Glyph extent, capped at the laid-out line pitch so tight line spacing doesn't overlap adjacent lines.
-  const int height = std::min(renderer.getFontGlyphHeight(wordFont),
-                              renderer.getLineHeight(lineFont, SETTINGS.getReaderLineCompression()));
+  // Measured ink extent, capped (centered) at the line pitch so tight line spacing doesn't overlap adjacent lines.
+  const auto ink = renderer.getFontInkBounds(wordFont);
+  const int pitch = renderer.getLineHeight(lineFont, SETTINGS.getReaderLineCompression());
+  const int trim = std::max(0, ink.bottom - ink.top - pitch);
   return Rect{left + line.xPos + block->wordXpos(i) + skipX,
               top + line.yPos + block->getRubyShift(renderer.getFontAscenderSize(lineFont)) +
-                  block->wordYOffset(renderer, fontId, i),
-              width, height};
+                  block->wordYOffset(renderer, fontId, i) + ink.top + trim / 2,
+              width, ink.bottom - ink.top - trim};
 }
