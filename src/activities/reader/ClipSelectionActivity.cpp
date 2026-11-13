@@ -158,13 +158,12 @@ bool ClipSelectionActivity::extractWords() {
   }
   rowCount = 0;
   const bool needsFontPrewarm = renderer.isSdCardFont(fontId);
-  const float lineCompression = SETTINGS.getReaderLineCompression();
   bool paragraphStartPending = false;
 
   for (size_t pageOffset = 0; pageOffset < pageCount(); ++pageOffset) {
     uint16_t pageWordIndex = 0;
     if (needsFontPrewarm) {
-      // Line bands measure the whole page's glyphs, so prepare every line before any measurement.
+      // Line bands measure neighbouring lines too, so prepare every line's advances before any measurement.
       for (const auto& element : pageAt(pageOffset).elements) {
         if (element->getTag() != TAG_PageLine) continue;
         const auto& block = static_cast<const PageLine&>(*element).getBlock();
@@ -180,15 +179,14 @@ bool ClipSelectionActivity::extractWords() {
         renderer.ensureSdCardFontReady(fontId, &text, &textLength, 1, false, false, styleMask);
       }
     }
-    const auto pageInk = clippingLineBand::measurePage(renderer, fontId, pageAt(pageOffset));
     for (const auto& element : pageAt(pageOffset).elements) {
       if (element->getTag() != TAG_PageLine) continue;
       const auto& line = static_cast<const PageLine&>(*element);
       const auto& block = line.getBlock();
       if (!block || !block->valid()) continue;
 
-      // One band per line, identical to saved-clipping highlights and hit-testing.
-      const auto band = clippingLineBand::lineBand(renderer, fontId, line, lineCompression, pageInk);
+      // Glyph band shared with neighbouring lines; identical to saved-clipping highlights and hit-testing.
+      const auto band = clippingLineBand::lineBand(renderer, fontId, pageAt(pageOffset), line);
 
       const size_t lineStart = wordCount;
       const bool isRtl = block->getBlockStyle().isRtl;
@@ -213,9 +211,10 @@ bool ClipSelectionActivity::extractWords() {
         WordBox& word = isRtl ? words[lineStart + (rtlWordCount < remaining ? rtlWordCount : rtlWordCount % remaining)]
                               : words[wordCount++];
         word.x = static_cast<int16_t>(marginLeft + line.xPos + block->wordXpos(i));
-        word.y = static_cast<int16_t>(marginTop + band.top);
+        const auto wordBand = clippingLineBand::clipWord(renderer, fontId, line, i, band);
+        word.y = static_cast<int16_t>(marginTop + wordBand.top);
         word.width = static_cast<int16_t>(width);
-        word.height = static_cast<int16_t>(band.bottom - band.top);
+        word.height = static_cast<int16_t>(wordBand.bottom - wordBand.top);
         word.row = rowCount;
         word.pageOffset = static_cast<uint8_t>(pageOffset);
         word.pageWordIndex = pageWordIndex++;
