@@ -158,7 +158,8 @@ struct Renderer {
   bool isSdCardFont(int) const { return sdFont; }
   int getFontAscenderSize(int) const { return 12; }
   int getLineHeight(int) const { return 16; }
-  int getFontGlyphHeight(int) const { return 14; }
+  struct InkBounds { int top, bottom; };
+  InkBounds getFontInkBounds(int) const { return {2, 14}; }
   int linePitch = 16;
   int getLineHeight(int, float) const { return linePitch; }
   RenderMode getRenderMode() const { return BW; }
@@ -446,12 +447,14 @@ int main() {
     page->elements.push_back(std::move(line));
     decorated.pages.push_back(std::move(page));
     assert(decorated.extractWords());
-    // Selection box hugs the glyphs (ascender + descender), not the full line advance.
-    assert(decorated.words[0].height == decorated.renderer.getFontGlyphHeight(0));
-    // Tight line spacing: the box must not exceed the line pitch.
+    // Selection box hugs the measured ink (top 2, bottom 14), not the full line advance.
+    const int inkY = decorated.words[0].y;
+    assert(decorated.words[0].height == 12);
+    // Tight line spacing: capped at the line pitch, trimmed evenly to stay centered on the ink.
     decorated.renderer.linePitch = 10;
     assert(decorated.extractWords());
     assert(decorated.words[0].height == 10);
+    assert(decorated.words[0].y == inkY + 1);
     decorated.renderer.linePitch = 16;
     assert(decorated.extractWords());
     const auto originalInk = decorated.renderer.ink;
