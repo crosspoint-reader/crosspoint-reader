@@ -118,10 +118,10 @@ void SettingsActivity::rebuildSettings() {
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
 
-  // Rescan /dictionaries on every rebuild: cheap (one directory listing) and
-  // picks up dictionaries copied to the SD card since the last visit.
+  // Rescan /dictionaries on every rebuild to pick up dictionaries copied to the
+  // SD card since the last visit. Only the Reader section shows the row.
   std::vector<DictionaryEntry> dictionaries;
-  DictionaryRegistry::discover(dictionaries);
+  if (section == SettingsSection::Reader) DictionaryRegistry::discover(dictionaries);
 
   auto all = getSettingsList(&sdFontSystem.registry(), &dictionaries);
 
