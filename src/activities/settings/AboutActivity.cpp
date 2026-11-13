@@ -5,6 +5,7 @@
 #include <HalClock.h>
 #include <HalFrontlight.h>
 #include <HalStorage.h>
+#include <HalSystem.h>
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <esp_mac.h>
@@ -33,6 +34,9 @@ enum MenuItem {
   ITEM_RTC,
   ITEM_IMU,
   ITEM_MAC,
+#if FREEINK_DEVICE_EEGO_A4
+  ITEM_UID,
+#endif
 };
 
 // Deliberately hardcoded English, exempt from the tr() rule: support reads
@@ -53,6 +57,9 @@ const char* const menuNames[AboutActivity::ITEM_COUNT] = {
     "RTC",
     "Tilt Sensor (IMU)",
     "MAC Address",
+#if FREEINK_DEVICE_EEGO_A4
+    "UID",
+#endif
 };
 
 // "14.5 GB" / "35 MB": GiB with one decimal, MiB below 1 GiB.
@@ -133,6 +140,15 @@ void AboutActivity::onEnter() {
   // profile and applyXteinkDisplayController() may have promoted the display
   // controller to the panel actually found on the bus.
   rowValues_[ITEM_DEVICE] = BoardConfig::ACTIVE.name;
+#if FREEINK_DEVICE_EEGO_A4
+  uint32_t uid = 0;
+  if (HalSystem::getEegoUid(uid)) {
+    snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(uid));
+    rowValues_[ITEM_UID] = buf;
+  } else {
+    rowValues_[ITEM_UID] = "Error.";
+  }
+#endif
   rowValues_[ITEM_FIRMWARE] = CROSSPOINT_VERSION;
   snprintf(buf, sizeof(buf), "%s rev %u", ESP.getChipModel(), static_cast<unsigned>(ESP.getChipRevision()));
   rowValues_[ITEM_CHIP] = buf;
