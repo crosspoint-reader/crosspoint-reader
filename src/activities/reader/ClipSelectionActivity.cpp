@@ -162,16 +162,12 @@ bool ClipSelectionActivity::extractWords() {
 
   for (size_t pageOffset = 0; pageOffset < pageCount(); ++pageOffset) {
     uint16_t pageWordIndex = 0;
-    for (const auto& element : pageAt(pageOffset).elements) {
-      if (element->getTag() != TAG_PageLine) continue;
-      const auto& line = static_cast<const PageLine&>(*element);
-      const auto& block = line.getBlock();
-      if (!block || !block->valid()) continue;
-
-      // Glyph band shared with neighbouring lines; identical to saved-clipping highlights and hit-testing.
-      const auto band = clippingLineBand::lineBand(renderer, fontId, pageAt(pageOffset), line);
-
-      if (needsFontPrewarm && block->wordCount() != 0) {
+    if (needsFontPrewarm) {
+      // Line bands measure neighbouring lines too, so prepare every line's advances before any measurement.
+      for (const auto& element : pageAt(pageOffset).elements) {
+        if (element->getTag() != TAG_PageLine) continue;
+        const auto& block = static_cast<const PageLine&>(*element).getBlock();
+        if (!block || !block->valid() || block->wordCount() == 0) continue;
         uint8_t styleMask = 0;
         for (uint16_t i = 0; i < block->wordCount(); ++i) {
           styleMask |= static_cast<uint8_t>(1U << (static_cast<uint8_t>(block->wordStyle(i)) & 0x03));
@@ -182,6 +178,15 @@ bool ClipSelectionActivity::extractWords() {
         const size_t textLength = block->wordText(lastWord) + block->wordTextLen(lastWord) + 1 - text;
         renderer.ensureSdCardFontReady(fontId, &text, &textLength, 1, false, false, styleMask);
       }
+    }
+    for (const auto& element : pageAt(pageOffset).elements) {
+      if (element->getTag() != TAG_PageLine) continue;
+      const auto& line = static_cast<const PageLine&>(*element);
+      const auto& block = line.getBlock();
+      if (!block || !block->valid()) continue;
+
+      // Glyph band shared with neighbouring lines; identical to saved-clipping highlights and hit-testing.
+      const auto band = clippingLineBand::lineBand(renderer, fontId, pageAt(pageOffset), line);
 
       const size_t lineStart = wordCount;
       const bool isRtl = block->getBlockStyle().isRtl;
