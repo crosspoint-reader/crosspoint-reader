@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
+#include "lib/Epub/Epub/hyphenation/Hyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
 
@@ -233,3 +234,30 @@ TEST(HyphenationEval, Italian) { runLanguageEval("italian", "it", "italian_hyphe
 TEST(HyphenationEval, Polish) { runLanguageEval("polish", "pl", "polish_hyphenation_tests.txt", 98.92); }
 TEST(HyphenationEval, Swedish) { runLanguageEval("swedish", "sv", "swedish_hyphenation_tests.txt", 94.01); }
 TEST(HyphenationEval, Portuguese) { runLanguageEval("portuguese", "pt", "portuguese_hyphenation_tests.txt", 98.21); }
+
+// Without a resolved language hyphenator (e.g. the EPUB's dc:language is missing or unrecognized),
+// Hyphenator::breakOffsets() has no linguistic basis for a split point, so its fallback "every-N-chars"
+// path (Hyphenator.cpp) must stay disabled rather than guessing with the generic Liang default minima
+// (2/2). Otherwise an ordinary 4-letter word like "good" gets chopped into "go-" + "od" purely to
+// satisfy line width.
+TEST(HyphenationBug, FallbackDoesNotSplitShortWordsWithoutAResolvedLanguageHyphenator) {
+  // An unrecognized tag resolves to no hyphenator (cachedHyphenator_ == nullptr), the same situation
+  // as a book with missing/unsupported dc:language metadata.
+  Hyphenator::setPreferredLanguage("xx-unsupported");
+
+  // includeFallback=true mirrors ParsedText::hyphenateWordAtIndex's allowFallbackBreaks for the
+  // first word on a line (ParsedText.cpp:1186,1239).
+  const auto breaks = Hyphenator::breakOffsets("good", /*includeFallback=*/true);
+
+  EXPECT_TRUE(breaks.empty()) << "\"good\" should not be split without any resolved language hyphenator";
+}
+
+// Contrast case: once a real language hyphenator is resolved, its own minPrefix/minSuffix (3/3 for
+// English, see LanguageRegistry.cpp:22) correctly refuses to split a word this short.
+TEST(HyphenationBug, EnglishHyphenatorCorrectlyRejectsTheSameShortWord) {
+  Hyphenator::setPreferredLanguage("en");
+
+  const auto breaks = Hyphenator::breakOffsets("good", /*includeFallback=*/true);
+
+  EXPECT_TRUE(breaks.empty());
+}
