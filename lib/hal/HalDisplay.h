@@ -81,6 +81,8 @@ class HalDisplay {
 
   // Power management
   void deepSleep();
+  // Power the panel down between frames, keeping its image; the next paint wakes it.
+  void controllerIdle();
 
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
