@@ -353,7 +353,7 @@ void TtfEpdFont::flushFace(Face& f) {
 }
 
 void TtfEpdFont::trimTail(Face& f) {
-  if (f.miniMetadataOnly || f.flushed || f.tailCap == 0) {
+  if (f.miniMetadataOnly || f.tailCap == 0) {
     flushFace(f);
     return;
   }
@@ -460,8 +460,7 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
   }
 
   // Route to tail buffer when core is full, or when this face is tail-only (coreCap == 0)
-  const bool isTail = f.coreFull || f.coreCap == 0;
-  if (isTail) {
+  if (f.coreFull || f.coreCap == 0) {
     // Route to tail buffer: trim tail on overflow (or flush if face has no core)
     const size_t tailGlyphs = f.glyphs.size() - f.coreCount;
     if (tailGlyphs >= f.maxTailGlyphs || f.tailUsed + bytes > f.tailCap) {
@@ -475,8 +474,15 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
         px = 0;
         f.miniMetadataOnly = true;
       }
+      // If trimTail fell back to flushFace, core was cleared (coreFull = false, coreCount = 0).
+      // Re-evaluate coreFull for the freshly flushed face so isTail routes to core.
+      if (!f.coreFull && (f.coreCount >= f.maxCoreGlyphs || f.coreUsed + bytes > f.coreCap)) {
+        f.coreFull = true;
+      }
     }
   }
+
+  const bool isTail = f.coreFull || f.coreCap == 0;
 
   // All growth below is exact and heap-checked (see reserveChecked). On a
   // failed grow, ask the memory manager to evict rebuildable caches (render
@@ -618,9 +624,20 @@ int8_t TtfEpdFont::kernThunk(void* ctx, const uint32_t leftCp, const uint32_t ri
 const uint8_t* TtfEpdFont::bitmapThunk(void* ctx, const EpdGlyph* glyph) {
   if (glyph == nullptr || glyph->dataLength == 0) return nullptr;
   Face* f = static_cast<Face*>(ctx);
-  if (glyph >= f->glyphs.data() + f->coreCount) {
+  const EpdGlyph* base = f->glyphs.data();
+  const size_t total = f->glyphs.size();
+  if (base == nullptr || total == 0) return nullptr;
+
+  const auto glyphAddr = reinterpret_cast<uintptr_t>(glyph);
+  const auto baseAddr = reinterpret_cast<uintptr_t>(base);
+  const auto endAddr = baseAddr + total * sizeof(EpdGlyph);
+  if (glyphAddr < baseAddr || glyphAddr >= endAddr) return nullptr;
+
+  if (glyph >= base + f->coreCount) {
+    if (glyph->dataOffset + glyph->dataLength > f->tailBmp.size()) return nullptr;
     return f->tailBmp.data() + glyph->dataOffset;
   }
+  if (glyph->dataOffset + glyph->dataLength > f->coreBmp.size()) return nullptr;
   return f->coreBmp.data() + glyph->dataOffset;
 }
 bool TtfEpdFont::coverageThunk(void* ctx, const uint32_t codepoint) {
