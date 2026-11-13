@@ -443,6 +443,28 @@ void ClipSelectionActivity::confirmSelection(const ClippingResult::Action action
   finish();
 }
 
+// Look up / Clip modes confirm directly. Select mode always asks which action to run, unless there is no
+// dictionary and Clip is the only option.
+void ClipSelectionActivity::confirmWithButtons() {
+  if (mode != Mode::Select || rangeStart < 0) {
+    confirmSelection(isLookup() ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
+    return;
+  }
+  if (!lookupAvailable) {
+    confirmSelection(ClippingResult::Action::Clip);
+    return;
+  }
+  static constexpr StrId OPTIONS[] = {StrId::STR_LOOKUP, StrId::STR_CLIP};
+  actionPopup.show(StrId::STR_SELECT, OPTIONS, 2, 0, [this](const int index) {
+    confirmSelection(index == 0 ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
+  });
+  requestUpdate();
+}
+
+const char* ClipSelectionActivity::confirmLabel() const {
+  return mode != Mode::Select && isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE);
+}
+
 void ClipSelectionActivity::cancel() {
   ActivityResult result;
   result.isCancelled = true;
@@ -630,7 +652,7 @@ bool ClipSelectionActivity::handleButtons(const uint8_t buttons) {
   }
 
   if (buttons & Input::INPUT_CONFIRM) {
-    confirmSelection(isLookup() ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
+    confirmWithButtons();
     return true;
   }
 
@@ -786,9 +808,8 @@ bool ClipSelectionActivity::renderIncremental() {
     drawSelection();
     renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
   }
-  const auto labels = mappedInput.mapLabels(
-      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : (isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE)), tr(STR_DIR_LEFT),
-      tr(STR_DIR_RIGHT));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(),
+                                            tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   lastRenderedSelected = selected;
@@ -846,9 +867,8 @@ void ClipSelectionActivity::render(RenderLock&&) {
   if (wordCount != 0) drawSelection();
   renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
 
-  const auto labels = mappedInput.mapLabels(
-      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : (isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE)), tr(STR_DIR_LEFT),
-      tr(STR_DIR_RIGHT));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : confirmLabel(),
+                                            tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 

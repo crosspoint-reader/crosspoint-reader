@@ -17,7 +17,7 @@
 
 class ClipSelectionActivity final : public Activity {
  public:
-  enum class Mode : uint8_t { Clip, Lookup, DefinitionLookup };
+  enum class Mode : uint8_t { Clip, Lookup, DefinitionLookup, Select };
 
   struct Selection {
     uint16_t firstPage = 0;
@@ -89,6 +89,8 @@ class ClipSelectionActivity final : public Activity {
   int textOffset() const;
   int textXOffset() const;
   void cancel();
+  const char* confirmLabel() const;
+  void confirmWithButtons();
   bool buildSelectedText(int first, int last, std::string& text) const;
   void drawSelection() const;
   bool renderIncremental();

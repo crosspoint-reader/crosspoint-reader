@@ -188,6 +188,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_READER_MENU = 4,
     LP_MENU_CREATE_CLIPPING = 5,
     LP_MENU_FOOTNOTES = 6,
+    LP_MENU_SELECT_TEXT = 7,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 

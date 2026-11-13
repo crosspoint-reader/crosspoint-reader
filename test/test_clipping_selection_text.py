@@ -29,6 +29,8 @@ def method(name, next_name, text=source):
 
 extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSelectionActivity::closestInRow")
 gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "bool ClipSelectionActivity::renderIncremental")
+confirm_label = method("const char* ClipSelectionActivity::confirmLabel", "void ClipSelectionActivity::cancel").replace(
+    "const char* ClipSelectionActivity::confirmLabel", "int ClipSelectionActivity::confirmLabel")
 incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void ClipSelectionActivity::drawSelection")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
 word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
@@ -292,7 +294,7 @@ struct ClipSelectionActivity {
 """ + word_box + action_helpers + r"""
   std::unique_ptr<WordBox[]> words = makeUniqueNoThrow<WordBox[]>(240);
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
-  enum class Mode { Clip, Lookup, DefinitionLookup };
+  enum class Mode { Clip, Lookup, DefinitionLookup, Select };
   Mode mode = Mode::Clip;
   bool lookupAvailable = true;
   Renderer renderer;
@@ -307,6 +309,7 @@ struct ClipSelectionActivity {
   int selected = 0, rangeStart = -1, currentPageOffset = 0;
   bool touchDragSelecting = false;
   bool isLookup() const { return mode != Mode::Clip; }
+  int confirmLabel() const;
   struct Popup { bool isActive() const { return false; } } actionPopup;
   int lastRenderedPageOffset = 0, lastRenderedSelected = 0, lastRenderedRangeStart = -1;
   int lastRenderedTextOffset = 0, lastRenderedTextXOffset = 0;
@@ -321,7 +324,7 @@ struct ClipSelectionActivity {
   Rect handleRect(int, bool) const { return {}; }
   Rect actionRect() const { return {}; }
 };
-""" + build_text + extract_words + gap_draw + incremental_draw + selection_draw + r"""
+""" + build_text + extract_words + confirm_label + gap_draw + incremental_draw + selection_draw + r"""
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -369,7 +372,8 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
 }
 int main() {
   for (bool images : {false, true}) for (auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH})
-    for (auto mode : {ClipSelectionActivity::Mode::Clip, ClipSelectionActivity::Mode::Lookup}) {
+    for (auto mode : {ClipSelectionActivity::Mode::Clip, ClipSelectionActivity::Mode::Lookup,
+                      ClipSelectionActivity::Mode::Select}) {
     ClipSelectionActivity pick;
     pick.mode = mode;
     pick.marginLeft = 11; pick.marginTop = 7;
@@ -401,7 +405,8 @@ int main() {
     pick.pages[0]->renderCalls = GUI.hints = pick.renderer.displays = 0;
     assert(pick.renderIncremental());
     assert(pick.pages[0]->renderCalls == 0 && GUI.hints == 1 && pick.renderer.displays == 1);
-    assert(GUI.confirmLabel == (pick.isLookup() ? STR_LOOKUP : STR_DONE));
+    const bool lookupLabel = pick.mode != ClipSelectionActivity::Mode::Select && pick.isLookup();
+    assert(GUI.confirmLabel == (lookupLabel ? STR_LOOKUP : STR_DONE));
     assert(pick.renderer.ink == before);
     for (int next : {2,3,2,1,0,3}) {
       pick.selected = next;

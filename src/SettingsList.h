@@ -172,6 +172,7 @@ inline std::vector<StrId> buildLongPressMenuValues() {
   if (BoardConfig::hasHomeKey()) values.push_back(StrId::STR_READER_MENU);
   values.push_back(StrId::STR_SAVE_CLIPPING);
   values.push_back(StrId::STR_FOOTNOTES);
+  values.push_back(StrId::STR_SELECT_TEXT);
   return values;
 }
 
