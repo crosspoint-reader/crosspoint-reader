@@ -345,6 +345,8 @@ Side buttons, and Taps and gestures where supported by the device. See the
 
 #### 3.6.4 System
 
+**About** shows hardware and firmware information. On EEGO Reader A4, it also shows the factory UID, matching the stock firmware. If the UID cannot be read, its value shows **Error.**
+
 - **Time to Sleep** (**Settings → Display**): Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
 
 - **Wi-Fi Networks**: Connect to Wi-Fi networks for file transfers and firmware updates.
