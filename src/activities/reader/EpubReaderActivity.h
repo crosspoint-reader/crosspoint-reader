@@ -258,8 +258,8 @@ class EpubReaderActivity final : public ReaderActivity {
   void loop() override;
   void render(RenderLock&& lock) override;
 
-  bool pageTurn(bool isForward) override;
-  bool skipPages(int amount) override;
+  bool performPageTurn(bool isForward) override;
+  bool performSkipPages(int amount) override;
   bool remoteShortcut(bool readerMenu) override;
   bool isAtEndOfBook() const override;
   void onReturnFromEndOfBook() override;
