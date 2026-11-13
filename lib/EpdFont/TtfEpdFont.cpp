@@ -124,24 +124,15 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
     f.ft = &f.ftStorage_;
     f.twoBit = twoBit;
     f.sizePx = sizePx;
-    // Regular (style 0) owns the full novel cache budget split into 75% core / 25% tail;
+    // Regular face (style 0) owns the full novel cache budget split into 75% core / 25% tail;
     // styled variants (bold/italic) only hold occasional emphasis words, capped at 64KB/512 glyphs
-    // with no separate tail buffer.
-    if (i == 0) {
-      f.cap = glyphCacheBytes;
-      f.maxGlyphs = maxGlyphs;
-      f.coreCap = (glyphCacheBytes * 3) / 4;
-      f.tailCap = glyphCacheBytes - f.coreCap;
-      f.maxCoreGlyphs = (maxGlyphs * 3) / 4;
-      f.maxTailGlyphs = maxGlyphs - f.maxCoreGlyphs;
-    } else {
-      f.cap = std::min<size_t>(glyphCacheBytes, 64 * 1024);
-      f.maxGlyphs = std::min<uint16_t>(maxGlyphs, 512);
-      f.coreCap = f.cap;
-      f.tailCap = 0;
-      f.maxCoreGlyphs = f.maxGlyphs;
-      f.maxTailGlyphs = 0;
-    }
+    // with tail-only eviction.
+    f.cap = (i == 0) ? glyphCacheBytes : std::min<size_t>(glyphCacheBytes, 64 * 1024);
+    f.maxGlyphs = (i == 0) ? maxGlyphs : std::min<uint16_t>(maxGlyphs, 512);
+    f.coreCap = (i == 0) ? (f.cap * 3) / 4 : 0;
+    f.tailCap = f.cap - f.coreCap;
+    f.maxCoreGlyphs = (i == 0) ? (f.maxGlyphs * 3) / 4 : 0;
+    f.maxTailGlyphs = f.maxGlyphs - f.maxCoreGlyphs;
     f.inited = false;
     f.ready = false;
     f.initFailures = 0;
@@ -181,13 +172,13 @@ bool TtfEpdFont::loadVariantOf(TtfEpdFont& master, const uint16_t pointSize, con
     f.wantItalic = mf.wantItalic;
     f.twoBit = twoBit;
     f.sizePx = sizePx;
-    if (i == 0) {
-      f.cap = glyphCacheBytes;
-      f.maxGlyphs = maxGlyphs;
-    } else {
-      f.cap = std::min<size_t>(glyphCacheBytes, 64 * 1024);
-      f.maxGlyphs = std::min<uint16_t>(maxGlyphs, 512);
-    }
+    // Variants only use the tail buffer (no core retention)
+    f.cap = (i == 0) ? glyphCacheBytes : std::min<size_t>(glyphCacheBytes, 64 * 1024);
+    f.maxGlyphs = (i == 0) ? maxGlyphs : std::min<uint16_t>(maxGlyphs, 512);
+    f.coreCap = 0;
+    f.maxCoreGlyphs = 0;
+    f.tailCap = f.cap;
+    f.maxTailGlyphs = f.maxGlyphs;
     f.inited = false;
     f.ready = false;
     f.initFailures = 0;
@@ -468,23 +459,10 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
     }
   }
 
-  bool isTail = f.coreFull && f.tailCap > 0;
-  if (!isTail) {
-    // Auxiliary style without tail, or core overflowed with no tail
-    if (f.coreFull) {
-      if (!allowFlush) {
-        f.flushed = true;
-        return nullptr;
-      }
-      flushFace(f);
-      if (bytes > f.coreCap) {
-        bytes = 0;
-        px = 0;
-        f.miniMetadataOnly = true;
-      }
-    }
-  } else {
-    // Route to tail buffer: trim tail on overflow
+  // Route to tail buffer when core is full, or when this face is tail-only (coreCap == 0)
+  const bool isTail = f.coreFull || f.coreCap == 0;
+  if (isTail) {
+    // Route to tail buffer: trim tail on overflow (or flush if face has no core)
     const size_t tailGlyphs = f.glyphs.size() - f.coreCount;
     if (tailGlyphs >= f.maxTailGlyphs || f.tailUsed + bytes > f.tailCap) {
       if (!allowFlush) {
