@@ -1,23 +1,25 @@
 #pragma once
 
 #include <Epub/Page.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <climits>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <type_traits>
-#include <utility>
 
 #include "clippings/ClippingText.h"
 
 // Vertical extent of a text line's selection/saved-clipping highlights. Shared by ClipSelectionActivity and
 // EpubReaderActivity so selection, saved highlights and tap hit-testing always agree.
 //
-// Each line starts from its glyph band (ascender + descender of each word's own font). The layout spaces lines by
-// font size x line spacing, not by the font's advanceY, so bands can overlap at tight spacing. Only overlapping
-// lines in the same horizontal flow (e.g. the same table column) constrain each other, and each overlapping pair
-// splits at one shared boundary (the upper line's bottom, so descenders stay whole), so neighbouring highlights never
-// overlap and never leave a gap.
+// The band hugs the ink of the glyphs actually on the page, measured per line font around the line's baseline, so
+// it fits any script (Latin accents, Greek, CJK, Thai, ...) without per-language rules. When that ink is taller
+// than the layout's line step (tight line spacing), the band is one step tall and centred on the ink, so stacked
+// lines tile without overlapping. Paragraph, margin and padding gaps are never part of a line's step, so they stay
+// unhighlighted.
 namespace clippingLineBand {
 
 struct Band {
@@ -25,111 +27,109 @@ struct Band {
   int bottom = 0;  // exclusive
 };
 
+// Glyph extent around a baseline: pixels above it and below it.
+struct Ink {
+  int above = INT_MIN;
+  int below = INT_MIN;
+  bool empty() const { return above == INT_MIN; }
+};
+
+// Per-font ink of one page. Fixed capacity (no heap); fonts beyond it fall back to font metrics.
+class PageInk {
+ public:
+  static constexpr size_t MAX_FONTS = 8;
+
+  const Ink* find(const int font) const {
+    for (size_t i = 0; i < count_; ++i) {
+      if (entries_[i].font == font) return &entries_[i].ink;
+    }
+    return nullptr;
+  }
+
+  // glyphTop/glyphBottom: y of the glyph's top and bottom edge, upwards from the baseline.
+  void add(const int font, const int glyphTop, const int glyphBottom) {
+    Ink* ink = nullptr;
+    for (size_t i = 0; i < count_ && !ink; ++i) {
+      if (entries_[i].font == font) ink = &entries_[i].ink;
+    }
+    if (!ink) {
+      if (count_ == MAX_FONTS) return;
+      entries_[count_].font = font;
+      ink = &entries_[count_++].ink;
+    }
+    ink->above = std::max(ink->above, glyphTop);
+    ink->below = std::max(ink->below, -glyphBottom);
+  }
+
+ private:
+  struct Entry {
+    int font = 0;
+    Ink ink;
+  };
+  Entry entries_[MAX_FONTS];
+  size_t count_ = 0;
+};
+
+// The font that sets the line's step: a CSS font-size override, else the section font.
 template <typename Renderer, typename Block>
-int wordFont(const Renderer& renderer, const int fontId, const Block& block, const uint16_t i) {
-  return Block::renderFontId(renderer, block.wordFontId(i, fontId), fontId);
+int lineFont(const Renderer& renderer, const int fontId, const Block& block) {
+  return Block::renderFontId(renderer, block.blockFontId(fontId), fontId);
 }
 
-// Glyph band of word i, before any neighbour constraint.
-template <typename Renderer, typename Line>
-Band wordBand(const Renderer& renderer, const int fontId, const Line& line, const uint16_t i) {
-  const auto& block = *line.getBlock();
-  using Block = std::remove_cv_t<std::remove_reference_t<decltype(block)>>;
-  const int lineFont = Block::renderFontId(renderer, block.blockFontId(fontId), fontId);
-  const int font = wordFont(renderer, fontId, block, i);
-  const int top =
-      line.yPos + block.getRubyShift(renderer.getFontAscenderSize(lineFont)) + block.wordYOffset(renderer, fontId, i);
-  // The font ascender includes empty headroom above the tallest glyphs; skip an eighth of it so lines look alike
-  // whether or not a neighbour overlaps them, while the descender stays whole for g, j, p, q, y.
-  const int ascender = renderer.getFontAscenderSize(font);
-  return {top + ascender / 8, top + ascender + std::abs(renderer.getFontDescenderSize(font))};
-}
-
-// Union of the visible words' bands; empty (top == bottom) for a line without visible words, so whitespace-only
-// lines never constrain visible text.
-template <typename Renderer, typename Line>
-Band naturalBand(const Renderer& renderer, const int fontId, const Line& line) {
-  const auto* block = line.getBlock();
-  if (!block || !block->valid() || block->wordCount() == 0) return {line.yPos, line.yPos};
-  Band band{INT_MAX, INT_MIN};
-  for (uint16_t i = 0; i < block->wordCount(); ++i) {
-    if (!clippingText::hasVisibleText(block->wordText(i))) continue;
-    const Band word = wordBand(renderer, fontId, line, i);
-    band.top = std::min(band.top, word.top);
-    band.bottom = std::max(band.bottom, word.bottom);
-  }
-  if (band.bottom <= band.top) return {line.yPos, line.yPos};
-  return band;
-}
-
-// Horizontal extent [left, right) of the line's words, in page coordinates.
-template <typename Renderer, typename Line>
-std::pair<int, int> horizontalExtent(const Renderer& renderer, const int fontId, const Line& line) {
-  const auto& block = *line.getBlock();
-  uint16_t last = 0;
-  int left = INT_MAX;
-  for (uint16_t i = 0; i < block.wordCount(); ++i) {
-    left = std::min(left, static_cast<int>(block.wordXpos(i)));
-    if (block.wordXpos(i) >= block.wordXpos(last)) last = i;
-  }
-  // Measure only the rightmost-starting word; it determines the right edge.
-  const int width = renderer.getTextAdvanceX(wordFont(renderer, fontId, block, last), block.wordText(last),
-                                             block.wordStyle(last), block.getBlockStyle().characterSpacing);
-  const int start = line.xPos + block.wordXpos(last);
-  return {line.xPos + left, std::max(start + 1, start + width)};
-}
-
-// The line's band after sharing a boundary with every overlapping line in the same horizontal flow.
-template <typename Renderer, typename PageT, typename Line>
-Band lineBand(const Renderer& renderer, const int fontId, const PageT& page, const Line& line) {
-  const Band natural = naturalBand(renderer, fontId, line);
-  Band band = natural;
-  if (natural.bottom <= natural.top) return band;
-  bool hasExtent = false;
-  std::pair<int, int> extent{0, 0};
-  bool selfSeen = false;
+// Measures the ink of every visible glyph on the page, keyed by its line's font. Superscript/subscript words are
+// skipped: they are scaled and shifted, and the line's band is sized by its regular text.
+template <typename Renderer, typename PageT>
+PageInk measurePage(const Renderer& renderer, const int fontId, const PageT& page) {
+  PageInk ink;
   for (const auto& element : page.elements) {
     if (element->getTag() != TAG_PageLine) continue;
-    const auto& other = static_cast<const Line&>(*element);
-    if (&other == &line) {
-      selfSeen = true;
-      continue;
-    }
-    const auto* block = other.getBlock();
-    if (!block || !block->valid() || block->wordCount() == 0) continue;
-    const Band neighbour = naturalBand(renderer, fontId, other);
-    if (neighbour.bottom <= neighbour.top) continue;  // no visible words
-    if (neighbour.bottom <= natural.top || neighbour.top >= natural.bottom) continue;  // no vertical overlap
-    if (!hasExtent) {
-      extent = horizontalExtent(renderer, fontId, line);
-      hasExtent = true;
-    }
-    const auto otherExtent = horizontalExtent(renderer, fontId, other);
-    if (otherExtent.second <= extent.first || otherExtent.first >= extent.second) continue;  // other column
-    // Order by band top; ties fall back to page order so both lines agree on which one is above.
-    const bool otherAbove = neighbour.top < natural.top || (neighbour.top == natural.top && !selfSeen);
-    const Band& upper = otherAbove ? neighbour : natural;
-    const Band& lower = otherAbove ? natural : neighbour;
-    // Keep the upper line's descenders whole; the lower line only gives up its empty headroom. Same value from both
-    // sides of the pair.
-    const int boundary = std::clamp(upper.bottom, lower.top, std::max(lower.top, lower.bottom - 1));
-    if (otherAbove) {
-      band.top = std::max(band.top, boundary);
-    } else {
-      band.bottom = std::min(band.bottom, boundary);
+    const auto* block = static_cast<const PageLine&>(*element).getBlock();
+    if (!block || !block->valid()) continue;
+    using Block = std::remove_cv_t<std::remove_reference_t<decltype(*block)>>;
+    const int font = lineFont(renderer, fontId, *block);
+    for (uint16_t i = 0; i < block->wordCount(); ++i) {
+      const char* text = block->wordText(i);
+      if (!clippingText::hasVisibleText(text)) continue;
+      const auto style = static_cast<uint8_t>(block->wordStyle(i));
+      if (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) continue;
+      const int wordFont = Block::renderFontId(renderer, block->wordFontId(i, fontId), fontId);
+      const auto glyphStyle = static_cast<EpdFontFamily::Style>(style & 0x03);
+      const auto* cursor = reinterpret_cast<const unsigned char*>(text);
+      while (const uint32_t cp = utf8NextCodepoint(&cursor)) {
+        int top = 0;
+        int bottom = 0;
+        if (renderer.getCodepointInk(wordFont, cp, glyphStyle, top, bottom)) ink.add(font, top, bottom);
+      }
     }
   }
-  if (band.bottom <= band.top) band.bottom = band.top + 1;  // keep fully-covered lines tappable
-  return band;
+  return ink;
 }
 
-// Word i's highlight band: its glyph band clipped to the line's shared band.
+// The line's highlight band. lineCompression is the reader's line spacing, as used by the layout.
 template <typename Renderer, typename Line>
-Band clipWord(const Renderer& renderer, const int fontId, const Line& line, const uint16_t i, const Band& bounds) {
-  const Band word = wordBand(renderer, fontId, line, i);
-  Band clipped{std::max(word.top, bounds.top), std::min(word.bottom, bounds.bottom)};
-  if (clipped.bottom <= clipped.top) clipped = {bounds.top, bounds.top + 1};
-  return clipped;
+Band lineBand(const Renderer& renderer, const int fontId, const Line& line, const float lineCompression,
+              const PageInk& pageInk) {
+  const auto* block = line.getBlock();
+  if (!block || !block->valid()) return {line.yPos, line.yPos + 1};
+  const int font = lineFont(renderer, fontId, *block);
+
+  // Same baseline as TextBlock::render and same step as ChapterHtmlSlimParser::addLineToPage.
+  const int ascent = block->lineAscent(renderer, fontId);
+  const int baseline = line.yPos + block->getRubyShift(ascent) + ascent;
+  const int step = renderer.getLineHeight(font, lineCompression) + block->extraAscent(renderer, fontId) +
+                   block->getRubyShift(renderer.getFontAscenderSize(font));
+
+  Ink ink;
+  if (const Ink* measured = pageInk.find(font)) ink = *measured;
+  if (ink.empty()) {
+    // Nothing measurable (e.g. glyphs unavailable): fall back to the font's metrics.
+    ink = {renderer.getFontAscenderSize(font), std::abs(renderer.getFontDescenderSize(font))};
+  }
+  const int inkHeight = std::max(1, ink.above + ink.below);
+  const int height = std::max(1, step > 0 ? std::min(inkHeight, step) : inkHeight);
+  // Centre a step-limited band on the ink, so tight spacing trims top and bottom evenly.
+  const int top = baseline - ink.above + (inkHeight - height) / 2;
+  return {top, top + height};
 }
 
 }  // namespace clippingLineBand
