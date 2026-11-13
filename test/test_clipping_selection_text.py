@@ -131,7 +131,7 @@ struct Renderer {
   using LaidOutText = ::LaidOutText;
   enum RenderMode { BW, GRAYSCALE_MSB };
   enum class DitherMode { Replace, PreserveInk };
-  struct Draw { int x, width, tracking; };
+  struct Draw { int x, width, tracking, y = 0, height = 0; };
   mutable std::vector<Draw> draws;
   mutable std::vector<Draw> fills;
   mutable std::set<std::pair<int, int>> ink;
@@ -211,7 +211,7 @@ struct Renderer {
   }
   void fillRectDither(int x, int y, int width, int height, Color,
                       DitherMode mode = DitherMode::Replace) const {
-    fills.push_back({x, width, 0});
+    fills.push_back({x, width, 0, y, height});
     if (mode == DitherMode::Replace) clearInk(x, y, width, height);
     for (int py = y; py < y + height; ++py)
       for (int px = x; px < x + width; ++px)
@@ -589,6 +589,9 @@ int main() {
     assert(activity.renderer.fills.size() == 1);
     const int width = activity.words[0].width;
     assert(activity.renderer.fills[0].width == width);
+    // Saved highlights and live selection share one box: same top and height.
+    assert(activity.renderer.fills[0].y == activity.words[0].y);
+    assert(activity.renderer.fills[0].height == activity.words[0].height);
     assert(reader.clippingAtPoint(*activity.pages[0], width - 1, 8) == 0);
     assert(reader.clippingAtPoint(*activity.pages[0], width, 8) == -1);
   }
