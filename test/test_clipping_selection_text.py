@@ -291,7 +291,7 @@ bool selectionLowMemory(const int first, const int last) {
 """ + memory_guard + r"""
   return lowMemory;
 }
-""" + clean_word + r"""
+""" + clean_word + "\n" + word_rect_helpers + r"""
 struct ClipSelectionActivity {
 """ + word_box + action_helpers + r"""
   std::unique_ptr<WordBox[]> words = makeUniqueNoThrow<WordBox[]>(240);
@@ -335,7 +335,7 @@ struct EpubReaderActivity {
   int clippingAtPoint(const Page&, int, int) const;
   void drawClippingHighlights(const Page&, int, int, int) const;
 };
-""" + word_rect_helpers + saved_hit + saved_draw + r"""
+""" + saved_hit + saved_draw + r"""
 int loadLine(ClipSelectionActivity& activity, const std::vector<std::string>& logical,
              bool rtl, int first = 0, uint32_t offset = 0, uint16_t row = 0) {
   std::vector<uint16_t> visual;
