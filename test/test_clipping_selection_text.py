@@ -158,6 +158,7 @@ struct Renderer {
   bool isSdCardFont(int) const { return sdFont; }
   int getFontAscenderSize(int) const { return 12; }
   int getLineHeight(int) const { return 16; }
+  int getFontGlyphHeight(int) const { return 14; }
   RenderMode getRenderMode() const { return BW; }
   void getOrientedViewableTRBL(int* top, int* right, int* bottom, int* left) const {
     *top = *right = *bottom = *left = 0;
@@ -442,6 +443,8 @@ int main() {
     page->elements.push_back(std::move(line));
     decorated.pages.push_back(std::move(page));
     assert(decorated.extractWords());
+    // Selection box hugs the glyphs (ascender + descender), not the full line advance.
+    assert(decorated.words[0].height == decorated.renderer.getFontGlyphHeight(0));
     const auto originalInk = decorated.renderer.ink;
     decorated.rangeStart = 0;
     decorated.selected = 1;

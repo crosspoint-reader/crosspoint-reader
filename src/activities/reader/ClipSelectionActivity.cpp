@@ -206,7 +206,7 @@ bool ClipSelectionActivity::extractWords() {
         word.x = static_cast<int16_t>(marginLeft + line.xPos + block->wordXpos(i));
         word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i));
         word.width = static_cast<int16_t>(width);
-        word.height = static_cast<int16_t>(renderer.getLineHeight(wordFont));
+        word.height = static_cast<int16_t>(renderer.getFontGlyphHeight(wordFont));
         word.row = rowCount;
         word.pageOffset = static_cast<uint8_t>(pageOffset);
         word.pageWordIndex = pageWordIndex++;
