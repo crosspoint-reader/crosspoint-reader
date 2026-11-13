@@ -70,11 +70,10 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
   unsigned long autoReturnAt = 0;
   static constexpr unsigned long AUTO_RETURN_DELAY_MS = 1200;
 
-  // Tracks whether this session activated WiFi. Set in onEnter past the credentials
-  // check; checked in onExit to decide whether to silent-reboot. Can't rely on
-  // WiFi.getMode() because performUpload() calls esp_wifi_stop() on the way out,
-  // which makes WiFi.getMode() return WIFI_MODE_NULL.
+  // wifiActivated: set in onEnter past the credentials check; onExit uses it to decide whether to silent-reboot.
+  // wifiStopped: performUpload() stopped Wi-Fi with esp_wifi_stop(), which WiFi.getMode() does not reflect.
   bool wifiActivated = false;
+  bool wifiStopped = false;
 
   // Reuses the KOReader WiFi connect/drain/return flow without a server: flush
   // plugged-outbox events instead of syncing progress.
