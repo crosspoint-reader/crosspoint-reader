@@ -480,6 +480,7 @@ void CrossPointWebServerActivity::render(RenderLock&&) {
 
 void CrossPointWebServerActivity::renderServerRunning() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto pageWidth = renderer.getScreenWidth();
 
   if (!isApMode) {
     renderWifiIndicator(metrics.topPadding + metrics.headerHeight);
