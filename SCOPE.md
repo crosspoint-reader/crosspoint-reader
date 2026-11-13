@@ -1,20 +1,20 @@
-# Project Vision & Scope: CrossPoint Reader
+# Project Vision & Scope: CrossWriter
 
-The goal of CrossPoint Reader is to create an efficient, open-source reading experience for ESP32-based e-reader devices. Xteink hardware (X3, X4) is where the project started and remains a primary target, but CrossPoint is explicitly broadening to support the wider ecosystem of small ESP32 e-ink readers. We believe a dedicated e-reader should do one thing exceptionally well: **facilitate focused reading.**
+CrossWriter is a downstream fork of CrossPoint Reader for focused reading and writing on ESP32-based e-ink devices. It retains CrossPoint's resource and portability constraints while exploring a BLE keyboard and a simple SD-card text editor.
 
 ## 1. Core Mission
 
-To provide a lightweight, high-performance firmware that maximizes the potential of ESP32-based e-reader hardware, prioritizing legibility, performance, and usability over "swiss-army-knife" functionality.
+Provide lightweight firmware for reading and distraction-free writing, prioritizing legibility, reliability, and usability over "swiss-army-knife" functionality.
 
-CrossPoint is **not** a kitchen-sink firmware, and it is **not** Xteink-only. We want clean, maintainable code that the community can build on, and that runs across the range of ESP32 e-reader devices (ESP32-C3, ESP32-S3, and adjacent variants). Every accepted change should make that goal easier, not harder. Device-specific code should live behind the HAL / SDK boundary so the reader core stays portable.
+CrossWriter is **not** a kitchen-sink firmware, and it is **not** Xteink-only. We want clean, maintainable code that can run across ESP32 e-reader devices (ESP32-C3, ESP32-S3, and adjacent variants). Device-specific code should live behind the HAL / SDK boundary so the core stays portable.
 
 ## 2. Guiding Principle: Fill Gaps the Stock Firmware Leaves
 
-CrossPoint exists to do the things the stock firmware does poorly or not at all. New work is evaluated against that delineator:
+CrossWriter builds on CrossPoint while pursuing a different writing-focused goal. New work is evaluated against that goal:
 
 * **Does the stock firmware already do this well?** We should hit that bar or surpass it 
-* **Is another popular CrossPoint fork already solving this well?** If yes, we generally defer to that fork if it's not part of the core reading experience. e.g. stats
-* **Does this directly improve the reading experience or the firmware's long-term maintainability?** If no, it is out of scope.
+* **Does an existing mechanism already solve this well?** Reuse it where practical instead of adding another implementation.
+* **Does this directly improve reading, focused writing, or the firmware's long-term maintainability?** If no, it is out of scope.
 
 ## 3. Current Focus
 
@@ -26,6 +26,7 @@ During this period, the priorities are:
 * **Flash footprint:** Trimming binary size to leave room for additional device targets and features. 
 * **Code cleanup:** Refactoring, removing dead code, tightening abstractions, and improving readability. 
 * **Reading experience:** EPUB parsing and rendering, typography, hyphenation, line spacing, font handling, and legibility improvements.
+* **Writing experience:** BLE keyboard input and a simple text editor with SD-card storage, subject to device resource constraints.
 
 ### Temporarily Closed Areas
 
@@ -40,12 +41,13 @@ If you are unsure whether your idea falls into one of these categories, open a D
 
 ### In-Scope
 
-*Features that directly improve the core reading experience or the firmware's maintainability.*
+*Features that directly improve reading, focused writing, or the firmware's maintainability.*
 
 * **EPUB Rendering & Optimization:** Improvements to the rendering engine, CSS/image handling, and parsing performance. 
 * **Typography & Legibility:** Custom font support, hyphenation, line and paragraph spacing, margins. 
 * **E-Ink Driver Refinement:** Reducing full-screen flashes (ghosting management) and improving general rendering. 
 * **Reading UX:** Bookmarks, progress tracking, button mapping, page navigation, and other in-reader interactions. 
+* **Focused Writing:** BLE keyboard input and editing plain-text files on the SD card.
 * **Library Management:** Simple, intuitive ways to organize and navigate a local book collection. 
 * **Memory, Flash, and Code Quality:** Refactors and cleanups that reduce resource use or improve maintainability, even without a user-visible feature.
 
@@ -53,12 +55,11 @@ If you are unsure whether your idea falls into one of these categories, open a D
 
 *Rejected because they compromise the device's stability, maintainability, or core mission.*
 
-* **Interactive Apps:** No notepads, calculators, or games. These belong in other forks and are not part of CrossPoint's focus. 
-* **Writing / Authoring Tools:** No typed notes, journals, or editors. Input hardware and RAM are wrong for this, and other forks already explore this space. 
+* **Unrelated Interactive Apps:** Calculators and games do not support the reading or writing mission.
 * **Active Connectivity:** No RSS readers, news aggregators, or web browsers. Background Wi-Fi drains the battery and complicates the single-core CPU. 
 * **PDF Rendering:** PDFs are fixed-layout documents, so rendering them requires displaying pages as images rather than reflowable text, resulting in constant panning and zooming that makes for a poor reading experience on e-ink. Out of scope on the current hardware class.
 
-### CrossPoint as a downstream foundation
+### CrossPoint as an upstream foundation
 
 CrossPoint is also used as a foundation for downstream forks with different
 product goals. Supporting that ecosystem does not expand CrossPoint's own
@@ -72,7 +73,9 @@ scope. If a reusable primitive cannot be cleanly separated from the downstream
 feature that needs it, that work belongs in the downstream fork unless
 CrossPoint independently chooses to adopt it.
 
-## 5. Calls to Action
+## 5. Upstream Calls to Action
+
+The following describes CrossPoint Reader's upstream priorities, not CrossWriter commitments.
 
 These are the areas where contributor help is most valuable right now. If you want to take one of these on, open a Discussion or issue first so we can coordinate.
 
@@ -94,7 +97,7 @@ We want help cataloguing things the stock firmware (and other popular CrossPoint
 
 If you can read or use the device in one of these languages, your feedback (even without code) is genuinely useful. Open a Discussion with concrete examples (screenshots, sample EPUBs, expected vs actual behavior) and we will prioritize from there.
 
-## 6. Funding and Contributor Sustainability
+## 6. Upstream Funding and Contributor Sustainability
 
 CrossPoint uses [Royalty.dev](https://royalty.dev) (yes, a product built by [@itsthisjustin](https://github.com/itsthisjustin)) to fund contributors. There has been some tension in the community around this, so the intent is being clarified here directly.
 

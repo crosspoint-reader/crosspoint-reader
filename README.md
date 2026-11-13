@@ -1,4 +1,8 @@
-# CrossPoint Reader
+# CrossWriter
+
+CrossWriter is a downstream fork of CrossPoint Reader for focused reading and writing. BLE keyboard support and a simple SD-card text editor are planned; they are not yet available. See the [fork scope](SCOPE.md).
+
+The information below describes the inherited CrossPoint Reader firmware. Official CrossPoint releases and services are upstream resources, not CrossWriter releases.
 
 [![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
 
@@ -53,7 +57,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **Localization**: 34 UI languages and counting, including CJK font fallback and RTL support.
 
-- **SD card plugins**: install plugins for book catalogs, downloads, and tools in the device's web interface. Enable Plugins under Settings → Connectivity to show them on Home. On-device plugins use existing firmware screens and operations. JavaScript runs in a browser on your phone or computer, and its page must stay open while it works. Plugins follow [CrossPoint's reading-focused scope](SCOPE.md#out-of-scope). See the [plugin guide](docs/sd-plugins.md).
+- **SD card plugins**: install plugins for book catalogs, downloads, and tools in the device's web interface. Enable Plugins under Settings → Connectivity to show them on Home. On-device plugins use existing firmware screens and operations. JavaScript runs in a browser on your phone or computer, and its page must stay open while it works. See the [plugin guide](docs/sd-plugins.md).
 
 ### Coming soon:
 

@@ -1,22 +1,20 @@
 ---
 name: scope-discipline
-description: Dedicated e-reader feature scope. Use when adding features, activities, libraries, settings, dependencies, or expanding the firmware surface.
+description: Focused reading and writing feature scope. Use when adding features, activities, libraries, settings, dependencies, or expanding the firmware surface.
 ---
 
 # Scope Discipline
 
-The mission: do one thing exceptionally well, focused reading on constrained
-hardware. `SCOPE.md` is the source of truth for what is in and out. Read it
+The mission: focused reading and writing on constrained hardware.
+`SCOPE.md` is the source of truth for what is in and out. Read it
 before adding surface. This is the gate to run before writing a new feature.
 
 ## The gate
 
 Before adding a feature, activity, lib, setting, or dependency, answer in order:
 
-1. **Is it in `SCOPE.md`?** Explicitly out: interactive apps (notepad,
-   calculator, games), active connectivity (RSS, news, browser), media/audio
-   playback. If it is out, say so and stop.
-2. **Does it materially improve focused reading?** If the benefit is
+1. **Is it in `SCOPE.md`?** If it is out, say so and stop.
+2. **Does it materially improve focused reading or writing?** If the benefit is
    "nice to have" or serves a different use case, it is out. This is not a PDA.
 3. **What resources does it need?** Account for steady-state and peak RAM,
    the largest required heap block, Flash/OTA slot headroom, and SD storage.
@@ -33,7 +31,7 @@ Before adding a feature, activity, lib, setting, or dependency, answer in order:
    Keep network ownership within the defined flow, including its child screens.
    Release it when that flow ends.
 6. **What must the human maintain?** Explain the cost of new dependencies,
-   settings, and failure paths alongside the concrete reading benefit.
+   settings, and failure paths alongside the concrete reading or writing benefit.
 
 If a request fails the gate, push back with the specific reason and the
 `SCOPE.md` basis, and offer the in-scope alternative. Make the call and say why;
@@ -67,8 +65,8 @@ choice; otherwise pick a sensible fixed default.
 ## Self-review
 
 - [ ] Checked against `SCOPE.md`; not on the out-of-scope list.
-- [ ] Stated the concrete reading benefit, not a generic "useful."
-- [ ] Accounted for RAM, largest-block, Flash/OTA, storage, power, and maintenance costs and explained why the reading benefit wins.
+- [ ] Stated the concrete reading or writing benefit, not a generic "useful."
+- [ ] Accounted for RAM, largest-block, Flash/OTA, storage, power, and maintenance costs and explained why the benefit wins.
 - [ ] Labeled estimates, measurements, and pending device checks.
 - [ ] Defined network/task lifetimes, retry limits, sleep behavior, and failure/exit cleanup.
 - [ ] Checked whether an existing activity/setting/doc already covers it.
