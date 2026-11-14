@@ -23,7 +23,9 @@ bool isTransparentMark(uint32_t cp);
 
 // paragraphLevel: -1 = auto-detect, 0 = LTR, 1 = RTL
 // On failure (including workspace OOM), returns false and leaves out unchanged.
-bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel = -1);
+// Optional visualSources maps each emitted codepoint to its source codepoint index.
+bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel = -1,
+                     std::vector<uint16_t>* visualSources = nullptr);
 
 // Returns false with empty visualOrder when no order is produced, including OOM.
 bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragraphIsRtl,

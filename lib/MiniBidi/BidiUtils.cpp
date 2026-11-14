@@ -105,7 +105,7 @@ bool isTransparentMark(const uint32_t cp) {
   return cp >= 0x0591 && bidi_class(cp) == NSM;
 }
 
-bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
+bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel, std::vector<uint16_t>* visualSources) {
   if (!utf8 || !*utf8) return false;
   const std::lock_guard<std::mutex> lock(bidiMutex);
 
@@ -157,6 +157,10 @@ bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
 
   out.clear();
   out.reserve(std::strlen(utf8));
+  if (visualSources) {
+    visualSources->clear();
+    visualSources->reserve(count);
+  }
   // Lam-Alef collapse sentinel and zero-width joining formatters have done
   // their job during shaping and have no glyphs to render.
   const auto filtered = [](const uint32_t cp) { return cp == LIGATURE_PLACEHOLDER || cp == 0x200C || cp == 0x200D; };
@@ -169,11 +173,16 @@ bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
       if (!isTransparentMark(shaped[end].wc)) matched = shaped[end].wc == U"הוהי"[matched] ? matched + 1 : 5;
     if (matched == 4) {
       out += "'ה";
+      if (visualSources) {
+        visualSources->push_back(shaped[i].index);
+        visualSources->push_back(shaped[i].index);
+      }
       i = end - 1;
       continue;
     }
     if (!isTransparentMark(cp)) {
       utf8AppendCodepoint(cp, out);
+      if (visualSources) visualSources->push_back(shaped[i].index);
       continue;
     }
     // UAX#9 rule L3: reversing an RTL run leaves combining marks *before*
@@ -185,14 +194,21 @@ bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
     while (j < count && (filtered(shaped[j].wc) || isTransparentMark(shaped[j].wc))) j++;
     if (j < count && shaped[j].index < shaped[i].index) {
       utf8AppendCodepoint(shaped[j].wc, out);
+      if (visualSources) visualSources->push_back(shaped[j].index);
       for (int k = j - 1; k >= i; k--) {
-        if (isTransparentMark(shaped[k].wc)) utf8AppendCodepoint(shaped[k].wc, out);
+        if (isTransparentMark(shaped[k].wc)) {
+          utf8AppendCodepoint(shaped[k].wc, out);
+          if (visualSources) visualSources->push_back(shaped[k].index);
+        }
       }
       i = j;  // base already emitted
     } else {
       // Unreversed (or trailing, base-less) marks already follow their base.
       for (int k = i; k < j; k++) {
-        if (isTransparentMark(shaped[k].wc)) utf8AppendCodepoint(shaped[k].wc, out);
+        if (isTransparentMark(shaped[k].wc)) {
+          utf8AppendCodepoint(shaped[k].wc, out);
+          if (visualSources) visualSources->push_back(shaped[k].index);
+        }
       }
       i = j - 1;
     }

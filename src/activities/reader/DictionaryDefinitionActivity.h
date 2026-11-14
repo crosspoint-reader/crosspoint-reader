@@ -42,6 +42,8 @@ class DictionaryDefinitionActivity final : public Activity {
     uint32_t start;
     uint16_t len;
     bool bold;
+    bool wraps;
+    bool paragraphRtl;
   };
 
   // Usable body-text area between the header and the button hints.
