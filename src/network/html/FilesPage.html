@@ -1427,7 +1427,7 @@
       let fileTableContent = '<table class="file-table"><thead>';
 
 				// Add select-all checkbox column
-      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th>Name</th><th>Type</th><th>Size</th><th>Modified</th><th class="actions-col">Actions</th></tr></thead><tbody>';
+      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th>Name</th><th>Type</th><th>Size</th><th>Created</th><th>Modified</th><th class="actions-col">Actions</th></tr></thead><tbody>';
 
 
       const sortedFiles = files.sort((a, b) => {
@@ -1451,6 +1451,7 @@
           fileTableContent += `<td><span class="file-icon"><svg class="icon"><use href="/assets/icons.svg#folder"></use></svg></span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a></td>`;
           fileTableContent += '<td>FOLDER</td>';
           fileTableContent += '<td>-</td>';
+          fileTableContent += `<td>${formatModified(file.created)}</td>`;
           fileTableContent += `<td>${formatModified(file.modified)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(folderPath)}" data-folder="true" title="Delete folder" aria-label="Delete folder"><svg class="icon"><use href="/assets/icons.svg#trash"></use></svg></button></div></td>`;
           fileTableContent += '</tr>';
@@ -1472,6 +1473,7 @@
           fileTableContent += '</td>';
           fileTableContent += file.isEpub ? '<td>EPUB</td>' : `<td>${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
+          fileTableContent += `<td>${formatModified(file.created)}</td>`;
           fileTableContent += `<td>${formatModified(file.modified)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
           fileTableContent += `<button class="move-btn" data-action="move" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" title="Move file" aria-label="Move file"><svg class="icon"><use href="/assets/icons.svg#move"></use></svg></button>`;
