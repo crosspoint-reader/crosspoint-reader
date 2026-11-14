@@ -9,6 +9,7 @@
 
 #include "activities/util/ConfirmationActivity.h"
 #include "components/CatalogScreens.h"
+#include "network/ExternalServices.h"
 #include "util/PluginLocations.h"
 
 namespace {
@@ -31,6 +32,10 @@ bool PluginHubInstallActivity::isAvailable() {
 
 void PluginHubInstallActivity::onEnter() {
   CatalogActivity::onEnter();
+  if (!externalservices::enabled()) {
+    fail(StrId::STR_EXTERNAL_SERVICES_DISABLED);
+    return;
+  }
 
   if (!showConfirmation) {
     state = State::CHECK_WIFI;

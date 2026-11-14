@@ -39,6 +39,7 @@
 
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
+#include "ExternalServices.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
 #include "ProtectedPaths.h"
@@ -1690,6 +1691,7 @@ void CrossPointWebServer::handlePostSettings() {
   std::vector<DictionaryEntry> dictionaries;
   DictionaryRegistry::discover(dictionaries);
   const auto& settings = getSettingsList(&sdFontSystem.registry(), &dictionaries);
+  const bool externalServicesWasEnabled = externalservices::enabled();
   int applied = 0;
 
   for (const auto& s : settings) {
@@ -1745,6 +1747,7 @@ void CrossPointWebServer::handlePostSettings() {
         break;
     }
   }
+  if (externalServicesWasEnabled != externalservices::enabled()) externalservices::settingChanged();
 
   SETTINGS.saveToFile();
 

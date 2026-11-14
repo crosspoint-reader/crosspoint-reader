@@ -15,6 +15,7 @@
 #include "PluginHttp.h"
 #include "PluginLocations.h"
 #include "components/UITheme.h"
+#include "network/ExternalServices.h"
 #include "network/ProtectedPaths.h"
 
 namespace {
@@ -152,6 +153,7 @@ uint8_t subscriptionMask(const char* plugin) {
 }
 
 bool wantsConnectAny() {
+  if (!externalservices::enabled()) return false;
   for (const auto& sub : subscribers) {
     if (sub.name[0] == '\0' || sub.connectMask == 0) continue;
     std::string raw;

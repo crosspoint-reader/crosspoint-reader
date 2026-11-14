@@ -17,6 +17,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <SecureClient.h>
 #include <TrustedTime.h>
 #include <VectorFontSupport.h>
 #include <WiFi.h>
@@ -45,6 +46,7 @@
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/ExternalServices.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
@@ -648,6 +650,9 @@ void setup() {
     SETTINGS.readerMenuStyle = CrossPointSettings::READER_MENU_TOOLBAR;
   }
   SETTINGS.loadFromFile();
+  // SecureNet resolves once through this policy, then connects the exact
+  // validated address while retaining the original hostname for Host/SNI.
+  freeink::setDestinationResolver(externalservices::resolveDestination);
   // Push the saved timezone's POSIX rule into the clock (migrating the legacy
   // UTC-offset setting on first boot after the update).
   timezones::applyToClock();

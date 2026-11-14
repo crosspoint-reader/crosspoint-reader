@@ -192,6 +192,13 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   };
   forEachBaseSetting(visit);
 
+  // Privacy migration: an older settings file never implies consent to
+  // outbound services. Write the explicit default on the next safe resave.
+  if (doc["externalServicesEnabled"].isNull()) {
+    externalServicesEnabled = 0;
+    needsResave = true;
+  }
+
   // Keep landscape swapping opt-in when loading older settings.
   if (doc["sideButtonFollowOrientation"].isNull()) {
     sideButtonFollowOrientation = 0;

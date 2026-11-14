@@ -9,6 +9,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/ExternalServices.h"
 #include "network/OtaUpdater.h"
 
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
@@ -74,6 +75,12 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
 
 void OtaUpdateActivity::onEnter() {
   Activity::onEnter();
+  if (!externalservices::enabled()) {
+    state = FAILED;
+    failedDetail = tr(STR_EXTERNAL_SERVICES_DISABLED);
+    requestUpdate();
+    return;
+  }
 
   // Turn on WiFi immediately
   LOG_DBG("OTA", "Turning on WiFi...");

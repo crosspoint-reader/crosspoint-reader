@@ -197,6 +197,11 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
     emit(SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
                              "backShortToFileBrowser", StrId::STR_CAT_CONTROLS));
 
+  // Outbound service integrations are opt-in. Local transfer listeners stay
+  // available because they do not traverse the guarded client transports.
+  emit(SettingInfo::Toggle(StrId::STR_EXTERNAL_SERVICES, &CrossPointSettings::externalServicesEnabled,
+                           "externalServicesEnabled", StrId::STR_SETTINGS_NETWORK));
+
   // Persisted here; set from the Connectivity -> Plugins popup.
   emit(SettingInfo::Toggle(StrId::STR_PLUGINS, &CrossPointSettings::pluginsEnabled, "pluginsEnabled").withWebHidden());
   emit(SettingInfo::Toggle(StrId::STR_PLUGIN_HUB, &CrossPointSettings::pluginHubPromptHidden, "pluginHubPromptHidden")

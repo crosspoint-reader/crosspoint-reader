@@ -57,6 +57,7 @@
 #include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/ExternalServices.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
@@ -1543,8 +1544,12 @@ bool EpubReaderActivity::handleLoadFailure() {
   if (perr == "access expired") {
     msg = StrId::STR_LOAN_EXPIRED;
   } else if (perr == "loan date unverified") {
-    msg = StrId::STR_LOAN_TIME_UNVERIFIED;
-    offerSync = true;
+    if (externalservices::enabled()) {
+      msg = StrId::STR_LOAN_TIME_UNVERIFIED;
+      offerSync = true;
+    } else {
+      msg = StrId::STR_EXTERNAL_SERVICES_DISABLED;
+    }
   }
   const char* options[2] = {I18N.get(offerSync ? StrId::STR_CLOCK_SYNC_NOW : StrId::STR_OK_BUTTON),
                             I18N.get(StrId::STR_OK_BUTTON)};

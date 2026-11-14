@@ -17,7 +17,7 @@ class ClockSyncActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  enum State { SYNCING, SUCCESS, NO_WIFI, FAILED };
+  enum State { SYNCING, SUCCESS, NO_WIFI, FAILED, SERVICES_DISABLED };
   State state = SYNCING;
   char syncedTime[16] = {0};
   bool shouldTearDownWifiOnExit = false;

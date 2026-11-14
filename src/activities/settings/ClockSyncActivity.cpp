@@ -14,11 +14,18 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/ExternalServices.h"
 
 void ClockSyncActivity::onEnter() {
   Activity::onEnter();
   state = SYNCING;
   syncedTime[0] = '\0';
+
+  if (!externalservices::enabled()) {
+    state = SERVICES_DISABLED;
+    requestUpdate();
+    return;
+  }
 
   if (WiFi.status() == WL_CONNECTED) {
     requestUpdate();
@@ -134,6 +141,9 @@ void ClockSyncActivity::render(RenderLock&&) {
     case FAILED:
       renderer.drawCenteredText(UI_12_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_FAIL), true, EpdFontFamily::BOLD);
       renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, tr(STR_CHECK_SERIAL_OUTPUT));
+      break;
+    case SERVICES_DISABLED:
+      renderer.drawCenteredText(UI_10_FONT_ID, midY, tr(STR_EXTERNAL_SERVICES_DISABLED));
       break;
   }
 

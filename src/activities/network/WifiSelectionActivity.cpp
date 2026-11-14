@@ -16,6 +16,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/ExternalServices.h"
 #include "util/PluginEvents.h"
 
 namespace fui = freeink::ui;
@@ -522,16 +523,16 @@ void WifiSelectionActivity::checkConnectionStatus() {
     // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
     // drifts ~2 ppm so one sync is enough; users can force a re-sync from
     // Settings > System > Clock > Sync clock now.
-    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
+    if (externalservices::enabled() && halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
         SETTINGS.saveToFile();
       }
     }
 
-    // Every station join is a chance to snap the loan-clock floor to real
-    // time (non-blocking; see TrustedTime).
-    trustedtime::startSync();
+    // External time services are opt-in; joining Wi-Fi for local transfer must
+    // not start SNTP as a side effect.
+    if (externalservices::enabled()) trustedtime::startSync();
 
     // Save this as the last connected network - SD card operations need lock as
     // we use SPI for both

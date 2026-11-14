@@ -39,6 +39,7 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "network/ExternalServices.h"
 #include "util/PluginEvents.h"
 
 namespace fui = freeink::ui;
@@ -74,6 +75,7 @@ SettingsSection sectionFor(const SettingInfo& setting) {
   if (setting.category == StrId::STR_CAT_READER) return SettingsSection::Reader;
   if (setting.category == StrId::STR_CAT_CONTROLS) return SettingsSection::Controls;
   if (setting.category == StrId::STR_CAT_SYSTEM) return SettingsSection::General;
+  if (setting.category == StrId::STR_SETTINGS_NETWORK) return SettingsSection::Network;
   return SettingsSection::End;
 }
 
@@ -266,6 +268,10 @@ void SettingsActivity::activateIndex(const int index) {
 }
 
 void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr) {
+  if (valuePtr == &CrossPointSettings::externalServicesEnabled) {
+    externalservices::settingChanged();
+    return;
+  }
   // Theme changes take effect immediately, on this screen — reload the theme
   // and re-derive the app's tokens so the very next repaint is in the new look.
   if (valuePtr != &CrossPointSettings::uiTheme) {

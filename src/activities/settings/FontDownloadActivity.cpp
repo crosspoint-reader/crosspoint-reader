@@ -21,6 +21,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/ExternalServices.h"
 #include "network/HttpDownloader.h"
 
 namespace fui = freeink::ui;
@@ -72,6 +73,12 @@ void FontDownloadActivity::onBackButton() {
 
 void FontDownloadActivity::onEnter() {
   UiListActivity::onEnter();
+  if (!externalservices::enabled()) {
+    state_ = ERROR;
+    errorMessage_ = tr(STR_EXTERNAL_SERVICES_DISABLED);
+    requestUpdate();
+    return;
+  }
   WiFi.mode(WIFI_STA);
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
