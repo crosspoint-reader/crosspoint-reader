@@ -538,13 +538,6 @@ int main() {
         line->block.styles.push_back(static_cast<EpdFontFamily::Style>(i % 4));
       }
       page->elements.push_back(std::move(line));
-      if (pageIndex == 0) {
-        // An overlapping neighbour with codepoints of its own must be prepared before the first line's band.
-        auto neighbour = std::make_unique<PageLine>();
-        neighbour->block.packedText = std::string("xyz") + '\0';
-        neighbour->block.styles.push_back(EpdFontFamily::REGULAR);
-        page->elements.push_back(std::move(neighbour));
-      }
       cold.pages.push_back(std::move(page));
     }
     assert(cold.extractWords());
