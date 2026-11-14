@@ -33,7 +33,25 @@ HalStorage::HalStorage() {
 
 // begin() and ready() are only called from setup, no need to acquire mutex for them
 
-bool HalStorage::begin() { return SDCard.begin(); }
+// SdFat reads no clock on its own and stamps files with its compile-date default unless given a callback.
+// Falls back to that default while the system clock is unset (cold boot before RTC/NTP).
+static void fatDateTimeCallback(uint16_t* date, uint16_t* time) {
+  const time_t now = ::time(nullptr);
+  struct tm local;
+  // FAT only represents 1980-2107; an unset clock (~1970) falls through to the default.
+  if (localtime_r(&now, &local) && local.tm_year >= 80 && local.tm_year <= 207) {
+    *date = FS_DATE(local.tm_year + 1900, local.tm_mon + 1, local.tm_mday);
+    *time = FS_TIME(local.tm_hour, local.tm_min, local.tm_sec);
+    return;
+  }
+  *date = FS_DEFAULT_DATE;
+  *time = FS_DEFAULT_TIME;
+}
+
+bool HalStorage::begin() {
+  FsDateTime::setCallback(fatDateTimeCallback);
+  return SDCard.begin();
+}
 
 bool HalStorage::ready() const { return SDCard.ready(); }
 
@@ -264,6 +282,13 @@ uint32_t HalFile::modificationTime() {
   uint16_t date = 0;
   uint16_t time = 0;
   if (!impl || !impl->file.getModifyDateTime(&date, &time) || date == 0) return 0;
+  return (static_cast<uint32_t>(date) << 16) | time;
+}
+uint32_t HalFile::creationTime() {
+  HalStorage::StorageLock lock;
+  uint16_t date = 0;
+  uint16_t time = 0;
+  if (!impl || !impl->file.getCreateDateTime(&date, &time) || date == 0) return 0;
   return (static_cast<uint32_t>(date) << 16) | time;
 }
 bool HalFile::seek(size_t pos) { HAL_FILE_WRAPPED_CALL(seekSet, pos); }

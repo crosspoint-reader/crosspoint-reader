@@ -890,7 +890,7 @@ body.web-ui  {
     padding: 0;
   }
   .web-ui .file-table td:first-child  {
-    grid-row: 1 / 4;
+    grid-row: 1 / 5;
     align-self: start;
   }
   .web-ui .file-table td:nth-child(2)  {
@@ -904,6 +904,10 @@ body.web-ui  {
     text-align: right;
   }
   .web-ui .file-table td:nth-child(5)  {
+    grid-column: 2 / 4;
+    font-size: 0.85em;
+  }
+  .web-ui .file-table td:nth-child(6)  {
     grid-column: 2 / 4;
     width: auto;
     text-align: right;
