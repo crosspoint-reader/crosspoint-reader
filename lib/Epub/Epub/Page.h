@@ -2,6 +2,8 @@
 #include <HalStorage.h>
 
 #include <algorithm>
+#include <climits>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -169,6 +171,18 @@ class Page {
   void renderWithImagePlaceholders(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(HalFile& file) const;
   static std::unique_ptr<Page> deserialize(HalFile& file);
+
+  // Distance to the nearest other text line (either direction), or INT_MAX if none. Highlights cap
+  // their height to this so they never overlap neighbouring lines, including a paragraph's last line.
+  int linePitch(const int16_t yPos) const {
+    int pitch = INT_MAX;
+    for (const auto& element : elements) {
+      if (element->getTag() != TAG_PageLine) continue;
+      const int dy = std::abs(element->yPos - yPos);
+      if (dy > 0) pitch = std::min(pitch, dy);
+    }
+    return pitch;
+  }
 
   // Check if page contains any images (used to force full refresh)
   bool hasImages() const {
