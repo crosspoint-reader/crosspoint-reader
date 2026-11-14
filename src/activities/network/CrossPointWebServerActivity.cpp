@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <WiFi.h>
 
 #include <cstddef>
@@ -15,6 +16,9 @@
 #include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
 #include "activities/network/CalibreConnectActivity.h"
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+#include "LocalSendReceiveActivity.h"
+#endif
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/PluginEvents.h"
@@ -129,6 +133,13 @@ void CrossPointWebServerActivity::onExit() {
       WiFi.disconnect(false);
     }
     delay(30);
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+    // Touch devices can return from the lightweight receiver without rebooting.
+    if (networkMode == NetworkMode::LOCAL_SEND && mappedInput.hasTouch()) {
+      WiFi.mode(WIFI_OFF);
+      return;
+    }
+#endif
     silentRestart();
   }
 
@@ -152,6 +163,10 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     modeName = "Create Hotspot";
   } else if (mode == NetworkMode::OPDS_BROWSER) {
     modeName = "OPDS Browser";
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+  } else if (mode == NetworkMode::LOCAL_SEND) {
+    modeName = "Local Send";
+#endif
 #if FREEINK_CAP_USB_MSC
   } else if (mode == NetworkMode::USB_DRIVE) {
     modeName = "USB Drive";
@@ -197,7 +212,11 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     return;
   }
 
-  if (mode == NetworkMode::JOIN_NETWORK) {
+  if (mode == NetworkMode::JOIN_NETWORK
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+      || mode == NetworkMode::LOCAL_SEND
+#endif
+  ) {
     // STA mode - launch WiFi selection
     LOG_DBG("WEBACT", "Turning on WiFi (STA mode)...");
     WiFi.mode(WIFI_STA);
@@ -227,6 +246,18 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
   if (connected) {
     // Get connection info before exiting subactivity
     isApMode = false;
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+    if (networkMode == NetworkMode::LOCAL_SEND) {
+      auto activity = makeUniqueNoThrow<LocalSendReceiveActivity>(renderer, mappedInput);
+      if (!activity) {
+        LOG_ERR("LSEND", "Out of memory opening Local Send receiver");
+        onGoHome();
+        return;
+      }
+      startActivityForResult(std::move(activity), [this](const ActivityResult&) { onGoHome(); });
+      return;
+    }
+#endif
 
     // Start mDNS for hostname resolution
     restartMdns(AP_HOSTNAME, "WEBACT");

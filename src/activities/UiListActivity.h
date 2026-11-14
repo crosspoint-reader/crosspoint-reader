@@ -75,6 +75,8 @@ class UiListActivity : public Activity, protected UiAppHost {
   virtual void drawChrome();
   // Button hints, drawn after the app renders. Default: Back/Select/Up/Down.
   virtual void drawFooter();
+  // Optional modal overlay in the same e-ink frame as the list.
+  virtual void renderOverlay() {}
 
   // --- helpers ---------------------------------------------------------------
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the

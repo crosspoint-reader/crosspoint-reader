@@ -44,8 +44,9 @@ bool overlaySleepMode() {
 }
 }  // namespace
 
-BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
-    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
+BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path,
+                                     const bool returnToCaller)
+    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)), returnToCaller(returnToCaller) {}
 
 void BmpViewerActivity::loadSiblingImages() {
   siblingImages.clear();
@@ -460,7 +461,10 @@ void BmpViewerActivity::loop() {
   };
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    activityManager.goToFileBrowser(filePath);
+    if (returnToCaller)
+      finish();
+    else
+      activityManager.goToFileBrowser(filePath);
     return;
   }
 
