@@ -1431,7 +1431,7 @@
       let fileTableContent = '<table class="file-table"><thead>';
 
 				// Add select-all checkbox column
-      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th data-sort="name" onclick="sortRows('name')">Name</th><th>Type</th><th data-sort="size" onclick="sortRows('size')">Size</th><th data-sort="created" onclick="sortRows('created')">Created</th><th data-sort="modified" onclick="sortRows('modified')">Modified <span class="sort-arrow">\u25BC</span></th><th class="actions-col">Actions</th></tr></thead><tbody>';
+      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th data-sort="name" onclick="sortRows(\'name\')">Name</th><th>Type</th><th data-sort="size" onclick="sortRows(\'size\')">Size</th><th data-sort="created" onclick="sortRows(\'created\')">Created</th><th data-sort="modified" onclick="sortRows(\'modified\')">Modified <span class="sort-arrow">\u25BC</span></th><th class="actions-col">Actions</th></tr></thead><tbody>';
 
 
       sortState = { key: 'modified', desc: true };  // matches the initial order below
