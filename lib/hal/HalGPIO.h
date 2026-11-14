@@ -75,6 +75,13 @@ class HalGPIO {
   // Button input methods
   void update();
   bool isPressed(uint8_t buttonIndex) const;
+  bool isPowerButtonPhysicallyPressed() const {
+#if CROSSPOINT_EMULATED == 0
+    return inputMgr.isPowerButtonPhysicallyPressed();
+#else
+    return isPressed(BTN_POWER);
+#endif
+  }
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;

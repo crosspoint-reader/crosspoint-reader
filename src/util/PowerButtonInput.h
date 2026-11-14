@@ -4,42 +4,39 @@
 
 class PowerButtonInput {
  public:
-  enum class Click { None, Single, Double };
-  static constexpr uint32_t DOUBLE_CLICK_MS = 500;
-  static constexpr uint32_t MAX_CLICK_HOLD_MS = 300;
-  static constexpr uint32_t MAX_SINGLE_CLICK_HOLD_MS = 400;
+  static constexpr uint16_t LONG_PRESS_MS = 400;
 
-  Click update(uint32_t now, bool pressed, bool released, uint32_t heldMs) {
-    if ((pressed || released) && heldMs > MAX_SINGLE_CLICK_HOLD_MS) {
-      reset();
-      return Click::None;
-    }
-    if (pressed && heldMs > MAX_CLICK_HOLD_MS) {
-      reset();
-      return Click::None;
-    }
-    if (released && heldMs > MAX_CLICK_HOLD_MS) {
-      reset();
-      return Click::Single;
-    }
-    if (pending && now - clickedAt > DOUBLE_CLICK_MS) {
-      pending = released;
-      clickedAt = now;
-      return Click::Single;
-    }
-    if (!released) return Click::None;
-    if (pending) {
-      reset();
-      return Click::Double;
-    }
-    pending = true;
-    clickedAt = now;
-    return Click::None;
+  void begin(bool suppressHold, bool held) {
+    state = !held ? State::Normal : suppressHold ? State::Suppressed : State::LongOnly;
+    shortRelease = sleepRequested = consumedRelease = false;
   }
 
-  void reset() { pending = false; }
+  void update(bool held, bool released, uint32_t heldMs, uint16_t sleepThresholdMs) {
+    shortRelease = sleepRequested = consumedRelease = false;
+    if (state == State::Normal && (held || released) && heldMs > LONG_PRESS_MS) state = State::LongOnly;
+    sleepRequested = (held || released) && state != State::Suppressed && heldMs > sleepThresholdMs;
+    if (released || !held) {
+      shortRelease = released && state == State::Normal;
+      consumedRelease = released && !shortRelease;
+      state = State::Normal;
+      return;
+    }
+  }
+
+  void consume() {
+    state = State::Suppressed;
+    shortRelease = sleepRequested = false;
+  }
+
+  bool wasShortReleased() const { return shortRelease; }
+  bool shouldSleep() const { return sleepRequested; }
+  bool wasReleaseConsumed() const { return consumedRelease; }
+  bool suppressesHold() const { return state == State::Suppressed; }
 
  private:
-  bool pending = false;
-  uint32_t clickedAt = 0;
+  enum class State : uint8_t { Suppressed, LongOnly, Normal };
+  State state = State::Suppressed;
+  bool shortRelease = false;
+  bool sleepRequested = false;
+  bool consumedRelease = false;
 };
