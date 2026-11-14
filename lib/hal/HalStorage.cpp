@@ -1,6 +1,7 @@
 #include "HalStorage.h"
 
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
+#include <FsHelpers.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <esp_heap_caps.h>
@@ -33,7 +34,20 @@ HalStorage::HalStorage() {
 
 // begin() and ready() are only called from setup, no need to acquire mutex for them
 
-bool HalStorage::begin() { return SDCard.begin(); }
+// SdFat reads no clock on its own and stamps files with its compile-date default unless given a callback.
+// Falls back to that default while the system clock is unset (cold boot before RTC/NTP).
+static void fatDateTimeCallback(uint16_t* date, uint16_t* time) {
+  const time_t now = ::time(nullptr);
+  struct tm local;
+  if (localtime_r(&now, &local) && FsHelpers::packFatDateTime(local, date, time)) return;
+  *date = FS_DEFAULT_DATE;
+  *time = FS_DEFAULT_TIME;
+}
+
+bool HalStorage::begin() {
+  FsDateTime::setCallback(fatDateTimeCallback);
+  return SDCard.begin();
+}
 
 bool HalStorage::ready() const { return SDCard.ready(); }
 
