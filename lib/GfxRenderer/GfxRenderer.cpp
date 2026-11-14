@@ -2246,17 +2246,6 @@ bool GfxRenderer::getCodepointMetrics(const int fontId, const uint32_t cp, const
   return true;
 }
 
-bool GfxRenderer::getCodepointInk(const int fontId, const uint32_t cp, const EpdFontFamily::Style style, int& top,
-                                  int& bottom) const {
-  const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end()) return false;
-  const EpdGlyph* glyph = fontIt->second.getGlyph(cp, style);
-  if (!glyph || glyph->height == 0) return false;  // missing or blank (e.g. a space)
-  top = glyph->top;
-  bottom = glyph->top - glyph->height;
-  return true;
-}
-
 int GfxRenderer::drawScaledCodepoint(const int fontId, const uint32_t cp, const EpdFontFamily::Style style, const int x,
                                      const int baselineY, const int scale256) const {
   if (scale256 <= 0) return 0;

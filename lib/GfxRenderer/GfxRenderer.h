@@ -359,8 +359,6 @@ class GfxRenderer {
                           int scale256) const;
   // Unscaled metrics for laying out drawScaledCodepoint: advance (12.4 fixed point) and top bearing.
   bool getCodepointMetrics(int fontId, uint32_t cp, EpdFontFamily::Style style, int32_t& advanceFP, int& top) const;
-  // Vertical ink of a glyph, upwards from the baseline (bottom < top). False when missing or blank.
-  bool getCodepointInk(int fontId, uint32_t cp, EpdFontFamily::Style style, int& top, int& bottom) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Returns the total inter-word advance: fp4::toPixel(spaceAdvance + kern(leftCp,' ') + kern(' ',rightCp)).
   /// Using a single snap avoids the +/-1 px rounding error that arises when space advance and kern are
