@@ -428,12 +428,12 @@ bool EpubReaderActivity::anyButtonPressed() const {
   return false;
 }
 
-void EpubReaderActivity::backgroundBuildTick() {
+bool EpubReaderActivity::backgroundBuildTick() {
   RenderLock lock(RenderLock::Mode::Try);
   // Not under an open toolbar or panel: those repaint straight onto the page in the framebuffer.
-  if (!lock.ownsLock() || overlay != Overlay::None || !backgroundBuildWanted()) return;
+  if (!lock.ownsLock() || overlay != Overlay::None || !backgroundBuildWanted()) return false;
   // A button is down or a page turn is queued: the next loop frames act on it first.
-  if (buttonContactClosed() || anyButtonPressed() || pendingManualTurn != 0 || !buildTickHeapGate()) return;
+  if (buttonContactClosed() || anyButtonPressed() || pendingManualTurn != 0 || !buildTickHeapGate()) return false;
   // A build step can lend the framebuffer (image probes), which hands it back white while the
   // panel still shows the page; redraw so nothing is later painted over the blank buffer.
   const uint32_t loansBefore = renderer.frameBufferLoanCount();
@@ -441,6 +441,7 @@ void EpubReaderActivity::backgroundBuildTick() {
   if (renderer.frameBufferLoanCount() != loansBefore) {
     pageBufferStale = true;
     requestUpdate();
+    return true;
   }
   if (!built) {
     LOG_ERR("ERS", "Background section build failed");
@@ -448,9 +449,13 @@ void EpubReaderActivity::backgroundBuildTick() {
     nextPageNumber = section->currentPage;
     section.reset();
     requestUpdate();
-  } else if (section->isBuildComplete() && applyDeferredReposition()) {
-    requestUpdate();
+    return true;
   }
+  if (section->isBuildComplete() && applyDeferredReposition()) {
+    requestUpdate();
+    return true;
+  }
+  return false;
 }
 
 void EpubReaderActivity::idlePrewarmTick() {
@@ -1055,8 +1060,9 @@ void EpubReaderActivity::loop() {
   nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
     // Nothing to act on in this frame: build more of the chapter or prewarm ahead.
-    backgroundBuildTick();
-    idlePrewarmTick();
+    if (!backgroundBuildTick()) {
+      idlePrewarmTick();
+    }
     return;
   }
 
