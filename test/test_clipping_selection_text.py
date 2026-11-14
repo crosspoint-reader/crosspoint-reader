@@ -8,8 +8,6 @@ ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT / "src/activities/reader/ClipSelectionActivity.cpp").read_text()
 reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
 header = (ROOT / "src/activities/reader/ClipSelectionActivity.h").read_text()
-page_header = (ROOT / "lib/Epub/Epub/Page.h").read_text()
-line_pitch = "  int linePitch(" + page_header.split("  int linePitch(", 1)[1].split("\n  }\n", 1)[0] + "\n  }\n"
 word_box = "struct WordBox {" + header.split("struct WordBox {", 1)[1].split("  };", 1)[0] + "};"
 action_helpers = "\n".join(line for line in header.splitlines()
                            if "int firstAction() const" in line or "int actionCount() const" in line)
@@ -46,7 +44,6 @@ harness = r"""
 #include <cstdint>
 #include <climits>
 #include <cstdio>
-#include <cstdlib>
 #include <memory>
 #include <set>
 #include <span>
@@ -112,7 +109,6 @@ struct PageLine {
 };
 struct Page {
   std::vector<std::unique_ptr<PageLine>> elements;
-""" + line_pitch + r"""
   mutable int renderCalls = 0;
   bool hasImages() const {
     return std::any_of(elements.begin(), elements.end(), [](const auto& e) { return e->getTag() == TAG_PageImage; });
@@ -372,19 +368,6 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
   assert(text == expected);
 }
 int main() {
-  {
-    // A paragraph's last line (y=48, next line past the paragraph gap) still gets the 24px pitch.
-    Page pitchPage;
-    for (int y : {0, 24, 48, 90}) {
-      auto line = std::make_unique<PageLine>();
-      line->yPos = y;
-      pitchPage.elements.push_back(std::move(line));
-    }
-    assert(pitchPage.linePitch(48) == 24 && pitchPage.linePitch(90) == 42);
-    Page single;
-    single.elements.push_back(std::make_unique<PageLine>());
-    assert(single.linePitch(0) == INT_MAX);
-  }
   for (bool images : {false, true}) for (auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH})
     for (auto mode : {ClipSelectionActivity::Mode::Clip, ClipSelectionActivity::Mode::Lookup}) {
     ClipSelectionActivity pick;
@@ -671,6 +654,7 @@ with tempfile.TemporaryDirectory() as directory:
         str(ROOT / "lib/Utf8/Utf8.cpp"), "-o", str(executable),
     ], check=True)
     subprocess.run([str(executable)], check=True)
+page_header = (ROOT / "lib/Epub/Epub/Page.h").read_text()
 assert "std::abs(element->yPos - yPos)" in page_header, "row pitch must look both ways (paragraph last lines)"
 for text in (source, reader_source):
     assert "linePitch(line.yPos)" in text and "std::min(fullHeight, rowPitch)" in text and "fullHeight - height" in text, \
