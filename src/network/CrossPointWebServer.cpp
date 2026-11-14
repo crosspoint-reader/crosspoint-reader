@@ -813,6 +813,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
       FileInfo info;
       info.name = fileName;
       info.isDirectory = file.isDirectory();
+      info.modified = file.modificationTime();
 
       if (info.isDirectory) {
         info.size = 0;
@@ -859,6 +860,7 @@ void CrossPointWebServer::handleFileListData() const {
     doc["size"] = info.size;
     doc["isDirectory"] = info.isDirectory;
     doc["isEpub"] = info.isEpub;
+    doc["modified"] = info.modified;
     if (doc.overflowed()) {
       LOG_ERR("WEB", "OOM: file entry JSON for %s", info.name.c_str());
       return;

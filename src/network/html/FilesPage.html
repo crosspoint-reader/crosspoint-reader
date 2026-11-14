@@ -1303,6 +1303,18 @@
     return `<svg class="icon"><use href="/assets/icons.svg#${name}"></use></svg>`;
   }
 
+  // Decode packed FAT timestamp ((date << 16) | time) into "YYYY-MM-DD HH:MM"
+  function formatModified(packed) {
+    const v = Number(packed) >>> 0;
+    if (!v) return '-';
+    const date = v >>> 16, time = v & 0xFFFF;
+    const year = 1980 + (date >> 9), month = (date >> 5) & 0x0F, day = date & 0x1F;
+    const hours = time >> 11, minutes = (time >> 5) & 0x3F;
+    if (month < 1 || month > 12 || day < 1) return '-';
+    const p = n => String(n).padStart(2, '0');
+    return `${year}-${p(month)}-${p(day)} ${p(hours)}:${p(minutes)}`;
+  }
+
   function formatFileSize(bytes) {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -1415,15 +1427,15 @@
       let fileTableContent = '<table class="file-table"><thead>';
 
 				// Add select-all checkbox column
-      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr></thead><tbody>';
+      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th>Name</th><th>Type</th><th>Size</th><th>Modified</th><th class="actions-col">Actions</th></tr></thead><tbody>';
 
 
       const sortedFiles = files.sort((a, b) => {
-        // Directories first, then epub files, then other files, alphabetically within each group
+        // Directories first, then newest to oldest; unknown dates last, name as tie-breaker
         if (a.isDirectory && !b.isDirectory) return -1;
         if (!a.isDirectory && b.isDirectory) return 1;
-        if (a.isEpub && !b.isEpub) return -1;
-        if (!a.isEpub && b.isEpub) return 1;
+        const diff = (Number(b.modified) || 0) - (Number(a.modified) || 0);
+        if (diff !== 0) return diff;
         return a.name.localeCompare(b.name);
       });
 
@@ -1439,6 +1451,7 @@
           fileTableContent += `<td><span class="file-icon"><svg class="icon"><use href="/assets/icons.svg#folder"></use></svg></span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a></td>`;
           fileTableContent += '<td>FOLDER</td>';
           fileTableContent += '<td>-</td>';
+          fileTableContent += `<td>${formatModified(file.modified)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(folderPath)}" data-folder="true" title="Delete folder" aria-label="Delete folder"><svg class="icon"><use href="/assets/icons.svg#trash"></use></svg></button></div></td>`;
           fileTableContent += '</tr>';
         } else {
@@ -1459,6 +1472,7 @@
           fileTableContent += '</td>';
           fileTableContent += file.isEpub ? '<td>EPUB</td>' : `<td>${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
+          fileTableContent += `<td>${formatModified(file.modified)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
           fileTableContent += `<button class="move-btn" data-action="move" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" title="Move file" aria-label="Move file"><svg class="icon"><use href="/assets/icons.svg#move"></use></svg></button>`;
           fileTableContent += `<button class="rename-btn" data-action="rename" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" title="Rename file" aria-label="Rename file"><svg class="icon"><use href="/assets/icons.svg#edit"></use></svg></button>`;
