@@ -837,8 +837,10 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // Draw Progress Text
   const auto screenHeight = renderer.getScreenHeight();
-  auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4 +
-               BoardConfig::ACTIVE.statusBarOffsetY;
+  const int statusBarHeight =
+      fillMargin ? UITheme::getReaderStatusBarHeight() : UITheme::getInstance().getStatusBarHeight();
+  auto textY =
+      screenHeight - statusBarHeight - orientedMarginBottom - paddingBottom - 4 + BoardConfig::ACTIVE.statusBarOffsetY;
 
   // The side clusters sit in the bottom corners: clear the panel's rounded corners too.
   const int corner = BoardConfig::ACTIVE.bottomCornerRadius != 0 ? BoardConfig::ACTIVE.bottomCornerRadius
@@ -887,9 +889,9 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       // Chapter progress
       progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
     }
-    if (BoardConfig::isEegoA4() && fillMargin && renderer.getOrientation() == GfxRenderer::Portrait) {
+    if (BoardConfig::isEegoA4() && fillMargin) {
       // EEGO A4: a slim line hugging the bottom bezel instead of a slab filling
-      // the 16 px inset. Its top row sits edgeGap px above the panel edge and
+      // the bottom inset. Its top row sits edgeGap px above the panel edge and
       // it fills down to the edge, so no gap shows under it at any viewing
       // angle. Both ends stop where the rounded corners start to cut in.
       constexpr int edgeGap = 7;

@@ -142,6 +142,16 @@ enum class BootResume : uint8_t {
 // device back up against the user's sleep gesture. Never cleared:
 // startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
 static bool deepSleepInProgress = false;
+static unsigned long lastInputTime = 0;
+
+// Screens that block auto-sleep can hold one static image for as long as they
+// run. Once input stops, power the panel down as sleep does; the next paint wakes it.
+static void idleDisplayWhileAwake() {
+  constexpr unsigned long kIdleAfterMs = 30000;
+  if (!activityManager.preventAutoSleep() || millis() - lastInputTime < kIdleAfterMs) return;
+  RenderLock lock(RenderLock::Mode::Try);
+  if (lock.ownsLock()) display.controllerIdle();
+}
 
 // A silent restart is internal maintenance, so the light must come back exactly
 // as the user left it. SETTINGS.frontlightOn is the saved preference and
@@ -411,7 +421,9 @@ static void drawSleepChargeStrip(const bool charging, const uint16_t percent) {
   char text[48];
   snprintf(text, sizeof(text), "%s  %u%%", charging ? tr(STR_CHARGING) : tr(STR_CHARGED), percent);
   renderer.drawCenteredText(SMALL_FONT_ID, y + 6, text);
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  if (!renderer.displayRetainedGrayscaleOverlay(0, y, renderer.getScreenWidth(), h)) {
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
 }
 
 // Shows the charge strip while the power HAL holds sleep on USB power, and
@@ -425,14 +437,16 @@ static bool holdSleepWhileUsbPowered() {
   auto* const sleepFrame = static_cast<uint8_t*>(heap_caps_malloc(frameSize, MALLOC_CAP_SPIRAM));
   if (sleepFrame) memcpy(sleepFrame, renderer.getFrameBuffer(), frameSize);
   const bool buttonPressed = powerManager.holdWhileUsbPowered(gpio, drawSleepChargeStrip);
-  if (sleepFrame) {
-    if (!buttonPressed) {
-      RenderLock lock;
-      memcpy(renderer.getFrameBuffer(), sleepFrame, frameSize);
+  if (!buttonPressed) {
+    RenderLock lock;
+    if (sleepFrame) memcpy(renderer.getFrameBuffer(), sleepFrame, frameSize);
+    const int h = renderer.getLineHeight(SMALL_FONT_ID) + 12;
+    const int y = renderer.getScreenHeight() - h;
+    if (!renderer.displayRetainedGrayscaleOverlay(0, y, renderer.getScreenWidth(), h, true) && sleepFrame) {
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     }
-    heap_caps_free(sleepFrame);
   }
+  heap_caps_free(sleepFrame);
   return buttonPressed;
 }
 #endif
@@ -751,7 +765,8 @@ void setup() {
           allowFastInitialReaderRefresh = true;
         }
       } else {
-        // Clean the retained sleep image as part of the first Home paint.
+        // With the fading fix the X3 wake refresh is not promoted to HALF, and
+        // controller RAM is white; clean the retained sleep image on the first Home paint.
         needsWakeRefresh = true;
       }
       break;
@@ -846,6 +861,7 @@ void loop() {
     // USB Drive handed the raw SD card to the host. Do not run screenshots,
     // sleep, shortcuts, or normal navigation while its filesystem is detached.
     activityManager.loop();
+    idleDisplayWhileAwake();
     if (activityManager.preventAutoSleep()) {
       powerManager.setPowerSaving(false);
       delay(10);
@@ -869,7 +885,7 @@ void loop() {
     if (lock.ownsLock()) gaugeCapacityPending = BatteryMonitor::loadDesignCapacity();
   }
 
-  renderer.setFadingFix(SETTINGS.fadingFix);
+  renderer.setFadingFix(SETTINGS.fadingFix && CrossPointSettings::fadingFixSupported());
 
   // The ROM console does not depend on Arduino USB CDC's connection state.
   if ((Serial || FREEINK_LOG_TRANSPORT == FREEINK_LOG_TRANSPORT_ROM_PRINTF) && millis() - lastMemPrint >= 10000) {
@@ -903,8 +919,11 @@ void loop() {
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() || halTiltSensor.hadActivity() ||
-      remoteActed || activityManager.preventAutoSleep()) {
+  const bool userInput = gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() ||
+                         halTiltSensor.hadActivity() || remoteActed;
+  if (userInput) lastInputTime = millis();
+  idleDisplayWhileAwake();
+  if (userInput || activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
