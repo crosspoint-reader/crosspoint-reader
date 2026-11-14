@@ -31,8 +31,9 @@ UiAppHost::TouchRoute UiAppHost::routeTouch(const MappedInputManager& input, con
   int liveX = 0;
   int liveY = 0;
   if (routeHeld && input.isScreenTouchHeld(liveX, liveY)) {
-    result.event = routePressThenHold(result.snap, static_cast<int16_t>(liveX), static_cast<int16_t>(liveY),
-                                      [this](const fui::InputSnapshot& snap) { return route(snap); });
+    result.event =
+        routePressThenHold(result.snap, static_cast<int16_t>(liveX), static_cast<int16_t>(liveY), app.touchActive(),
+                           [this](const fui::InputSnapshot& snap) { return route(snap); });
   } else {
     result.event = route(result.snap);
   }

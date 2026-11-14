@@ -44,7 +44,8 @@ struct SliderScreen {
   }
 
   fui::ActionEvent route(const fui::InputSnapshot& snap, const int16_t liveX) {
-    return routePressThenHold(snap, liveX, kY, [this](const fui::InputSnapshot& s) { return buffer.route(s); });
+    return routePressThenHold(snap, liveX, kY, buffer.activeIndex() >= 0,
+                              [this](const fui::InputSnapshot& s) { return buffer.route(s); });
   }
 };
 
@@ -81,6 +82,26 @@ TEST(TouchFrameRouting, ContactStartedOutsideDoesNotGrabSliderDuringTapSlop) {
   EXPECT_EQ(screen.held(150).action, fui::NO_ACTION);
 }
 
+// The router's first frame of a contact can already carry the delayed press,
+// e.g. when the finger landed while the screen was still rendering.
+TEST(TouchFrameRouting, FirstFrameInsideToOutside) {
+  SliderScreen screen;
+  const auto first = screen.pressedAndHeld(195, 208);
+  EXPECT_EQ(first.action, kSlider);
+  EXPECT_EQ(first.dragPermille, 975);
+
+  const auto later = screen.held(245);
+  EXPECT_EQ(later.action, kSlider);
+  EXPECT_EQ(later.dragPermille, 1000);
+}
+
+TEST(TouchFrameRouting, FirstFrameOutsideToInside) {
+  SliderScreen screen;
+  EXPECT_EQ(screen.pressedAndHeld(205, 195).action, fui::NO_ACTION);
+  EXPECT_EQ(screen.buffer.activeIndex(), -1);
+  EXPECT_EQ(screen.held(150).action, fui::NO_ACTION);
+}
+
 TEST(TouchFrameRouting, PressHighlightStaysOnLandingElement) {
   fui::InteractionBuffer<4> buffer;
   for (int16_t i = 0; i < 2; ++i) {
@@ -96,10 +117,10 @@ TEST(TouchFrameRouting, PressHighlightStaysOnLandingElement) {
   snap.touchHeld = true;
   snap.touchX = 95;
   snap.touchY = kY;
-  EXPECT_EQ(routePressThenHold(snap, 95, kY, route).action, fui::NO_ACTION);
+  EXPECT_EQ(routePressThenHold(snap, 95, kY, buffer.activeIndex() >= 0, route).action, fui::NO_ACTION);
 
   snap.touchPressed = true;
-  EXPECT_EQ(routePressThenHold(snap, 110, kY, route).action, fui::NO_ACTION);
+  EXPECT_EQ(routePressThenHold(snap, 110, kY, buffer.activeIndex() >= 0, route).action, fui::NO_ACTION);
   EXPECT_EQ(buffer.activeIndex(), 0);
 }
 
@@ -116,7 +137,7 @@ TEST(TouchFrameRouting, SnapshotWithoutPressAndHoldRoutesUnchanged) {
   release.touchReleased = true;
   release.touchX = 42;
   release.touchY = kY;
-  routePressThenHold(release, 99, kY, route);
+  routePressThenHold(release, 99, kY, /*touchBound=*/true, route);
   EXPECT_EQ(calls, 1);
   EXPECT_TRUE(seen.touchReleased);
   EXPECT_EQ(seen.touchX, 42);
