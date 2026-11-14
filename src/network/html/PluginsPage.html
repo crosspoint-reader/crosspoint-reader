@@ -39,7 +39,11 @@
     select.addEventListener('change', () => {
       if (!select.value) return;
       const target = document.getElementById(select.value);
-      if (target) target.scrollIntoView({behavior: 'smooth', block: 'start'});
+      if (target) {
+        target.tabIndex = -1;
+        target.scrollIntoView({behavior: 'smooth', block: 'start'});
+        target.focus({preventScroll: true});
+      }
     });
     const onDiscovered = plugins => {
       if (!plugins.length) return;

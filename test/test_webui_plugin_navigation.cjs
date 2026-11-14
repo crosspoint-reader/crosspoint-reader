@@ -20,10 +20,12 @@ class Element {
     this.hidden = false;
     this.listeners = {};
     this.scrollCalls = [];
+    this.focusCalls = [];
   }
   appendChild(child) { this.children.push(child); return child; }
   addEventListener(type, callback) { this.listeners[type] = callback; }
   scrollIntoView(options) { this.scrollCalls.push(options); }
+  focus(options) { this.focusCalls.push(options); }
   replaceChildren(...children) { this.children = children; this._text = ''; }
   set textContent(value) { this._text = String(value); this.children = []; }
   get textContent() { return this._text || this.children.map(child => child.textContent).join(' '); }
@@ -177,6 +179,9 @@ test('Plugins page dropdown navigates to every discovered plugin card', async ()
     assert.equal(card.scrollCalls.length, 1);
     assert.equal(card.scrollCalls[0].behavior, 'smooth');
     assert.equal(card.scrollCalls[0].block, 'start');
+    assert.equal(card.tabIndex, -1);
+    assert.equal(card.focusCalls.length, 1);
+    assert.equal(card.focusCalls[0].preventScroll, true);
   }
 });
 
