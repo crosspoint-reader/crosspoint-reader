@@ -144,6 +144,10 @@
       text-align: left;
       border-bottom: 1px solid var(--border-color);
     }
+    .file-table th[data-sort] {
+      cursor: pointer;
+      user-select: none;
+    }
     .file-table tr:hover {
       background-color: var(--accent-color-10);
     }
@@ -1427,9 +1431,10 @@
       let fileTableContent = '<table class="file-table"><thead>';
 
 				// Add select-all checkbox column
-      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th>Name</th><th>Type</th><th>Size</th><th>Created</th><th>Modified</th><th class="actions-col">Actions</th></tr></thead><tbody>';
+      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th data-sort="name" onclick="sortRows('name')">Name</th><th>Type</th><th data-sort="size" onclick="sortRows('size')">Size</th><th data-sort="created" onclick="sortRows('created')">Created</th><th data-sort="modified" onclick="sortRows('modified')">Modified <span class="sort-arrow">\u25BC</span></th><th class="actions-col">Actions</th></tr></thead><tbody>';
 
 
+      sortState = { key: 'modified', desc: true };  // matches the initial order below
       const sortedFiles = files.sort((a, b) => {
         // Directories first, then newest to oldest; unknown dates last, name as tie-breaker
         if (a.isDirectory && !b.isDirectory) return -1;
@@ -1446,7 +1451,7 @@
           folderPath += file.name;
 
          // Checkbox cell + folder row
-          fileTableContent += `<tr class="folder-row">`;
+          fileTableContent += `<tr class="folder-row" data-dir="1" data-name="${escapeHtml(file.name)}" data-size="0" data-created="${Number(file.created) || 0}" data-modified="${Number(file.modified) || 0}">`;
           fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(folderPath)}" data-name="${escapeHtml(file.name)}" data-type="folder"></td>`;
           fileTableContent += `<td><span class="file-icon"><svg class="icon"><use href="/assets/icons.svg#folder"></use></svg></span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a></td>`;
           fileTableContent += '<td>FOLDER</td>';
@@ -1461,7 +1466,7 @@
           filePath += file.name;
 
           // Checkbox cell + file row
-          fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
+          fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}" data-name="${escapeHtml(file.name)}" data-size="${Number(file.size) || 0}" data-created="${Number(file.created) || 0}" data-modified="${Number(file.modified) || 0}">`;
           fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
           const fileIsImage = isImageFile(file.name);
           fileTableContent += `<td><span class="file-icon">${fileIcon(file.isEpub ? 'book' : (fileIsImage ? 'image' : 'file'))}</span>`;
@@ -1487,6 +1492,29 @@
       fileTableContent += '</tbody></table>';
       fileTable.innerHTML = fileTableContent;
     }
+  }
+
+  // Client-side column sort. The list loads newest-modified first; a click on a header sorts by it
+  // (descending for dates/size, ascending for name), and a second click flips the direction.
+  // Folders always stay on top. Rows are reordered in place, so there is no refetch.
+  let sortState = { key: 'modified', desc: true };
+  function sortRows(key) {
+    const desc = sortState.key === key ? !sortState.desc : key !== 'name';
+    sortState = { key, desc };
+    const tbody = document.querySelector('#file-table tbody');
+    if (!tbody) return;
+    const rows = Array.from(tbody.rows);
+    rows.sort((a, b) => {
+      if (!!a.dataset.dir !== !!b.dataset.dir) return a.dataset.dir ? -1 : 1;
+      const diff = key === 'name'
+        ? a.dataset.name.localeCompare(b.dataset.name)
+        : Number(a.dataset[key]) - Number(b.dataset[key]);
+      return (desc ? -diff : diff) || a.dataset.name.localeCompare(b.dataset.name);
+    });
+    rows.forEach(row => tbody.appendChild(row));
+    document.querySelectorAll('#file-table .sort-arrow').forEach(el => el.remove());
+    const th = document.querySelector('#file-table th[data-sort="' + key + '"]');
+    if (th) th.insertAdjacentHTML('beforeend', ' <span class="sort-arrow">' + (desc ? '\u25BC' : '\u25B2') + '</span>');
   }
 
   // Image preview
