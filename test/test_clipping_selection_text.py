@@ -8,10 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 source = (ROOT / "src/activities/reader/ClipSelectionActivity.cpp").read_text()
 reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
 header = (ROOT / "src/activities/reader/ClipSelectionActivity.h").read_text()
-line_band_header = (ROOT / "src/clippings/ClippingLineBand.h").read_text()
-# The harness stubs Page/PageLine/TextBlock, so drop the real Page.h include.
-line_band = "\n".join(line for line in line_band_header.splitlines()
-                      if not line.startswith(("#pragma", "#include <Epub/")))
+page_header = (ROOT / "lib/Epub/Epub/Page.h").read_text()
+line_pitch = "  int linePitch(" + page_header.split("  int linePitch(", 1)[1].split("\n  }\n", 1)[0] + "\n  }\n"
 word_box = "struct WordBox {" + header.split("struct WordBox {", 1)[1].split("  };", 1)[0] + "};"
 action_helpers = "\n".join(line for line in header.splitlines()
                            if "int firstAction() const" in line or "int actionCount() const" in line)
@@ -50,7 +48,6 @@ harness = r"""
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
-#include <optional>
 #include <set>
 #include <span>
 #include <string>
@@ -84,9 +81,8 @@ struct Block {
   bool valid() const { return true; }
   const Style& getBlockStyle() const { return style; }
   int getRubyShift(int) const { return 0; }
-  int font = -1;  // -1: section font; otherwise e.g. a heading font
-  int blockFontId(int fallback) const { return font >= 0 ? font : fallback; }
-  int wordFontId(uint16_t, int fallback) const { return font >= 0 ? font : fallback; }
+  int blockFontId(int fallback) const { return fallback; }
+  int wordFontId(uint16_t, int fallback) const { return fallback; }
   int wordYOffset(const Renderer&, int, uint16_t) const { return 0; }
   static int renderFontId(const Renderer&, int fontId, int) { return fontId; }
   uint16_t wordCount() const {
@@ -116,6 +112,7 @@ struct PageLine {
 };
 struct Page {
   std::vector<std::unique_ptr<PageLine>> elements;
+""" + line_pitch + r"""
   mutable int renderCalls = 0;
   bool hasImages() const {
     return std::any_of(elements.begin(), elements.end(), [](const auto& e) { return e->getTag() == TAG_PageImage; });
@@ -163,9 +160,7 @@ struct Renderer {
   mutable size_t coldMeasurements = 0;
   std::set<std::pair<uint8_t, uint32_t>> advances;
   bool isSdCardFont(int) const { return sdFont; }
-  // Font 2 stands in for a larger heading font.
-  int getFontAscenderSize(int font) const { return font == 2 ? 24 : 12; }
-  int getFontDescenderSize(int font) const { return font == 2 ? -6 : -4; }  // sign varies by font source
+  int getFontAscenderSize(int) const { return 12; }
   int getLineHeight(int) const { return 16; }
   RenderMode getRenderMode() const { return BW; }
   void getOrientedViewableTRBL(int* top, int* right, int* bottom, int* left) const {
@@ -267,7 +262,6 @@ struct Input {
 };
 using GfxRenderer = Renderer;
 using TextBlock = Block;
-""" + line_band + r"""
 struct BoardConfig { static bool isEegoA4() { return false; } };
 unsigned long millis() { return 0; }
 struct Settings {
@@ -379,47 +373,17 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
 }
 int main() {
   {
-    using clippingLineBand::lineBand;
-    Renderer bandRenderer;
-    auto addLine = [](Page& page, int x, int y, int font = -1) {
+    // A paragraph's last line (y=48, next line past the paragraph gap) still gets the 24px pitch.
+    Page pitchPage;
+    for (int y : {0, 24, 48, 90}) {
       auto line = std::make_unique<PageLine>();
-      line->xPos = x; line->yPos = y; line->block.font = font;
-      page.elements.push_back(std::move(line));
-      return page.elements.back().get();
-    };
-    auto height = [](clippingLineBand::Band band) { return band.bottom - band.top; };
-
-    // A lone line (and a paragraph's last line before a gap) covers ascender + descender, not advanceY.
-    Page spaced;
-    const auto* first = addLine(spaced, 0, 0);
-    const auto* last = addLine(spaced, 0, 40);
-    assert(lineBand(bandRenderer, 0, spaced, *first).top == 0 && height(lineBand(bandRenderer, 0, spaced, *first)) == 16);
-    assert(lineBand(bandRenderer, 0, spaced, *last).top == 40 && height(lineBand(bandRenderer, 0, spaced, *last)) == 16);
-
-    // Tight spacing: glyph bands [0,16) and [10,26) split at one shared boundary, without overlap or gap.
-    Page tight;
-    const auto* upper = addLine(tight, 0, 0);
-    const auto* lower = addLine(tight, 0, 10);
-    const auto upperBand = lineBand(bandRenderer, 0, tight, *upper);
-    const auto lowerBand = lineBand(bandRenderer, 0, tight, *lower);
-    assert(upperBand.top == 0 && upperBand.bottom == 13 && lowerBand.top == 13 && lowerBand.bottom == 26);
-    for (int y = 0; y < 26; ++y)  // every row belongs to exactly one line, so a tap selects one clipping
-      assert((y >= upperBand.top && y < upperBand.bottom) + (y >= lowerBand.top && y < lowerBand.bottom) == 1);
-
-    // A small line above a larger heading must not shrink the heading to the small line's pitch.
-    Page heading;
-    const auto* body = addLine(heading, 0, 0);
-    const auto* title = addLine(heading, 0, 16, 2);
-    assert(height(lineBand(bandRenderer, 0, heading, *body)) == 16);
-    assert(lineBand(bandRenderer, 0, heading, *title).top == 16 && height(lineBand(bandRenderer, 0, heading, *title)) == 30);
-
-    // Table cells in separate columns, one pixel apart, do not constrain each other.
-    Page table;
-    const auto* left = addLine(table, 0, 0);
-    const auto* right = addLine(table, 200, 1);
-    addLine(table, 0, 24);
-    addLine(table, 200, 25);
-    assert(height(lineBand(bandRenderer, 0, table, *left)) == 16 && height(lineBand(bandRenderer, 0, table, *right)) == 16);
+      line->yPos = y;
+      pitchPage.elements.push_back(std::move(line));
+    }
+    assert(pitchPage.linePitch(48) == 24 && pitchPage.linePitch(90) == 42);
+    Page single;
+    single.elements.push_back(std::make_unique<PageLine>());
+    assert(single.linePitch(0) == INT_MAX);
   }
   for (bool images : {false, true}) for (auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH})
     for (auto mode : {ClipSelectionActivity::Mode::Clip, ClipSelectionActivity::Mode::Lookup}) {
@@ -707,8 +671,8 @@ with tempfile.TemporaryDirectory() as directory:
         str(ROOT / "lib/Utf8/Utf8.cpp"), "-o", str(executable),
     ], check=True)
     subprocess.run([str(executable)], check=True)
+assert "std::abs(element->yPos - yPos)" in page_header, "row pitch must look both ways (paragraph last lines)"
 for text in (source, reader_source):
-    assert "clippingLineBand::lineBand(" in text and "clippingLineBand::clipWord(" in text, \
-        "selection and saved-clip highlights must share the clippingLineBand geometry"
-assert "getLineHeight" not in word_rect, "saved-clip rects must use the glyph band, not advanceY"
+    assert "linePitch(line.yPos)" in text and "std::min(fullHeight, rowPitch)" in text and "fullHeight - height" in text, \
+        "selection and saved-clip highlights must share the bottom-anchored row-pitch cap"
 print("Clipping selection text regression checks passed")

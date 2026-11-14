@@ -22,7 +22,6 @@
 #include <functional>
 #include <iterator>
 #include <limits>
-#include <optional>
 
 #include "../../util/BookmarkFile.h"
 #include "BookmarkEntry.h"
@@ -54,7 +53,6 @@
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
-#include "clippings/ClippingLineBand.h"
 #include "clippings/ClippingText.h"
 #include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
@@ -82,7 +80,7 @@ int clippingWordFont(const GfxRenderer& renderer, const int fontId, const TextBl
 }
 
 Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, const PageLine& line, const uint16_t i,
-                      const int top, const int left, const int wordWidth, const clippingLineBand::Band& lineBand) {
+                      const int top, const int left, const int wordWidth, const int rowPitch) {
   const auto& block = line.getBlock();
   const int wordFont = clippingWordFont(renderer, fontId, *block, i);
   const char* text = block->wordText(i);
@@ -93,9 +91,14 @@ Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, const PageL
   if (i + 1 < block->wordCount() && block->wordXpos(i + 1) > block->wordXpos(i)) {
     width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i) - skipX));
   }
-  // Same band as ClipSelectionActivity, so taps and saved highlights match the selection.
-  const auto band = clippingLineBand::clipWord(renderer, fontId, line, i, lineBand);
-  return Rect{left + line.xPos + block->wordXpos(i) + skipX, top + band.top, width, band.bottom - band.top};
+  const int lineFont = TextBlock::renderFontId(renderer, block->blockFontId(fontId), fontId);
+  // Match ClipSelectionActivity: cap to the row pitch, trimming the ascender gap from the top.
+  const int fullHeight = renderer.getLineHeight(wordFont);
+  const int height = std::min(fullHeight, rowPitch);
+  return Rect{left + line.xPos + block->wordXpos(i) + skipX,
+              top + line.yPos + block->getRubyShift(renderer.getFontAscenderSize(lineFont)) +
+                  block->wordYOffset(renderer, fontId, i) + fullHeight - height,
+              width, height};
 }
 
 int clampPercent(int percent) {
@@ -2360,7 +2363,6 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
     const auto& line = static_cast<const PageLine&>(*element);
     const auto& block = line.getBlock();
     if (!block || !block->valid()) continue;
-    std::optional<clippingLineBand::Band> band;  // lazy: only lines with a candidate word pay for it
     for (uint16_t i = 0; i < block->wordCount(); ++i) {
       const char* text = block->wordText(i);
       if (!clippingText::hasVisibleText(text)) continue;
@@ -2369,9 +2371,9 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
                                                  block->getBlockStyle().characterSpacing);
       if (width <= 0) continue;
       const uint16_t index = wordIndex++;
-      if (!band) band = clippingLineBand::lineBand(renderer, fontId, page, line);
-      const Rect rect = clippingWordRect(renderer, fontId, line, i, top + SETTINGS.screenMargin,
-                                         left + SETTINGS.screenMargin, width, *band);
+      const Rect rect =
+          clippingWordRect(renderer, fontId, line, i, top + SETTINGS.screenMargin, left + SETTINGS.screenMargin, width,
+                           page.linePitch(line.yPos));
       if (x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height) continue;
       const auto range = block->wordSourceRange(i);
       for (size_t j = 0; j < CLIPPINGS.clippingCount(); ++j) {
@@ -2429,7 +2431,6 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     const auto& line = static_cast<const PageLine&>(*element);
     const auto& block = line.getBlock();
     if (!block || !block->valid()) continue;
-    std::optional<clippingLineBand::Band> band;  // lazy: only lines with a highlight pay for it
     bool hasPreviousHighlight = false;
     int previousHighlightX = 0;
     int previousHighlightWidth = 0;
@@ -2446,9 +2447,8 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
         continue;
       }
 
-      if (!band) band = clippingLineBand::lineBand(renderer, fontId, page, line);
-      const Rect rect =
-          clippingWordRect(renderer, fontId, line, i, orientedMarginTop, orientedMarginLeft, width, *band);
+      const Rect rect = clippingWordRect(renderer, fontId, line, i, orientedMarginTop, orientedMarginLeft, width,
+                                         page.linePitch(line.yPos));
       const int x = rect.x;
       const int y = rect.y;
       const int height = rect.height;

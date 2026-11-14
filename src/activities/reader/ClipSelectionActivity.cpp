@@ -16,7 +16,6 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/ActivityResult.h"
-#include "clippings/ClippingLineBand.h"
 #include "clippings/ClippingText.h"
 #include "clippings/SelectionGeometry.h"
 #include "components/UIScale.h"
@@ -168,8 +167,9 @@ bool ClipSelectionActivity::extractWords() {
       const auto& block = line.getBlock();
       if (!block || !block->valid()) continue;
 
-      // Glyph band shared with neighbouring lines; identical to saved-clipping highlights and hit-testing.
-      const auto band = clippingLineBand::lineBand(renderer, fontId, pageAt(pageOffset), line);
+      // Tight line spacing makes the font's line height exceed the row pitch; cap the highlight so it
+      // cannot paint over neighbouring lines.
+      const int rowPitch = pageAt(pageOffset).linePitch(line.yPos);
 
       if (needsFontPrewarm && block->wordCount() != 0) {
         uint8_t styleMask = 0;
@@ -188,6 +188,8 @@ bool ClipSelectionActivity::extractWords() {
       const int8_t characterSpacing = block->getBlockStyle().characterSpacing;
       const size_t remaining = capacity - lineStart;
       size_t rtlWordCount = 0;
+      const int lineFont = TextBlock::renderFontId(renderer, block->blockFontId(fontId), fontId);
+      const int rubyShift = block->getRubyShift(renderer.getFontAscenderSize(lineFont));
       for (uint16_t i = 0; i < block->wordCount(); ++i) {
         if (block->wordStartsParagraph(i)) paragraphStartPending = true;
         const char* text = block->wordText(i);
@@ -206,10 +208,14 @@ bool ClipSelectionActivity::extractWords() {
         WordBox& word = isRtl ? words[lineStart + (rtlWordCount < remaining ? rtlWordCount : rtlWordCount % remaining)]
                               : words[wordCount++];
         word.x = static_cast<int16_t>(marginLeft + line.xPos + block->wordXpos(i));
-        const auto wordBand = clippingLineBand::clipWord(renderer, fontId, line, i, band);
-        word.y = static_cast<int16_t>(marginTop + wordBand.top);
+        // Keep the box anchored to the glyph bottom (descenders) and trim the excess from the top,
+        // which is mostly ascender gap that would overlap the line above.
+        const int fullHeight = renderer.getLineHeight(wordFont);
+        const int height = std::min(fullHeight, rowPitch);
+        word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i) +
+                                      fullHeight - height);
         word.width = static_cast<int16_t>(width);
-        word.height = static_cast<int16_t>(wordBand.bottom - wordBand.top);
+        word.height = static_cast<int16_t>(height);
         word.row = rowCount;
         word.pageOffset = static_cast<uint8_t>(pageOffset);
         word.pageWordIndex = pageWordIndex++;
