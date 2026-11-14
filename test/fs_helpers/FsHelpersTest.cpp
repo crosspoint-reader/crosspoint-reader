@@ -76,4 +76,28 @@ TEST(SanitizePathComponentForFat32, DoesNotSplitLetterAtBufferLimit) {
   EXPECT_EQ(sanitize(kTitle2103), "Богиня-глюкозы.-Нормализуйте-уров");
 }
 
+TEST(PackFatDateTime, PacksFields) {
+  struct tm t = {};
+  t.tm_year = 2026 - 1900;
+  t.tm_mon = 4;
+  t.tm_mday = 17;
+  t.tm_hour = 13;
+  t.tm_min = 45;
+  t.tm_sec = 31;
+  uint16_t date = 0, time = 0;
+  ASSERT_TRUE(FsHelpers::packFatDateTime(t, &date, &time));
+  EXPECT_EQ(date, ((2026 - 1980) << 9) | (5 << 5) | 17);
+  EXPECT_EQ(time, (13 << 11) | (45 << 5) | 15);
+}
+
+TEST(PackFatDateTime, RejectsUnsetClock) {
+  struct tm t = {};
+  t.tm_year = 70;  // 1970
+  t.tm_mday = 1;
+  uint16_t date = 7, time = 7;
+  EXPECT_FALSE(FsHelpers::packFatDateTime(t, &date, &time));
+  EXPECT_EQ(date, 7);
+  EXPECT_EQ(time, 7);
+}
+
 }  // namespace
