@@ -753,6 +753,8 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     // font-native position. Fonts without their glyphs — the built-ins — miss
     // the getGlyph lookup and skip them, as before.
     if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) {
+      // getGlyph falls back to U+FFFD, which would be stamped over the base.
+      if (!font.hasCodepoint(cp, style)) continue;
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
       const auto anchor = combiningMark::anchorFor(cp);
@@ -1392,16 +1394,17 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   int rotatedY = 0;
   rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, panelWidth, panelHeight);
   // Rotate origin corner
+  // The logical width runs along the panel Y axis in the portrait orientations.
   switch (orientation) {
     case Portrait:
-      rotatedY = rotatedY - height;
+      rotatedY -= width - 1;
       break;
     case PortraitInverted:
-      rotatedX = rotatedX - width;
+      rotatedX -= height - 1;
       break;
     case LandscapeClockwise:
-      rotatedY = rotatedY - height;
-      rotatedX = rotatedX - width;
+      rotatedY -= height - 1;
+      rotatedX -= width - 1;
       break;
     case LandscapeCounterClockwise:
       break;
@@ -1490,7 +1493,11 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     }
     screenY += y;  // the offset should not be scaled
     if (screenY >= getScreenHeight()) {
-      break;
+      // Top-down: every later row is lower still. Bottom-up: later rows move up
+      // onto the screen, so consume this one and keep going.
+      if (bitmap.isTopDown()) break;
+      if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) return false;
+      continue;
     }
 
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
@@ -2376,6 +2383,8 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     // font-native position. Fonts without their glyphs — the built-ins — miss
     // the getGlyph lookup and skip them, as before.
     if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) {
+      // getGlyph falls back to U+FFFD, which would be stamped over the base.
+      if (!font.hasCodepoint(cp, style)) continue;
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
       const auto anchor = combiningMark::anchorFor(cp);
