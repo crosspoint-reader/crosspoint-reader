@@ -498,6 +498,8 @@ int main() {
     assert(cold.words[0].pageOffset == 0);
     assert(cold.words[239].pageOffset == 1);
     assert(cold.renderer.coldMeasurements == 0);
+    for (const char probe : {'d', 'H', 'l', 'p', 'g', 'y'})  // ink-bounds letters prepared for getFontInkBounds
+      assert(cold.renderer.advances.count({EpdFontFamily::REGULAR, static_cast<uint32_t>(probe)}));
     cold.mode = ClipSelectionActivity::Mode::DefinitionLookup;
     cold.borrowedPages = cold.pages;
     HalMemory::stats = {1024 * 1024, 1024 * 1024};
