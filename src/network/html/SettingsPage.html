@@ -14,6 +14,18 @@
       padding: 12px;
       margin: 10px 0;
     }
+    .controls-group {
+      margin-top: 24px;
+    }
+    .controls-group h3 {
+      margin: 0 0 8px;
+    }
+    .controls-group .setting-control {
+      max-width: 100%;
+    }
+    .controls-group select {
+      max-width: 100%;
+    }
     .item-actions {
       display: flex;
       gap: 8px;
@@ -63,8 +75,8 @@
   }
 
 
-  function renderControl(setting) {
-    const id = 'setting-' + setting.key;
+  function renderControl(setting, suffix = '') {
+    const id = 'setting-' + setting.key + suffix;
 
     if (setting.type === 'toggle') {
       const checked = setting.value ? 'checked' : '';
@@ -74,7 +86,7 @@
     }
 
     if (setting.type === 'enum') {
-      let html = '<select id="' + id + '" onchange="handleSettingChanged(\'' + setting.key + '\')">';
+      let html = '<select id="' + id + '" onchange="handleSettingChanged(\'' + setting.key + '\', this)">';
       setting.options.forEach(function(opt, idx) {
         const selected = idx === setting.value ? ' selected' : '';
         html += '<option value="' + idx + '"' + selected + '>' + escapeHtml(opt) + '</option>';
@@ -219,23 +231,62 @@
   }
 
   function updateSettingsVisibility() {
-    const shortPwrBtnVal = getControlValue('shortPwrBtn');
-    const pwrBtnFootnoteBackRow = document.getElementById('row-setting-pwrBtnFootnoteBack');
-    if (pwrBtnFootnoteBackRow) {
-      if (shortPwrBtnVal === 4) {
-        pwrBtnFootnoteBackRow.style.display = '';
-      } else {
-        pwrBtnFootnoteBackRow.style.display = 'none';
-      }
-    }
+    // Footnotes is display index 4 in both SettingsList.h Power option lists.
+    const footnotesSelected = getControlValue('shortPwrBtn') === 4 || getControlValue('doublePwrBtn') === 4;
+    const row = document.getElementById('row-setting-pwrBtnFootnoteBack');
+    if (row) row.style.display = footnotesSelected ? '' : 'none';
   }
 
-  function handleSettingChanged(key) {
+  function handleSettingChanged(key, source) {
+    if (key === 'longPressButtonBehavior' && source) {
+      getControl(key).value = source.value;
+      const duplicate = document.getElementById('setting-' + key + '-side');
+      if (duplicate) duplicate.value = source.value;
+    }
     syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'quickResumeSleepScreen');
-    if (key === 'shortPwrBtn') {
+    if (key === 'shortPwrBtn' || key === 'doublePwrBtn') {
       updateSettingsVisibility();
     }
     markChanged();
+  }
+
+  function renderSettingRow(setting, suffix = '') {
+    const name = setting.key === 'longPressButtonBehavior' ? 'Page turn long press' : setting.name;
+    return '<div class="setting-row" id="row-setting-' + setting.key + suffix + '">' +
+      '<label class="setting-name" for="setting-' + setting.key + suffix + '">' + escapeHtml(name) + '</label>' +
+      '<span class="setting-control">' + renderControl(setting, suffix) + '</span></div>';
+  }
+
+  function renderCategory(settings) {
+    const definitions = [
+      ['Home button gestures', ['homeButtonTapAction', 'homeButtonDoubleTapAction', 'homeButtonLongPressAction']],
+      ['Power button', ['shortPwrBtn', 'doublePwrBtn', 'pwrBtnFootnoteBack']],
+      ['Front buttons', ['frontButtonFollowOrientation', 'backShortToFileBrowser']],
+      ['Side buttons', ['sideButtonLayout', 'sideButtonFollowOrientation']],
+      ['Taps and gestures', ['touchReaderControls', 'pageTurnGesture', 'previousPageGesture', 'tapForReaderMenu']]
+    ];
+    const assigned = new Set();
+    let grouped = '';
+    definitions.forEach(function(definition) {
+      const title = definition[0];
+      const keys = definition[1];
+      if (!settings.some(function(s) { return keys.includes(s.key); })) return;
+      if (title === 'Front buttons') keys.push('longPressButtonBehavior', 'longPressMenuFunction');
+      if (title === 'Side buttons') keys.push('longPressButtonBehavior');
+      grouped += '<section class="controls-group"><h3>' + title + '</h3>';
+      keys.forEach(function(key) {
+        const setting = settings.find(function(s) { return s.key === key; });
+        if (!setting) return;
+        const suffix = assigned.has(key) ? '-side' : '';
+        grouped += renderSettingRow(setting, suffix);
+        assigned.add(key);
+      });
+      grouped += '</section>';
+    });
+    // Unmapped settings stay visible, including board-specific controls.
+    return settings.filter(function(s) { return !assigned.has(s.key); }).map(function(s) {
+      return renderSettingRow(s);
+    }).join('') + grouped;
   }
 
   async function loadSettings() {
@@ -264,12 +315,7 @@
 
       for (const category in groups) {
         html += '<div class="card"><h2>' + escapeHtml(category) + '</h2>';
-        groups[category].forEach(function(s) {
-          html += '<div class="setting-row" id="row-setting-' + s.key + '">' +
-            '<label class="setting-name" for="setting-' + s.key + '">' + escapeHtml(s.name) + '</label>' +
-            '<span class="setting-control">' + renderControl(s) + '</span>' +
-            '</div>';
-        });
+        html += renderCategory(groups[category]);
         html += '</div>';
       }
 

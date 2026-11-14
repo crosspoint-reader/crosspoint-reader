@@ -241,6 +241,14 @@ void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
   renderer.restoreBwBuffer();
 }
 
+// Book page presentation: lets the panel use its reading waveform.
+struct ReaderRefreshScope {
+  ReaderRefreshScope() { display.setReaderRefresh(true); }
+  ~ReaderRefreshScope() { display.setReaderRefresh(false); }
+  ReaderRefreshScope(const ReaderRefreshScope&) = delete;
+  ReaderRefreshScope& operator=(const ReaderRefreshScope&) = delete;
+};
+
 struct BackNavCallback {
   void* ctx;
   void (*fn)(void*);
@@ -255,6 +263,11 @@ struct BackNavCallback {
 // - with backShortToFileBrowser: go to file browser.
 inline bool handleBackNavigation(const MappedInputManager& mappedInput, ActivityManager& activityManager,
                                  const char* filePath, BackNavCallback goHome) {
+  if (mappedInput.homeButtonAction() == HomeButtonAction::FileBrowser) {
+    activityManager.goToFileBrowser(filePath);
+    return true;
+  }
+
   // The reading surface deliberately has no left-edge swipe-to-exit path: in
   // swipe page-turn mode a right swipe must page back instead. Home remains
   // available through the board's dedicated Home gesture/key. Back swipes stay

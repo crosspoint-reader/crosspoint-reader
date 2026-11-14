@@ -16,6 +16,11 @@ class HalDisplay {
   GrayscaleCapabilities grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const;
   // Controller of the driver chosen at boot (null if the driver does not say).
   const char* controllerName() const { return einkDisplay.getControllerName(); }
+  // True while book pages are presented; panels with a reading waveform use it.
+  void setReaderRefresh(bool reading) { einkDisplay.setReaderRefresh(reading); }
+  bool displayRetainedGrayscaleOverlay(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool restore) {
+    return einkDisplay.displayRetainedGrayscaleOverlay(x, y, w, h, restore);
+  }
 
   // Constructor with pin configuration
   HalDisplay();
@@ -76,6 +81,8 @@ class HalDisplay {
 
   // Power management
   void deepSleep();
+  // Power the panel down between frames, keeping its image; the next paint wakes it.
+  void controllerIdle();
 
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
