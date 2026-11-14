@@ -2321,9 +2321,11 @@ GfxRenderer::InkBounds GfxRenderer::getFontInkBounds(const int fontId) const {
   // Measure real letters; the ascender metric usually reserves room for accents above them.
   int above = 0, below = 0;
   for (const char cp : {'d', 'H', 'l'}) {
+    if (!fontIt->second.hasCodepoint(cp)) continue;  // getGlyph would return the replacement glyph
     if (const EpdGlyph* glyph = fontIt->second.getGlyph(cp)) above = std::max<int>(above, glyph->top);
   }
   for (const char cp : {'p', 'g', 'y'}) {
+    if (!fontIt->second.hasCodepoint(cp)) continue;  // getGlyph would return the replacement glyph
     if (const EpdGlyph* glyph = fontIt->second.getGlyph(cp)) below = std::max(below, glyph->height - glyph->top);
   }
   // Glyphs may not be loaded yet (SD fonts): fall back to metrics and don't cache, so a later call can measure.
