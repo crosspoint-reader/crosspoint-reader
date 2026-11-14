@@ -73,7 +73,7 @@ void HomeActivity::fillCoverGridFromLibrary() {
   auto& record = reader->record;
   if (!index.open(library::libraryIndexPath())) {
     index.close();
-    GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+    GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING), /*transient=*/true);
     library::BuildStats stats;
     if (!library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0) ||
         !index.open(library::libraryIndexPath())) {
@@ -134,7 +134,7 @@ void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoad
     if (Storage.exists(epub->getThumbBmpPath(height).c_str())) return;
     if (!showingLoading) {
       showingLoading = true;
-      popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+      popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), /*transient=*/true);
       GUI.fillPopupProgress(renderer, popupRect, 0);
     }
     if (epub->generateThumbBmpFromSource(height)) {
@@ -150,7 +150,7 @@ void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoad
     if (Storage.exists(xtc->getThumbBmpPath(height).c_str())) return;
     if (!showingLoading) {
       showingLoading = true;
-      popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+      popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), /*transient=*/true);
       GUI.fillPopupProgress(renderer, popupRect, 0);
     }
     if (xtc->load() && xtc->generateThumbBmp(height)) {
@@ -188,7 +188,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           // Try to generate thumbnail image for Continue Reading card
           if (!showingLoading) {
             showingLoading = true;
-            popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+            popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), /*transient=*/true);
           }
           GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
           // Without a book cache (e.g. after "Delete Book Cache") there is no cached metadata,
@@ -208,7 +208,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             // Try to generate thumbnail image for Continue Reading card
             if (!showingLoading) {
               showingLoading = true;
-              popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+              popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), /*transient=*/true);
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
             bool success = xtc.generateThumbBmp(thumbHeight);
