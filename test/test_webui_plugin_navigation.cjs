@@ -153,27 +153,14 @@ async function runPluginsPage(plugins) {
   return {host, picker, select, emptyState, onDiscovered};
 }
 
-test('a manifest over 8 KiB remains within the plugin metadata read allowance', () => {
+test('plugin list handler preserves the 64 KiB manifest read limit', () => {
   const source = fs.readFileSync(path.join(root, 'src/network/CrossPointWebServer.cpp'), 'utf8');
   const handler = source.split('void CrossPointWebServer::handlePluginList() const {')[1]
     .split('// GET /plugin?name=')[0];
   const limit = handler.match(/strcmp\(filename, "manifest\.json"\) == 0 \? (\d+) \* 1024 : \d+/);
-  assert.ok(limit, 'manifest.json should retain its separate, larger read allowance');
+  assert.ok(limit, 'manifest.json should retain its separate read allowance');
+  assert.equal(Number(limit[1]) * 1024, 64 * 1024);
   assert.match(handler, /Storage\.readFileToString\("WEB", e\.dir \+ "\/" \+ filename, maxBytes, raw\)/);
-  const manifest = JSON.stringify({
-    title: 'Long manifest',
-    description: 'x'.repeat(10_000),
-    mount: 'files'
-  });
-  assert.ok(Buffer.byteLength(manifest) > 8192);
-  assert.match(handler, /for \(const char\* field : \{"title", "version", "author", "mount"\}\)/);
-  const metadata = Buffer.byteLength(manifest) <= Number(limit[1]) * 1024 ?
-    JSON.parse(manifest) : {};
-  const responseEntry = {name: 'large-manifest', mount: 'settings'};
-  for (const field of ['title', 'version', 'author', 'mount']) {
-    if (typeof metadata[field] === 'string') responseEntry[field] = metadata[field];
-  }
-  assert.equal(responseEntry.mount, 'files');
 });
 
 test('Plugins page dropdown navigates to every discovered plugin card', async () => {
