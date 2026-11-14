@@ -786,6 +786,10 @@ bool Section::finalizeBuild() {
   partial_ = false;
   partialPageCount_ = 0;
   pageCount = builtPageCount_;
+  // Drop caches grown beside parser allocations so prewarming can reuse the freed space.
+  if (auto* fontCache = renderer.getFontCacheManager()) {
+    fontCache->releaseSdFontCaches();
+  }
   return true;
 }
 

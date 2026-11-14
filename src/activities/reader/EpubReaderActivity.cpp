@@ -9,6 +9,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -723,6 +724,7 @@ void EpubReaderActivity::loop() {
       idlePrewarmPage = section->currentPage;
       const int nextPage = section->currentPage + 1;
       if (nextPage < static_cast<int>(section->pageCount)) {
+        HalPowerManager::Lock powerLock;
         if (const auto p = section->loadPage(nextPage)) {
           if (auto* fcm = renderer.getFontCacheManager()) {
             const auto t0 = millis();
@@ -1654,6 +1656,10 @@ void EpubReaderActivity::renderBook() {
   // exit from the overlay while its deferred chrome refresh is still pending.
   settleOverlayRefresh();
 
+  // The old page snapshot must not compete with chapter builds for heap.
+  // An open overlay gets a fresh snapshot after the new page is rendered.
+  discardOverlayPage();
+
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;
     pendingSyncSaveError = false;
@@ -1964,11 +1970,6 @@ void EpubReaderActivity::renderBook() {
     currentPageLinks = std::move(p->links);
     currentPageLinkMarginLeft = orientedMarginLeft;
     currentPageLinkMarginTop = orientedMarginTop;
-
-    // The overlay and non-tiled grayscale renderer share the renderer's single
-    // stored-BW slot. Release the old page snapshot before renderContents()
-    // needs that slot, then snapshot the newly rendered page below.
-    discardOverlayPage();
 
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
