@@ -6,36 +6,17 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <TtfEpdFont.h>
+#include <VectorFontIdentity.h>
 #include <esp_heap_caps.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <iterator>
 
 #include "CrossPointSettings.h"
 #include "ReaderFontSizes.h"
 #include "fontIds.h"
-
-namespace {
-
-#if CROSSPOINT_VECTOR_FONTS
-// Stable, non-zero renderer font id for a vector family at a size (FNV-1a of
-// name + size). 0 is the "not found" sentinel, so bump collisions to 1.
-int computeTtfFontId(const char* familyName, uint8_t pointSize) {
-  uint32_t hash = 2166136261u;
-  for (const char* p = familyName; p && *p; ++p) {
-    hash ^= static_cast<uint8_t>(*p);
-    hash *= 16777619u;
-  }
-  hash ^= pointSize;
-  hash *= 16777619u;
-  hash ^= 0x54544600u;  // "TTF\0" salt to avoid colliding with cpfont ids
-  const int id = static_cast<int>(hash);
-  return id != 0 ? id : 1;
-}
-#endif  // CROSSPOINT_VECTOR_FONTS
-
-}  // namespace
 
 // Out-of-line ctor/dtor: TtfEpdFont is complete here, so unique_ptr<TtfEpdFont>
 // can be constructed/destroyed. (Declared in the header where it is only
@@ -407,7 +388,19 @@ void SdCardFontSystem::freeTtfSources() {
     s.streamed = false;
     s.size = 0;
     s.present = false;
+    s.identity = 0;
   }
+}
+
+int SdCardFontSystem::ttfIdentity(const uint8_t pointSize, const bool uiFallback) const {
+  uint32_t hashes[4] = {};
+  uint8_t present = 0;
+  for (uint8_t role = 0; role < 4; ++role) {
+    if (!ttfSources_[role].present) continue;
+    present |= 1u << role;
+    hashes[role] = ttfSources_[role].identity;
+  }
+  return vectorFontIdentity(hashes, present, pointSize, uiFallback);
 }
 
 bool SdCardFontSystem::loadTtfVariant(const uint8_t pointSize, const int fontId) {
@@ -497,6 +490,8 @@ bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& pat
     return false;
   }
   TtfSource& s = ttfSources_[style];
+  const char* slash = strrchr(path.c_str(), '/');
+  s.identity = vectorFontSourceHash(f, slash ? slash + 1 : path.c_str());
   // A resident buffer lands in PSRAM when fiFontMalloc can place it there;
   // otherwise it competes with everything else in internal DRAM. PsramAlloc
   // aborts on OOM, so this gate is load-bearing on no-PSRAM boards (X4/C3):
@@ -599,10 +594,8 @@ void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
         f->loadVariantOf(*ttf_, ui.pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/16 * 1024, /*maxGlyphs=*/384);
     if (!ok) continue;
     LOG_DBG("SDFS", "TTF UI fallback @%upt loaded (heap free %u)", ui.pointSize, (unsigned)ESP.getFreeHeap());
-    // Distinct id from the reader-size font: a UI size can equal the reader size
-    // (e.g. both 12pt), which would collide on computeTtfFontId and be dropped
-    // as a duplicate. Salt the UI family name to separate the id spaces.
-    const int id = computeTtfFontId((ttfFamily_ + "\x01ui").c_str(), ui.pointSize);
+    // Separate reader and UI identities even when their point sizes match.
+    const int id = ttfIdentity(ui.pointSize, /*uiFallback=*/true);
     renderer.insertFont(id, f->family());
     renderer.registerTtfFont(id, f.get());
     renderer.setFallbackFont(ui.fontId, id);
@@ -643,7 +636,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     renderer.removeFont(ttfFontId_);
     if (ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs)) {
       ttf_->build(" ");
-      ttfFontId_ = computeTtfFontId(family.name.c_str(), size);
+      ttfFontId_ = ttfIdentity(size);
       renderer.insertFont(ttfFontId_, ttf_->family());
       renderer.registerTtfFont(ttfFontId_, ttf_.get());
       ttfPointSize_ = size;
@@ -705,7 +698,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   // Seed the regular face's glyph cache; other styles + glyphs fault on demand.
   ttf_->build(" ");
 
-  ttfFontId_ = computeTtfFontId(family.name.c_str(), size);
+  ttfFontId_ = ttfIdentity(size);
   renderer.insertFont(ttfFontId_, ttf_->family());
   renderer.registerTtfFont(ttfFontId_, ttf_.get());
   ttfFamily_ = family.name;

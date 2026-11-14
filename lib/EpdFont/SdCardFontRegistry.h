@@ -14,11 +14,11 @@ struct SdCardFontFileInfo {
   // for the canonical name, so downloaded families keep no per-file heap strings
   // and the entry is two pointers wide (8 bytes on the ESP32-C3).
   std::unique_ptr<char[]> name;
-  uint8_t pointSize;  // parsed from filename: 14 (0 for size-free vector fonts)
-  uint8_t style;      // .cpfont: always 0 (all 4 styles bundled in one file).
-                      // Vector family in a folder: the style ROLE of this file —
-                      // 0=regular, 1=bold, 2=italic, 3=bold-italic (parsed from
-                      // the filename). A loose vector file is always role 0.
+  uint8_t pointSize;      // parsed from filename: 14 (0 for size-free vector fonts)
+  uint8_t style;          // .cpfont: always 0 (all 4 styles bundled in one file).
+                          // Vector family: resolved role (0=regular, 1=bold,
+                          // 2=italic, 3=bold-italic). A loose file is always role 0.
+  uint16_t weight = 400;  // Vector metadata weight (unused for .cpfont).
 };
 
 struct SdCardFontFamilyInfo {
@@ -96,12 +96,11 @@ class SdCardFontRegistry {
   // Match a loose vector font filename (.ttf/.otf/.ttc, case-insensitive) and
   // return the length of the base name (extension stripped) in `baseLen`.
   static bool parseVectorFontName(const char* filename, size_t& baseLen);
-  // Style role (0=regular, 1=bold, 2=italic, 3=bold-italic) inferred from a
-  // vector font's base name (case-insensitive "bold"/"italic"/"oblique" tokens).
-  static uint8_t parseVectorStyle(const char* baseName, size_t baseLen);
-  // Refine each vector file's style role from its real face metadata
-  // (FtFont::inspectStream: OS/2 weight + italic flag), keeping the
-  // filename-derived role when the face can't be read. Then dedup by role.
+  // Bits 0-1: filename bold/italic hints. Bits 2-5: explicit suffix role.
+  static uint8_t guessVectorStyle(const char* baseName, size_t baseLen);
+  // Reject inspection failures, then prefer suffixes over filename hints OR metadata.
+  // Rank nearest 400 (unsuffixed italic: regular weight) or regular weight + 300 for bold.
+  // Ties prefer heavier, then lexical. No file reuse.
   static void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
 #endif
   static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
