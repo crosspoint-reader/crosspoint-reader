@@ -232,7 +232,9 @@ EpubReaderActivity::~EpubReaderActivity() {
   // A radio still stopped for this book's build may start again in the next one.
   if (radioReleasedForBuild.load()) bleturner::afterPaint();
 
-  if (footnoteDepth > 0 && epub) saveLinkStack();
+  // The progress file still points to the source until the landing page is rendered.
+  footnoteHistory.discardPendingLink();
+  if (!footnoteHistory.empty() && epub) saveLinkStack();
 
   section.reset();
   CLIPPINGS.unload();
@@ -901,9 +903,7 @@ void EpubReaderActivity::loop() {
         startClipSelection();
         return;
       case CrossPointSettings::LP_MENU_FOOTNOTES:
-        if (footnoteDepth > 0) {
-          restoreSavedPosition();
-        } else {
+        if (!restoreSavedPosition()) {
           openFootnoteSelect(false);
         }
         return;
@@ -973,9 +973,8 @@ void EpubReaderActivity::loop() {
     return;  // no build step before the menu shows
   }
 
-  if (footnoteDepth > 0 && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
-      mappedInput.getHeldTime() < ReaderUtils::GO_BACK_OR_HOME_MS) {
-    restoreSavedPosition();
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() < ReaderUtils::GO_BACK_OR_HOME_MS && restoreSavedPosition()) {
     return;
   }
 
@@ -994,9 +993,7 @@ void EpubReaderActivity::loop() {
       (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
        mappedInput.wasReleased(MappedInputManager::Button::Power) &&
        !mappedInput.wasReleased(MappedInputManager::Button::Down))) {
-    if (footnoteDepth > 0) {
-      restoreSavedPosition();
-    } else {
+    if (!restoreSavedPosition()) {
       openFootnoteSelect(false);
     }
     return;
@@ -1403,7 +1400,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
       localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
     }
     // The destructor can no longer save the back-stack once epub is gone.
-    if (footnoteDepth > 0) saveLinkStack();
+    if (!footnoteHistory.empty()) saveLinkStack();
     epub.reset();
   }
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
@@ -1714,7 +1711,8 @@ void EpubReaderActivity::renderBook() {
       cachedChapterTotalPageCount = 0;
       cachedVisibleTextOffset.reset();
     }
-    const bool cacheComplete = cacheLoaded && !section->isPartial();
+    // Rebuild unexamined span targets; a completed negative lookup keeps the cache usable.
+    const bool cacheComplete = cacheLoaded && !section->isPartial() && section->hasCheckedAnchor(pendingAnchor);
     const bool explicitOffsetJump = pendingOffsetJump.has_value();
     const std::optional<uint32_t> offsetJump =
         explicitOffsetJump ? pendingOffsetJump
@@ -1741,7 +1739,7 @@ void EpubReaderActivity::renderBook() {
           return;
         }
         GfxRenderer::FrameBufferLoan loan(renderer);
-        if (!section->createSectionFile(renderSpec, popupFn)) {
+        if (!section->createSectionFile(renderSpec, popupFn, pendingAnchor)) {
           LOG_ERR("ERS", "Failed to persist page data to SD");
           section.reset();
           loan.end();
@@ -1798,7 +1796,8 @@ void EpubReaderActivity::renderBook() {
           bool started;
           {
             GfxRenderer::FrameBufferLoan loan(renderer);
-            started = section->startBuild(renderSpec, [this] { showBuildPopup(renderer, pagesUntilFullRefresh); });
+            started = section->startBuild(
+                renderSpec, [this] { showBuildPopup(renderer, pagesUntilFullRefresh); }, pendingAnchor);
           }
           if (!started) {
             LOG_ERR("ERS", "Failed to start section build");
@@ -1975,6 +1974,7 @@ void EpubReaderActivity::renderBook() {
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
     markPageRendered();
+    footnoteHistory.resolveLinkTarget({currentSpineIndex, section->currentPage});
   }
 
   if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
@@ -3280,22 +3280,14 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
     return;
   }
 
-  if (savePosition) {
-    // Full: drop the oldest entry so Back always returns from the newest jump.
-    if (footnoteDepth == MAX_FOOTNOTE_DEPTH) {
-      std::copy(savedPositions + 1, savedPositions + MAX_FOOTNOTE_DEPTH, savedPositions);
-      footnoteDepth--;
-    }
-    // A child screen (menu, footnote list) may have released the section;
-    // nextPageNumber then holds the page it was on.
-    const int page = section ? section->currentPage : nextPageNumber;
-    savedPositions[footnoteDepth] = {currentSpineIndex, page};
-    footnoteDepth++;
-    LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, page);
-  }
-
   {
     RenderLock lock;
+    if (savePosition) {
+      // Child screens release section after preserving its page in nextPageNumber.
+      const int page = section ? section->currentPage : nextPageNumber;
+      footnoteHistory.push({currentSpineIndex, page});
+      LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteHistory.depth(), currentSpineIndex, page);
+    }
     clearDeferredReposition();
     pendingAnchor = std::move(anchor);
     currentSpineIndex = targetSpineIndex;
@@ -3308,11 +3300,11 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 
 void EpubReaderActivity::saveLinkStack() const {
   // [depth] then depth x (spine u16 LE, page u16 LE)
-  uint8_t data[1 + MAX_FOOTNOTE_DEPTH * 4];
+  uint8_t data[1 + FootnoteHistory::MAX_DEPTH * 4];
   size_t size = 0;
-  data[size++] = static_cast<uint8_t>(footnoteDepth);
-  for (int i = 0; i < footnoteDepth; i++) {
-    const SavedPosition& pos = savedPositions[i];
+  data[size++] = static_cast<uint8_t>(footnoteHistory.depth());
+  for (int i = 0; i < footnoteHistory.depth(); i++) {
+    const auto& pos = footnoteHistory.data()[i];
     data[size++] = pos.spineIndex & 0xFF;
     data[size++] = (pos.spineIndex >> 8) & 0xFF;
     data[size++] = pos.pageNumber & 0xFF;
@@ -3328,20 +3320,21 @@ void EpubReaderActivity::loadLinkStack() {
   if (!Storage.exists(path.c_str())) return;
   {
     HalFile f;
-    uint8_t data[1 + MAX_FOOTNOTE_DEPTH * 4];
+    uint8_t data[1 + FootnoteHistory::MAX_DEPTH * 4];
     if (Storage.openFileForRead("ERS", path, f)) {
       const int size = f.read(data, sizeof(data));
       const int depth = size > 0 ? data[0] : 0;
-      if (depth >= 1 && depth <= MAX_FOOTNOTE_DEPTH && size == 1 + depth * 4) {
+      if (depth >= 1 && depth <= FootnoteHistory::MAX_DEPTH && size == 1 + depth * 4) {
         const int spineCount = epub->getSpineItemsCount();
         bool valid = true;
+        FootnoteHistory::Position positions[FootnoteHistory::MAX_DEPTH];
         for (int i = 0; i < depth; i++) {
           const uint8_t* p = data + 1 + i * 4;
-          savedPositions[i] = {p[0] | (p[1] << 8), p[2] | (p[3] << 8)};
-          valid = valid && savedPositions[i].spineIndex < spineCount;
+          positions[i] = {p[0] | (p[1] << 8), p[2] | (p[3] << 8)};
+          valid = valid && positions[i].spineIndex < spineCount;
         }
         if (valid) {
-          footnoteDepth = depth;
+          footnoteHistory.restore(positions, depth);
           LOG_DBG("ERS", "Loaded link stack, depth %d", depth);
         }
       }
@@ -3352,20 +3345,20 @@ void EpubReaderActivity::loadLinkStack() {
   Storage.remove(path.c_str());
 }
 
-void EpubReaderActivity::restoreSavedPosition() {
-  if (footnoteDepth <= 0) return;
-  footnoteDepth--;
-  const auto& pos = savedPositions[footnoteDepth];
-  LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteDepth, pos.spineIndex, pos.pageNumber);
-
+bool EpubReaderActivity::restoreSavedPosition() {
   {
     RenderLock lock;
+    const auto pos = footnoteHistory.pop();
+    if (!pos) return false;
+    LOG_DBG("ERS", "Restoring position [%d]: spine %d, page %d", footnoteHistory.depth(), pos->spineIndex,
+            pos->pageNumber);
     clearDeferredReposition();
-    currentSpineIndex = pos.spineIndex;
-    nextPageNumber = pos.pageNumber;
+    currentSpineIndex = pos->spineIndex;
+    nextPageNumber = pos->pageNumber;
     section.reset();
   }
   requestUpdate();
+  return true;
 }
 
 void EpubReaderActivity::loadCachedBookmarks() {

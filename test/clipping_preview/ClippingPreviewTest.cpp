@@ -265,6 +265,23 @@ TEST(ClippingHighlight, RemovalMatchesPortableAndLegacyHighlightBoundaries) {
   EXPECT_FALSE(clippingContainsWord(clip, 2, 2, 11, 42, 4, 0, 1));
 }
 
+TEST(ClippingHighlight, SelectedListMarkerUsesPageAndWordInTheOriginalLayout) {
+  Clipping clip;
+  clip.spineIndex = 2;
+  clip.startPage = clip.endPage = 2;
+  clip.startWordIndex = 4;
+  clip.endWordIndex = 5;
+  clip.pageCount = 10;
+  clip.layoutSignature = 42;
+  clip.startOffset = 100;
+  clip.endOffset = 104;
+
+  EXPECT_TRUE(clippingContainsWord(clip, 2, 2, 10, 42, 4, 100, 100));
+  EXPECT_FALSE(clippingContainsWord(clip, 2, 2, 10, 42, 3, 100, 100));
+  EXPECT_FALSE(clippingContainsWord(clip, 2, 2, 10, 43, 4, 100, 100));
+  EXPECT_TRUE(clippingContainsWord(clip, 2, 3, 11, 43, 0, 100, 104));
+}
+
 TEST(ClippingText, SharedPredicatesHandleEmptyWhitespaceAndUnicode) {
   EXPECT_FALSE(clippingText::hasVisibleText(nullptr));
   EXPECT_FALSE(clippingText::hasVisibleText(""));

@@ -436,9 +436,12 @@ void ClipSelectionActivity::confirmSelection(const ClippingResult::Action action
       result.startOffset = result.endOffset = UINT32_MAX;
       break;
     }
+    if (words[i].startOffset == words[i].endOffset) continue;
     result.startOffset = std::min(result.startOffset, words[i].startOffset);
     result.endOffset = std::max(result.endOffset, words[i].endOffset);
   }
+  // Generated list markers have no source text. Keep marker-only clippings page-local.
+  if (result.startOffset == UINT32_MAX) result.endOffset = UINT32_MAX;
   setResult(std::move(result));
   finish();
 }
