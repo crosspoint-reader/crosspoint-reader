@@ -302,8 +302,12 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   if (storedFontFamily != STORED_NOTOSANS) needsResave = true;
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
-  // Hotspot subnet — edited in settings.json only, load manually
-  copyToField(apCidr, doc["apCidr"] | "", sizeof(apCidr));
+  // Hotspot subnet — edited in settings.json only, load manually. Reject
+  // oversized values so truncation can't reshape them into a different CIDR.
+  const char* cidr = doc["apCidr"] | "";
+  if (strlen(cidr) < sizeof(apCidr)) {
+    copyToField(apCidr, cidr, sizeof(apCidr));
+  }
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
     language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
