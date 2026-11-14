@@ -75,6 +75,14 @@ class UiTabListActivity : public UiListActivity {
   // with more tabs (Settings) keep the default of 0 (fill the slot).
   int16_t tabPillMaxPad = 0;
 
+  // When true, each tab's slot is sized to its own label (plus pill padding and
+  // room for the sort indicator on every tab, so nothing moves when the active
+  // tab changes), with the spare width shared equally, instead of equal
+  // quarters/thirds of the bar. Short labels give their room to long ones, so a
+  // label is cut only when all of them together do not fit (then the bar falls
+  // back to equal slots). Slots sit edge to edge, so the bar stays touchable.
+  bool tabDistributeSlots = false;
+
  private:
   static void tabActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
 };

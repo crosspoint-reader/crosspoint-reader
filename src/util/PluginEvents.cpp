@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "FavoritesStore.h"
 #include "PluginHttp.h"
 #include "PluginLocations.h"
 #include "components/UITheme.h"
@@ -401,6 +402,9 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
           Storage.remove(tmp.c_str());
           if (hadDest && !Storage.rename(bak.c_str(), dest.c_str())) {
             LOG_ERR("PEVT", "restore of %s failed", dest.c_str());
+            // The original is parked as .bak and nothing is at dest: a
+            // favorited book there is gone from its path.
+            FAVORITES.forgetIfGone(dest.c_str());
           }
           return -1;
         }
