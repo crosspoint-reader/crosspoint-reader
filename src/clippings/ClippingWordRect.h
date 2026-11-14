@@ -33,7 +33,10 @@ inline Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, cons
   // Trim from the top only: descenders (g, j, p, q, y) stay whole. The word's own font keeps larger runs intact.
   const auto ink = renderer.getFontInkBounds(wordFont);
   const int pitch = renderer.getLineHeight(wordFont, SETTINGS.getReaderLineCompression());
-  const int trim = std::max(0, ink.bottom - ink.top - pitch);
+  int trim = ink.bottom - ink.top - pitch;
+  // Glue to the line above when the gap fits in the font's own headroom above its letters (ink.top, room the
+  // ascender reserves for accents): the box grows upwards but never past the font's ascender. Larger gaps stay.
+  if (-trim > ink.top) trim = 0;
   return Rect{left + line.xPos + block->wordXpos(i) + skipX,
               top + line.yPos + block->getRubyShift(renderer.getFontAscenderSize(lineFont)) +
                   block->wordYOffset(renderer, fontId, i) + ink.top + trim,

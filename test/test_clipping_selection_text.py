@@ -456,6 +456,15 @@ int main() {
     assert(decorated.words[0].height == 10);
     assert(decorated.words[0].y == inkY + 2);
     assert(decorated.words[0].y + decorated.words[0].height == inkY + 12);
+    // A gap within the font's headroom (ink top 2) is closed by growing upwards; descenders stay put.
+    decorated.renderer.linePitch = 14;
+    assert(decorated.extractWords());
+    assert(decorated.words[0].height == 14);
+    assert(decorated.words[0].y == inkY - 2);
+    // One pixel more than the headroom: the gap stays and the box hugs the ink.
+    decorated.renderer.linePitch = 15;
+    assert(decorated.extractWords());
+    assert(decorated.words[0].height == 12 && decorated.words[0].y == inkY);
     decorated.renderer.linePitch = 16;
     assert(decorated.extractWords());
     const auto originalInk = decorated.renderer.ink;
