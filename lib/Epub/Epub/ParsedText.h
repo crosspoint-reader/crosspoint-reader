@@ -93,6 +93,7 @@ class ParsedText {
   bool focusReadingEnabled;
   bool isNaturalAlign;
   bool hasRtlWord;
+  bool hasComplexWord = false;
   bool droppedWords = false;
   int linesAfterCurrent = -1;
   bool firstLineConsumed = false;

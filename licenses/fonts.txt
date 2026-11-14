@@ -653,6 +653,266 @@ CrossPoint selects the SIL Open Font License 1.1 option.
 Full terms: see the shared OFL 1.1 section at the end of this file.
 
 ========================================================================
+NotoSansBengali
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notosansbengali/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/bengali)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifBengali
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifbengali/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/bengali)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansDevanagari
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notosansdevanagari/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/devanagari)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifDevanagari
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifdevanagari/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/devanagari)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansGurmukhi
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notosansgurmukhi/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/gurmukhi)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifGurmukhi
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifgurmukhi/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/gurmukhi)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansGujarati
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notosansgujarati/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/gujarati)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifGujarati
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifgujarati/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/gujarati)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansOriya
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notosansoriya/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/oriya)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifOriya
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notoseriforiya/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/oriya)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansTamil
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notosanstamil/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/tamil)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifTamil
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notoseriftamil/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/tamil)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansTelugu
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notosanstelugu/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/telugu)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifTelugu
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notoseriftelugu/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/telugu)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansKannada
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notosanskannada/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/kannada)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifKannada
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifkannada/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/kannada)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansMalayalam
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notosansmalayalam/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/malayalam)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifMalayalam
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifmalayalam/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/malayalam)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSansSinhala
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssinhala/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/sinhala)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
+NotoSerifSinhala
+Source: https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsinhala/OFL.txt
+========================================================================
+
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/sinhala)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://scripts.sil.org/OFL
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
 Shared OFL 1.1 terms
 ========================================================================
 

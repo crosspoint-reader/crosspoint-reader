@@ -1158,6 +1158,54 @@ TEST_F(ChapterBlockDecorationTest, FirstLetterRuleCapturesQuoteAndLetter) {
   std::filesystem::remove(cssPath);
 }
 
+// A drop cap draws codepoints one by one; Indic text must shape as a whole word.
+TEST_F(ChapterBlockDecorationTest, IndicFloatedSpanStaysText) {
+  open("p", nullptr);
+  open("span", "float: left; font-size: 3em");
+  text("\xe0\xa6\x95\xe0\xa6\xbf");  // কি: the pre-base vowel sign draws before its consonant
+  close("span");
+  text("\xe0\xa6\x9b\xe0\xa7\x81 " + words(40));  // ছু
+  close("p");
+
+  EXPECT_TRUE(elementsWithTag(TAG_PageDropCap).empty());
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_FALSE(lines.empty());
+  EXPECT_EQ(lines[0]->xPos, 0);
+  EXPECT_STREQ(static_cast<const PageLine*>(lines[0])->getBlock()->wordText(0), "\xe0\xa6\x95\xe0\xa6\xbf");
+}
+
+TEST_F(ChapterBlockDecorationTest, IndicFirstLetterRuleKeepsQuoteAndClusterInWord) {
+  const auto cssPath = std::filesystem::temp_directory_path() / "crosspoint-first-letter-indic.css";
+  {
+    HalFile output;
+    ASSERT_TRUE(output.open(cssPath.c_str(), "wb"));
+    const std::string css = "p.opening::first-letter { initial-letter: 2; }";
+    output.write(css.data(), css.size());
+  }
+  HalFile input;
+  ASSERT_TRUE(input.open(cssPath.c_str(), "rb"));
+  ASSERT_EQ(cssParser.loadFromStream(input), CssParser::ParseResult::Complete);
+
+  open("body", nullptr);
+  open("p", nullptr);
+  text("Before here");
+  close("p");
+  const XML_Char* attributes[] = {"class", "opening", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "p", attributes);
+  text("\xe2\x80\x9c\xe0\xa6\x95\xe0\xa6\xbf " + words(40));  // “কি
+  close("p");
+
+  EXPECT_TRUE(elementsWithTag(TAG_PageDropCap).empty());
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_GE(lines.size(), 2u);
+  const auto& before = *static_cast<const PageLine*>(lines[0])->getBlock();
+  const auto& opening = *static_cast<const PageLine*>(lines[1])->getBlock();
+  EXPECT_STREQ(opening.wordText(0), "\xe2\x80\x9c\xe0\xa6\x95\xe0\xa6\xbf");
+  // The restored quote keeps its own source offset, right after "Before here", not the previous word's.
+  EXPECT_EQ(opening.wordSourceRange(0).start, before.wordSourceRange(before.wordCount() - 1).end);
+  std::filesystem::remove(cssPath);
+}
+
 TEST_F(ChapterBlockDecorationTest, BorderedBlockFramesItsTextAndInsetsIt) {
   open("div", "border: 2px solid black");
   open("p", nullptr);
@@ -2323,4 +2371,21 @@ TEST(TextDecorationPosition, UnderlineStaysBelowBaseline) {
     line->render(renderer, 0, 0, 20);
     EXPECT_EQ(renderer.lastLineY, 34);
   });
+}
+
+TEST(TextSpacingLayout, UsesShapingMemoOnlyForParagraphsWithIndicText) {
+  GfxRenderer renderer;
+  for (const char* word : {"office", "שָׁלוֹם", "कि", "漢कि"}) {
+    ParsedText text;
+    text.addWord(word, EpdFontFamily::REGULAR);
+    const unsigned before = GfxRenderer::shapingMemoStarts;
+    unsigned lines = 0;
+    text.layoutAndExtractLines(renderer, 0, 200, [&](std::unique_ptr<TextBlock> block, auto) {
+      EXPECT_TRUE(block->valid());
+      ++lines;
+    });
+    EXPECT_GT(lines, 0u);
+    const bool indic = std::strstr(word, "कि") != nullptr;
+    EXPECT_EQ(GfxRenderer::shapingMemoStarts - before, indic ? 1u : 0u) << word;
+  }
 }
