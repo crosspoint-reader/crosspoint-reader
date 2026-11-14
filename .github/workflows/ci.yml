@@ -71,8 +71,17 @@ jobs:
       - name: Install cppcheck runtime dependency
         run: |
           # pioarduino's Linux cppcheck binary links against libpcre.so.3.
+          # In newer Ubuntu runner images where libpcre3 is omitted from apt sources,
+          # download from Ubuntu archive over HTTPS and verify SHA-256 before installation.
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libpcre3
+          if ! sudo apt-get install -y --no-install-recommends libpcre3; then
+            PKG="libpcre3_8.39-13ubuntu0.22.04.1_amd64.deb"
+            SHA256="0d1eb051047eb0c637c893f618f45e1d419863bfa3bc821897ee05ad418ba22e"
+            wget -q "https://security.ubuntu.com/ubuntu/pool/main/p/pcre3/${PKG}"
+            echo "${SHA256}  ${PKG}" | sha256sum -c -
+            sudo dpkg -i "${PKG}"
+            rm -f "${PKG}"
+          fi
 
       - name: Run cppcheck
         run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high

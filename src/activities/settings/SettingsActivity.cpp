@@ -50,11 +50,7 @@ SettingsSection sectionFor(const SettingInfo& setting);
 
 bool showOnDevice(const SettingInfo& setting) {
   if (sectionFor(setting) == SettingsSection::End || home_button::isSetting(setting.valuePtr)) return false;
-  // The sunlight fading fix is a grayscale-waveform compensation that does
-  // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
-  if (setting.valuePtr == &CrossPointSettings::fadingFix && (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
-    return false;
-  }
+  if (setting.valuePtr == &CrossPointSettings::fadingFix && !CrossPointSettings::fadingFixSupported()) return false;
   // Merged into the Text Settings screen.
   if (setting.category == StrId::STR_CAT_READER && setting.inTextSettings) return false;
   if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&

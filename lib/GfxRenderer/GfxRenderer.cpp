@@ -2431,6 +2431,17 @@ bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDispla
   return true;
 }
 
+bool GfxRenderer::displayRetainedGrayscaleOverlay(int x, int y, int width, int height, bool restore) const {
+  if (x < 0 || y < 0 || width <= 0 || height <= 0 || x >= getScreenWidth() || y >= getScreenHeight() ||
+      width > getScreenWidth() - x || height > getScreenHeight() - y)
+    return false;
+  int ax, ay, bx, by;
+  rotateCoordinates(orientation, x, y, &ax, &ay, panelWidth, panelHeight);
+  rotateCoordinates(orientation, x + width - 1, y + height - 1, &bx, &by, panelWidth, panelHeight);
+  const int x0 = std::min(ax, bx), y0 = std::min(ay, by);
+  return display.displayRetainedGrayscaleOverlay(x0, y0, std::abs(ax - bx) + 1, std::abs(ay - by) + 1, restore);
+}
+
 void GfxRenderer::preconditionGrayscale() const { display.preconditionGrayscale(); }
 
 void GfxRenderer::preconditionGrayscale(int x, int y, int w, int h) const {

@@ -2,6 +2,7 @@
 
 #include <BitmapHelpers.h>
 #include <BmpToBmpConverter.h>
+#include <BoardConfig.h>
 #include <Epub.h>
 #include <Epub/converters/PngToFramebufferConverter.h>
 #include <FontCacheManager.h>
@@ -736,6 +737,13 @@ void SleepActivity::onEnter() {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
   }
 
+  // Every mode below replaces the whole screen. One clean straight to the new
+  // image leaves the old screen visible, so clean to white first (BLANK is that clean).
+  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
+    renderer.clearScreen();
+    renderer.displayBuffer(kSleepClean);
+  }
+
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
       return renderBlankSleepScreen();
@@ -815,10 +823,9 @@ void SleepActivity::renderCustomSleepScreen() const {
   renderDefaultSleepScreen();
 }
 
-// Sleep screens paint with a single HALF refresh (stock parity): the OEM X4
-// firmware's only clean refresh in normal operation is the single-pass 0xD7
-// sequence, used once for the sleep image. It never runs the multi-flash GC
-// waveform (0xF7) that FULL_REFRESH selects (#2471's blinking complaint).
+// Sleep screens paint with kSleepClean (after the white clean in onEnter): HALF, not
+// the multi-flash GC waveform (0xF7) that FULL_REFRESH selects (#2471's blinking
+// complaint), except on Metalio.
 void SleepActivity::renderDefaultSleepScreen() const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -880,7 +887,11 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     return;
   }
   if (absolute) {
-    cleanBeforeAbsoluteGray(renderer);
+    // Full-screen modes already cleaned to white in onEnter; Cover + Transparent
+    // skips that clean, so its plain-cover fallback cleans here.
+    if (preserveBackground || SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT) {
+      cleanBeforeAbsoluteGray(renderer);
+    }
     if (!renderer.displayGrayscaleBase(sleepGrayscaleMode(renderer))) return;
   } else if (hasGreyscale) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is
@@ -1100,8 +1111,16 @@ void SleepActivity::renderCoverSleepScreen() const {
 }
 
 void SleepActivity::renderLastScreenSleepScreen() const {
-  const auto pageHeight = renderer.getScreenHeight();
-  renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  // Clear the rounded bottom corner too: how far its arc cuts in at the icon's bottom row.
+  const int radius = BoardConfig::ACTIVE.bottomCornerRadius != 0 ? BoardConfig::ACTIVE.bottomCornerRadius
+                                                                 : BoardConfig::ACTIVE.cornerRadius;
+  const int d = std::max(0, radius - bottom);
+  const int intrusion =
+      radius > 0 ? static_cast<int>(std::ceil(radius - std::sqrt(static_cast<float>(radius * radius - d * d)))) : 0;
+  renderer.drawImage(MoonIcon, std::max(left, intrusion), renderer.getScreenHeight() - bottom - MOONICON_HEIGHT,
+                     MOONICON_WIDTH, MOONICON_HEIGHT);
   // Only the moon differs from the displayed frame, so a differential FAST
   // update adds it without the flashing clean pass (which sweeps the panel
   // through the inverse — a full white flash on a night-mode page).

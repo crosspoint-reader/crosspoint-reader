@@ -85,6 +85,7 @@ class HttpDownloader {
     // Extra headers (per-server custom headers), sent to the starting origin only.
     std::vector<Header> headers;
     int* statusOut = nullptr;
+    std::string* wwwAuthenticateOut = nullptr;
     bool captureErrorBody = false;
   };
 
