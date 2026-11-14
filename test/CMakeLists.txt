@@ -73,6 +73,7 @@ add_subdirectory(button_press_navigation)
 
 add_subdirectory(inflate_stream)
 add_subdirectory(inflate_reader)
+add_subdirectory(symbol_table)
 add_subdirectory(zip_file)
 add_subdirectory(xtc_parser)
 add_subdirectory(fs_helpers)

@@ -5,6 +5,7 @@
 #include "Arduino.h"
 #include "HalStorage.h"
 #include "Logging.h"
+#include "SymbolTable.h"
 #include "esp_debug_helpers.h"
 #include "esp_memory_utils.h"
 #include "esp_private/esp_cpu_internal.h"
@@ -19,6 +20,9 @@
 
 RTC_NOINIT_ATTR char panicMessage[256];
 RTC_NOINIT_ATTR HalSystem::StackFrame panicStack[MAX_PANIC_STACK_DEPTH];
+// PC and the return-address register (ra, or a0 on Xtensa) at the fault; 0 when not captured.
+RTC_NOINIT_ATTR uint32_t panicPc;
+RTC_NOINIT_ATTR uint32_t panicReturnAddress;
 // RTC_NOINIT is uninitialized on cold boot, so only this exact marker proves a
 // panic diagnostic was captured before the reset.
 RTC_NOINIT_ATTR volatile uint32_t panicCaptureMarker;
@@ -51,6 +55,13 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
   for (size_t i = 0; i < MAX_PANIC_STACK_DEPTH; i++) {
     panicStack[i].sp = 0;
   }
+#if __riscv
+  panicPc = (uint32_t)((RvExcFrame*)frame)->mepc;
+  panicReturnAddress = (uint32_t)((RvExcFrame*)frame)->ra;
+#else
+  panicPc = (uint32_t)((XtExcFrame*)frame)->pc;
+  panicReturnAddress = (uint32_t)((XtExcFrame*)frame)->a0;
+#endif
 
   // Stack window dump, mirroring components/esp_system/port/arch/*/panic_arch.c.
   // Hardware exceptions never reach __wrap_panic_abort, so on both
@@ -128,6 +139,8 @@ void checkPanic() {
 void clearPanic() {
   panicCaptureMarker = 0;
   panicMessage[0] = '\0';
+  panicPc = 0;
+  panicReturnAddress = 0;
   for (size_t i = 0; i < MAX_PANIC_STACK_DEPTH; i++) {
     panicStack[i].sp = 0;
   }
@@ -159,6 +172,63 @@ static const char* resetReasonName(esp_reset_reason_t reason) {
   }
 }
 
+// On Xtensa a saved return address carries the call size in its top two bits.
+static uint32_t toCodeAddress(uint32_t value) {
+#if __riscv
+  return value;
+#else
+  return (value >> 30) ? ((value & 0x3FFFFFFF) | 0x40000000) : value;
+#endif
+}
+
+// Lists the faulting PC and return address, then the stack words that fall
+// inside a function: candidates for return addresses, not a real unwind.
+static void appendCodeAddresses(std::string& info) {
+  SymbolTable::Table table;
+  const bool haveTable = SymbolTable::open(table);
+
+  char line[160];
+  auto append = [&](const char* label, uint32_t address, bool isReturnAddress, bool onlyIfNamed) {
+    // A call that never returns can be a function's last instruction, so its return
+    // address is the next function's first byte. Resolve the byte before it instead.
+    const uint32_t back = isReturnAddress ? 1 : 0;
+    SymbolTable::Function function;
+    if (haveTable && address >= back && SymbolTable::lookup(table, address - back, function)) {
+      const uint32_t offset = function.offset + back;
+      if (function.isLibraryRange) {
+        // The offset in a whole library means nothing.
+        snprintf(line, sizeof(line), "\n%s0x%08X %s", label, static_cast<unsigned>(address), function.name);
+      } else {
+        snprintf(line, sizeof(line), "\n%s0x%08X %s+0x%x%s", label, static_cast<unsigned>(address), function.name,
+                 static_cast<unsigned>(offset), offset == function.size ? " (function end)" : "");
+      }
+    } else if (onlyIfNamed) {
+      return false;
+    } else {
+      snprintf(line, sizeof(line), "\n%s0x%08X ?", label, static_cast<unsigned>(address));
+    }
+    info += line;
+    return true;
+  };
+
+  info += "\n\nCode addresses:";
+  append("PC ", panicPc, false, false);
+  append("RA ", toCodeAddress(panicReturnAddress), true, false);
+  if (!haveTable) {
+    return;
+  }
+  info += "\nStack (possible return addresses):";
+  // Bounds the report: each line is a heap append on a device with little RAM.
+  int remaining = 64;
+  for (size_t i = 0; i < MAX_PANIC_STACK_DEPTH && panicStack[i].sp != 0; i++) {
+    for (size_t j = 0; j < 8 && remaining > 0; j++) {
+      if (append("  ", toCodeAddress(panicStack[i].spp[j]), true, true)) {
+        remaining--;
+      }
+    }
+  }
+}
+
 std::string getPanicInfo(bool full) {
   if (!full) {
     return panicMessage;
@@ -171,6 +241,7 @@ std::string getPanicInfo(bool full) {
     // way to tell those apart from a true panic.
     info += "\n\nReset reason: " + std::string(resetReasonName(esp_reset_reason()));
     info += "\n\nPanic reason: " + std::string(panicMessage);
+    appendCodeAddresses(info);
     info += "\n\nLast logs:\n" + getLastLogs();
     info += "\n\nStack memory:\n";
 
