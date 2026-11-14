@@ -8,8 +8,6 @@
 #include <type_traits>
 #include <utility>
 
-#include "clippings/ClippingText.h"
-
 // Vertical extent of a text line's selection/saved-clipping highlights. Shared by ClipSelectionActivity and
 // EpubReaderActivity so selection, saved highlights and tap hit-testing always agree.
 //
@@ -41,20 +39,17 @@ Band wordBand(const Renderer& renderer, const int fontId, const Line& line, cons
   return {top, top + renderer.getFontAscenderSize(font) + std::abs(renderer.getFontDescenderSize(font))};
 }
 
-// Union of the visible words' bands; empty (top == bottom) for a line without visible words, so whitespace-only
-// lines never constrain visible text.
+// Union of the line's word bands; empty (top == bottom) for a line without words.
 template <typename Renderer, typename Line>
 Band naturalBand(const Renderer& renderer, const int fontId, const Line& line) {
   const auto* block = line.getBlock();
   if (!block || !block->valid() || block->wordCount() == 0) return {line.yPos, line.yPos};
   Band band{INT_MAX, INT_MIN};
   for (uint16_t i = 0; i < block->wordCount(); ++i) {
-    if (!clippingText::hasVisibleText(block->wordText(i))) continue;
     const Band word = wordBand(renderer, fontId, line, i);
     band.top = std::min(band.top, word.top);
     band.bottom = std::max(band.bottom, word.bottom);
   }
-  if (band.bottom <= band.top) return {line.yPos, line.yPos};
   return band;
 }
 

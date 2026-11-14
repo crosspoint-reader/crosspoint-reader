@@ -420,16 +420,6 @@ int main() {
     addLine(table, 0, 24);
     addLine(table, 200, 25);
     assert(height(lineBand(bandRenderer, 0, table, *left)) == 16 && height(lineBand(bandRenderer, 0, table, *right)) == 16);
-
-    // A whitespace-only line has no band and cannot constrain the visible line it overlaps.
-    Page blank;
-    const auto* visible = addLine(blank, 0, 0);
-    auto* spaces = static_cast<PageLine*>(addLine(blank, 0, 10));
-    spaces->block.packedText = "  ";
-    spaces->block.packedText += '\0';
-    spaces->block.styles.push_back(EpdFontFamily::REGULAR);
-    assert(height(clippingLineBand::naturalBand(bandRenderer, 0, *spaces)) == 0);
-    assert(lineBand(bandRenderer, 0, blank, *visible).bottom == 16);
   }
   for (bool images : {false, true}) for (auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH})
     for (auto mode : {ClipSelectionActivity::Mode::Clip, ClipSelectionActivity::Mode::Lookup}) {
