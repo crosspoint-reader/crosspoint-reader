@@ -338,6 +338,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t SCREEN_MARGIN_MAX = 40;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 5;
   uint8_t screenMargin = SCREEN_MARGIN_MIN;
+  // Top/bottom reader margin. 0 follows screenMargin (which then sets all four
+  // sides, as before); any other value leaves screenMargin for left/right only.
+  uint8_t screenMarginVertical = 0;
+  uint8_t verticalMargin() const { return screenMarginVertical == 0 ? screenMargin : screenMarginVertical; }
+  // Bottom reader margin: the gap below the text, above the status bar when
+  // one is shown. 0 follows the top margin.
+  uint8_t screenMarginBottom = 0;
+  uint8_t bottomMargin() const { return screenMarginBottom == 0 ? verticalMargin() : screenMarginBottom; }
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in
   // SettingsList.h, so it stays out of the on-device Settings screen.

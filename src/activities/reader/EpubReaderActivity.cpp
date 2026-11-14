@@ -510,7 +510,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
 
   int marginTop, marginRight, marginBottom, marginLeft;
   renderer.getOrientedViewableTRBL(&marginTop, &marginRight, &marginBottom, &marginLeft);
-  marginTop += SETTINGS.screenMargin;
+  marginTop += SETTINGS.verticalMargin();
   marginLeft += SETTINGS.screenMargin;
 
   std::string chapterTitle;
@@ -582,7 +582,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         vocabulary.seriesIndex = vocabularyMetadata->seriesIndex;
       }
       auto lookup = makeUniqueNoThrow<DictionaryWordSelectActivity>(
-          renderer, mappedInput, std::move(page), left + SETTINGS.screenMargin, top + SETTINGS.screenMargin,
+          renderer, mappedInput, std::move(page), left + SETTINGS.screenMargin, top + SETTINGS.verticalMargin(),
           clipping.text, std::move(vocabulary));
       if (!lookup) {
         LOG_ERR("CLIP", "OOM: dictionary lookup activity");
@@ -630,7 +630,7 @@ void EpubReaderActivity::openFootnoteSelect(const bool reopenMenuOnCancel) {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginTop += SETTINGS.verticalMargin();
   orientedMarginLeft += SETTINGS.screenMargin;
   auto selector = makeUniqueNoThrow<EpubReaderFootnoteSelectActivity>(renderer, mappedInput, std::move(page),
                                                                       orientedMarginLeft, orientedMarginTop);
@@ -1678,7 +1678,7 @@ void EpubReaderActivity::renderBook() {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginTop += SETTINGS.verticalMargin();
   orientedMarginLeft += SETTINGS.screenMargin;
   orientedMarginRight += SETTINGS.screenMargin;
 
@@ -1687,13 +1687,13 @@ void EpubReaderActivity::renderBook() {
   if (automaticPageTurnActive &&
       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
     orientedMarginBottom +=
-        SETTINGS.screenMargin + statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin;
+        SETTINGS.bottomMargin() + statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin;
   } else {
     // statusBarOffsetY lowers the status line toward the edge; the text follows it down.
     const int statusLane = SETTINGS.statusBarSpec().textLaneVisible(true)
                                ? std::max(0, statusBarHeight - BoardConfig::ACTIVE.statusBarOffsetY)
                                : statusBarHeight;
-    orientedMarginBottom += SETTINGS.screenMargin + statusLane;
+    orientedMarginBottom += SETTINGS.bottomMargin() + statusLane;
   }
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
@@ -2382,8 +2382,8 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
                                                  block->getBlockStyle().characterSpacing);
       if (width <= 0) continue;
       const uint16_t index = wordIndex++;
-      const Rect rect =
-          clippingWordRect(renderer, fontId, line, i, top + SETTINGS.screenMargin, left + SETTINGS.screenMargin, width);
+      const Rect rect = clippingWordRect(renderer, fontId, line, i, top + SETTINGS.verticalMargin(),
+                                         left + SETTINGS.screenMargin, width);
       if (x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height) continue;
       const auto range = block->wordSourceRange(i);
       for (size_t j = 0; j < CLIPPINGS.clippingCount(); ++j) {

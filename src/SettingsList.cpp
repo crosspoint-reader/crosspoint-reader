@@ -96,6 +96,14 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                            CrossPointSettings::SCREEN_MARGIN_STEP},
                           "screenMargin", StrId::STR_CAT_READER)
            .withTextSettings());
+  emit(SettingInfo::Value(StrId::STR_TOP_MARGIN, &CrossPointSettings::screenMarginVertical,
+                          {0, CrossPointSettings::SCREEN_MARGIN_MAX, CrossPointSettings::SCREEN_MARGIN_STEP},
+                          "screenMarginVertical", StrId::STR_CAT_READER)
+           .withTextSettings());
+  emit(SettingInfo::Value(StrId::STR_BOTTOM_MARGIN, &CrossPointSettings::screenMarginBottom,
+                          {0, CrossPointSettings::SCREEN_MARGIN_MAX, CrossPointSettings::SCREEN_MARGIN_STEP},
+                          "screenMarginBottom", StrId::STR_CAT_READER)
+           .withTextSettings());
   emit(SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
                          {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                           StrId::STR_BOOK_S_STYLE},

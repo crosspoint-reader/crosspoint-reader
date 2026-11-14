@@ -262,6 +262,7 @@ struct BoardConfig { static bool isEegoA4() { return false; } };
 unsigned long millis() { return 0; }
 struct Settings {
   int screenMargin = 0;
+  int verticalMargin() const { return screenMargin; }
   int getReaderFontId() const { return 0; }
   ReaderRenderSpec readerRenderSpec(int width, int height) const {
     ReaderRenderSpec spec;

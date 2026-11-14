@@ -27,7 +27,8 @@ constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_L
 
 constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
     StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
-    StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN};
+    StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN,     StrId::STR_TOP_MARGIN,
+    StrId::STR_BOTTOM_MARGIN};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION_NO_PREVIEW,
                                         StrId::STR_EMBEDDED_STYLE_NO_PREVIEW, StrId::STR_TEXT_AA_NO_PREVIEW};
 
@@ -448,6 +449,34 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     }
+    case LayoutRow::VerticalMargin: {
+      // First option follows Screen Margin (the stored value 0).
+      std::vector<std::string> options;
+      options.reserve(MARGIN_MAX / MARGIN_STEP + 1);
+      options.push_back(tr(STR_SAME_AS_SCREEN_MARGIN));
+      for (int m = MARGIN_STEP; m <= MARGIN_MAX; m += MARGIN_STEP) options.push_back(std::to_string(m));
+      const int cur = std::clamp<int>(SETTINGS.screenMarginVertical, 0, MARGIN_MAX) / MARGIN_STEP;
+      optionPopup_.show(StrId::STR_TOP_MARGIN, options, cur, [](int idx) {
+        SETTINGS.screenMarginVertical = static_cast<uint8_t>(idx * MARGIN_STEP);
+        SETTINGS.saveToFile();
+      });
+      requestUpdate();
+      break;
+    }
+    case LayoutRow::BottomMargin: {
+      // First option follows Top Margin (the stored value 0).
+      std::vector<std::string> options;
+      options.reserve(MARGIN_MAX / MARGIN_STEP + 1);
+      options.push_back(tr(STR_SAME_AS_TOP_MARGIN));
+      for (int m = MARGIN_STEP; m <= MARGIN_MAX; m += MARGIN_STEP) options.push_back(std::to_string(m));
+      const int cur = std::clamp<int>(SETTINGS.screenMarginBottom, 0, MARGIN_MAX) / MARGIN_STEP;
+      optionPopup_.show(StrId::STR_BOTTOM_MARGIN, options, cur, [](int idx) {
+        SETTINGS.screenMarginBottom = static_cast<uint8_t>(idx * MARGIN_STEP);
+        SETTINGS.saveToFile();
+      });
+      requestUpdate();
+      break;
+    }
 
     default:
       break;
@@ -477,6 +506,12 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     }
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
+    case LayoutRow::VerticalMargin:
+      return SETTINGS.screenMarginVertical == 0 ? tr(STR_SAME_AS_SCREEN_MARGIN)
+                                                : std::to_string(SETTINGS.screenMarginVertical);
+    case LayoutRow::BottomMargin:
+      return SETTINGS.screenMarginBottom == 0 ? tr(STR_SAME_AS_TOP_MARGIN)
+                                              : std::to_string(SETTINGS.screenMarginBottom);
 
     default:
       return "";
