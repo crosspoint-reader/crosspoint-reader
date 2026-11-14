@@ -1,8 +1,6 @@
 #pragma once
 #include <WString.h>
 
-#include <cstdint>
-#include <ctime>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -95,11 +93,5 @@ inline bool isSafePathComponent(const String& name) {
  * Replaces invalid path characters, spaces, and control characters with '-'.
  */
 void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLen);
-
-/**
- * Pack a local broken-down time into FAT date/time words. Returns false (outputs untouched)
- * when the year is outside the FAT range 1980-2107, e.g. an unset clock near 1970.
- */
-bool packFatDateTime(const struct tm& local, uint16_t* date, uint16_t* time);
 
 }  // namespace FsHelpers

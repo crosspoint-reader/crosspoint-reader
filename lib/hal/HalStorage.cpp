@@ -1,7 +1,6 @@
 #include "HalStorage.h"
 
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
-#include <FsHelpers.h>
 #include <Logging.h>
 #include <SDCardManager.h>
 #include <esp_heap_caps.h>
@@ -39,7 +38,12 @@ HalStorage::HalStorage() {
 static void fatDateTimeCallback(uint16_t* date, uint16_t* time) {
   const time_t now = ::time(nullptr);
   struct tm local;
-  if (localtime_r(&now, &local) && FsHelpers::packFatDateTime(local, date, time)) return;
+  // FAT only represents 1980-2107; an unset clock (~1970) falls through to the default.
+  if (localtime_r(&now, &local) && local.tm_year >= 80 && local.tm_year <= 207) {
+    *date = FS_DATE(local.tm_year + 1900, local.tm_mon + 1, local.tm_mday);
+    *time = FS_TIME(local.tm_hour, local.tm_min, local.tm_sec);
+    return;
+  }
   *date = FS_DEFAULT_DATE;
   *time = FS_DEFAULT_TIME;
 }

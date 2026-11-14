@@ -229,15 +229,3 @@ void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLe
 }
 
 }  // namespace FsHelpers
-
-namespace FsHelpers {
-
-bool packFatDateTime(const struct tm& local, uint16_t* date, uint16_t* time) {
-  const int year = local.tm_year + 1900;
-  if (!date || !time || year < 1980 || year > 2107) return false;
-  *date = static_cast<uint16_t>(((year - 1980) << 9) | ((local.tm_mon + 1) << 5) | local.tm_mday);
-  *time = static_cast<uint16_t>((local.tm_hour << 11) | (local.tm_min << 5) | (local.tm_sec / 2));
-  return true;
-}
-
-}  // namespace FsHelpers
