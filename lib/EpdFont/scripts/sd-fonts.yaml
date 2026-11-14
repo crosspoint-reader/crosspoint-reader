@@ -428,12 +428,14 @@ families:
   # ── Japanese ───────────────────────────────────────────────────────────
   # Subset Japanese fonts cover the kanji block with gaps, which splits it
   # into more than the 4096 intervals SdCardFont accepts. Noto Sans CJK JP
-  # covers the whole block and converts to 107 per style.
+  # covers the whole block and converts to 111 per style.
 
   - name: NotoSansCJKJP
     description: "Japanese sans-serif with full kanji coverage (Kanji, Kana, Latin)"
     scripts: [cjk]
-    intervals: cjk,latin-ext,punctuation,reading,symbols
+    # Plus small katakana, enclosed CJK (㈱) and CJK compatibility (㎏ ㌔), which
+    # Japanese text uses but the cjk preset omits, and 𠮷 from Extension B.
+    intervals: cjk,latin-ext,punctuation,reading,symbols,(0x31F0-0x31FF),(0x3200-0x33FF),(0x20BB7-0x20BB7)
     sizes: [8, 10, 12, 14, 16, 18]
     styles:
       regular: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"}
