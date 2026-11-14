@@ -16,8 +16,14 @@ class Element {
     this.id = '';
     this._text = '';
     this.style = {};
+    this.value = '';
+    this.hidden = false;
+    this.listeners = {};
+    this.scrollCalls = [];
   }
   appendChild(child) { this.children.push(child); return child; }
+  addEventListener(type, callback) { this.listeners[type] = callback; }
+  scrollIntoView(options) { this.scrollCalls.push(options); }
   replaceChildren(...children) { this.children = children; this._text = ''; }
   set textContent(value) { this._text = String(value); this.children = []; }
   get textContent() { return this._text || this.children.map(child => child.textContent).join(' '); }
@@ -104,9 +110,92 @@ test('a malformed plugin list is rejected without creating cards', async () => {
   assert.equal(host.children.length, 0);
 });
 
-test('Plugins page keeps the dropdown and scroll navigation wired', () => {
+async function runPluginsPage(plugins) {
   const html = fs.readFileSync(path.join(root, 'src/network/html/PluginsPage.html'), 'utf8');
-  assert.match(html, /id="plugin-select"/);
-  assert.match(html, /loadPlugins\('settings', null, onDiscovered\)/);
-  assert.match(html, /scrollIntoView\(\{behavior: 'smooth', block: 'start'\}\)/);
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const host = new Element('div');
+  host.children = plugins.map(plugin => {
+    const card = new Element('div');
+    card.id = 'plugin-' + plugin.name;
+    return card;
+  });
+  const picker = new Element('div');
+  picker.hidden = true;
+  const select = new Element('select');
+  const emptyState = new Element('div');
+  emptyState.hidden = true;
+  const message = new Element('p');
+  const elements = {
+    'plugin-container': host,
+    'plugin-picker': picker,
+    'plugin-select': select,
+    'empty-state': emptyState
+  };
+  let onDiscovered;
+  const document = {
+    getElementById: id => elements[id] || host.children.find(child => child.id === id) || null,
+    querySelector: selector => selector === '#empty-state p' ? message : null,
+    createElement: tag => new Element(tag)
+  };
+  const context = {
+    document,
+    loadPlugins: async (mount, beforeLoad, callback) => {
+      assert.equal(mount, 'settings');
+      assert.equal(beforeLoad, null);
+      onDiscovered = callback;
+      callback(plugins);
+      return true;
+    }
+  };
+  vm.createContext(context);
+  vm.runInContext(script, context, { filename: 'PluginsPage.html' });
+  await new Promise(resolve => setImmediate(resolve));
+  return {host, picker, select, emptyState, onDiscovered};
+}
+
+test('a manifest over 8 KiB remains within the plugin metadata read allowance', () => {
+  const source = fs.readFileSync(path.join(root, 'src/network/CrossPointWebServer.cpp'), 'utf8');
+  const handler = source.split('void CrossPointWebServer::handlePluginList() const {')[1]
+    .split('// GET /plugin?name=')[0];
+  const limit = handler.match(/strcmp\(filename, "manifest\.json"\) == 0 \? (\d+) \* 1024 : \d+/);
+  assert.ok(limit, 'manifest.json should retain its separate, larger read allowance');
+  assert.match(handler, /Storage\.readFileToString\("WEB", e\.dir \+ "\/" \+ filename, maxBytes, raw\)/);
+  const manifest = JSON.stringify({
+    title: 'Long manifest',
+    description: 'x'.repeat(10_000),
+    mount: 'files'
+  });
+  assert.ok(Buffer.byteLength(manifest) > 8192);
+  assert.match(handler, /for \(const char\* field : \{"title", "version", "author", "mount"\}\)/);
+  const metadata = Buffer.byteLength(manifest) <= Number(limit[1]) * 1024 ?
+    JSON.parse(manifest) : {};
+  const responseEntry = {name: 'large-manifest', mount: 'settings'};
+  for (const field of ['title', 'version', 'author', 'mount']) {
+    if (typeof metadata[field] === 'string') responseEntry[field] = metadata[field];
+  }
+  assert.equal(responseEntry.mount, 'files');
+});
+
+test('Plugins page dropdown navigates to every discovered plugin card', async () => {
+  const {host, picker, select, onDiscovered} = await runPluginsPage(installed.slice());
+  assert.equal(typeof onDiscovered, 'function');
+  assert.equal(picker.hidden, false);
+  assert.equal(select.children.length, host.children.length);
+  for (let i = 0; i < host.children.length; i++) {
+    const card = host.children[i];
+    const option = select.children[i];
+    assert.equal(option.value, card.id);
+    select.value = option.value;
+    select.listeners.change();
+    assert.equal(card.scrollCalls.length, 1);
+    assert.equal(card.scrollCalls[0].behavior, 'smooth');
+    assert.equal(card.scrollCalls[0].block, 'start');
+  }
+});
+
+test('Plugins page hides jump picker when discovery returns no plugins', async () => {
+  const {picker, select, emptyState} = await runPluginsPage([]);
+  assert.equal(picker.hidden, true);
+  assert.equal(select.children.length, 0);
+  assert.equal(emptyState.hidden, false);
 });
