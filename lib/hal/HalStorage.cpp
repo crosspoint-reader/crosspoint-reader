@@ -266,6 +266,13 @@ uint32_t HalFile::modificationTime() {
   if (!impl || !impl->file.getModifyDateTime(&date, &time) || date == 0) return 0;
   return (static_cast<uint32_t>(date) << 16) | time;
 }
+uint32_t HalFile::creationTime() {
+  HalStorage::StorageLock lock;
+  uint16_t date = 0;
+  uint16_t time = 0;
+  if (!impl || !impl->file.getCreateDateTime(&date, &time) || date == 0) return 0;
+  return (static_cast<uint32_t>(date) << 16) | time;
+}
 bool HalFile::seek(size_t pos) { HAL_FILE_WRAPPED_CALL(seekSet, pos); }
 bool HalFile::seek64(uint64_t pos) { HAL_FILE_WRAPPED_CALL(seekSet, pos); }
 bool HalFile::seekCur(int64_t offset) { HAL_FILE_WRAPPED_CALL(seekCur, offset); }
