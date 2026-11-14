@@ -7,6 +7,10 @@ target_compile_definitions(OtShaperTest PRIVATE SHAPING_FIXTURE_DIR="${REPO_ROOT
 target_link_libraries(OtShaperTest PRIVATE crosspoint_test_common GTest::gtest_main)
 gtest_discover_tests(OtShaperTest)
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME OtSyllableMachineStateOrder
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_machine_state_order.py)
+
 # Not a test: the command-line shaper compare_harfbuzz.py diffs against HarfBuzz.
 add_executable(ot_shape_cli
   OtShapeCli.cpp

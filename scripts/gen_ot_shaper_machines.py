@@ -11,6 +11,7 @@ firmware segments syllables with one table lookup per character.
     python3 scripts/gen_ot_shaper_machines.py
 """
 
+import hashlib
 from pathlib import Path
 
 OUTPUT = Path(__file__).resolve().parent.parent / "lib" / "OtShaper" / "OtSyllableMachines.h"
@@ -294,10 +295,23 @@ def used_categories(shift):
     return {(v >> shift) & 0x3F for v in values}
 
 
+def order_scanner_states(name, table, accept):
+    """Order noninitial states by a fixed digest key for reproducible table layout."""
+    assert 0 < len(table) < 255
+    order = [0] + sorted(range(1, len(table)), key=lambda state: (
+        hashlib.sha256(f"CrossPoint/OtSyllableMachines/v1/{name}/{state}".encode("ascii")).digest(), state))
+    mapping = [0] * len(table)
+    for new, old in enumerate(order):
+        mapping[old] = new
+    renamed = [[mapping[t] if t >= 0 else -1 for t in table[old]] for old in order]
+    return mapping, renamed, [accept[old] for old in order]
+
+
 def emit(name, patterns, alphabet, source, extra=()):
     shift = 13 if name == "INDIC" else 23
     alphabet = sorted((set(alphabet) & used_categories(shift)) | set(extra))
     class_of, nclasses, table, acc = compile_scanner(patterns, alphabet)
+    _, table, acc = order_scanner_states(name, table, acc)
     classes = [0] * 64
     for cat, cls in class_of.items():
         classes[cat] = cls
