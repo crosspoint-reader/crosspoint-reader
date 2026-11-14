@@ -654,9 +654,6 @@ with tempfile.TemporaryDirectory() as directory:
         str(ROOT / "lib/Utf8/Utf8.cpp"), "-o", str(executable),
     ], check=True)
     subprocess.run([str(executable)], check=True)
-page_header = (ROOT / "lib/Epub/Epub/Page.h").read_text()
-assert "std::abs(element->yPos - yPos)" in page_header, "row pitch must look both ways (paragraph last lines)"
-for text in (source, reader_source):
-    assert "linePitch(line.yPos)" in text and "std::min(fullHeight, rowPitch)" in text and "fullHeight - height" in text, \
-        "selection and saved-clip highlights must share the bottom-anchored row-pitch cap"
+assert "std::abs(static_cast<const PageLine&>(*other).yPos - line.yPos)" in source, "paragraph last lines must also be capped"
+assert "std::min(fullHeight, rowPitch)" in source and "fullHeight - height" in source, "selection highlight must stay bottom-anchored within the row pitch"
 print("Clipping selection text regression checks passed")

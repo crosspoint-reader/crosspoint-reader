@@ -80,7 +80,7 @@ int clippingWordFont(const GfxRenderer& renderer, const int fontId, const TextBl
 }
 
 Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, const PageLine& line, const uint16_t i,
-                      const int top, const int left, const int wordWidth, const int rowPitch) {
+                      const int top, const int left, const int wordWidth) {
   const auto& block = line.getBlock();
   const int wordFont = clippingWordFont(renderer, fontId, *block, i);
   const char* text = block->wordText(i);
@@ -92,13 +92,10 @@ Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, const PageL
     width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i) - skipX));
   }
   const int lineFont = TextBlock::renderFontId(renderer, block->blockFontId(fontId), fontId);
-  // Match ClipSelectionActivity: cap to the row pitch, trimming the ascender gap from the top.
-  const int fullHeight = renderer.getLineHeight(wordFont);
-  const int height = std::min(fullHeight, rowPitch);
   return Rect{left + line.xPos + block->wordXpos(i) + skipX,
               top + line.yPos + block->getRubyShift(renderer.getFontAscenderSize(lineFont)) +
-                  block->wordYOffset(renderer, fontId, i) + fullHeight - height,
-              width, height};
+                  block->wordYOffset(renderer, fontId, i),
+              width, renderer.getLineHeight(wordFont)};
 }
 
 int clampPercent(int percent) {
@@ -2372,8 +2369,7 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
       if (width <= 0) continue;
       const uint16_t index = wordIndex++;
       const Rect rect =
-          clippingWordRect(renderer, fontId, line, i, top + SETTINGS.screenMargin, left + SETTINGS.screenMargin, width,
-                           page.linePitch(line.yPos));
+          clippingWordRect(renderer, fontId, line, i, top + SETTINGS.screenMargin, left + SETTINGS.screenMargin, width);
       if (x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height) continue;
       const auto range = block->wordSourceRange(i);
       for (size_t j = 0; j < CLIPPINGS.clippingCount(); ++j) {
@@ -2447,21 +2443,19 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
         continue;
       }
 
-      const Rect rect = clippingWordRect(renderer, fontId, line, i, orientedMarginTop, orientedMarginLeft, width,
-                                         page.linePitch(line.yPos));
+      const Rect rect = clippingWordRect(renderer, fontId, line, i, orientedMarginTop, orientedMarginLeft, width);
       const int x = rect.x;
       const int y = rect.y;
-      const int height = rect.height;
       width = rect.width;
       if (width > 0) {
         const int highlightRight = x + width;
         const int previousHighlightRight = previousHighlightX + previousHighlightWidth;
         if (hasPreviousHighlight && previousHighlightRight < x) {
-          fillHighlight(previousHighlightRight, y, x - previousHighlightRight, height);
+          fillHighlight(previousHighlightRight, y, x - previousHighlightRight, renderer.getLineHeight(fontId));
         } else if (hasPreviousHighlight && highlightRight < previousHighlightX) {
-          fillHighlight(highlightRight, y, previousHighlightX - highlightRight, height);
+          fillHighlight(highlightRight, y, previousHighlightX - highlightRight, renderer.getLineHeight(fontId));
         }
-        fillHighlight(x, y, width, height);
+        fillHighlight(x, y, width, renderer.getLineHeight(fontId));
         previousHighlightX = x;
         previousHighlightWidth = width;
         hasPreviousHighlight = true;
