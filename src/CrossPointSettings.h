@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <BlePageTurner.h>
+#include <BoardConfig.h>
 #include <Epub/ReaderRenderSpec.h>
 #include <PersistableStore.h>
 
@@ -356,6 +357,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
+  // The fading fix compensates the X4/X3 grayscale waveforms; other boards never get it.
+  static bool fadingFixSupported() {
+    const auto board = BoardConfig::ACTIVE.board;
+    return board == BoardConfig::Board::XteinkX4 || board == BoardConfig::Board::XteinkX3 ||
+           board == BoardConfig::Board::XteinkX3Uc8279;
+  }
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)

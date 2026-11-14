@@ -8,7 +8,7 @@ namespace fo = freeink::opds;
 fo::HttpResult OpdsHttpTransport::get(const std::string& url, const fo::HttpAuth& auth, const char* accept,
                                       const char* acceptLanguage, const bool captureErrorBody,
                                       const fo::OpdsDataSink& onChunk) {
-  int status = 0;
+  fo::HttpResult result;
   HttpDownloader::FetchOptions options;
   options.username = auth.username;
   options.password = auth.password;
@@ -17,9 +17,11 @@ fo::HttpResult OpdsHttpTransport::get(const std::string& url, const fo::HttpAuth
   if (accept) options.accept = accept;
   if (acceptLanguage) options.acceptLanguage = acceptLanguage;
   options.captureErrorBody = captureErrorBody;
-  options.statusOut = &status;
-  const bool ok = HttpDownloader::fetchUrl(url, onChunk, options);
-  return fo::HttpResult{ok, status};
+  options.statusOut = &result.status;
+  if (captureErrorBody) options.wwwAuthenticateOut = &result.wwwAuthenticate;
+  result.ok = HttpDownloader::fetchUrl(url, onChunk, options);
+  result.redirected = HttpDownloader::lastAnswerRedirected();
+  return result;
 }
 
 bool OpdsHttpTransport::postForm(const std::string& url, const std::string& body, std::string& outResponse,
