@@ -31,8 +31,8 @@ extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSele
 gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "bool ClipSelectionActivity::renderIncremental")
 incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void ClipSelectionActivity::drawSelection")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
-word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
-word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
+word_rect_source = (ROOT / "src/clippings/ClippingWordRect.h").read_text()
+word_rect_helpers = word_rect_source[word_rect_source.rfind("\n", 0, word_rect_source.index("inline int clippingWordFont")) + 1:]
 saved_hit = method("int EpubReaderActivity::clippingAtPoint", "void EpubReaderActivity::drawClippingHighlights", reader_source)
 saved_draw = method("void EpubReaderActivity::drawClippingHighlights", "void EpubReaderActivity::renderStatusBar", reader_source)
 
@@ -128,7 +128,7 @@ struct FontCache {
 struct Renderer {
   enum RenderMode { BW };
   enum class DitherMode { Replace, PreserveInk };
-  struct Draw { int x, width, tracking; };
+  struct Draw { int x, width, tracking, y = 0, height = 0; };
   mutable std::vector<Draw> draws;
   mutable std::vector<Draw> fills;
   mutable std::set<std::pair<int, int>> ink;
@@ -158,6 +158,10 @@ struct Renderer {
   bool isSdCardFont(int) const { return sdFont; }
   int getFontAscenderSize(int) const { return 12; }
   int getLineHeight(int) const { return 16; }
+  struct InkBounds { int top, bottom; };
+  InkBounds getFontInkBounds(int) const { return {2, 14}; }
+  int linePitch = 16;
+  int getLineHeight(int, float) const { return linePitch; }
   RenderMode getRenderMode() const { return BW; }
   void getOrientedViewableTRBL(int* top, int* right, int* bottom, int* left) const {
     *top = *right = *bottom = *left = 0;
@@ -202,7 +206,7 @@ struct Renderer {
   }
   void fillRectDither(int x, int y, int width, int height, Color,
                       DitherMode mode = DitherMode::Replace) const {
-    fills.push_back({x, width, 0});
+    fills.push_back({x, width, 0, y, height});
     if (mode == DitherMode::Replace) clearInk(x, y, width, height);
     for (int py = y; py < y + height; ++py)
       for (int px = x; px < x + width; ++px)
@@ -263,6 +267,7 @@ unsigned long millis() { return 0; }
 struct Settings {
   int screenMargin = 0;
   int getReaderFontId() const { return 0; }
+  float getReaderLineCompression() const { return 1.0f; }
   ReaderRenderSpec readerRenderSpec(int width, int height) const {
     ReaderRenderSpec spec;
     spec.viewportWidth = width;
@@ -287,7 +292,7 @@ bool selectionLowMemory(const int first, const int last) {
 """ + memory_guard + r"""
   return lowMemory;
 }
-""" + clean_word + r"""
+""" + clean_word + "\n" + word_rect_helpers + r"""
 struct ClipSelectionActivity {
 """ + word_box + action_helpers + r"""
   std::unique_ptr<WordBox[]> words = makeUniqueNoThrow<WordBox[]>(240);
@@ -331,7 +336,7 @@ struct EpubReaderActivity {
   int clippingAtPoint(const Page&, int, int) const;
   void drawClippingHighlights(const Page&, int, int, int) const;
 };
-""" + word_font + word_rect + saved_hit + saved_draw + r"""
+""" + saved_hit + saved_draw + r"""
 int loadLine(ClipSelectionActivity& activity, const std::vector<std::string>& logical,
              bool rtl, int first = 0, uint32_t offset = 0, uint16_t row = 0) {
   std::vector<uint16_t> visual;
@@ -442,6 +447,26 @@ int main() {
     page->elements.push_back(std::move(line));
     decorated.pages.push_back(std::move(page));
     assert(decorated.extractWords());
+    // Selection box hugs the measured ink (top 2, bottom 14), not the full line advance.
+    const int inkY = decorated.words[0].y;
+    assert(decorated.words[0].height == 12);
+    // Tight line spacing: capped at the line pitch, trimmed from the top so descenders stay whole.
+    decorated.renderer.linePitch = 10;
+    assert(decorated.extractWords());
+    assert(decorated.words[0].height == 10);
+    assert(decorated.words[0].y == inkY + 2);
+    assert(decorated.words[0].y + decorated.words[0].height == inkY + 12);
+    // A gap within the font's headroom (ink top 2) is closed by growing upwards; descenders stay put.
+    decorated.renderer.linePitch = 14;
+    assert(decorated.extractWords());
+    assert(decorated.words[0].height == 14);
+    assert(decorated.words[0].y == inkY - 2);
+    // One pixel more than the headroom: the gap stays and the box hugs the ink.
+    decorated.renderer.linePitch = 15;
+    assert(decorated.extractWords());
+    assert(decorated.words[0].height == 12 && decorated.words[0].y == inkY);
+    decorated.renderer.linePitch = 16;
+    assert(decorated.extractWords());
     const auto originalInk = decorated.renderer.ink;
     decorated.rangeStart = 0;
     decorated.selected = 1;
@@ -482,6 +507,8 @@ int main() {
     assert(cold.words[0].pageOffset == 0);
     assert(cold.words[239].pageOffset == 1);
     assert(cold.renderer.coldMeasurements == 0);
+    for (const char probe : {'d', 'H', 'l', 'p', 'g', 'y'})  // ink-bounds letters prepared for getFontInkBounds
+      assert(cold.renderer.advances.count({EpdFontFamily::REGULAR, static_cast<uint32_t>(probe)}));
     cold.mode = ClipSelectionActivity::Mode::DefinitionLookup;
     cold.borrowedPages = cold.pages;
     HalMemory::stats = {1024 * 1024, 1024 * 1024};
@@ -571,6 +598,9 @@ int main() {
     assert(activity.renderer.fills.size() == 1);
     const int width = activity.words[0].width;
     assert(activity.renderer.fills[0].width == width);
+    // Saved highlights and live selection share one box: same top and height.
+    assert(activity.renderer.fills[0].y == activity.words[0].y);
+    assert(activity.renderer.fills[0].height == activity.words[0].height);
     assert(reader.clippingAtPoint(*activity.pages[0], width - 1, 8) == 0);
     assert(reader.clippingAtPoint(*activity.pages[0], width, 8) == -1);
   }

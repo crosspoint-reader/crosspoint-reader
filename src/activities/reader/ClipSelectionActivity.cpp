@@ -17,6 +17,7 @@
 #include "MappedInputManager.h"
 #include "activities/ActivityResult.h"
 #include "clippings/ClippingText.h"
+#include "clippings/ClippingWordRect.h"
 #include "clippings/SelectionGeometry.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -176,7 +177,12 @@ bool ClipSelectionActivity::extractWords() {
         const char* text = block->wordText(0);
         const uint16_t lastWord = block->wordCount() - 1;
         const size_t textLength = block->wordText(lastWord) + block->wordTextLen(lastWord) + 1 - text;
-        renderer.ensureSdCardFontReady(fontId, &text, &textLength, 1, false, false, styleMask);
+        // Also load the letters getFontInkBounds measures, so selection boxes match saved highlights from the start.
+        static constexpr char kInkProbe[] = "dHlpgy";
+        const char* segments[] = {text, kInkProbe};
+        const size_t lengths[] = {textLength, sizeof(kInkProbe)};
+        renderer.ensureSdCardFontReady(fontId, segments, lengths, 2, false, false,
+                                       static_cast<uint8_t>(styleMask | (1U << EpdFontFamily::REGULAR)));
       }
 
       const size_t lineStart = wordCount;
@@ -184,29 +190,25 @@ bool ClipSelectionActivity::extractWords() {
       const int8_t characterSpacing = block->getBlockStyle().characterSpacing;
       const size_t remaining = capacity - lineStart;
       size_t rtlWordCount = 0;
-      const int lineFont = TextBlock::renderFontId(renderer, block->blockFontId(fontId), fontId);
-      const int rubyShift = block->getRubyShift(renderer.getFontAscenderSize(lineFont));
       for (uint16_t i = 0; i < block->wordCount(); ++i) {
         if (block->wordStartsParagraph(i)) paragraphStartPending = true;
         const char* text = block->wordText(i);
         if (!clippingText::hasVisibleText(text)) continue;
 
         const auto style = static_cast<EpdFontFamily::Style>(block->wordStyle(i) & ~EpdFontFamily::UNDERLINE);
-        const int wordFont = TextBlock::renderFontId(renderer, block->wordFontId(i, fontId), fontId);
-        int width = renderer.getTextAdvanceX(wordFont, text, style, characterSpacing);
+        const int width =
+            renderer.getTextAdvanceX(clippingWordFont(renderer, fontId, *block, i), text, style, characterSpacing);
         if (width <= 0) continue;
-        if (i + 1 < block->wordCount() && block->wordXpos(i + 1) > block->wordXpos(i)) {
-          width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i)));
-        }
+        const Rect rect = clippingWordRect(renderer, fontId, line, i, marginTop, marginLeft, width);
 
         if (!isRtl && wordCount == capacity) break;
 
         WordBox& word = isRtl ? words[lineStart + (rtlWordCount < remaining ? rtlWordCount : rtlWordCount % remaining)]
                               : words[wordCount++];
-        word.x = static_cast<int16_t>(marginLeft + line.xPos + block->wordXpos(i));
-        word.y = static_cast<int16_t>(marginTop + line.yPos + rubyShift + block->wordYOffset(renderer, fontId, i));
-        word.width = static_cast<int16_t>(width);
-        word.height = static_cast<int16_t>(renderer.getLineHeight(wordFont));
+        word.x = static_cast<int16_t>(rect.x);
+        word.y = static_cast<int16_t>(rect.y);
+        word.width = static_cast<int16_t>(rect.width);
+        word.height = static_cast<int16_t>(rect.height);
         word.row = rowCount;
         word.pageOffset = static_cast<uint8_t>(pageOffset);
         word.pageWordIndex = pageWordIndex++;

@@ -76,6 +76,8 @@ class GfxRenderer {
   // recording to the (non-const) FontCacheManager. Same pragmatic compromise
   // as before, concentrated in a single pointer instead of four fields.
   mutable FontCacheManager* fontCacheManager_ = nullptr;
+  mutable bool inkBoundsCached_ = false;
+  mutable int inkBoundsFontId_ = 0, inkTop_ = 0, inkBottom_ = 0;
 
   // One-shot refresh promotion (see promoteNextRefresh). Mutable because
   // Display entry points are const but must consume the flag.
@@ -155,6 +157,7 @@ class GfxRenderer {
     fontMap.erase(fontId);
     sdCardFonts_.erase(fontId);
     sdCardFontScales_.erase(fontId);
+    if (inkBoundsFontId_ == fontId) inkBoundsCached_ = false;
   }
   void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
@@ -370,6 +373,11 @@ class GfxRenderer {
                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const;
   int getFontAscenderSize(int fontId) const;
+  // Vertical ink extent of typical letters, relative to the top passed to drawText. Cached for the last font.
+  struct InkBounds {
+    int top = 0, bottom = 0;
+  };
+  InkBounds getFontInkBounds(int fontId) const;
   int getLineHeight(int fontId) const;
   // Explicit line spacing scales font size; the one-argument form returns font metrics.
   int getLineHeight(int fontId, float compression) const;
