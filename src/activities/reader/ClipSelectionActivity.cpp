@@ -168,12 +168,11 @@ bool ClipSelectionActivity::extractWords() {
       if (!block || !block->valid()) continue;
 
       // Tight line spacing makes the font's line height exceed the row pitch; cap the highlight so it
-      // cannot paint over neighbouring lines. Measure both directions: a paragraph's last line has no
-      // close successor (paragraph spacing or page end), but its predecessor gives the same pitch.
+      // cannot paint over neighbouring lines.
       int rowPitch = INT_MAX;
       for (const auto& other : pageAt(pageOffset).elements) {
         if (other->getTag() != TAG_PageLine) continue;
-        const int dy = std::abs(static_cast<const PageLine&>(*other).yPos - line.yPos);
+        const int dy = static_cast<const PageLine&>(*other).yPos - line.yPos;
         if (dy > 0) rowPitch = std::min(rowPitch, dy);
       }
 
