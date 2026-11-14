@@ -54,6 +54,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "clippings/ClippingText.h"
+#include "clippings/ClippingWordRect.h"
 #include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -73,30 +74,6 @@ bool xteinkClassPanel() {
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 constexpr float bookmarkProgressEpsilon = 0.0001f;
 constexpr int CLIP_SELECTION_PAGE_WINDOW = 3;
-
-// Word i's font: headings and CSS font-size runs can differ from the section font.
-int clippingWordFont(const GfxRenderer& renderer, const int fontId, const TextBlock& block, const uint16_t i) {
-  return TextBlock::renderFontId(renderer, block.wordFontId(i, fontId), fontId);
-}
-
-Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, const PageLine& line, const uint16_t i,
-                      const int top, const int left, const int wordWidth) {
-  const auto& block = line.getBlock();
-  const int wordFont = clippingWordFont(renderer, fontId, *block, i);
-  const char* text = block->wordText(i);
-  const auto style = static_cast<EpdFontFamily::Style>(block->wordStyle(i) & ~EpdFontFamily::UNDERLINE);
-  const int skipX =
-      clippingText::hasEmSpacePrefix(text) ? renderer.getTextAdvanceX(wordFont, "\xe2\x80\x83", style) : 0;
-  int width = wordWidth - skipX;
-  if (i + 1 < block->wordCount() && block->wordXpos(i + 1) > block->wordXpos(i)) {
-    width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i) - skipX));
-  }
-  const int lineFont = TextBlock::renderFontId(renderer, block->blockFontId(fontId), fontId);
-  return Rect{left + line.xPos + block->wordXpos(i) + skipX,
-              top + line.yPos + block->getRubyShift(renderer.getFontAscenderSize(lineFont)) +
-                  block->wordYOffset(renderer, fontId, i),
-              width, renderer.getLineHeight(wordFont)};
-}
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -2465,11 +2442,11 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
         const int highlightRight = x + width;
         const int previousHighlightRight = previousHighlightX + previousHighlightWidth;
         if (hasPreviousHighlight && previousHighlightRight < x) {
-          fillHighlight(previousHighlightRight, y, x - previousHighlightRight, renderer.getLineHeight(fontId));
+          fillHighlight(previousHighlightRight, y, x - previousHighlightRight, rect.height);
         } else if (hasPreviousHighlight && highlightRight < previousHighlightX) {
-          fillHighlight(highlightRight, y, previousHighlightX - highlightRight, renderer.getLineHeight(fontId));
+          fillHighlight(highlightRight, y, previousHighlightX - highlightRight, rect.height);
         }
-        fillHighlight(x, y, width, renderer.getLineHeight(fontId));
+        fillHighlight(x, y, width, rect.height);
         previousHighlightX = x;
         previousHighlightWidth = width;
         hasPreviousHighlight = true;

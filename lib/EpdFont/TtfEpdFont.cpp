@@ -295,18 +295,21 @@ void TtfEpdFont::setupFace(Face& f) {
   freeink::font::FtFont& src = f.ready ? *f.ft : *faces_[0].ft;
   // Fractional-ppem line metrics, rounded once here rather than per-call.
   freeink::font::FtFont::LineMetrics lm;
-  int ascent, lineHeight;
+  int ascent, lineHeight, descent;
   if (src.lineMetrics26_6(f.owner->size26_6_, lm)) {
     ascent = static_cast<int>((lm.ascender26_6 + 32) >> 6);
     lineHeight = static_cast<int>((lm.height26_6 + 32) >> 6);
+    // FreeType's descender is negative; height also includes the line gap, so it is not the glyph depth.
+    descent = static_cast<int>((-lm.descender26_6 + 32) >> 6);
   } else {
     ascent = src.ascent(f.sizePx);
     lineHeight = src.lineHeight(f.sizePx);
+    descent = lineHeight - ascent;
   }
   f.data = EpdFontData{};
   f.data.advanceY = static_cast<uint8_t>(lineHeight > 255 ? 255 : (lineHeight < 0 ? 0 : lineHeight));
   f.data.ascender = ascent;
-  f.data.descender = lineHeight - ascent > 0 ? lineHeight - ascent : 0;
+  f.data.descender = descent > 0 ? descent : 0;
   f.data.is2Bit = f.twoBit;
   f.data.glyphMissHandler = &TtfEpdFont::missThunk;
   f.data.glyphMissCtx = &f;
