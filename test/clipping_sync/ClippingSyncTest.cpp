@@ -4,7 +4,9 @@
 #include <HalStorage.h>
 #include <KOReaderCredentialStore.h>
 #include <SecureHttpClient.h>
+#include <strings.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <string>
@@ -22,12 +24,14 @@ void reset() {
   fake::reset();
   fake::syncHeap = 68000;
   fake::syncBufferAllocated = false;
+  fake::headers.clear();
   fake::uploads.clear();
   fake::requests = 0;
   fake::failHttpAt = -1;
   fake::incomplete = false;
   fake::remoteResponse = "{\"cursor\":0,\"more\":false,\"items\":[]}";
   syncCredentials.enabled = true;
+  syncCredentials.customHeaders.clear();
 }
 void released() {
   auto* scratch = buildscratch::claim(32768);
@@ -77,11 +81,51 @@ void maximumTextRoundTrip() {
   assert(stored == text);
   CLIPPINGS.unload();
 }
+bool hasHeader(const fake::Headers& headers, const std::string& name, const std::string& value) {
+  return std::find(headers.begin(), headers.end(), std::make_pair(name, value)) != headers.end();
+}
+// Every clipping request sends one Authorization header: the configured one, else the Basic auth of progress sync.
+void everyRequestSendsAuthHeaders(const SyncCredentials::Header& custom, const std::string& authorization) {
+  reset();
+  syncCredentials.customHeaders = {custom};
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
+  fake::syncHeap = 100000;
+#endif
+  add("kept");
+  add("removed");
+  assert(clippingSync::run(book, "hash"));  // Probe, two uploads, pull.
+  released();
+  assert(CLIPPINGS.loadForBook(book, "", "", "epub"));
+  assert(CLIPPINGS.removeClippingAt(1));
+  CLIPPINGS.unload();
+  fake::uploads.clear();
+  assert(clippingSync::run(book, "hash"));  // Probe, delete, pull.
+  released();
+  assert(fake::uploads.size() == 1);
+  assert(fake::uploads.front().find("\"deleted\":1") != std::string::npos);
+  assert(fake::requests == 7 && fake::headers.size() == 7);
+  for (const auto& headers : fake::headers) {
+    assert(hasHeader(headers, "x-auth-user", "reader"));
+    assert(hasHeader(headers, "x-auth-key", "key"));
+    if (!custom.name.empty()) assert(hasHeader(headers, custom.name, custom.value));
+    std::vector<std::string> values;
+    for (const auto& [name, value] : headers) {
+      if (strcasecmp(name.c_str(), "Authorization") == 0) values.push_back(value);
+    }
+    assert(values == std::vector<std::string>{authorization});
+  }
+}
 }  // namespace
 
 int main() {
   buildscratch::lend(framebuffer.data(), framebuffer.size());
   maximumTextRoundTrip();
+  const std::string basic = "Basic cmVhZGVyOnBhc3M=";
+  everyRequestSendsAuthHeaders({}, basic);
+  everyRequestSendsAuthHeaders({"CF-Access-Client-Id", "client"}, basic);
+  for (const char* name : {"Authorization", "authorization", "AuThOrIzAtIoN"}) {
+    everyRequestSendsAuthHeaders({name, "Bearer fixture"}, "Bearer fixture");
+  }
   for (int failure = 0; failure < 3; ++failure) {
     reset();
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3

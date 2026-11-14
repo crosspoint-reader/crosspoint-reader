@@ -1,7 +1,13 @@
 import os
 import re
+import sys
 import gzip
 import hashlib
+
+# PlatformIO runs this from the project root without __file__.
+sys.path.insert(0, os.path.abspath(os.path.join("scripts", "vendor")))
+from rcssmin import cssmin  # noqa: E402
+from rjsmin import jsmin  # noqa: E402
 
 SRC_DIR = "src"
 HTML_EXT = ".html"
@@ -24,6 +30,98 @@ def resolve_includes(html: str, base_dir: str) -> str:
             return f.read()
 
     return pattern.sub(repl, html)
+
+# rjsmin only treats "/" as a regex literal after one of these or `return`.
+RJSMIN_REGEX_PREFIX = set("(,=:[!&|?{};\n+*-")
+# JavaScript also starts a regex (not a division) after these.
+JS_REGEX_PREFIX = RJSMIN_REGEX_PREFIX | set("%<>~^}")
+JS_REGEX_KEYWORDS = {"return", "typeof", "case", "do", "else", "in", "of", "new", "delete", "void", "throw",
+                     "yield", "await", "instanceof"}
+
+def rjsmin_hazard(js: str):
+    """Return (line, problem) for JS that rjsmin would silently corrupt, or None.
+
+    rjsmin does not support a template literal nested in another one's ${...},
+    and misreads a regex literal that does not follow RJSMIN_REGEX_PREFIX or
+    `return` (for example `x => /re/`)."""
+    i, n, mode, stack = 0, len(js), None, []
+    prev, prev_raw, word = "", "", ""  # last code char, same with "\n" kept, last word
+    # After a string, template or regex, "x" stands for an operand, so a "/" divides.
+    prev_at, dotted = 0, False  # where prev is; word follows "." (obj.in is not a keyword)
+    line = lambda pos: js.count("\n", 0, pos) + 1
+    while i < n:
+        c = js[i]
+        if mode is not None:  # inside '...', "..." or `...`
+            if c == "\\":
+                i += 2
+                continue
+            if c == mode or (c == "\n" and mode != "`"):
+                mode, prev, prev_raw, word = None, "x", "x", ""
+            elif mode == "`" and js.startswith("${", i):
+                stack.append("${")
+                mode, prev, prev_raw, word = None, "{", "{", ""
+                i += 2
+                continue
+            i += 1
+            continue
+        if js.startswith("//", i):
+            i = n if js.find("\n", i) < 0 else js.find("\n", i)
+            continue
+        if js.startswith("/*", i):
+            i = n if js.find("*/", i + 2) < 0 else js.find("*/", i + 2) + 2
+            continue
+        if c == "/" and (prev == "" or prev in JS_REGEX_PREFIX or (word in JS_REGEX_KEYWORDS and not dotted)):
+            if not (prev_raw == "" or prev_raw in RJSMIN_REGEX_PREFIX or word == "return"):
+                return line(i), "regex literal after '" + (word or prev) + "'; wrap it in parentheses"
+            in_class, j = False, i + 1
+            while j < n and js[j] != "\n":
+                if js[j] == "\\":
+                    j += 1
+                elif js[j] == "[":
+                    in_class = True
+                elif js[j] == "]":
+                    in_class = False
+                elif js[j] == "/" and not in_class:
+                    break
+                j += 1
+            i, prev, prev_raw, word = j + 1, "x", "x", ""
+            continue
+        if c in "'\"`":
+            if c == "`" and "${" in stack:
+                return line(i), "nested template literal"
+            mode = c
+        elif c == "{":
+            stack.append("{")
+        elif c == "}" and stack and stack.pop() == "${":
+            mode = "`"
+        if c.isalnum() or c in "_$":
+            if i > 0 and (js[i - 1].isalnum() or js[i - 1] in "_$"):
+                word += c
+            else:
+                word, dotted = c, prev == "." and js[prev_at - 1:prev_at] != "."  # not ...spread
+        elif not c.isspace():
+            word = ""
+        if not c.isspace():
+            prev, prev_at = c, i
+        if not c.isspace() or c == "\n":
+            prev_raw = c
+        i += 1
+    return None
+
+def minify_js(js: str, file_path: str) -> str:
+    hazard = rjsmin_hazard(js)
+    if hazard is not None:
+        sys.exit(f"{file_path}: script line {hazard[0]}: {hazard[1]}; rjsmin cannot minify it")
+    return jsmin(js)
+
+def minify_inline_assets(html: str, file_path: str) -> str:
+    """Minify inline <script> (without src) and <style> blocks."""
+    def script(match):
+        return match.group(1) + minify_js(match.group(2), file_path) + match.group(3)
+
+    html = re.sub(r'(<script\b(?![^>]*\bsrc=)[^>]*>)(.*?)(</script>)', script, html, flags=re.DOTALL | re.IGNORECASE)
+    return re.sub(r'(<style\b[^>]*>)(.*?)(</style>)', lambda m: m.group(1) + cssmin(m.group(2)) + m.group(3), html,
+                  flags=re.DOTALL | re.IGNORECASE)
 
 def minify_html(html: str) -> str:
     # Tags where whitespace should be preserved
@@ -74,12 +172,14 @@ for root, _, files in os.walk(SRC_DIR):
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            # Only minify HTML files; JS files are typically pre-minified (e.g., jszip.min.js)
-            is_html = file.endswith(HTML_EXT)
-            if is_html:
-                processed = minify_html(resolve_includes(content, root))
+            if file.endswith(HTML_EXT):
+                processed = minify_html(minify_inline_assets(resolve_includes(content, root), file_path))
+            elif file.endswith(".css"):
+                processed = cssmin(content)
+            elif file.endswith(JS_EXT) and not file.endswith(".min.js"):
+                processed = minify_js(content, file_path)
             else:
-                processed = content
+                processed = content  # pre-minified (e.g., jszip.min.js) or SVG
 
             # Compress with gzip (compresslevel 9 is maximum compression)
             # mtime=0 keeps the output reproducible across builds

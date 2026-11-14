@@ -1,5 +1,6 @@
 #include "UITheme.h"
 
+#include <BoardConfig.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
@@ -130,6 +131,14 @@ Rect UITheme::getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButton
   return safeArea;
 }
 
+Rect UITheme::getHeaderRect(const GfxRenderer& renderer, bool hasFrontButtonHints, bool hasSideButtonHints) {
+  const Rect safe = getScreenSafeArea(renderer, hasFrontButtonHints, hasSideButtonHints);
+  const Rect content = getContentArea(renderer);
+  const ThemeMetrics metrics = getMetrics();
+  return Rect{safe.x - content.x, safe.y - content.y + metrics.topPadding,
+              safe.width + renderer.getScreenWidth() - content.width, metrics.headerHeight};
+}
+
 std::string UITheme::getCoverThumbPath(std::string coverBmpPath, int coverHeight) {
   size_t pos = coverBmpPath.find("[HEIGHT]", 0);
   if (pos != std::string::npos) {
@@ -168,6 +177,12 @@ int UITheme::getProgressBarHeight() {
   const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
   const auto sb = SETTINGS.statusBarSpec();
   return sb.showsProgressBar() ? (sb.progressBarHeightPx + metrics.progressBarMarginTop) : 0;
+}
+
+// Height the reader's status bar takes above the bottom inset. The EEGO A4 draws
+// its progress bar inside the inset (BaseTheme::drawStatusBar), so the bar takes none.
+int UITheme::getReaderStatusBarHeight() {
+  return getStatusBarHeight() - (BoardConfig::isEegoA4() ? getProgressBarHeight() : 0);
 }
 
 // Centered text implementation that takes the safe area into account

@@ -2,7 +2,7 @@ name: CI (build)
 
 on:
   push:
-    branches: [master]
+    branches: [develop]
   pull_request:
 
 permissions:
@@ -65,14 +65,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini', 'scripts/patch_pioarduino_cache.py') }}
           restore-keys: pio-v2-${{ runner.os }}-
 
       - name: Install cppcheck runtime dependency
         run: |
           # pioarduino's Linux cppcheck binary links against libpcre.so.3.
+          # In newer Ubuntu runner images where libpcre3 is omitted from apt sources,
+          # download from Ubuntu archive over HTTPS and verify SHA-256 before installation.
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libpcre3
+          if ! sudo apt-get install -y --no-install-recommends libpcre3; then
+            PKG="libpcre3_8.39-13ubuntu0.22.04.1_amd64.deb"
+            SHA256="0d1eb051047eb0c637c893f618f45e1d419863bfa3bc821897ee05ad418ba22e"
+            wget -q "https://security.ubuntu.com/ubuntu/pool/main/p/pcre3/${PKG}"
+            echo "${SHA256}  ${PKG}" | sha256sum -c -
+            sudo dpkg -i "${PKG}"
+            rm -f "${PKG}"
+          fi
 
       - name: Run cppcheck
         run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
@@ -132,7 +141,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-v3-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+          key: pio-v3-${{ runner.os }}-${{ matrix.env }}-${{ hashFiles('platformio.ini', 'scripts/patch_pioarduino_cache.py') }}
           restore-keys: pio-v3-${{ runner.os }}-${{ matrix.env }}-
 
       - name: Pin pioarduino core inside the platform penv
@@ -185,7 +194,7 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build
+          sudo apt-get install -y cmake ninja-build zlib1g-dev
 
       - name: Cache googletest source
         uses: actions/cache@v4
