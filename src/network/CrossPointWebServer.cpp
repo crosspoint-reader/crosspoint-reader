@@ -2111,28 +2111,32 @@ bool CrossPointWebServer::rejectIfPluginsDisabled() const {
   return true;
 }
 
-// GET /api/plugins -> [{ "name", "title", "mount" }, ...]. Only plugins with a
-// plugin.js are listed (the page loads it); optional manifest.json supplies the
-// title and mount point.
+// GET /api/plugins -> all installed plugins, including native-only plugins.
+// Browser hosts check hasPluginJs before loading a script.
 void CrossPointWebServer::handlePluginList() const {
   JsonDocument doc;
   JsonArray arr = doc.to<JsonArray>();
+  JsonDocument filter;
+  for (const char* field : {"title", "version", "author", "mount"}) filter[field] = true;
 
   for (const auto& e : PluginLocations::scanPlugins()) {
-    if (!e.hasPluginJs) continue;
     JsonObject obj = arr.add<JsonObject>();
     obj["name"] = e.name;
     obj["dir"] = e.dir;         // the plugin keeps its own files here
     obj["title"] = e.name;      // overridden by manifest below
     obj["mount"] = "settings";  // default mount point
-    std::string manifest;
-    if (e.hasManifest && Storage.readFileToString("WEB", e.dir + "/manifest.json", 64 * 1024, manifest)) {
-      JsonDocument m;
-      if (deserializeJson(m, manifest) == DeserializationError::Ok) {
-        if (m["title"].is<const char*>()) obj["title"] = m["title"];
-        if (m["mount"].is<const char*>()) obj["mount"] = m["mount"];
+    obj["hasPluginJs"] = e.hasPluginJs;
+    const auto readMetadata = [&](const char* filename) {
+      std::string raw;
+      if (!Storage.readFileToString("WEB", e.dir + "/" + filename, 8192, raw)) return;
+      JsonDocument metadata;
+      if (deserializeJson(metadata, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) return;
+      for (const char* field : {"title", "version", "author", "mount"}) {
+        if (metadata[field].is<const char*>()) obj[field] = metadata[field].as<String>();
       }
-    }
+    };
+    if (e.hasManifest) readMetadata("manifest.json");
+    if (e.hasDevice) readMetadata("device.json");
   }
 
   sendJson(doc);

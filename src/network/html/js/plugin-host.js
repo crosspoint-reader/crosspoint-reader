@@ -157,27 +157,56 @@ window.CrossPoint = window.CrossPoint || {
 // one stalled request does not hold back the plugins after it.
 const PLUGIN_SCRIPT_TIMEOUT_MS = 30000;
 
-// beforeLoad runs once, before the first matching plugin script; a failure
-// there does not stop the plugins from loading. Resolves to false when the
-// container or the plugin list is missing.
-async function loadPlugins(mount, beforeLoad) {
+// beforeLoad runs once before the first matching browser script. The Plugins
+// page receives its list after cards exist, before slow plugin scripts load.
+async function loadPlugins(mount, beforeLoad, onDiscovered) {
   const host = document.getElementById('plugin-container');
   if (!host) return false;
   let list;
   try { list = await (await fetch('/api/plugins')).json(); } catch (e) { return false; }
   if (!Array.isArray(list)) return false;  // e.g. {"error":"out of memory"}
+  const managementPage = mount === 'settings';
+  if (managementPage) {
+    const isHub = p => (p.name || '').toLowerCase().replace(/[-_]/g, '') === 'pluginhub';
+    list.sort((a, b) => (Number(isHub(b)) - Number(isHub(a))) ||
+      (a.title || a.name).localeCompare(b.title || b.name, undefined, {sensitivity: 'base'}));
+  }
+  const scripts = [];
   for (const p of list) {
-    // A null mount loads everything: the headless runner page hosts all
-    // plugins so any registered action can execute there.
-    if (mount && (p.mount || 'settings') !== mount) continue;
-    if (beforeLoad) {
-      try { await beforeLoad(); } catch (e) { console.warn('Plugin preload failed:', e); }
-      beforeLoad = null;
-    }
+    if (!managementPage && (p.hasPluginJs === false || (mount && (p.mount || 'settings') !== mount))) continue;
     const container = document.createElement('div');
     container.className = 'card';
     container.id = 'plugin-' + p.name;
     host.appendChild(container);
+    if (managementPage && (p.hasPluginJs === false || (p.mount || 'settings') !== 'settings')) {
+      const heading = document.createElement('h2');
+      heading.textContent = p.title || p.name;
+      container.appendChild(heading);
+      for (const key of ['version', 'author']) {
+        if (!p[key]) continue;
+        const detail = document.createElement('p');
+        detail.textContent = (key === 'version' ? 'Version: ' : 'Author: ') + p[key];
+        container.appendChild(detail);
+      }
+      const note = document.createElement('p');
+      note.textContent = p.hasPluginJs === false ? 'No browser settings for this plugin.' :
+        'This plugin appears on the File Manager page.';
+      container.appendChild(note);
+    } else {
+      if (managementPage) {
+        const placeholder = document.createElement('p');
+        placeholder.textContent = 'Loading ' + (p.title || p.name) + '...';
+        container.appendChild(placeholder);
+      }
+      scripts.push({p, container});
+    }
+  }
+  if (onDiscovered) onDiscovered(list);
+  for (const {p, container} of scripts) {
+    if (beforeLoad) {
+      try { await beforeLoad(); } catch (e) { console.warn('Plugin preload failed:', e); }
+      beforeLoad = null;
+    }
     const showFailure = () => {
       const h = document.createElement('h2');
       h.textContent = p.title || p.name;
@@ -188,7 +217,11 @@ async function loadPlugins(mount, beforeLoad) {
     };
     const s = document.createElement('script');
     const render = () => {
-      if (typeof s.cpRender !== 'function') return;
+      if (typeof s.cpRender !== 'function') {
+        if (managementPage) container.textContent = 'No browser settings for ' + (p.title || p.name) + '.';
+        return;
+      }
+      if (managementPage) container.replaceChildren();
       const rendered = s.cpRender(container, {
         name: p.name,
         dir: p.dir,
