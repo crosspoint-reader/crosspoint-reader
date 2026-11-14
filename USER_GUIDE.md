@@ -656,6 +656,8 @@ The role of the side buttons can be swapped in the **[Controls Settings](#363-co
 
 If the **Short click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
 
+In EPUB books, page-turn presses made while the screen is still refreshing are remembered, up to four in either direction. When the screen is free they are applied together: the reader goes straight to the page you asked for and draws only that one. Four quick presses can therefore show as two screen updates, the first page and then a jump of three.
+
 ### Chapter Navigation
 
 * **Next Chapter:** Press and **hold** the **Right** (or **Side Down**) button briefly, then release.
