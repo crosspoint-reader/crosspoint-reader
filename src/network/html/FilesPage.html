@@ -2381,8 +2381,22 @@
     return labels[state] || 'Normal';
   }
 
+  // The device has no RTC on some boards: hand it the browser's time and zone once per page load.
+  // Best effort; the device ignores it when its own clock or zone setting is already trustworthy.
+  function syncDeviceClock() {
+    const jan = -new Date(new Date().getFullYear(), 0, 1).getTimezoneOffset();
+    const jul = -new Date(new Date().getFullYear(), 6, 1).getTimezoneOffset();
+    const body = new URLSearchParams({
+      epochMs: String(Date.now()),
+      stdOffsetMin: String(Math.min(jan, jul)),
+      dst: jan !== jul ? '1' : '0'
+    });
+    fetch('/api/clock', { method: 'POST', body }).catch(() => {});
+  }
+
   // Initialize quality settings handlers
   document.addEventListener('DOMContentLoaded', function() {
+    syncDeviceClock();
     document.getElementById('file-table').addEventListener('change', function(event) {
       if (event.target.matches('.select-item')) {
         event.target.closest('tr').classList.toggle('selected', event.target.checked);

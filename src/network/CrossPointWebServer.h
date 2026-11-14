@@ -108,6 +108,7 @@ class CrossPointWebServer {
   void handleJszip() const;
   void handleNotFound() const;
   void handleStatus() const;
+  void handlePostClock();  // POST /api/clock -> browser seeds the clock and, if unset, the timezone
   void handleFileList() const;
   void handleFileListData() const;
   void handleDownload() const;
