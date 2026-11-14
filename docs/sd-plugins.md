@@ -91,10 +91,16 @@ firmware surfaces: the job queue and the `device.json` on-device screens.
 
 ## Surface 1: browser plugins (`plugin.js`)
 
-JS loaded into the File Manager or Settings web page, backed by generic device
+JS loaded into the File Manager or Plugins web page, backed by generic device
 endpoints (`/api/relay`, `/api/crypto`, `/api/fetch`, `/api/plugin-fs`). See
 `docs/webserver-endpoints.md` for the endpoints and the sd-plugins repository
 for the JS contract.
+
+`plugin.js` must call `CrossPoint.registerPlugin(fn)` while the script runs,
+not after an `await` or from a timer; a later call is ignored. A script that has
+not loaded after 30 seconds, or an `fn` that throws or returns a rejected
+promise, shows "Failed to load plugin." A script that arrives after the 30
+seconds still renders.
 
 ## Surface 2: the plugin job queue (external automation)
 
@@ -107,7 +113,7 @@ the browser context, and posts the result back.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/plugin-jobs` | enqueue `{plugin, action, args?}` → `{id}` (503 when the pool is full) |
+| `POST /api/plugin-jobs` | enqueue `{plugin, action, args?}` → `{id}` (503 when the pool is full or the device is out of memory) |
 | `GET /api/plugin-jobs/claim?plugin=` | executor claims the next pending job |
 | `POST /api/plugin-jobs/complete` | executor posts `{id, claim, ok, result?}` (`claim` from the claim response; 409 when stale) |
 | `GET /api/plugin-jobs/status?id=` | caller polls: `{id, state, result}`; states: `pending`, `running`, `done`, `error`, `unknown` (recycled) |
@@ -136,8 +142,9 @@ Plugins register handlers in `plugin.js`:
 
 ```js
 api.registerAction('myaction', async (args) => {
-  // runs in the hosting page; throw -> state "error" with {error: message}
-  return { anything: 'small' };  // -> state "done" with this result
+  // runs in the hosting page; throw, or return a value JSON.stringify throws
+  // on (BigInt, circular structure), -> state "error" with {error: message}
+  return { anything: 'small' };  // -> state "done" with this result ({} for undefined/null)
 });
 ```
 
@@ -188,6 +195,9 @@ Stock CrossPoint currently advertises these catalog capabilities:
 | `catalog.compatibility` | JSON catalog entries can be filtered by firmware family, minimum plugin API, and required capabilities. | Any catalog can omit entries that require firmware behavior the current device does not provide, while entries with no compatibility metadata remain backward-compatible. Plugin Hub currently uses this for compatibility-aware discovery. |
 | `catalog.item_details` | JSON catalog items can open a Details page with selected-row metadata and optional bounded on-demand HTML/text content. | Any catalog can keep browse rows concise while offering richer information before Fetch/Install/Update. Rich metadata is additive and failure falls back to the normal item details view. |
 | `catalog.encoded_item_fields` | Download, sidecar, and details templates can use the percent-encoded item variables `{id_enc}`, `{title_enc}`, `{author_enc}`, and `{url_enc}`. | A catalog whose URLs carry item text can require this so older firmware, which would send the variable names literally, does not offer the entry. |
+| `catalog.list_index_mapping` | `browse.lists_url` can be fetched with `lists_headers` and read with `lists_items`/`lists_fields`, and lists can carry an `id` that fills `{list_id}` and `{list_id_enc}`. | A catalog can build its lists from a service's own folder or tag API, with the token in a header, without a separate server to reshape the answer. |
+| `catalog.list_requirements` | Static and fetched browse lists can declare an optional `requires` array of firmware capabilities; fetched lists can map its path via `lists_fields.requires`. | List discovery hides sections that require unsupported firmware behavior, without tying the index format to any specific plugin or firmware. |
+| `catalog.server_paths` | A JSON catalog accepts server paths (`/path`) where a response supplies a URL: the `download.url_path` answer, a fetched list `url`, and an item `details_url`. Each path is joined to the origin (scheme, host, and port) of the request that returned it. A `url_path` answer that is a server path is fetched with the download headers. | A catalog whose API answers with paths on its own server, rather than full URLs, works without a proxy that rewrites them. |
 
 Capability names describe firmware behavior available to the entire plugin system.
 They must not encode Plugin Hub policy or ownership, and another plugin may use the
@@ -214,6 +224,8 @@ download filename/username/password; and sidecar path/body.
 | `{page}` | current 1-based page | browse |
 | `{offset}` | rows before the current page: `(page - 1) * page_size` | browse |
 | `{limit}` | `page_size` when the request uses `{page}` and not `{offset}`; otherwise `page_size + 1` (the extra row shows that another page exists) | browse |
+| `{list_id}` | `id` of the open list as received (not encoded), empty outside a list; firmware with it advertises `catalog.list_index_mapping` | browse, and download, sidecar, and item details while a list is open |
+| `{list_id_enc}` | the same id percent-encoded like `{id_enc}`, for URL query values and path segments | browse, and download, sidecar, and item details while a list is open |
 | `{id}` `{title}` `{author}` `{url}` | fields of the selected item, as received (unlike `{query}`, which is encoded, with `{query_raw}` as the raw form) | download, sidecar, item details |
 | `{id_enc}` `{title_enc}` `{author_enc}` `{url_enc}` | the same fields percent-encoded (everything except letters, digits, `-_.~`), for URL query values and path segments; firmware with these advertises `catalog.encoded_item_fields` | download, sidecar, item details |
 | `{md5}` | MD5 hex of the destination file path | sidecar |
@@ -295,9 +307,19 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
           "title": "Community content",        // defaults to the list title
           "message": "Review this notice before continuing.",
           "confirm": "Continue",               // defaults to translated Confirm
-          "cancel": "Go Back"                  // defaults to translated Cancel
+          "cancel": "Go Back",                 // defaults to translated Cancel
+          "id": "content-guidance",           // stable ID shared by related lists
+          "once": true                       // remember Continue across restarts
         } }
     ],                                      // omitted keys fall back to browse's
+                                            // an "id" fills {list_id} and {list_id_enc},
+                                            // so lists can share browse.url
+                                            // ("...?folder={list_id_enc}")
+
+    "lists_url": "https://.../folders",     // optional: more lists, shown after "lists"
+    "lists_headers": { "Authorization": "Bearer {token}" },  // sent only to lists_url
+    "lists_items": "folders",               // dotted path to the array; default "lists"
+    "lists_fields": { "title": "title", "id": "folder_id" },  // defaults: title, url, id
 
     // --- xml format (ignore the json fields above; fields become selectors) ---
     "item": "response",                     // local-name of the repeating element
@@ -310,9 +332,11 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   "download": {
     "url": "https://.../books/{id}/download",
     "method": "POST",
-    "headers": { "Authorization": "Bearer {token}" },  // file GET too, unless url_path is set
+    "headers": { "Authorization": "Bearer {token}" },  // file GET too, unless url_path
+                                            // returns a full URL
     "body": "{}",
-    "url_path": "url",                      // response field with the file URL;
+    "url_path": "url",                      // response field with the file URL or a
+                                            // server path ("/files/1");
                                             // omit to treat "url" itself as the file URL
     "username": "{cfg.user}",              // optional HTTP Basic creds for the file GET
     "password": "{cfg.pass}",             // omit for token/header auth
@@ -382,6 +406,10 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   - Neither `{page}` nor `{offset}`: the response is one static list, and the
     firmware pages through it locally.
 
+  Rows without a title are not shown. When the request uses `{page}` or
+  `{offset}`, these rows still count toward the page, so a page can show
+  fewer rows and still offer "Next page".
+
   Navigation matches the OPDS browser: a "Previous page" row precedes the
   items past page 1 and a "Next page" row follows them while more pages
   exist — tappable and button-reachable like any row.
@@ -394,6 +422,53 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   defaults to the list title, and omitted button labels use the firmware's
   translated Cancel/Confirm defaults. Back from the book list returns to the
   picker.
+- **Named-list notices (`notice`)**: optionally include `once: true` (boolean) and
+  a stable `id` of 1–64 ASCII letters, digits, hyphens, underscores, or dots.
+  The firmware remembers **Continue** per plugin installation directory and
+  notice ID on the SD card, across reboots and plugin updates. Lists sharing
+  the same ID within a plugin share the acknowledgement; uninstalling the
+  plugin clears its acknowledgements. **Go Back** never acknowledges. Missing,
+  invalid, or mistyped `id`/`once` fields keep the normal per-visit notice.
+  If the SD write fails, Continue still opens the list, but the notice returns
+  on a later visit.
+- **Dynamic lists** (json): `browse.lists_url` is fetched with a GET once per
+  catalog visit. The request carries `lists_headers` and no other headers, so
+  a token reaches the lists server only when the manifest says so. The answer
+  is read from the array at `lists_items`; each entry's title, url, and id
+  come from the dotted paths in `lists_fields`, plus the optional `body`
+  string and `notice` object, read by the same names as in `lists`. An entry
+  needs a title and a url or an id; an entry with only an id browses
+  `browse.url`, which gets the id through `{list_id}` or `{list_id_enc}`.
+  Other entries are skipped. At most 64 fetched lists are kept; an answer with
+  no usable entries, or one larger than 16KB, counts as a failed fetch. The
+  fetched lists follow any `lists` from the manifest. If the fetch fails, the
+  manifest's own lists are still shown and the fetch is not retried until the
+  catalog is reopened; without them the catalog shows an error, and Retry
+  fetches again. A 401/403 answer is handled as for browsing: a `password`
+  sign-in mints a new token and retries once, otherwise the sign-in screen is
+  shown. Firmware before this change ignores `lists_url` when `lists` is also
+  set. `lists_headers`, `lists_items`, `lists_fields`, `{list_id}`, and
+  `{list_id_enc}` need the `catalog.list_index_mapping` capability.
+  Optional `requires` on either a manifest list or a fetched list contains an
+  array of firmware capability names. A list is shown only when all names are
+  advertised by the firmware. Lists without `requires` are unchanged; a
+  malformed array or more than 32 names hides that list. For remote APIs,
+  `browse.lists_fields.requires` can specify a dotted path to the array.
+  A plugin that depends on this filtering should declare
+  `catalog.list_requirements` in its compatibility requirements.
+- **Server paths** (json): a URL that a response supplies may be a server
+  path such as `/api/files/12/download`. This applies to the `download.url_path`
+  answer, a fetched list's `url`, and an item's `details_url`. The firmware
+  joins the path to the origin (scheme, host, and port) of the request that
+  returned it: the download request, `lists_url`, or the browse or search
+  request. A `url_path` answer that is a server path is on the API's own host,
+  so the file GET sends the download `headers`, and a 401/403 there gets the
+  password-grant retry. A full URL, even on the same host, still gets no
+  headers, because it may be pre-signed. The details GET sends no headers, as
+  before. Other relative forms (`files/12`, `//host/x`) are used as they are,
+  and item `url` fields are not changed, because templates such as
+  `{cfg.server}{url}` may already join them. A catalog that relies on this
+  should declare `catalog.server_paths` in its compatibility requirements.
 - **XML navigation**: Confirm on a folder (an item carrying `container_element`)
   descends into it, Back climbs out (Back at the root leaves the screen).
   With `resolve_urls`, server-relative URLs resolve against the browse URL's
@@ -500,7 +575,8 @@ browser-side.
   EPUB to SD. Browsing/search is HTML, so parse it in the browser.
 - **RSS → EPUB digest** — build a "morning edition." Fetch feeds with
   `api.relay`, assemble an EPUB in the browser with the JSZip the File Manager
-  page already loads, then `api.writeFile` it to SD.
+  page loads before its plugins, then `api.writeFile` it to SD. Check `typeof JSZip`
+  and load `/js/jszip.min.js` if needed: other pages do not provide it.
 - **Read-any-article** — paste a URL, run it through a readability service via
   `api.relay`, wrap the result as an EPUB, write to SD.
 - **Metadata / cover editor** — a File Manager plugin: open an EPUB with JSZip,
@@ -518,11 +594,12 @@ browser-side.
 | Need | Use |
 |---|---|
 | Outbound HTTP(S), any method (CORS-free) | `api.relay(method, url, headers, body)` |
-| Download a URL straight to SD | `api.fetchToSd(url, dest, headers)` |
+| Download a URL straight to SD | `api.fetchToSd(url, dest, headers, {method, body})` (options optional; with a method other than GET, or a non-empty body, the request is sent once, and on failure the thrown error carries the `/api/fetch` result in `err.result`, including the start of the server's answer in `err.result.body` when there is one) |
 | Write a small file to SD | `api.writeFile(path, base64)` |
 | The plugin's own folder (keep its data here) | `api.dir` |
 | Crypto (hash, HMAC via SHA, AES, RSA) | `api.crypto(op, fields)` or browser `crypto.subtle` |
 | Create / delete / move SD files | same-origin `/mkdir`, `/delete`, `/move` |
+| Read a few reader settings | same-origin `GET /api/settings?keys=a,b` (returns only the settings you ask for) |
 | On-device catalog/browse/download | `device.json` (this document) |
 | External app triggers an action | `api.registerAction(name, fn)` + `/api/plugin-jobs` |
 

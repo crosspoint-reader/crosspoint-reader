@@ -477,6 +477,30 @@ TEST_F(ChapterHtmlSlimParserTest, HeaderWithHiddenAttributeShouldBeSkipped) {
   ASSERT_EQ(parser.partWordBufferIndex, 0);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, HeadingBlocksAreNotHyphenated) {
+  const XML_Char* noAttributes[] = {nullptr};
+  parser.hyphenationEnabled = true;
+
+  parser.beginParse();
+  ChapterHtmlSlimParser::startElement(&parser, "h2", noAttributes);
+  ChapterHtmlSlimParser::characterData(&parser, "Title ", 6);
+  ASSERT_NE(parser.currentTextBlock, nullptr);
+  EXPECT_FALSE(parser.currentTextBlock->isHyphenationEnabled());
+  // A line break inside the heading starts another block of the same heading.
+  ChapterHtmlSlimParser::startElement(&parser, "br", noAttributes);
+  ChapterHtmlSlimParser::endElement(&parser, "br");
+  ChapterHtmlSlimParser::characterData(&parser, "More ", 5);
+  EXPECT_FALSE(parser.currentTextBlock->isHyphenationEnabled());
+  ChapterHtmlSlimParser::endElement(&parser, "h2");
+
+  ChapterHtmlSlimParser::startElement(&parser, "p", noAttributes);
+  ChapterHtmlSlimParser::characterData(&parser, "Body ", 5);
+  ASSERT_NE(parser.currentTextBlock, nullptr);
+  EXPECT_TRUE(parser.currentTextBlock->isHyphenationEnabled());
+  ChapterHtmlSlimParser::endElement(&parser, "p");
+  parser.abortParse();
+}
+
 TEST_F(ChapterHtmlSlimParserTest, SpanWithHiddenAttributeShouldBeSkipped) {
   const XML_Char* attributes[] = {"hidden", "hidden", nullptr};
 

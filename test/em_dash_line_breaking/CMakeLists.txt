@@ -1,5 +1,6 @@
 add_executable(EmDashLineBreakingTest
   EmDashLineBreakingTest.cpp
+  FocusReadingTest.cpp
   ${REPO_ROOT}/lib/Epub/Epub/ParsedText.cpp
   ${REPO_ROOT}/lib/Epub/Epub/WordStore.cpp
   ${REPO_ROOT}/lib/Epub/Epub/blocks/TextBlock.cpp

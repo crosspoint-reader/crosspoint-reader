@@ -1,5 +1,6 @@
 // From
 // https://github.com/vroland/epdiy/blob/c61e9e923ce2418150d54f88cea5d196cdc40c54/src/epd_internals.h
+// The EPDiy font layouts use LGPLv3. See licenses/borrowed-code.txt.
 
 #pragma once
 #include <cstdint>
@@ -25,6 +26,10 @@ constexpr int32_t HALF = 1 << (FRAC_BITS - 1);  // 8, added before shift for rou
 
 /// Convert an integer pixel value to 12.4 fixed-point.
 constexpr int32_t fromPixel(int px) { return static_cast<int32_t>(px) << FRAC_BITS; }
+
+/// Discard the two low bits of a 26.6 value, leaving four fractional bits.
+/// This is used to preserve the final pixel snap when combining advances with fp4 kerning.
+constexpr int32_t truncate26_6_to_4(int32_t fp) { return fp >> 2; }
 
 /// Snap a fixed-point value to the nearest integer pixel.
 constexpr int toPixel(int32_t fp) { return static_cast<int>((fp + HALF) >> FRAC_BITS); }

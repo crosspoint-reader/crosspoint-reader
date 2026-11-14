@@ -123,6 +123,8 @@ class FontDownloadActivity final : public UiListActivity {
 
   int listCount() const override;
   void buildScreen(UiScreen& screen) override;
+  void drawChrome() override;
+  void drawFooter() override;
   void activateIndex(int index) override;
   freeink::ui::ListNav& activeNav() override;
   void onBackButton() override;

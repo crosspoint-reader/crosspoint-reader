@@ -48,10 +48,10 @@ namespace pluginevents {
 
 enum class Event : uint8_t {
   ReaderOpen,      // "reader.open"      vars: book
-  ReaderExit,      // "reader.exit"      vars: book, percent
+  ReaderExit,      // "reader.exit"      vars: book, percent, end_percent
   ReaderSession,   // "reader.session"   vars: book, document, active-session summary
   BookDownloaded,  // "book.downloaded"  vars: path, title, plugin
-  SleepEnter,      // "sleep.enter"      vars: book, percent when sleeping from a reader, else none
+  SleepEnter,      // "sleep.enter"      vars: book, percent, end_percent when sleeping from a reader, else none
   COUNT
 };
 

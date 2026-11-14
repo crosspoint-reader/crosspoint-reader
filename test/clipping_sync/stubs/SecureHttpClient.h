@@ -3,11 +3,14 @@
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "BuildScratch.h"
 
 namespace fake {
+using Headers = std::vector<std::pair<std::string, std::string>>;
+inline std::vector<Headers> headers;  // One entry per begin(), in request order.
 inline std::vector<std::string> uploads;
 inline std::string remoteResponse;
 inline int requests = 0;
@@ -20,9 +23,10 @@ class SecureHttpClient {
   void setInsecure() {}
   bool begin(const std::string& url) {
     url_ = url;
+    fake::headers.emplace_back();
     return true;
   }
-  void addHeader(const std::string&, const std::string&) {}
+  void addHeader(const std::string& name, const std::string& value) { fake::headers.back().emplace_back(name, value); }
   template <typename Sink>
   int sendRequest(const char* method, const uint8_t* data, size_t length, Sink sink) {
 #if defined(CONFIG_IDF_TARGET_ESP32C3) && CONFIG_IDF_TARGET_ESP32C3

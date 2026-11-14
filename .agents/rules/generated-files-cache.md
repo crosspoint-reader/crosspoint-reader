@@ -6,14 +6,14 @@ Edit sources, not generated output. Stage only sources.
 
 | Source | Generator | Ignored output |
 | --- | --- | --- |
-| `data/html/` | `scripts/build_html.py`, run by the PlatformIO pre-build | `src/network/html/*.generated.h` |
+| `src/network/html/` (HTML, JS, CSS, SVG) | `scripts/build_html.py`, run by the PlatformIO pre-build | `src/network/html/**/*.generated.h` |
 | `lib/I18n/translations/*.yaml` | `scripts/gen_i18n.py` | `lib/I18n/I18nKeys.h`, `I18nStrings.h`, `I18nStrings.cpp` |
 
 Other ignored artifacts include `.pio/`, `build/`, and `compile_commands.json`.
 
 ### Modifying Generated Content Workflow
 
-For HTML, edit `data/html/`; the next relevant firmware build regenerates the
+For web UI assets, edit `src/network/html/`; the next relevant firmware build regenerates the
 headers. For i18n, follow the translation workflow below. Generated outputs
 remain unstaged even when used for local verification.
 

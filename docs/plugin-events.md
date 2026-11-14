@@ -47,10 +47,19 @@ against newer firmware degrades gracefully on older firmware.
 | Event             | Fires when                                             | Variables                            |
 | ----------------- | ------------------------------------------------------ | ------------------------------------ |
 | `reader.open`     | A book is opened (EPUB/TXT/XTC)                        | `book` (SD path)                     |
-| `reader.exit`     | The reader is left (home, sleep, another activity)     | `book`, `percent` (0-100 whole-book) |
+| `reader.exit`     | The reader is left (home, sleep, another activity)     | `book`, `percent`, `end_percent`     |
 | `reader.session`  | An active-reading summary is flushed before sleep/exit | fields documented below              |
 | `book.downloaded` | An on-device catalog download completed                | `path`, `title`, `plugin`            |
-| `sleep.enter`     | The device begins entering deep sleep                  | `book`, `percent` when sleeping out of a reader, else none |
+| `sleep.enter`     | The device begins entering deep sleep                  | `book`, `percent`, `end_percent` when sleeping out of a reader, else none |
+
+`percent` and `end_percent` are whole-book progress, 0-100, sent as strings
+like all event variables. In EPUB and TXT books, `percent` is measured at the
+top of the visible page, so it can stay below 100 on the last page.
+`end_percent` is measured at the bottom of the visible page, rounded down, and
+is `100` only on the last page and on the end-of-book screen: a book is
+finished when `end_percent` is `100`. In XTC books both values count the
+visible page as read. `end_percent` is not related to `reader.session`'s
+`end_progress_bp`, which is the progress when a reading session ended.
 
 `sleep.enter` carries the reader snapshot because sleeping straight out of a
 book is the common flow, and the reader's own `reader.exit` fires after the

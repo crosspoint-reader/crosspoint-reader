@@ -9,10 +9,10 @@
 
 #include "activities/Activity.h"
 
-// Footnote reference selection overlaid on the current reader page, modeled on
-// DictionaryWordSelectActivity: the page renders underneath and each footnote
-// reference marker gets a highlight box. Up/Down/Left/Right move between
-// markers, Confirm jumps to that footnote, Back returns to the reader.
+// Footnote reference selection overlaid on the current reader page. Each
+// reference gets a dotted background and outline without redrawing its text.
+// Direction buttons move between markers, Confirm jumps to that footnote,
+// Back returns to the reader.
 class EpubReaderFootnoteSelectActivity final : public Activity {
  public:
   explicit EpubReaderFootnoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

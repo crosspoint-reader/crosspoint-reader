@@ -97,6 +97,175 @@ TEST_F(LibraryBuilderTest, SkipsSystemFolderContents) {
   EXPECT_EQ(fake::directoryEntriesByPath["/System Volume Information/notes.txt"], 0u);
 }
 
+TEST(LibraryBookFileTest, RejectsResourceRootsButNotNestedNamesOrSubstrings) {
+  for (const auto* root : {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"}) {
+    const std::string path = std::string("/") + root;
+    EXPECT_FALSE(isLibraryBookFile(path + "/LICENSE.txt")) << path;
+    EXPECT_FALSE(isLibraryBookFile(path + "/nested/book.epub")) << path;
+    EXPECT_FALSE(isLibraryBookFile("/./" + path + "/README.md")) << path;
+    EXPECT_TRUE(isLibraryBookFile(path + "-books/book.epub")) << path;
+    EXPECT_TRUE(isLibraryBookFile(std::string("/books-") + root + "/book.epub")) << path;
+    EXPECT_TRUE(isLibraryBookFile(std::string("/books-") + root + "-archive/book.epub")) << path;
+    EXPECT_TRUE(isLibraryBookFile("/Books" + path + "/book.txt")) << path;
+    EXPECT_TRUE(isLibraryBookFile(path + ".txt")) << path;
+  }
+  EXPECT_FALSE(isLibraryBookFile("/FoNtS/family/LICENSE.TXT"));
+  EXPECT_FALSE(isLibraryBookFile("/DICTIONARIES/nested/book.epub"));
+}
+
+TEST(LibraryBookFileTest, ResourceRootsUseAsciiCaseInsensitiveMatching) {
+  for (const auto* name : {"FoNtS", "DiCtIoNaRiEs", "PlUgInS", "SlEeP", "SlEeP-OvErLaY"}) {
+    const std::string root = std::string("/") + name;
+    EXPECT_FALSE(isLibraryBookFile(root + "/book.epub")) << root;
+    EXPECT_TRUE(isLibraryBookFile("/books" + root + "/book.epub")) << root;
+    EXPECT_TRUE(isLibraryBookFile(root + "-books/book.epub")) << root;
+  }
+  EXPECT_TRUE(isLibraryBookFile("/f\xC3\xB6nt/book.epub"));
+  EXPECT_TRUE(isLibraryBookFile("/font\xC5\xBF/book.epub"));
+}
+
+TEST_F(LibraryBuilderTest, ScansNestedSkippedNamesAndRootSubstringNames) {
+  std::vector<std::string> expected = {"/a.epub", "/b.epub"};
+  expected.reserve(expected.size() + 5 * 4);
+  for (const auto* name : {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"}) {
+    expected.push_back(std::string("/books/") + name + "/nested/book.epub");
+    expected.push_back(std::string("/") + name + "-books/nested/book.epub");
+    expected.push_back(std::string("/books-") + name + "/nested/book.epub");
+    expected.push_back(std::string("/books-") + name + "-archive/nested/book.epub");
+  }
+  for (const auto& path : expected) fake::add(path);
+
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  ASSERT_EQ(index.bookCount(), expected.size());
+  std::vector<std::string> actual;
+  actual.reserve(index.bookCount());
+  for (uint16_t row = 0; row < index.bookCount(); row++) {
+    actual.push_back(pathAt(index, SortOrder::TitleAsc, row));
+  }
+  std::sort(actual.begin(), actual.end());
+  std::sort(expected.begin(), expected.end());
+  EXPECT_EQ(actual, expected);
+  for (const auto& path : expected) {
+    EXPECT_GT(fake::directoryEntriesByPath[path], 0u) << path;
+  }
+}
+
+TEST_F(LibraryBuilderTest, PrunesResourceRootsWithoutScanningTheirContents) {
+  std::vector<std::string> expected = {"/a.epub", "/b.epub"};
+  expected.reserve(expected.size() + 6 * 3);
+  for (const auto* root : {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay", "FoNtS"}) {
+    const std::string path = std::string("/") + root;
+    fake::add(path + "/LICENSE.txt");
+    fake::add(path + "/nested/book.epub");
+    expected.push_back(path + "-books/book.epub");
+    expected.push_back("/Books" + path + "/book.txt");
+    expected.push_back(path + ".txt");
+  }
+  for (const auto& path : expected) fake::add(path);
+
+  initial();
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  ASSERT_EQ(index.bookCount(), expected.size());
+  std::vector<std::string> actual;
+  actual.reserve(index.bookCount());
+  for (uint16_t row = 0; row < index.bookCount(); row++) {
+    actual.push_back(pathAt(index, SortOrder::TitleAsc, row));
+  }
+  std::sort(actual.begin(), actual.end());
+  std::sort(expected.begin(), expected.end());
+  EXPECT_EQ(actual, expected);
+  for (const auto* root : {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay", "FoNtS"}) {
+    const std::string path = std::string("/") + root;
+    EXPECT_EQ(fake::directoryEntriesByPath[path + "/LICENSE.txt"], 0u) << path;
+    EXPECT_EQ(fake::directoryEntriesByPath[path + "/nested"], 0u) << path;
+    EXPECT_EQ(fake::directoryEntriesByPath[path + "/nested/book.epub"], 0u) << path;
+  }
+}
+
+TEST_F(LibraryBuilderTest, RootAliasesApplyTheSameResourceExclusions) {
+  for (const auto* alias : {"/", "//", "///", "/./", "/.//./", ".", "./", ".//."}) {
+    SCOPED_TRACE(alias);
+    fake::reset();
+    EXPECT_TRUE(isLibraryBookFile(std::string(alias) + "/books/sleep/book.epub"));
+    EXPECT_TRUE(isLibraryBookFile(std::string(alias) + "/sleep-books/book.epub"));
+    EXPECT_FALSE(isLibraryBookFile(std::string(alias) + "/books/.hidden/book.epub"));
+    fake::add("/books/sleep/book.epub");
+    fake::add("/sleep-books/book.epub");
+    for (const auto* name : {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"}) {
+      const std::string root = std::string("/") + name;
+      fake::add(root + "/LICENSE.txt");
+      fake::add(root + "/nested/book.epub");
+      EXPECT_FALSE(isLibraryBookFile(std::string(alias) + "/" + name + "/LICENSE.txt"));
+    }
+
+    ASSERT_TRUE(buildLibraryIndex(alias, stats));
+
+    LibraryIndexFile index;
+    ASSERT_TRUE(index.open(INDEX));
+    ASSERT_EQ(index.bookCount(), 2u);
+    std::vector<std::string> actual;
+    actual.reserve(index.bookCount());
+    for (uint16_t row = 0; row < index.bookCount(); row++) {
+      actual.push_back(pathAt(index, SortOrder::TitleAsc, row));
+    }
+    std::sort(actual.begin(), actual.end());
+    EXPECT_EQ(actual, (std::vector<std::string>{"/books/sleep/book.epub", "/sleep-books/book.epub"}));
+    for (const auto* name : {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"}) {
+      const std::string root = std::string("/") + name;
+      EXPECT_EQ(fake::directoryEntriesByPath[root + "/LICENSE.txt"], 0u);
+      EXPECT_EQ(fake::directoryEntriesByPath[root + "/nested"], 0u);
+    }
+  }
+}
+
+TEST_F(LibraryBuilderTest, SubRootScansSkipResourceFoldersAndTheirDescendants) {
+  for (const auto* name : {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay", "FoNtS"}) {
+    const std::string root = std::string("/") + name;
+    for (const auto* alias : {"", "/", "/./"}) {
+      for (const auto* suffix : {"", "/nested"}) {
+        const std::string scanRoot = std::string(alias) + root + suffix;
+        SCOPED_TRACE(scanRoot);
+        fake::reset();
+        fake::add(root + "/book.epub");
+        fake::add(root + "/nested/book.txt");
+        EXPECT_FALSE(isLibraryBookFile(scanRoot + "/book.epub"));
+
+        ASSERT_TRUE(buildLibraryIndex(scanRoot.c_str(), stats));
+
+        LibraryIndexFile index;
+        ASSERT_TRUE(index.open(INDEX));
+        EXPECT_EQ(index.bookCount(), 0u);
+        EXPECT_EQ(fake::directoryEntriesByPath[root + "/book.epub"], 0u);
+        EXPECT_EQ(fake::directoryEntriesByPath[root + "/nested"], 0u);
+        EXPECT_EQ(fake::directoryEntriesByPath[root + "/nested/book.txt"], 0u);
+      }
+    }
+  }
+}
+
+TEST_F(LibraryBuilderTest, SubRootScansKeepNestedAndSubstringResourceNames) {
+  for (const auto* scanRoot : {"/books", "/books/fonts", "/sleep-books", "/books-sleep"}) {
+    SCOPED_TRACE(scanRoot);
+    fake::reset();
+    const std::string bookPath = std::string(scanRoot) + "/sleep/book.epub";
+    fake::add(bookPath);
+    EXPECT_TRUE(isLibraryBookFile(bookPath));
+
+    ASSERT_TRUE(buildLibraryIndex(scanRoot, stats));
+
+    LibraryIndexFile index;
+    ASSERT_TRUE(index.open(INDEX));
+    ASSERT_EQ(index.bookCount(), 1u);
+    EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, 0), bookPath);
+    EXPECT_GT(fake::directoryEntriesByPath[bookPath], 0u);
+  }
+}
+
 TEST_F(LibraryBuilderTest, XtcTitleAndAuthorComeFromTheFile) {
   fake::add("/Comics/one.xtc");
   fake::add("/Comics/two.xtch");

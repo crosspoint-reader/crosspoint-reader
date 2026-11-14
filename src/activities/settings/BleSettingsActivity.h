@@ -46,6 +46,7 @@ class BleSettingsActivity final : public UiListActivity {
   uint32_t shownSignature = 0;
   uint32_t radioVisit = 0;
   unsigned long lastPollMs = 0;
+  unsigned long lastStatusRepaintMs = 0;
   bleturner::Action learnAction = bleturner::Action::None;
   char learnAddr[18]{};
   char mappingValues[8][24]{};

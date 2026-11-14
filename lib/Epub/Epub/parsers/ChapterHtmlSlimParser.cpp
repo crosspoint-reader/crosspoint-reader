@@ -780,6 +780,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle, cons
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
       if (paragraphEnd) currentTextBlock->resetFirstLineIndent();
+      // The reused block may have been created on the other side of a heading boundary.
+      currentTextBlock->setHyphenationEnabled(blockHyphenationEnabled());
       // The stack accumulates horizontal margins and text properties from ancestors.
       // Vertical margins are per-element and not inherited through the stack, but
       // container elements deposit their vertical margins on the empty block when they
@@ -814,12 +816,12 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle, cons
   dropCap.firstLetterPending = false;
   inlineSize = InlineSizeState{};
   currentTextBlock =
-      makeUniqueNoThrow<ParsedText>(hyphenationEnabled, focusReadingEnabled, blockStyle, paragraphIndentSpaces);
+      makeUniqueNoThrow<ParsedText>(blockHyphenationEnabled(), focusReadingEnabled, blockStyle, paragraphIndentSpaces);
   if (!currentTextBlock) {
     // Evict rebuildable caches and retry once before failing the build.
     freeink::MemoryManager::instance().ensureFree(4 * 1024);
-    currentTextBlock =
-        makeUniqueNoThrow<ParsedText>(hyphenationEnabled, focusReadingEnabled, blockStyle, paragraphIndentSpaces);
+    currentTextBlock = makeUniqueNoThrow<ParsedText>(blockHyphenationEnabled(), focusReadingEnabled, blockStyle,
+                                                     paragraphIndentSpaces);
   }
   if (!currentTextBlock) {
     LOG_ERR("EHP", "OOM: ParsedText");
@@ -2098,6 +2100,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     self->applyBlockFontScale(headerBlockStyle, cssStyle, name);
     headerBlockStyle.keepWithNext = true;
+    self->headingDepth = std::min(self->headingDepth, self->depth);
     self->openBoxScope(headerBlockStyle, cssStyle);
     const auto accumulated =
         self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
@@ -2767,6 +2770,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // Leaving bold tag
   if (self->boldUntilDepth == self->depth) {
     self->boldUntilDepth = INT_MAX;
+  }
+
+  // Leaving heading: the block opened after it hyphenates again
+  if (self->headingDepth == self->depth) {
+    self->headingDepth = INT_MAX;
   }
 
   // Leaving italic tag

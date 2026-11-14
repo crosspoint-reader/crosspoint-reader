@@ -6,6 +6,7 @@
 #include <Logging.h>
 
 #include "ClippingStore.h"
+#include "ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
 
@@ -175,6 +176,11 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
   int depth = getDepth(s);
 
   LOG_DBG("DAV", "PROPFIND %s depth=%d", path.c_str(), depth);
+
+  if (isProtectedPath(path)) {
+    s.send(403, "text/plain", "Forbidden");
+    return;
+  }
 
   // Check if path exists
   if (!Storage.exists(path.c_str()) && path != "/") {
@@ -776,6 +782,9 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
 }
 
 bool WebDAVHandler::isProtectedPath(const String& path) const {
+  // Covers the credential stores' 8.3 aliases, which no segment check can map.
+  if (protectedpaths::isSensitivePath(path.c_str())) return true;
+
   // Check every segment of the path, not just the last one.
   // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
   int start = 0;
@@ -787,9 +796,14 @@ bool WebDAVHandler::isProtectedPath(const String& path) const {
     int end = path.indexOf('/', start);
     if (end == -1) end = path.length();
 
-    String segment = path.substring(start, end);
-
-    if (segment.startsWith(".")) return true;
+    // SdFat skips leading spaces and drops trailing dots and spaces when it
+    // opens a name, so check the name it would actually open.
+    int first = start;
+    int last = end;
+    while (first < last && path.charAt(first) == ' ') first++;
+    if (path.charAt(first) == '.') return true;
+    while (last > first && (path.charAt(last - 1) == '.' || path.charAt(last - 1) == ' ')) last--;
+    String segment = path.substring(first, last);
 
     for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
       if (segment.equals(item)) return true;
