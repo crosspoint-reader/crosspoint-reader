@@ -450,11 +450,12 @@ int main() {
     // Selection box hugs the measured ink (top 2, bottom 14), not the full line advance.
     const int inkY = decorated.words[0].y;
     assert(decorated.words[0].height == 12);
-    // Tight line spacing: capped at the line pitch, trimmed evenly to stay centered on the ink.
+    // Tight line spacing: capped at the line pitch, trimmed from the top so descenders stay whole.
     decorated.renderer.linePitch = 10;
     assert(decorated.extractWords());
     assert(decorated.words[0].height == 10);
-    assert(decorated.words[0].y == inkY + 1);
+    assert(decorated.words[0].y == inkY + 2);
+    assert(decorated.words[0].y + decorated.words[0].height == inkY + 12);
     decorated.renderer.linePitch = 16;
     assert(decorated.extractWords());
     const auto originalInk = decorated.renderer.ink;
