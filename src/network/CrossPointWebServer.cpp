@@ -775,7 +775,8 @@ void CrossPointWebServer::handleStatus() const {
   server->send(200, "application/json", response);
 }
 
-void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
+void CrossPointWebServer::scanFiles(const char* path, bool includeHidden,
+                                    const std::function<void(FileInfo)>& callback) const {
   HalFile root = Storage.open(path);
   if (!root) {
     LOG_DBG("WEB", "Failed to open directory: %s", path);
@@ -797,7 +798,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     auto fileName = String(name);
 
     // Skip hidden items (starting with ".")
-    bool shouldHide = !SETTINGS.showHiddenFiles && fileName.startsWith(".");
+    bool shouldHide = !includeHidden && !SETTINGS.showHiddenFiles && fileName.startsWith(".");
 
     // Check against explicitly hidden items list
     if (!shouldHide) {
@@ -840,6 +841,8 @@ void CrossPointWebServer::handleFileList() const {
 }
 
 void CrossPointWebServer::handleFileListData() const {
+  const bool includeHidden = server->hasArg("hidden") && server->arg("hidden") == "true";
+
   // Get current path from query string (default to root)
   String currentPath = "/";
   if (server->hasArg("path")) {
@@ -853,7 +856,7 @@ void CrossPointWebServer::handleFileListData() const {
   bool seenFirst = false;
   JsonDocument doc;
 
-  scanFiles(currentPath.c_str(), [&reply, &doc, &seenFirst](const FileInfo& info) {
+  scanFiles(currentPath.c_str(), includeHidden, [&reply, &doc, &seenFirst](const FileInfo& info) {
     doc.clear();
     doc["name"] = info.name;
     doc["size"] = info.size;

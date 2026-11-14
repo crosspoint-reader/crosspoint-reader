@@ -97,7 +97,12 @@ The File Manager page can:
 - Rename files
 - Move files into existing folders
 - Delete one or more selected files or empty folders, hidden ones included
-  (shown when **Show Hidden Files** is on)
+
+Enable **Show hidden** beside the folder summary to include dotfiles and folders
+such as `.sleep` without changing the device's **Show Hidden Files** setting.
+The choice is remembered in this browser for this address. Turning it off follows
+the device setting. It also applies to upload-name checks and move destinations;
+`System Volume Information` and `XTCache` remain hidden.
 
 Uploads do not replace a file that has the same name: the upload fails with
 "File already exists". API clients can replace a file with

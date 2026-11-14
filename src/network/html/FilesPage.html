@@ -575,6 +575,21 @@
       color: var(--label-color);
       font-size: 0.9em;
     }
+    .contents-header-right {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+    .show-hidden-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--label-color);
+      font-size: 0.9em;
+      white-space: nowrap;
+      cursor: pointer;
+    }
     #progress-container {
       display: none;
       margin-top: 10px;
@@ -897,7 +912,12 @@
 <div class="card">
   <div class="contents-header">
     <h2 class="breadcrumb-inline" id="directory-breadcrumbs"></h2>
-    <span class="summary-inline" id="folder-summary"></span>
+    <div class="contents-header-right">
+      <label class="show-hidden-toggle" title="Include dotfiles even when the device hides them. When off, follow the device setting.">
+        <input type="checkbox" id="showHiddenToggle" disabled> Show hidden
+      </label>
+      <span class="summary-inline" id="folder-summary"></span>
+    </div>
   </div>
 
   <div id="file-table">
@@ -1220,6 +1240,18 @@
     if (leaf) document.title = leaf + ' - Files - CrossPoint Reader';
   }
 
+  const SHOW_HIDDEN_STORAGE_KEY = 'showHiddenFiles';
+  let showHidden = false;
+  try {
+    showHidden = localStorage.getItem(SHOW_HIDDEN_STORAGE_KEY) === 'true';
+  } catch (e) {
+    console.warn('Could not read hidden file preference:', e);
+  }
+
+  function hiddenParam() {
+    return showHidden ? '&hidden=true' : '';
+  }
+
   // Network status monitoring
   let isNetworkOnline = navigator.onLine;
 
@@ -1339,6 +1371,28 @@
       });
     });
 
+    const showHiddenToggle = document.getElementById('showHiddenToggle');
+    showHiddenToggle.checked = showHidden;
+    showHiddenToggle.addEventListener('change', async function() {
+      showHidden = this.checked;
+      try {
+        localStorage.setItem(SHOW_HIDDEN_STORAGE_KEY, String(showHidden));
+      } catch (e) {
+        console.warn('Could not save hidden file preference:', e);
+      }
+      this.disabled = true;
+      try {
+        await loadFileList();
+      } finally {
+        this.disabled = false;
+      }
+    });
+
+    await loadFileList();
+    showHiddenToggle.disabled = false;
+  }
+
+  async function loadFileList() {
     const breadcrumbs = document.getElementById('directory-breadcrumbs');
     const fileTable = document.getElementById('file-table');
 
@@ -1383,7 +1437,7 @@
 
     let files = [];
     try {
-      const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
+      const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + hiddenParam() + '&_=' + Date.now());
       if (!response.ok) {
         throw new Error('Failed to load files: ' + response.status + ' ' + response.statusText);
       }
@@ -3318,7 +3372,7 @@ function reserveAvailableUploadFilename(fileName, usedFileNames) {
 }
 
 async function fetchExistingUploadNames() {
-  const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
+  const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + hiddenParam() + '&_=' + Date.now());
   if (!response.ok) {
     throw new Error(response.status + ' ' + response.statusText);
   }
@@ -3964,7 +4018,7 @@ function retryAllFailedUploads() {
 
     async function fetchFolders(path) {
       try {
-        const response = await fetch('/api/files?path=' + encodeURIComponent(path));
+        const response = await fetch('/api/files?path=' + encodeURIComponent(path) + hiddenParam());
         if (!response.ok) return [];
         return await response.json();
       } catch (e) {
