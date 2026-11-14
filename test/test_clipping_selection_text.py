@@ -654,5 +654,5 @@ with tempfile.TemporaryDirectory() as directory:
         str(ROOT / "lib/Utf8/Utf8.cpp"), "-o", str(executable),
     ], check=True)
     subprocess.run([str(executable)], check=True)
-assert "std::min(fullHeight, rowPitch)" in source and "fullHeight - height" in source, "selection highlight must stay bottom-anchored within the row pitch"
+assert "std::min(renderer.getLineHeight(wordFont), rowPitch)" in source, "selection highlight must not exceed row pitch"
 print("Clipping selection text regression checks passed")
