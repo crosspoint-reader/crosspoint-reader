@@ -150,6 +150,18 @@ uint8_t activeIndex() {
   return UTC_INDEX;
 }
 
+int indexForOffset(const int stdOffsetMinutes, const bool observesDst) {
+  if (stdOffsetMinutes % 15 != 0) return -1;
+  const int q = stdOffsetMinutes / 15;
+  int fallback = -1;
+  for (size_t i = 0; i < TABLE_COUNT; i++) {
+    if (TABLE[i].stdOffsetQ != q) continue;
+    if ((strchr(TABLE[i].posixTz, ',') != nullptr) == observesDst) return static_cast<int>(i);
+    if (fallback < 0) fallback = static_cast<int>(i);
+  }
+  return fallback;
+}
+
 void formatOffset(const uint8_t index, char* buf, const size_t bufSize) {
   if (index >= TABLE_COUNT) {
     snprintf(buf, bufSize, "UTC");
