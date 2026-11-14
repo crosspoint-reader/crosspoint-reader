@@ -159,14 +159,26 @@ int LibraryListActivity::pinnedCount() const {
   return pinnedTotal;
 }
 
+const RecentBook* LibraryListActivity::pinnedBookFor(const int entry) const {
+  if (entry < 0 || entry >= pinnedTotal) return nullptr;
+  const auto& books = RECENT_BOOKS.getBooks();
+  const size_t storeIndex = pinnedStoreIndices[entry];
+  return storeIndex < books.size() ? &books[storeIndex] : nullptr;
+}
+
 void LibraryListActivity::resolvePinned() {
   const auto& books = RECENT_BOOKS.getBooks();
-  pinnedTotal = static_cast<uint8_t>(std::min<size_t>(books.size(), RecentBooksStore::MAX_RECENT_BOOKS));
-  for (int i = 0; i < pinnedTotal; i++) pinnedAscRows[i] = 0xFFFF;
+  pinnedTotal = 0;
+  const size_t count = std::min<size_t>(books.size(), RecentBooksStore::MAX_RECENT_BOOKS);
+  for (size_t i = 0; i < count; i++) {
+    if (!library::isLibraryBookFile(books[i].path)) continue;
+    pinnedStoreIndices[pinnedTotal] = static_cast<uint8_t>(i);
+    pinnedAscRows[pinnedTotal++] = 0xFFFF;
+  }
   if (pinnedTotal > 0 && index.isOpen()) {
     library::BookIdentity identities[RecentBooksStore::MAX_RECENT_BOOKS];
     for (int i = 0; i < pinnedTotal; i++) {
-      const std::string& path = books[static_cast<size_t>(i)].path;
+      const std::string& path = books[pinnedStoreIndices[i]].path;
       identities[i].pathHash = library::clixPathHash(path.data(), path.size());
       // Size is only a lookup prefilter; 0 (stat failed, e.g. the index handle
       // is the card's one open reader) falls back to hash-only matching.
@@ -201,9 +213,9 @@ void LibraryListActivity::refreshOverlap() {
 void LibraryListActivity::openSelectedBook() {
   std::string path;
   if (selectedEntry() < pinnedCount()) {
-    const auto& books = RECENT_BOOKS.getBooks();
-    if (selectedEntry() >= static_cast<int>(books.size())) return;
-    path = books[static_cast<size_t>(selectedEntry())].path;
+    const auto* book = pinnedBookFor(selectedEntry());
+    if (!book) return;
+    path = book->path;
   } else {
     if (!index.isOpen()) return;
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(selectedEntry())));
@@ -264,10 +276,10 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
   std::string title;
   const bool isStoreRow = entry < pinnedCount();
   if (isStoreRow) {
-    const auto& books = RECENT_BOOKS.getBooks();
-    if (entry >= static_cast<int>(books.size())) return;
-    path = books[static_cast<size_t>(entry)].path;
-    title = books[static_cast<size_t>(entry)].title;
+    const auto* book = pinnedBookFor(entry);
+    if (!book) return;
+    path = book->path;
+    title = book->title;
   } else {
     if (!index.isOpen()) return;
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
@@ -317,8 +329,8 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
 void LibraryListActivity::swipeDelete(const int entry) {
   activeNav().selected = entry + 1;
   if (isRecentSort(sortOrder) && entry < pinnedCount()) {
-    const auto& book = RECENT_BOOKS.getBooks()[static_cast<size_t>(entry)];
-    promptDeleteBookByPath(book.path, book.title);
+    const auto* book = pinnedBookFor(entry);
+    if (book) promptDeleteBookByPath(book->path, book->title);
   } else {
     promptDeleteBook(entry);
   }
@@ -710,12 +722,11 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
   author.clear();
   if (fileName) fileName->clear();
   if (entry < pinnedCount()) {
-    const auto& books = RECENT_BOOKS.getBooks();
-    if (entry < 0 || entry >= static_cast<int>(books.size())) return false;
-    const auto& book = books[static_cast<size_t>(entry)];
-    title = book.title;
-    author = book.author;
-    if (fileName) *fileName = book.path;
+    const auto* book = pinnedBookFor(entry);
+    if (!book) return false;
+    title = book->title;
+    author = book->author;
+    if (fileName) *fileName = book->path;
     return true;
   }
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));

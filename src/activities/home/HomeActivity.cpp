@@ -53,6 +53,9 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
       continue;
     }
 
+    // Keep the current file on its card; other recents follow Library eligibility.
+    if (!recentBooks.empty() && !library::isLibraryBookFile(book.path)) continue;
+
     recentBooks.push_back(book);
   }
 }

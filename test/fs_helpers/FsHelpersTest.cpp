@@ -9,6 +9,28 @@ namespace {
 
 using namespace std::string_view_literals;
 
+TEST(EqualsIgnoreAsciiCase, FoldsBothArguments) {
+  EXPECT_TRUE(FsHelpers::equalsIgnoreAsciiCase("My Clippings.txt", "my CLIPPINGS.TXT"));
+  EXPECT_TRUE(FsHelpers::equalsIgnoreAsciiCase("FONTS", "fonts"));
+  EXPECT_TRUE(FsHelpers::equalsIgnoreAsciiCase("fonts", "FONTS"));
+  EXPECT_TRUE(FsHelpers::equalsIgnoreAsciiCase("", ""));
+  EXPECT_FALSE(FsHelpers::equalsIgnoreAsciiCase("fonts", "font"));
+  EXPECT_FALSE(FsHelpers::equalsIgnoreAsciiCase("font", "fonts"));
+  EXPECT_FALSE(FsHelpers::equalsIgnoreAsciiCase("fonts", "fontz"));
+}
+
+TEST(EqualsIgnoreAsciiCase, LeavesNonAsciiBytesUnchanged) {
+  EXPECT_TRUE(FsHelpers::equalsIgnoreAsciiCase("f\xC3\xB6nt", "F\xC3\xB6NT"));
+  EXPECT_FALSE(FsHelpers::equalsIgnoreAsciiCase("\xC3\x96", "\xC3\xB6"));
+  EXPECT_FALSE(FsHelpers::equalsIgnoreAsciiCase("font\xC5\xBF", "fonts"));
+}
+
+TEST(EqualsIgnoreAsciiCase, RespectsViewBoundsAndEmbeddedNulls) {
+  EXPECT_TRUE(FsHelpers::equalsIgnoreAsciiCase(std::string_view("FONTS/extra", 5), "fonts"));
+  EXPECT_TRUE(FsHelpers::equalsIgnoreAsciiCase("A\0B"sv, "a\0b"sv));
+  EXPECT_FALSE(FsHelpers::equalsIgnoreAsciiCase("A\0B"sv, "a\0c"sv));
+}
+
 TEST(ReflowableBookExtension, IncludesTextFormatsAndExcludesImageBooks) {
   for (const auto path : {"/Books/book.epub"sv, "book.TXT"sv, "book.mD"sv}) {
     EXPECT_TRUE(FsHelpers::hasReflowableBookExtension(path));
