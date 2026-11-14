@@ -17,7 +17,6 @@
 #include <Utf8.h>
 
 #include <algorithm>
-#include <cstdlib>
 
 #include "../Memory/Memory.h"
 #include "FontCacheManager.h"
@@ -2453,17 +2452,6 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
   }
 
   return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
-}
-
-int GfxRenderer::getFontDescenderSize(const int fontId) const {
-  const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
-    return 0;
-  }
-
-  // Built-in fonts store FreeType's negative descender; TTF and SD fonts may store it positive.
-  return std::abs(fontIt->second.getData(EpdFontFamily::REGULAR)->descender);
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
