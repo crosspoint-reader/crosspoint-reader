@@ -65,7 +65,7 @@ harness = r"""
 #include "ClippingStore.h"
 #include <Epub/ReaderRenderSpec.h>
 namespace BidiUtils { enum class BidiBaseDir : int8_t { AUTO = -1, LTR = 0, RTL = 1 }; }
-struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4, STRIKETHROUGH = 8 }; };
+struct EpdFontFamily { enum Style { REGULAR, UNDERLINE = 4, STRIKETHROUGH = 8, SUP = 16, SUB = 32 }; };
 constexpr int TAG_PageLine = 1, TAG_PageImage = 2;
 struct Rect { int x = 0, y = 0, width = 0, height = 0; };
 enum class Color { LightGray };
@@ -88,6 +88,8 @@ struct Block {
   int blockFontId(int fallback) const { return font >= 0 ? font : fallback; }
   int wordFontId(uint16_t, int fallback) const { return font >= 0 ? font : fallback; }
   int wordYOffset(const Renderer&, int, uint16_t) const { return 0; }
+  int lineAscent(const Renderer& renderer, int sectionFont) const;
+  int extraAscent(const Renderer&, int) const { return 0; }
   static int renderFontId(const Renderer&, int fontId, int) { return fontId; }
   uint16_t wordCount() const {
     return packedText.empty() ? (prefixSpace ? 2 : 1) : std::count(packedText.begin(), packedText.end(), '\0');
@@ -167,6 +169,21 @@ struct Renderer {
   int getFontAscenderSize(int font) const { return font == 2 ? 24 : 12; }
   int getFontDescenderSize(int font) const { return font == 2 ? -6 : -4; }  // sign varies by font source
   int getLineHeight(int) const { return 16; }
+  // Font size in pixels: 15 for the body font, 30 for the heading font.
+  int getLineHeight(int font, float compression) const {
+    return static_cast<int>((font == 2 ? 30 : 15) * compression + 0.5f);
+  }
+  // Body glyphs: x-height 8, ascenders/capitals 11, descenders 4, accented/non-ASCII 13; doubled for font 2.
+  bool getCodepointInk(int font, uint32_t cp, EpdFontFamily::Style, int& top, int& bottom) const {
+    if (cp == ' ') return false;
+    const char c = cp < 0x80 ? static_cast<char>(cp) : '\0';
+    const bool descends = c && std::char_traits<char>::find("gjpqy", 5, c) != nullptr;
+    const bool tall = (cp >= 'A' && cp <= 'Z') || (c && std::char_traits<char>::find("bdfhklt", 7, c) != nullptr);
+    top = cp > 0x7f ? 13 : tall ? 11 : 8;
+    bottom = descends ? -4 : 0;
+    if (font == 2) { top *= 2; bottom *= 2; }
+    return true;
+  }
   RenderMode getRenderMode() const { return BW; }
   void getOrientedViewableTRBL(int* top, int* right, int* bottom, int* left) const {
     *top = *right = *bottom = *left = 0;
@@ -267,12 +284,17 @@ struct Input {
 };
 using GfxRenderer = Renderer;
 using TextBlock = Block;
+int Block::lineAscent(const Renderer& renderer, int sectionFont) const {
+  return renderer.getFontAscenderSize(blockFontId(sectionFont));
+}
 """ + line_band + r"""
 struct BoardConfig { static bool isEegoA4() { return false; } };
 unsigned long millis() { return 0; }
 struct Settings {
   int screenMargin = 0;
+  float lineCompression = 1.2f;
   int getReaderFontId() const { return 0; }
+  float getReaderLineCompression() const { return lineCompression; }
   ReaderRenderSpec readerRenderSpec(int width, int height) const {
     ReaderRenderSpec spec;
     spec.viewportWidth = width;
@@ -380,57 +402,64 @@ void expect(const ClipSelectionActivity& activity, int first, int last, const ch
 int main() {
   {
     using clippingLineBand::lineBand;
+    using clippingLineBand::measurePage;
     Renderer bandRenderer;
-    auto addLine = [](Page& page, int x, int y, int font = -1) {
+    auto addLine = [](Page& page, int y, const char* text, int font = -1,
+                      EpdFontFamily::Style style = EpdFontFamily::REGULAR) {
       auto line = std::make_unique<PageLine>();
-      line->xPos = x; line->yPos = y; line->block.font = font;
+      line->yPos = y; line->block.font = font;
+      line->block.packedText = std::string(text) + '\0';
+      line->block.styles.push_back(style);
       page.elements.push_back(std::move(line));
       return page.elements.back().get();
     };
     auto height = [](clippingLineBand::Band band) { return band.bottom - band.top; };
+    // Body font: ascender 12, so the baseline sits at yPos + 12.
 
-    // A lone line (and a paragraph's last line before a gap) covers ascender + descender, not advanceY.
+    // 120%: step 18 fits the page's ink (T top 11 above, y bottom 4 below), so the band hugs the glyphs exactly.
     Page spaced;
-    const auto* first = addLine(spaced, 0, 0);
-    const auto* last = addLine(spaced, 0, 40);
-    assert(lineBand(bandRenderer, 0, spaced, *first).top == 1 && height(lineBand(bandRenderer, 0, spaced, *first)) == 15);
-    assert(lineBand(bandRenderer, 0, spaced, *last).top == 41 && height(lineBand(bandRenderer, 0, spaced, *last)) == 15);
+    const auto* first = addLine(spaced, 0, "Thy");
+    const auto* second = addLine(spaced, 18, "ace");
+    const auto* afterParagraph = addLine(spaced, 18 + 18 + 9, "go");  // extra paragraph spacing before it
+    const auto spacedInk = measurePage(bandRenderer, 0, spaced);
+    const auto firstBand = lineBand(bandRenderer, 0, *first, 1.2f, spacedInk);
+    assert(firstBand.top == 12 - 11 && firstBand.bottom == 12 + 4);
+    // Every line on the page shares the page's ink, so heights are even even without capitals or descenders.
+    assert(lineBand(bandRenderer, 0, *second, 1.2f, spacedInk).top == 18 + 1);
+    assert(height(lineBand(bandRenderer, 0, *second, 1.2f, spacedInk)) == 15);
+    // Paragraph spacing is not part of the band.
+    assert(lineBand(bandRenderer, 0, *afterParagraph, 1.2f, spacedInk).top == 45 + 1);
+    assert(height(lineBand(bandRenderer, 0, *afterParagraph, 1.2f, spacedInk)) == 15);
 
-    // Tight spacing: glyph bands [1,16) and [11,26) split at the upper line's bottom, keeping its descenders whole.
+    // 80%: step 12 is shorter than the 15px ink, so the band is one step tall, centred on the ink, and lines tile.
     Page tight;
-    const auto* upper = addLine(tight, 0, 0);
-    const auto* lower = addLine(tight, 0, 10);
-    const auto upperBand = lineBand(bandRenderer, 0, tight, *upper);
-    const auto lowerBand = lineBand(bandRenderer, 0, tight, *lower);
-    assert(upperBand.top == 1 && upperBand.bottom == 16 && lowerBand.top == 16 && lowerBand.bottom == 26);
-    for (int y = 1; y < 26; ++y)  // every row belongs to exactly one line, so a tap selects one clipping
-      assert((y >= upperBand.top && y < upperBand.bottom) + (y >= lowerBand.top && y < lowerBand.bottom) == 1);
+    const auto* upper = addLine(tight, 0, "Thy");
+    const auto* lower = addLine(tight, 12, "Thy");
+    const auto tightInk = measurePage(bandRenderer, 0, tight);
+    const auto upperBand = lineBand(bandRenderer, 0, *upper, 0.8f, tightInk);
+    const auto lowerBand = lineBand(bandRenderer, 0, *lower, 0.8f, tightInk);
+    assert(height(upperBand) == 12 && upperBand.top == 1 + 1 && upperBand.bottom == 16 - 2);
+    assert(lowerBand.top == upperBand.bottom && height(lowerBand) == 12);
 
-    // A small line above a larger heading must not shrink the heading to the small line's pitch.
+    // Any script: taller (accented/non-ASCII) glyphs on the page raise the band top.
+    Page accented;
+    const auto* accentLine = addLine(accented, 0, "\xc3\x9c" "ber");
+    const auto accentBand = lineBand(bandRenderer, 0, *accentLine, 1.2f, measurePage(bandRenderer, 0, accented));
+    assert(accentBand.top == 12 - 13 && accentBand.bottom == 12);
+
+    // A heading line uses its own font's ink, baseline and step, unaffected by the body text.
     Page heading;
-    const auto* body = addLine(heading, 0, 0);
-    const auto* title = addLine(heading, 0, 16, 2);
-    assert(height(lineBand(bandRenderer, 0, heading, *body)) == 15);
-    assert(lineBand(bandRenderer, 0, heading, *title).top == 19 && height(lineBand(bandRenderer, 0, heading, *title)) == 27);
+    addLine(heading, 0, "gap");
+    const auto* title = addLine(heading, 18, "Title", 2);
+    const auto headingBand = lineBand(bandRenderer, 0, *title, 1.2f, measurePage(bandRenderer, 0, heading));
+    assert(headingBand.top == 18 + 24 - 22 && headingBand.bottom == 18 + 24);
 
-    // Table cells in separate columns, one pixel apart, do not constrain each other.
-    Page table;
-    const auto* left = addLine(table, 0, 0);
-    const auto* right = addLine(table, 200, 1);
-    addLine(table, 0, 24);
-    addLine(table, 200, 25);
-    assert(height(lineBand(bandRenderer, 0, table, *left)) == 15 && height(lineBand(bandRenderer, 0, table, *right)) == 15);
-
-    // A whitespace-only line has no band and cannot constrain the visible line it overlaps.
-    Page blank;
-    const auto* visible = addLine(blank, 0, 0);
-    auto* spaces = static_cast<PageLine*>(addLine(blank, 0, 10));
-    spaces->block.packedText = "  ";
-    spaces->block.packedText += '\0';
-    spaces->block.styles.push_back(EpdFontFamily::REGULAR);
-    assert(height(clippingLineBand::naturalBand(bandRenderer, 0, *spaces)) == 0);
-    assert(lineBand(bandRenderer, 0, blank, *visible).bottom == 16);
-    assert(lineBand(bandRenderer, 0, blank, *visible).top == 1);
+    // Nothing measurable (superscript only, whitespace ignored): fall back to ascender + |descender|.
+    Page fallback;
+    addLine(fallback, 0, "  ");
+    const auto* sup = addLine(fallback, 18, "x", -1, EpdFontFamily::SUP);
+    const auto fallbackBand = lineBand(bandRenderer, 0, *sup, 1.2f, measurePage(bandRenderer, 0, fallback));
+    assert(fallbackBand.top == 18 && fallbackBand.bottom == 18 + 12 + 4);
   }
   for (bool images : {false, true}) for (auto decoration : {EpdFontFamily::UNDERLINE, EpdFontFamily::STRIKETHROUGH})
     for (auto mode : {ClipSelectionActivity::Mode::Clip, ClipSelectionActivity::Mode::Lookup}) {
@@ -726,7 +755,7 @@ with tempfile.TemporaryDirectory() as directory:
     ], check=True)
     subprocess.run([str(executable)], check=True)
 for text in (source, reader_source):
-    assert "clippingLineBand::lineBand(" in text and "clippingLineBand::clipWord(" in text, \
+    assert "clippingLineBand::lineBand(" in text and "clippingLineBand::measurePage(" in text, \
         "selection and saved-clip highlights must share the clippingLineBand geometry"
 assert "getLineHeight" not in word_rect, "saved-clip rects must use the glyph band, not advanceY"
 print("Clipping selection text regression checks passed")

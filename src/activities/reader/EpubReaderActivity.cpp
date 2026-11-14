@@ -82,7 +82,7 @@ int clippingWordFont(const GfxRenderer& renderer, const int fontId, const TextBl
 }
 
 Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, const PageLine& line, const uint16_t i,
-                      const int top, const int left, const int wordWidth, const clippingLineBand::Band& lineBand) {
+                      const int top, const int left, const int wordWidth, const clippingLineBand::Band& band) {
   const auto& block = line.getBlock();
   const int wordFont = clippingWordFont(renderer, fontId, *block, i);
   const char* text = block->wordText(i);
@@ -93,8 +93,7 @@ Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, const PageL
   if (i + 1 < block->wordCount() && block->wordXpos(i + 1) > block->wordXpos(i)) {
     width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i) - skipX));
   }
-  // Same band as ClipSelectionActivity, so taps and saved highlights match the selection.
-  const auto band = clippingLineBand::clipWord(renderer, fontId, line, i, lineBand);
+  // Same line band as ClipSelectionActivity, so taps and saved highlights match the selection.
   return Rect{left + line.xPos + block->wordXpos(i) + skipX, top + band.top, width, band.bottom - band.top};
 }
 
@@ -2354,6 +2353,8 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
   const int fontId = SETTINGS.getReaderFontId();
   const uint32_t signature =
       readerRenderSpecSignature(SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight));
+  const float lineCompression = SETTINGS.getReaderLineCompression();
+  std::optional<clippingLineBand::PageInk> pageInk;  // lazy: measured once, on the first candidate word
   uint16_t wordIndex = 0;
   for (const auto& element : page.elements) {
     if (element->getTag() != TAG_PageLine) continue;
@@ -2369,7 +2370,8 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
                                                  block->getBlockStyle().characterSpacing);
       if (width <= 0) continue;
       const uint16_t index = wordIndex++;
-      if (!band) band = clippingLineBand::lineBand(renderer, fontId, page, line);
+      if (!pageInk) pageInk = clippingLineBand::measurePage(renderer, fontId, page);
+      if (!band) band = clippingLineBand::lineBand(renderer, fontId, line, lineCompression, *pageInk);
       const Rect rect = clippingWordRect(renderer, fontId, line, i, top + SETTINGS.screenMargin,
                                          left + SETTINGS.screenMargin, width, *band);
       if (x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height) continue;
@@ -2424,6 +2426,8 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
   };
 
   uint16_t pageWordIndex = 0;
+  const float lineCompression = SETTINGS.getReaderLineCompression();
+  std::optional<clippingLineBand::PageInk> pageInk;  // lazy: measured once, on the first highlighted word
   for (const auto& element : page.elements) {
     if (element->getTag() != TAG_PageLine) continue;
     const auto& line = static_cast<const PageLine&>(*element);
@@ -2446,7 +2450,8 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
         continue;
       }
 
-      if (!band) band = clippingLineBand::lineBand(renderer, fontId, page, line);
+      if (!pageInk) pageInk = clippingLineBand::measurePage(renderer, fontId, page);
+      if (!band) band = clippingLineBand::lineBand(renderer, fontId, line, lineCompression, *pageInk);
       const Rect rect =
           clippingWordRect(renderer, fontId, line, i, orientedMarginTop, orientedMarginLeft, width, *band);
       const int x = rect.x;
