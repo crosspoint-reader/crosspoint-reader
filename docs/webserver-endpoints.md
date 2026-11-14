@@ -549,7 +549,8 @@ The final field is the WebSocket upload port.
 
 - Device creates an open hotspot named `CrossPoint-Reader`.
 - The device shows a Wi-Fi QR code and URL QR code.
-- The fallback IP is typically `192.168.4.1`.
+- The fallback IP is typically `192.168.4.1` (configurable via `apCidr` in
+  `settings.json` — see [webserver.md](webserver.md)).
 - `/api/status` returns `"mode": "AP"` and `"rssi": 0`.
 - The hotspot's DNS answers every name with the device's IP. A `GET` or `HEAD`
   request whose `Host` is any other domain name (not an IP address, a `.local`

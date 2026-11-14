@@ -10,6 +10,7 @@
 
 #include <cstddef>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
 #include "SilentRestart.h"
@@ -17,6 +18,7 @@
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/Ipv4.h"
 #include "util/PluginEvents.h"
 #include "util/QrUtils.h"
 #include "util/TaskWatchdog.h"
@@ -255,6 +257,30 @@ void CrossPointWebServerActivity::startAccessPoint() {
   // Configure and start the AP
   WiFi.mode(WIFI_AP);
   delay(100);
+
+  // Optional hotspot subnet override ("apCidr" in settings.json). The Arduino
+  // core rejects AP netmasks outside /24-/28 (it needs room for 10 DHCP
+  // leases), so anything else falls back to the default 192.168.4.1/24.
+  if (SETTINGS.apCidr[0] != '\0') {
+    uint8_t octets[4], prefix;
+    if (Ipv4::parseCidr(SETTINGS.apCidr, octets, prefix) && prefix >= 24 && prefix <= 28 &&
+        Ipv4::isUsableHostIp(octets, prefix)) {
+      const IPAddress apIp(octets[0], octets[1], octets[2], octets[3]);
+      const IPAddress apMask(255, 255, 255, 256 - (1 << (32 - prefix)));
+      if (!WiFi.softAPConfig(apIp, apIp, apMask)) {
+        LOG_ERR("WEBACT", "softAPConfig rejected apCidr '%s'; restoring default subnet", SETTINGS.apCidr);
+        // config() applies the address before its late DHCP checks can fail,
+        // so a rejection can leave the netif half-configured with the DHCP
+        // server stopped. Reconfiguring the default restores both.
+        if (!WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0))) {
+          LOG_ERR("WEBACT", "Default subnet restore failed");
+        }
+      }
+    } else {
+      LOG_ERR("WEBACT", "Invalid apCidr '%s' (want a.b.c.d/n, /24-/28 usable host); using default subnet",
+              SETTINGS.apCidr);
+    }
+  }
 
   // Start soft AP
   bool apStarted;
