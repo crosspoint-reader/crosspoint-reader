@@ -136,8 +136,7 @@ bool open(Table& table) {
     }
 
     if (header.version != VERSION || header.headerSize < sizeof(header) || header.headerSize > segment.data_len ||
-        header.blockCount == 0 ||
-        header.blockCount >= (segment.data_len - header.headerSize) / sizeof(IndexEntry) ||
+        header.blockCount == 0 || header.blockCount >= (segment.data_len - header.headerSize) / sizeof(IndexEntry) ||
         header.maxBlockSize == 0 || header.maxBlockSize > MAX_BLOCK_SIZE) {
       return false;
     }
