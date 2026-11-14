@@ -33,9 +33,11 @@ won't trigger deprecation warnings.
 
 #if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
 static HWCDC& logSerial = Serial;
+#define LOG_SERIAL_IS_HWCDC 1
 #define LOG_SERIAL_HAS_TX_TIMEOUT 1
 #else
 static HardwareSerial& logSerial = Serial;
+#define LOG_SERIAL_IS_HWCDC 0
 #define LOG_SERIAL_HAS_TX_TIMEOUT 0
 #endif
 
