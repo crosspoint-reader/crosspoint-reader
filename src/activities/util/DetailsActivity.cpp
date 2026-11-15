@@ -13,6 +13,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/CatalogScreens.h"
 #include "components/UITheme.h"
 #include "util/DictHtmlPages.h"
@@ -103,9 +104,23 @@ void DetailsActivity::confirm() {
 
 void DetailsActivity::confirmSecondary() {
   if (spec.secondaryLabel.empty()) return;
-  MenuResult choice;
-  choice.action = SECONDARY_ACTION;
-  setResult(ActivityResult{choice});
+  if (spec.secondaryConfirm.empty()) {
+    finishSecondary();
+    return;
+  }
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, spec.secondaryConfirm, spec.title,
+                                                              std::string(), spec.secondaryLabel);
+  if (!confirmation) {
+    LOG_ERR("DETAILS", "OOM: confirmation");
+    return;
+  }
+  startActivityForResult(std::move(confirmation), [this](const ActivityResult& result) {
+    if (!result.isCancelled) finishSecondary();
+  });
+}
+
+void DetailsActivity::finishSecondary() {
+  setResult(ActivityResult{DetailsResult{true}});
   finish();
 }
 

@@ -26,8 +26,10 @@ struct DetailsSpec {
   std::string description;         // plain text, or HTML when descriptionHtml
   bool descriptionHtml = false;
   std::string actionLabel;  // primary button; confirming finishes with a non-cancelled result
-  // Optional second button; choosing it finishes with MenuResult{SECONDARY_ACTION}.
+  // Optional second button; choosing it finishes with DetailsResult{secondary = true}.
   std::string secondaryLabel;
+  // When set, the second button asks this first; declining stays on the page.
+  std::string secondaryConfirm;
 };
 
 // Title, metadata and the start of the description, with the primary action
@@ -35,8 +37,6 @@ struct DetailsSpec {
 // dictionary's EPUB-engine layout; when that fails they fall back to plain text.
 class DetailsActivity final : public Activity, private UiAppHost {
  public:
-  static constexpr int SECONDARY_ACTION = 1;
-
   DetailsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, DetailsSpec spec);
 
   void onEnter() override;
@@ -57,6 +57,7 @@ class DetailsActivity final : public Activity, private UiAppHost {
   void layoutDescription();
   void confirm();
   void confirmSecondary();
+  void finishSecondary();
   void cancel();
   void openMore();
 

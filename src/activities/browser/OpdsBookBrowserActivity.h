@@ -121,6 +121,8 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   void promptLcpPassphrase(bool retry);
   // Decodes the /unlock response ({content_key: b64, expires: epoch}).
   static bool parseUnlockResponse(const std::string& response, LcpWrappedKey* wrapped, int64_t* expiresAt);
+  // Folder downloads are saved in ("" = SD root); also where the details page looks for a copy.
+  const char* downloadFolder() const;
   std::string downloadDestination(const OpdsEntry& book) const;
   static std::string bookPathIn(const char* folder, const OpdsEntry& book);
   bool verifyAndRegisterEpub(const std::string& filename);

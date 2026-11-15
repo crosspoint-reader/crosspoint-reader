@@ -484,11 +484,13 @@ void OpdsBookBrowserActivity::navigateBack() {
 
 void OpdsBookBrowserActivity::onBackButton() { navigateBack(); }
 
+// opdsDownloadFolder is already a null-terminated char[64]; use it directly —
+// no std::string copy. exists()/mkdir() take const char*.
+const char* OpdsBookBrowserActivity::downloadFolder() const { return SETTINGS.opdsDownloadFolder; }
+
 // SD destination from the configured download folder + filename format.
 std::string OpdsBookBrowserActivity::downloadDestination(const OpdsEntry& book) const {
-  // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
-  // no std::string copy. exists()/mkdir() take const char*.
-  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
+  const char* folder = downloadFolder();
   bool haveFolder = folder[0] != '\0';
   if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
     // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
@@ -932,12 +934,13 @@ void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
   // A plain download can be read in place: Read when this book's file is already
   // in the download folder, else download and read. Purchases and loans keep one button.
   const bool plainDownload = !detailBook.purchase && !detailBook.indirect && !detailBook.lcpLicense;
-  std::string localPath = plainDownload ? bookPathIn(SETTINGS.opdsDownloadFolder, detailBook) : std::string();
+  std::string localPath = plainDownload ? bookPathIn(downloadFolder(), detailBook) : std::string();
   const bool onDevice = plainDownload && Storage.exists(localPath.c_str());
   if (onDevice) {
     spec.status = tr(STR_OPDS_ON_DEVICE);  // the local copy matters more than catalog availability
     spec.actionLabel = tr(STR_READ);
     spec.secondaryLabel = tr(STR_REDOWNLOAD);
+    spec.secondaryConfirm = tr(STR_REDOWNLOAD_CONFIRM);  // it resets the reading position
   } else if (plainDownload) {
     spec.actionLabel = tr(STR_DOWNLOAD_AND_READ);
     spec.secondaryLabel = tr(STR_DOWNLOAD);
@@ -961,8 +964,8 @@ void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
       startBrowse();  // entries were released for heap; rebuild the catalog we came from
       return;
     }
-    const auto* choice = std::get_if<MenuResult>(&result.data);
-    const bool secondary = choice && choice->action == DetailsActivity::SECONDARY_ACTION;
+    const auto* choice = std::get_if<DetailsResult>(&result.data);
+    const bool secondary = choice && choice->secondary;
     if (onDevice && !secondary) {
       openBook(localPath);
       return;
