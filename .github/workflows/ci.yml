@@ -106,6 +106,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+          fetch-depth: 2
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -168,6 +169,9 @@ jobs:
           STATS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          if git rev-parse --verify HEAD^2 >/dev/null 2>&1; then
+            BASE_SHA="$(git rev-parse HEAD^1)"
+          fi
           python3 .github/scripts/firmware-stats.py pio.log "${{ matrix.env }}" "$STATS_SHA" \
             ".pio/build/${{ matrix.env }}/firmware.bin" "$BASE_SHA" > firmware-stats.json
           {
