@@ -33,7 +33,10 @@ class FontCacheManager {
   // Drop only the SD fonts' advance tables (rebuilt on the next layout), for a
   // glyph bitmap that a table elsewhere keeps from fitting (SdCardFont::setAdvanceReleaseHook).
   void releaseSdFontAdvanceTables();
-  void prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F, bool accumulate = true);
+  bool prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F, bool accumulate = true);
+  // Recommended lookahead depth for idle prewarming. TTF fonts on PSRAM
+  // accumulate glyphs across multiple pages; single-page SD fonts use 1.
+  int getIdleLookaheadPages(int fontId) const;
   void logStats(const char* label = "render");
   void resetStats();
 
@@ -47,9 +50,9 @@ class FontCacheManager {
   // RAII scope for two-pass prewarm pattern
   class PrewarmScope {
    public:
-    explicit PrewarmScope(FontCacheManager& manager);
+    explicit PrewarmScope(FontCacheManager& manager, bool accumulate = false);
     ~PrewarmScope();
-    void endScanAndPrewarm();
+    bool endScanAndPrewarm();
     PrewarmScope(PrewarmScope&& other) noexcept;
     PrewarmScope& operator=(PrewarmScope&&) = delete;
     PrewarmScope(const PrewarmScope&) = delete;
@@ -58,8 +61,9 @@ class FontCacheManager {
    private:
     FontCacheManager* manager_;
     bool active_ = true;
+    bool accumulate_ = false;
   };
-  PrewarmScope createPrewarmScope();
+  PrewarmScope createPrewarmScope(bool accumulate = false);
 
  private:
   ReleaseCallback releaseCb_ = nullptr;
