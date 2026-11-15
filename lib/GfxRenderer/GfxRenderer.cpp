@@ -1394,13 +1394,13 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   int rotatedY = 0;
   rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, panelWidth, panelHeight);
   // Rotate origin corner
-  // The logical width runs along the panel Y axis in the portrait orientations.
+  // The bitmap is unrotated, so use its physical blit dimensions.
   switch (orientation) {
     case Portrait:
-      rotatedY -= width - 1;
+      rotatedY -= height - 1;
       break;
     case PortraitInverted:
-      rotatedX -= height - 1;
+      rotatedX -= width - 1;
       break;
     case LandscapeClockwise:
       rotatedY -= height - 1;
