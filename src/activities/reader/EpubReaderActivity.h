@@ -4,6 +4,7 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/PageLink.h>
 #include <Epub/Section.h>
+#include <HalMemory.h>
 
 #include <atomic>
 #include <memory>
@@ -21,6 +22,11 @@
 #include "components/OptionPopup.h"
 
 class EpubReaderActivity final : public ReaderActivity {
+#ifdef BOARD_HAS_PSRAM
+  // Reused for this reader's lifetime; never consumes internal RAM.
+  HalMemory::PsramBuffer grayPlanes;
+  size_t grayPlaneCapacity = 0;
+#endif
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Epub::SyncMetadata> vocabularyMetadata;
   std::unique_ptr<Section> section = nullptr;

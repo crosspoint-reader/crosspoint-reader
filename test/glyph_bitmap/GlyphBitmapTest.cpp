@@ -89,6 +89,24 @@ void compare(int orientation, int rotation, bool twoBit, Plane plane, bool state
       actual.data() + 16, PANEL_WIDTH, STRIDE, originY, rows, {px, py, xx - px, xy - py, yx - px, yy - py}};
   glyphBitmap::draw(bitmap.data(), width, height, twoBit, plane, state, target, local);
   EXPECT_EQ(expected, actual);
+  if (plane == Plane::GrayMSB) return;
+  auto pairLsb = expected;
+  auto pairMsb = expected;
+  auto referenceLsb = expected;
+  auto referenceMsb = expected;
+  auto pairedTarget = target;
+  pairedTarget.buffer = pairLsb.data() + 16;
+  const bool absolute = plane == Plane::BW;
+  glyphBitmap::drawGrayPair(bitmap.data(), width, height, twoBit, absolute, state, pairedTarget, pairMsb.data() + 16,
+                            local);
+  auto referenceTarget = target;
+  referenceTarget.buffer = referenceLsb.data() + 16;
+  glyphBitmap::draw(bitmap.data(), width, height, twoBit, plane, state, referenceTarget, local);
+  referenceTarget.buffer = referenceMsb.data() + 16;
+  glyphBitmap::draw(bitmap.data(), width, height, twoBit, absolute ? Plane::BW : Plane::GrayMSB, state, referenceTarget,
+                    local);
+  EXPECT_EQ(referenceLsb, pairLsb);
+  EXPECT_EQ(referenceMsb, pairMsb);
 }
 }  // namespace
 

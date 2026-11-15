@@ -2289,10 +2289,24 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     const int gwBytes = renderer.getDisplayWidthBytes();
     const size_t planeBytes = static_cast<size_t>(gwBytes) * gh;
 
+#ifdef BOARD_HAS_PSRAM
+    if (!grayPlanes || grayPlaneCapacity < planeBytes) {
+      grayPlanes.reset();
+      grayPlaneCapacity = 0;
+      grayPlanes = HalMemory::allocatePsram(2 * planeBytes);
+      if (grayPlanes) grayPlaneCapacity = planeBytes;
+    }
+#endif
+    const int stripRows =
+#ifdef BOARD_HAS_PSRAM
+        grayPlanes ? gh :
+#endif
+                   STRIP_ROWS;
+
     auto renderPlaneToBuffer = [&](const bool lsbPlane, uint8_t* buf) {
       renderer.setRenderMode(lsbPlane ? GfxRenderer::GRAYSCALE_LSB : GfxRenderer::GRAYSCALE_MSB);
-      for (int y = 0; y < gh; y += STRIP_ROWS) {
-        const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
+      for (int y = 0; y < gh; y += stripRows) {
+        const int rows = (gh - y < stripRows) ? (gh - y) : stripRows;
         renderer.beginStripTarget(buf + static_cast<size_t>(y) * gwBytes, y, rows);
         renderer.clearScreen(absoluteImageGrayscale ? 0xFF : 0x00);
         renderGrayscalePass();
@@ -2306,23 +2320,48 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
       return ESP.getFreeHeap() >= planeBytes + PLANE_BUF_HEADROOM &&
              ESP.getMaxAllocHeap() >= planeBytes + PLANE_BUF_MAX_ALLOC_RESERVE;
     };
-    auto lsbPlaneBuf = (overlapRefresh && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
-    auto msbPlaneBuf = (lsbPlaneBuf && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+    uint8_t* lsbPlaneBuf = nullptr;
+    uint8_t* msbPlaneBuf = nullptr;
+#ifdef BOARD_HAS_PSRAM
+    if (grayPlanes) {
+      lsbPlaneBuf = grayPlanes.get();
+      msbPlaneBuf = grayPlanes.get() + planeBytes;
+    }
+#endif
+    auto internalLsb =
+        (!lsbPlaneBuf && overlapRefresh && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+    auto internalMsb = (internalLsb && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+    if (internalLsb) {
+      lsbPlaneBuf = internalLsb.get();
+      msbPlaneBuf = internalMsb.get();
+    }
 
     if (lsbPlaneBuf) {
-      renderPlaneToBuffer(true, lsbPlaneBuf.get());
-      if (msbPlaneBuf) renderPlaneToBuffer(false, msbPlaneBuf.get());
+#ifdef BOARD_HAS_PSRAM
+      // Image decoding and image plane encoding retain the established two-pass path.
+      if (grayPlanes && !page->hasImages()) {
+        renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+        renderer.beginGrayPairTarget(lsbPlaneBuf, msbPlaneBuf, gh);
+        renderer.clearScreen(absoluteImageGrayscale ? 0xFF : 0x00);
+        renderGrayscalePass();
+        renderer.endStripTarget();
+      } else
+#endif
+      {
+        renderPlaneToBuffer(true, lsbPlaneBuf);
+        if (msbPlaneBuf) renderPlaneToBuffer(false, msbPlaneBuf);
+      }
       const auto tGrayRender = millis();
 
       renderer.waitRefreshComplete();
       const auto tWait = millis();
 
-      renderer.writeGrayscalePlaneStrip(true, lsbPlaneBuf.get(), 0, gh);
+      renderer.writeGrayscalePlaneStrip(true, lsbPlaneBuf, 0, gh);
       if (msbPlaneBuf) {
-        renderer.writeGrayscalePlaneStrip(false, msbPlaneBuf.get(), 0, gh);
+        renderer.writeGrayscalePlaneStrip(false, msbPlaneBuf, 0, gh);
       } else {
-        renderPlaneToBuffer(false, lsbPlaneBuf.get());
-        renderer.writeGrayscalePlaneStrip(false, lsbPlaneBuf.get(), 0, gh);
+        renderPlaneToBuffer(false, lsbPlaneBuf);
+        renderer.writeGrayscalePlaneStrip(false, lsbPlaneBuf, 0, gh);
       }
       const auto tGrayWrite = millis();
 
