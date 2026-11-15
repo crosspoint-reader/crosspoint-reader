@@ -39,6 +39,7 @@
 
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
+#include "FavoritesStore.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
 #include "ProtectedPaths.h"
@@ -1156,9 +1157,10 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
           state.error = keepStaged ? "Replace failed; the new file is kept as " + state.fileName + ".part"
                                    : "Failed to replace the existing file";
           if (keepStaged) {
-            // The original is gone: drop its cache and Library entry.
+            // The original is gone: drop its cache, Library entry and favorite.
             clearBookCache(dest.c_str());
             if (library::isLibraryBookFile(dest.c_str())) library::markLibraryIndexDirty();
+            FAVORITES.forgetIfGone(dest.c_str());
           }
         }
       }
@@ -1341,6 +1343,7 @@ void CrossPointWebServer::handleRename() const {
 
   if (success) {
     LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    FAVORITES.updatePath(itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Renamed successfully");
   } else {
     LOG_ERR("WEB", "Failed to rename file: %s -> %s", itemPath.c_str(), newPath.c_str());
@@ -1439,6 +1442,7 @@ void CrossPointWebServer::handleMove() const {
 
   if (success) {
     LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    FAVORITES.updatePath(itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Moved successfully");
   } else {
     LOG_ERR("WEB", "Failed to move file: %s -> %s", itemPath.c_str(), newPath.c_str());
@@ -1548,6 +1552,7 @@ void CrossPointWebServer::handleDelete() const {
       if (f) f.close();
       success = removeBookFile(itemPath.c_str());
     }
+    FAVORITES.forgetIfGone(itemPath.c_str());
 
     if (!success) {
       failedItems += itemPath + " (deletion failed); ";
@@ -2736,6 +2741,9 @@ void CrossPointWebServer::handleFetch() {
     if (!errorBody.empty()) resp["body"] = errorBody;
   } else if (complete && !Storage.replaceFile(part.c_str(), dest.c_str())) {
     Storage.remove(part.c_str());
+    // replaceFile removes an existing file before its rename: a book that was
+    // there may be gone, and its favorite with it (no-op while it exists).
+    FAVORITES.forgetIfGone(dest.c_str());
     complete = false;
     resp["error"] = "sd write failed";
   } else if (complete && library::isLibraryBookFile(dest)) {
@@ -2822,6 +2830,8 @@ void CrossPointWebServer::handlePluginFsUpload() {
         fail(400, "empty body");
       } else if (!Storage.replaceFile(st.tmp.c_str(), st.path.c_str())) {
         fail(500, "sd write failed");
+        // As in handleFetch: the replaced file may be gone now.
+        FAVORITES.forgetIfGone(st.path.c_str());
       } else if (library::isLibraryBookFile(st.path)) {
         library::markLibraryIndexDirty();
       }

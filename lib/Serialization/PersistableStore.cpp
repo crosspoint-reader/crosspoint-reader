@@ -9,8 +9,21 @@
 
 bool PersistableStoreBase::writeDocToFile(const char* path, const JsonDocument& doc) {
   Storage.mkdir("/.crosspoint");
+  // A document that ran out of memory while it was being filled is missing
+  // members but still serializes as valid JSON; writing it would replace the
+  // good file with a shorter one. Likewise a String that could not grow holds
+  // only a prefix. Refuse both, so the previous file stays on the card.
+  if (doc.overflowed()) {
+    LOG_ERR("PERSIST", "Not writing %s: document overflowed", path);
+    return false;
+  }
   String json;
-  serializeJson(doc, json);
+  const size_t expected = measureJson(doc);
+  if (serializeJson(doc, json) != expected || json.length() != expected) {
+    LOG_ERR("PERSIST", "Not writing %s: serialized %u of %u bytes", path, static_cast<unsigned>(json.length()),
+            static_cast<unsigned>(expected));
+    return false;
+  }
   if (!Storage.writeFile(path, json)) {
     LOG_ERR("PERSIST", "Failed to write %s", path);
     return false;

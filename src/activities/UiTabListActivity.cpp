@@ -142,11 +142,11 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   const int16_t tabBand = preferredTabHeight > tabLineHeight + 10 ? preferredTabHeight : tabLineHeight + 10;
 
   if (tabPillMaxPad > 0) {
-    // Cap each pill at its label plus this padding: the equal-width slots (and
-    // so the tab positions) stay exactly where they were, only the pill stops
-    // stretching across the whole slot. The SDK shrinks the pill to content
-    // width and centers it in its slot when the horizontal contentInset is
-    // nonzero.
+    // Cap each pill at its label plus this padding, so it stops stretching
+    // across its whole slot. The slots themselves are unchanged by this (equal
+    // widths, or label-sized ones with tabDistributeSlots below). The SDK
+    // shrinks the pill to content width and centers it in its slot when the
+    // horizontal contentInset is nonzero.
     tabProps.contentInset.left = tabPillMaxPad;
     tabProps.contentInset.right = tabPillMaxPad;
   }
@@ -199,7 +199,48 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
                             static_cast<int16_t>(contentTabRect.width - 2 * side),
                             static_cast<int16_t>(tabRect.height - divider)};
   tabProps.divider = false;
-  fui::tabBar(screen.frame(), slotsRect, tabProps);
+
+  // Label-sized slots: each tab's slot is its own natural width (label, room
+  // for the sort indicator on EVERY tab so nothing moves when the active tab
+  // changes, pill padding and inset, at least the SDK's minimum pill), plus an
+  // equal share of the spare width. The slots sit edge to edge across the bar,
+  // so the whole bar stays touchable. Each slot is drawn as a one-tab bar,
+  // which keeps the interaction count at one per tab. When the natural widths
+  // do not fit, the bar falls back to the SDK's equal slots below.
+  bool laidOut = false;
+  if (tabDistributeSlots && count > 1) {
+    const int minPill = std::max(0, slotsRect.height - tabProps.tabInset.top - tabProps.tabInset.bottom);
+    int natural[MAX_TABS];
+    int total = 0;
+    for (int i = 0; i < count; i++) {
+      const char* label = tabs[i].label;
+      const int labelW =
+          (label && label[0] != '\0') ? screen.target().measureText(tabProps.text.font, label, tabProps.text).width : 0;
+      int pillW = labelW + tabProps.contentInset.left + tabProps.contentInset.right;
+      if (labelW > 0 && tabProps.indicatorSize > 0) pillW += tabProps.indicatorGap + tabProps.indicatorSize;
+      natural[i] = std::max(pillW, minPill) + tabProps.tabInset.left + tabProps.tabInset.right;
+      total += natural[i];
+    }
+    if (total <= slotsRect.width) {
+      const int spare = slotsRect.width - total;
+      int x = slotsRect.x;
+      for (int i = 0; i < count; i++) {
+        // Spread the remainder one pixel at a time so the last slot ends
+        // exactly at the bar's right edge.
+        const int width = natural[i] + spare / count + (i < spare % count ? 1 : 0);
+        fui::TabBarProps one = tabProps;
+        one.tabs = &tabs[i];
+        one.count = 1;
+        one.layout = fui::TabBarLayout::EqualWidth;
+        fui::tabBar(screen.frame(),
+                    fui::Rect{static_cast<int16_t>(x), slotsRect.y, static_cast<int16_t>(width), slotsRect.height},
+                    one);
+        x += width;
+      }
+      laidOut = true;
+    }
+  }
+  if (!laidOut) fui::tabBar(screen.frame(), slotsRect, tabProps);
   screen.target().fill(fui::Rect{tabRect.x, static_cast<int16_t>(tabRect.bottom() - divider), tabRect.width, divider},
                        fui::Paint::solid(fui::Color::Black));
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));

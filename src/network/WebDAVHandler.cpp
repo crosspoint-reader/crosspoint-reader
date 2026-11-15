@@ -3,9 +3,11 @@
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <HiddenItems.h>
+#include <LibraryBuilder.h>
 #include <Logging.h>
 
 #include "ClippingStore.h"
+#include "FavoritesStore.h"
 #include "ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
@@ -105,6 +107,13 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
         _putOk = false;
       }
       if (!_putOk) Storage.remove(tempPath.c_str());
+      // A replacement that failed after the original was removed leaves no
+      // book at this path: drop its favorite (a no-op while the file exists).
+      if (!_putOk && _putExisted) FAVORITES.forgetIfGone(_putPath.c_str());
+      // A new or replaced book changes what the Library lists (and, for an
+      // overwrite, what a favorite at this path shows): rebuild on next entry,
+      // as the web upload does.
+      if (_putOk && library::isLibraryBookFile(_putPath.c_str())) library::markLibraryIndexDirty();
     }
     LOG_DBG("DAV", "PUT END: %u bytes, ok=%d", raw.totalSize, _putOk);
 
@@ -451,13 +460,17 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     }
     file.close();
     if (Storage.rmdir(path.c_str())) {
+      FAVORITES.forgetIfGone(path.c_str());
       s.send(204);
     } else {
       s.send(500, "text/plain", "Failed to remove directory");
     }
   } else {
     file.close();
-    if (removeBookFile(path.c_str())) {
+    const bool removed = removeBookFile(path.c_str());
+    // Also after a partial failure: the book itself may be gone.
+    FAVORITES.forgetIfGone(path.c_str());
+    if (removed) {
       s.send(204);
     } else {
       s.send(500, "text/plain", "Failed to delete file");
@@ -555,9 +568,15 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  if (dstExists && !removeBookFile(dstPath.c_str())) {
-    s.send(500, "text/plain", "Failed to remove destination");
-    return;
+  if (dstExists) {
+    const bool removed = removeBookFile(dstPath.c_str());
+    // The replaced book's favorite goes now, whether or not the move that
+    // follows succeeds (and even if the delete only partly failed).
+    FAVORITES.forgetIfGone(dstPath.c_str());
+    if (!removed) {
+      s.send(500, "text/plain", "Failed to remove destination");
+      return;
+    }
   }
 
   HalFile file = Storage.open(srcPath.c_str());
@@ -571,6 +590,8 @@ void WebDAVHandler::handleMove(WebServer& s) {
   const bool success = ClippingStore::moveBook(srcPath.c_str(), dstPath.c_str());
 
   if (success) {
+    // A moved folder carries its favorites with it (prefix repoint).
+    FAVORITES.updatePath(srcPath.c_str(), dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     s.send(500, "text/plain", "Move failed");
@@ -643,6 +664,8 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   HalFile dstFile;
   if (!Storage.openFileForWrite("DAV", dstPath, dstFile)) {
     srcFile.close();
+    // An overwritten destination is gone now: drop its favorite.
+    if (dstExists) FAVORITES.forgetIfGone(dstPath.c_str());
     s.send(500, "text/plain", "Failed to create destination");
     return;
   }
@@ -665,9 +688,15 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   dstFile.close();
 
   if (copyOk) {
+    // As for PUT: the Library (and a favorite at an overwritten path) must
+    // pick up the new book.
+    if (library::isLibraryBookFile(dstPath.c_str())) library::markLibraryIndexDirty();
     s.send(dstExists ? 204 : 201);
   } else {
     Storage.remove(dstPath.c_str());
+    // The overwritten original is gone whether or not the partial copy could
+    // be removed, so its favorite goes unconditionally.
+    if (dstExists) FAVORITES.removeByPath(dstPath.c_str());
     s.send(500, "text/plain", "Copy failed - disk full?");
   }
 }

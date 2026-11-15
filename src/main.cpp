@@ -32,6 +32,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "FavoritesStore.h"
 #include "KOReaderCredentialStore.h"
 #include "LcpPassphraseStore.h"
 #include "MappedInputManager.h"
@@ -652,6 +653,7 @@ void setup() {
   // UTC-offset setting on first boot after the update).
   timezones::applyToClock();
   RECENT_BOOKS.loadFromFile();
+  FAVORITES.load();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();

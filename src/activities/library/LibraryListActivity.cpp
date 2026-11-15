@@ -13,8 +13,10 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 #include "CrossPointSettings.h"
+#include "FavoritesStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -40,9 +42,14 @@ int bottomCornerClearance() {
 
 constexpr unsigned long LONG_PRESS_MS = 1000;
 
-constexpr int RECENT_TAB = 0;
-constexpr int TITLE_TAB = 1;
-constexpr int AUTHOR_TAB = 2;
+// Set after the first favorites prune of this boot (see onEnter).
+bool favoritesPrunedThisBoot = false;
+
+// Favorites leads: it is the shelf the Library opens on whenever it has books.
+constexpr int FAVORITES_TAB = 0;
+constexpr int RECENT_TAB = 1;
+constexpr int TITLE_TAB = 2;
+constexpr int AUTHOR_TAB = 3;
 constexpr int TAB_SLOTS = AUTHOR_TAB + 1;
 
 constexpr bool isDescending(const library::SortOrder order) {
@@ -60,7 +67,11 @@ constexpr bool isAuthorSort(const library::SortOrder order) {
 
 constexpr library::SortOrder orderForTab(const int tab, const uint8_t descendingTabs) {
   const bool descending = (descendingTabs & (1u << tab)) != 0;
-  if (tab == TITLE_TAB) return descending ? library::SortOrder::TitleDesc : library::SortOrder::TitleAsc;
+  // Favorites order their own rows by title; the title order is also what a
+  // search started from the Favorites tab lists.
+  if (tab == TITLE_TAB || tab == FAVORITES_TAB) {
+    return descending ? library::SortOrder::TitleDesc : library::SortOrder::TitleAsc;
+  }
   if (tab == AUTHOR_TAB) return descending ? library::SortOrder::AuthorDesc : library::SortOrder::AuthorAsc;
   return descending ? library::SortOrder::RecentDesc : library::SortOrder::RecentAsc;
 }
@@ -68,6 +79,7 @@ constexpr library::SortOrder orderForTab(const int tab, const uint8_t descending
 const char* tabLabelFor(const int tab) {
   if (tab == TITLE_TAB) return tr(STR_LIBRARY_TAB_TITLE);
   if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
+  if (tab == FAVORITES_TAB) return tr(STR_LIBRARY_TAB_FAVORITES);
   return tr(STR_LIBRARY_TAB_RECENT);
 }
 
@@ -75,9 +87,14 @@ const char* tabLabelFor(const int tab) {
 
 LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiTabListActivity("Library", renderer, mappedInput, true) {
-  // Three short tab labels: a full-slot pill would stretch across a third of
-  // the screen, so cap it at the label plus padding (slots stay put).
-  tabPillMaxPad = 16;
+  // Four tab labels share the bar. Equal quarters with 16 px of padding beside
+  // each label cut "Favorites" (and the active tab's sort arrow costs more), so
+  // the pill hugs its label with a small pad and each slot is sized to its own
+  // label plus an equal share of the spare width (see tabDistributeSlots).
+  tabPillMaxPad = 6;
+  tabDistributeSlots = true;
+  // Recent starts newest first; Favorites, Title and Author start A-Z.
+  descendingTabs = static_cast<uint8_t>(1u << RECENT_TAB);
 }
 
 void LibraryListActivity::onEnter() {
@@ -95,6 +112,20 @@ void LibraryListActivity::onEnter() {
   // Recent is backed by the resident store. Prune before opening the index so
   // its persistence write never overlaps the long-lived index reader.
   if (RECENT_BOOKS.pruneMissing()) RECENT_BOOKS.saveToFile();
+  // Picks up a favorites file the card could not serve at boot, then retries
+  // a favorites save that failed earlier (after a move, say).
+  FAVORITES.refreshFromCard();
+  // Pruning costs one card lookup per favorite, so it runs on the first entry
+  // after boot and after index rebuilds, not on every entry. Deletes made on
+  // the device already remove their favorite; this catches books removed some
+  // other way (USB, a card reader). pruneMissing() skips its scan while the
+  // card's state folder is not visible, so a first entry with an unreadable
+  // card does not count, and a later entry tries again.
+  if (!favoritesPrunedThisBoot && Storage.exists("/.crosspoint")) {
+    FAVORITES.pruneMissing();
+    favoritesPrunedThisBoot = true;
+  }
+  FAVORITES.flushPending();
 
   // Rebuild when the index is missing, invalid, or was built with the other
   // metadata mode. Otherwise entering the screen stays instant.
@@ -105,13 +136,27 @@ void LibraryListActivity::onEnter() {
     index.close();
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
     rebuildIndex();
+    // The card changed enough to need a rebuild; recheck favorites too, while
+    // the index reader is still closed.
+    FAVORITES.pruneMissing();
+    FAVORITES.flushPending();
     if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
+    // A rebuild (new books, another metadata mode) can change any title.
+    FAVORITES.invalidateResolved();
   }
   degraded = index.isOpen() && index.ranksDegraded();
   if (index.isOpen() && index.dedupDegraded()) {
     LOG_ERR("LIB", "index was built without duplicate detection");
   }
   resolvePinned();
+  resolveFavorites();
+  // Open on Favorites when there are any, otherwise on Recent rather than on
+  // an empty shelf. A degraded index hides the tab bar, so it stays on Recent
+  // (discovery order), the one shelf that needs no sort.
+  activeTabIndex = (FAVORITES.getCount() > 0 && !degraded) ? FAVORITES_TAB : RECENT_TAB;
+  sortOrder = orderForTab(activeTabIndex, descendingTabs);
+  refreshOverlap();
+  refreshFavorites();
 
   // Entered while Confirm was still held (typical when launched from the home
   // menu): ignore its release, or we would open whatever sits at row 0.
@@ -198,9 +243,143 @@ void LibraryListActivity::refreshOverlap() {
   std::sort(overlapRows, overlapRows + overlapCount);
 }
 
+bool LibraryListActivity::favoritesShelf() const { return activeTabIndex == FAVORITES_TAB && query.empty(); }
+
+// Browse Files stores a favorite under its file name; the index knows the
+// book's own title and the author spelling the rest of the Library uses. Look
+// up the unresolved entries in batches and adopt the index's fields. Entries
+// the index does not hold (a folder deeper than the index walks, say) keep
+// their file-name title and are not looked for again this boot: each lookup
+// pass can touch every record, and it runs before the screen paints.
+void LibraryListActivity::resolveFavorites() {
+  if (!index.isOpen()) return;
+  const size_t total = static_cast<size_t>(FAVORITES.getCount());
+  constexpr size_t BATCH = library::LibraryIndexFile::MAX_IDENTITY_LOOKUPS;
+  size_t pending[BATCH];
+  library::BookIdentity identities[BATCH];
+  uint16_t rows[BATCH];
+  bool changed = false;
+  size_t next = 0;
+  while (next < total) {
+    size_t count = 0;
+    for (; next < total && count < BATCH; next++) {
+      const FavoriteBook& book = FAVORITES.at(next);
+      if (book.resolved || book.lookupTried) continue;
+      const std::string& path = book.path;
+      pending[count] = next;
+      identities[count].pathHash = library::clixPathHash(path.data(), path.size());
+      // The size lets the lookup skip most records without reading their
+      // hash. 0 (the stat failed, e.g. the index holds the card's one reader)
+      // falls back to hash-only matching, as resolvePinned does.
+      identities[count].fileSize = 0;
+      HalFile file;
+      if (Storage.openFileForRead("LIB", path.c_str(), file)) {
+        identities[count].fileSize = static_cast<uint32_t>(file.fileSize());
+      }
+      count++;
+    }
+    if (count == 0) break;
+    if (!index.recentRowsFor(identities, count, rows)) {
+      LOG_ERR("LIB", "favorite lookup failed");
+      break;
+    }
+    std::string title;
+    std::string author;
+    for (size_t i = 0; i < count; i++) {
+      const uint16_t ordinal = rows[i] == 0xFFFF ? 0xFFFF : index.ordinalForRow(library::SortOrder::RecentAsc, rows[i]);
+      library::ClixRecord record{};
+      title.clear();
+      author.clear();
+      if (ordinal != 0xFFFF && index.readRecord(ordinal, record)) {
+        if (!index.readTitle(record, title) || title.empty()) index.readName(record, title);
+        if (!index.readAuthor(record, author)) author.clear();
+      }
+      if (title.empty()) {
+        FAVORITES.markLookupTried(pending[i]);
+        continue;
+      }
+      if (!FAVORITES.setResolved(pending[i], title, author)) {
+        // The longer title would not fit the list's size budget: keep the
+        // file-name title and do not look again this boot.
+        FAVORITES.markLookupTried(pending[i]);
+        continue;
+      }
+      changed = true;
+    }
+  }
+  // Save when something resolved, or when a change is already waiting (the
+  // cleared flags after a rebuild must reach the card even if no lookup
+  // succeeded). Same discipline as the recents prune: never write while the
+  // index reader holds the card.
+  if (!changed && !FAVORITES.hasUnsaved()) return;
+  index.close();
+  FAVORITES.flushPending();
+  if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+}
+
+void LibraryListActivity::refreshFavorites() {
+  favCount = static_cast<uint16_t>(std::min(FAVORITES.getCount(), FavoritesStore::MAX_FAVORITES));
+  for (uint16_t i = 0; i < favCount; i++) favOrder[i] = i;
+  // The Title tab's order: the index's fold (case and accents dropped), title
+  // first, author breaking ties. Keys are fixed-width title prefixes in one
+  // fallible block (under 10 KB at the cap, freed on return), so a full list cannot
+  // abort on a fragmented heap; without the block the shelf keeps store order.
+  struct SortKey {
+    char title[47];
+    bool titleTruncated;
+  };
+  auto keys = makeUniqueNoThrow<SortKey[]>(favCount > 0 ? favCount : 1);
+  if (!keys) {
+    LOG_ERR("LIB", "cannot allocate favorites sort keys; showing store order");
+  } else {
+    for (uint16_t i = 0; i < favCount; i++) {
+      const std::string title = library::fold(FAVORITES.at(i).title);
+      snprintf(keys[i].title, sizeof(keys[i].title), "%s", title.c_str());
+      keys[i].titleTruncated = title.size() >= sizeof(keys[i].title);
+    }
+    std::sort(favOrder, favOrder + favCount, [&keys](const uint16_t x, const uint16_t y) {
+      int c = strcmp(keys[x].title, keys[y].title);
+      // Equal prefixes where either title is longer than the key: compare the
+      // full folds (rare, so folding again here costs nothing in practice).
+      // Using the full title whenever a prefix tie is ambiguous keeps the
+      // order a strict weak order.
+      if (c == 0 && (keys[x].titleTruncated || keys[y].titleTruncated)) {
+        c = library::fold(FAVORITES.at(x).title).compare(library::fold(FAVORITES.at(y).title));
+      }
+      if (c != 0) return c < 0;
+      // Same title (rare): the full folded authors decide.
+      c = library::fold(FAVORITES.at(x).author).compare(library::fold(FAVORITES.at(y).author));
+      if (c != 0) return c < 0;
+      return x < y;  // store order breaks exact ties: stable without a buffer
+    });
+  }
+  if ((descendingTabs & (1u << FAVORITES_TAB)) != 0) std::reverse(favOrder, favOrder + favCount);
+}
+
+int LibraryListActivity::favoriteFor(const int entry) const {
+  if (entry < 0 || entry >= static_cast<int>(favCount)) return -1;
+  const int i = favOrder[entry];
+  return i < FAVORITES.getCount() ? i : -1;
+}
+
+void LibraryListActivity::clampSelection() {
+  auto& nav = activeNav();
+  const int count = listCount();
+  if (count == 0) {
+    nav.selected = 0;
+  } else if (nav.selected > count) {
+    nav.selected = count;
+  }
+  nav.followOnBuild = true;
+}
+
 void LibraryListActivity::openSelectedBook() {
   std::string path;
-  if (selectedEntry() < pinnedCount()) {
+  if (favoritesShelf()) {
+    const int fav = favoriteFor(selectedEntry());
+    if (fav < 0) return;
+    path = FAVORITES.at(static_cast<size_t>(fav)).path;
+  } else if (selectedEntry() < pinnedCount()) {
     const auto& books = RECENT_BOOKS.getBooks();
     if (selectedEntry() >= static_cast<int>(books.size())) return;
     path = books[static_cast<size_t>(selectedEntry())].path;
@@ -236,17 +415,16 @@ void LibraryListActivity::activateIndex(const int index) {
   }
 }
 
-// Row long-press prompts delete wherever grouping does not own the gesture:
-// an active search is already a flat list the reader narrowed down on purpose
-// ("find it, hold it, delete it"). Unfiltered Title/Author lists keep
-// collapse-to-groups. The Recent shelf always opens the row options menu.
+// Row long-press opens the row options menu (open, favorite, delete, ...)
+// wherever grouping does not own the gesture: the Recent and Favorites
+// shelves, and an active search, which is already a flat list the reader
+// narrowed down on purpose. Unfiltered Title/Author lists keep
+// collapse-to-groups.
 bool LibraryListActivity::deleteEligible() const { return !groupsCollapsed && (!query.empty() || !groupable()); }
 
 void LibraryListActivity::onRowLongPress(const int index) {
-  if (isRecentSort(sortOrder)) {
-    showRecentBookOptions(index);
-  } else if (deleteEligible()) {
-    promptDeleteBook(index);
+  if (isRecentSort(sortOrder) || favoritesShelf() || deleteEligible()) {
+    showBookOptions(index);
   } else if (!groupsCollapsed && groupable()) {
     collapseGroups(index);
   } else {
@@ -254,69 +432,127 @@ void LibraryListActivity::onRowLongPress(const int index) {
   }
 }
 
-// Recent-shelf long-press menu (button hold and touch long-press). The first
-// rows may come from RecentBooksStore; the rest are index rows sorted by
-// modification time. Only store rows can be removed from recents.
-void LibraryListActivity::showRecentBookOptions(const int entry) {
+// Row long-press menu (button hold and touch long-press). A row is one of:
+// a Favorites-shelf entry (FavoritesStore), a pinned Recent entry
+// (RecentBooksStore), or an index row. Only pinned Recent rows can be removed
+// from recents; every row can be added to or removed from favorites.
+void LibraryListActivity::showBookOptions(const int entry) {
   if (entry < 0 || entry >= listCount()) return;
 
   std::string path;
   std::string title;
-  const bool isStoreRow = entry < pinnedCount();
-  if (isStoreRow) {
+  std::string author;
+  // Whether title/author are the index's own fields (a favorite added from a
+  // pinned Recent row carries the reader's copy and is re-resolved later).
+  bool fromIndex = false;
+  const bool isStoreRow = !favoritesShelf() && entry < pinnedCount();
+  if (favoritesShelf()) {
+    const int fav = favoriteFor(entry);
+    if (fav < 0) return;
+    const auto& book = FAVORITES.at(static_cast<size_t>(fav));
+    path = book.path;
+    title = book.title;
+    author = book.author;
+    fromIndex = book.resolved;
+  } else if (isStoreRow) {
     const auto& books = RECENT_BOOKS.getBooks();
     if (entry >= static_cast<int>(books.size())) return;
     path = books[static_cast<size_t>(entry)].path;
     title = books[static_cast<size_t>(entry)].title;
+    author = books[static_cast<size_t>(entry)].author;
   } else {
     if (!index.isOpen()) return;
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
     library::ClixRecord record{};
-    std::string author;
     if (ordinal == 0xFFFF || !index.readRecord(ordinal, record) || !index.readPath(record, path) ||
         !rowTextFor(entry, title, author)) {
-      LOG_ERR("LIB", "cannot resolve Recent row %d", entry);
+      LOG_ERR("LIB", "cannot resolve row %d", entry);
       return;
     }
+    fromIndex = true;
   }
 
-  const char* STORE_OPTIONS[] = {tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
-  const char* INDEX_OPTIONS[] = {tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  enum class Action { Open, Favorite, RemoveRecent, Delete, Rebuild };
+  Action actions[5];
+  const char* labels[5];
+  int count = 0;
+  actions[count] = Action::Open;
+  labels[count++] = tr(STR_OPEN);
+  const bool favorite = FAVORITES.isFavorite(path);
+  actions[count] = Action::Favorite;
+  // A list that cannot take this book says so in place of the add.
+  labels[count++] = favorite
+                        ? tr(STR_REMOVE_FROM_FAVORITES)
+                        : (FAVORITES.canAdd(path, title, author) ? tr(STR_ADD_TO_FAVORITES) : tr(STR_FAVORITES_FULL));
+  if (isStoreRow) {
+    actions[count] = Action::RemoveRecent;
+    labels[count++] = tr(STR_REMOVE_FROM_RECENTS);
+  }
+  actions[count] = Action::Delete;
+  labels[count++] = tr(STR_DELETE);
+  actions[count] = Action::Rebuild;
+  labels[count++] = tr(STR_LIBRARY_REBUILD);
+
+  // The popup copies the labels; the actions travel with the callback.
+  std::vector<Action> chosen(actions, actions + count);
   app.clearTapFlash();
-  optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS, isStoreRow ? 4 : 3, 0,
-                   [this, path, title, isStoreRow](const int choice) {
+  optionPopup.show(tr(STR_LIBRARY), title.c_str(), labels, count, 0,
+                   [this, chosen, path, title, author, fromIndex](const int choice) {
                      swallowHeldReleases();
-                     switch (choice) {
-                       case 0:
+                     if (choice < 0 || choice >= static_cast<int>(chosen.size())) return;
+                     switch (chosen[static_cast<size_t>(choice)]) {
+                       case Action::Open:
                          openBookByPath(path);
                          break;
-                       case 1:
-                         if (isStoreRow) {
-                           promptRemoveRecentBook(path, title);
-                         } else {
-                           promptDeleteBookByPath(path, title);
-                         }
+                       case Action::Favorite:
+                         toggleFavorite(path, title, author, fromIndex);
                          break;
-                       case 2:
-                         if (isStoreRow)
-                           promptDeleteBookByPath(path, title);
-                         else
-                           promptRebuildIndex();
+                       case Action::RemoveRecent:
+                         promptRemoveRecentBook(path, title);
                          break;
-                       case 3:
-                         if (isStoreRow) promptRebuildIndex();
+                       case Action::Delete:
+                         promptDeleteBookByPath(path, title);
                          break;
-                       default:
+                       case Action::Rebuild:
+                         promptRebuildIndex();
                          break;
                      }
                    });
   requestUpdate();
 }
 
+void LibraryListActivity::toggleFavorite(const std::string& path, const std::string& title, const std::string& author,
+                                         const bool resolved) {
+  {
+    // The render task reads the store and favOrder for the Favorites shelf.
+    // The save must not overlap the index reader either, so release it for
+    // the write and take it back.
+    RenderLock lock(*this);
+    const bool reopenIndex = index.isOpen();
+    index.close();
+    // toggle() refuses an add that does not fit (the menu said "full").
+    FAVORITES.toggle(path, title, author, resolved);
+    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    refreshFavorites();
+    if (favoritesShelf()) {
+      // Rows moved: drop touch routes that still describe the old list until
+      // the next render publishes new ones, as the delete paths do.
+      closeRouting();
+      clampSelection();
+    }
+  }
+  requestUpdate();
+}
+
 #if FREEINK_CAP_TOUCH
 void LibraryListActivity::swipeDelete(const int entry) {
   activeNav().selected = entry + 1;
-  if (isRecentSort(sortOrder) && entry < pinnedCount()) {
+  if (favoritesShelf()) {
+    const int fav = favoriteFor(entry);
+    if (fav < 0) return;
+    const auto& book = FAVORITES.at(static_cast<size_t>(fav));
+    promptDeleteBookByPath(book.path, book.title);
+  } else if (isRecentSort(sortOrder) && entry < pinnedCount()) {
     const auto& book = RECENT_BOOKS.getBooks()[static_cast<size_t>(entry)];
     promptDeleteBookByPath(book.path, book.title);
   } else {
@@ -333,6 +569,9 @@ void LibraryListActivity::promptRebuildIndex() {
   GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
   index.close();
   rebuildIndex();
+  // An asked-for refresh rechecks favorites too, while the index is closed.
+  FAVORITES.pruneMissing();
+  FAVORITES.flushPending();
   if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
   resetAfterRebuild();
   requestUpdate(true);
@@ -342,14 +581,11 @@ void LibraryListActivity::resetAfterRebuild() {
   // Sort positions, group starts, and pinned rows all point into the old order.
   applyFilter();
   resolvePinned();
-  auto& nav = activeNav();
-  const int count = listCount();
-  if (count == 0) {
-    nav.selected = 0;
-  } else if (nav.selected > count) {
-    nav.selected = count;
-  }
-  nav.followOnBuild = true;
+  // The rebuilt index may hold books an earlier lookup missed, or new titles.
+  FAVORITES.invalidateResolved();
+  resolveFavorites();
+  refreshFavorites();
+  clampSelection();
 }
 
 void LibraryListActivity::promptRemoveRecentBook(const std::string& path, const std::string& title) {
@@ -419,6 +655,8 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
       if (!result.isCancelled) {
         LOG_DBG("LIB", "deleting %s", path.c_str());
         if (!removeBookFile(path)) LOG_ERR("LIB", "cannot delete %s", path.c_str());
+        // Only a book that is really gone stops being a favorite.
+        FAVORITES.forgetIfGone(path.c_str());
         if (RECENT_BOOKS.removeByPath(path)) RECENT_BOOKS.saveToFile();
         GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
         rebuildIndex();
@@ -480,18 +718,24 @@ void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) 
   closeSwipeDelete();
 #endif
   if (index < 0 || index >= TAB_SLOTS) return;
-  if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
-  sortOrder = orderForTab(index, descendingTabs);
-  // The filter and the overlap rows hold positions in the old order, so they
-  // must be rebuilt.
-  applyFilter();
-  activeTabIndex = index;
-  refreshOverlap();
-  // Tab changes happen only while the bar owns focus. A tab's remembered row
-  // must not pull focus back into the list after the switch.
-  auto& nav = activeNav();
-  nav.selected = 0;
-  nav.top = 0;
+  {
+    // The render task reads the sort order, filter, overlap rows and favOrder;
+    // rebuild them where it cannot see them half done.
+    RenderLock lock(*this);
+    if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
+    sortOrder = orderForTab(index, descendingTabs);
+    // The filter and the overlap rows hold positions in the old order, so they
+    // must be rebuilt.
+    applyFilter();
+    activeTabIndex = index;
+    refreshOverlap();
+    refreshFavorites();
+    // Tab changes happen only while the bar owns focus. A tab's remembered row
+    // must not pull focus back into the list after the switch.
+    auto& nav = activeNav();
+    nav.selected = 0;
+    nav.top = 0;
+  }
   requestUpdate();
 }
 
@@ -510,6 +754,7 @@ fui::TabIndicator LibraryListActivity::tabIndicator(const int index) const {
 
 int LibraryListActivity::bookRowCount() const {
   if (!query.empty()) return static_cast<int>(filteredCount);
+  if (favoritesShelf()) return static_cast<int>(favCount);
   // Pinned books already in the index are skipped below the pins, not doubled;
   // pinned books the index missed still show, so the difference stays split.
   const int pinned = pinnedCount();
@@ -536,7 +781,9 @@ int LibraryListActivity::rowFor(const int entry) const {
   return row;
 }
 
-bool LibraryListActivity::groupable() const { return !degraded && !isRecentSort(sortOrder) && bookRowCount() > 0; }
+bool LibraryListActivity::groupable() const {
+  return !degraded && !isRecentSort(sortOrder) && !favoritesShelf() && bookRowCount() > 0;
+}
 
 uint32_t LibraryListActivity::titleInitialFor(const int entry) {
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
@@ -709,6 +956,15 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
   title.clear();
   author.clear();
   if (fileName) fileName->clear();
+  if (favoritesShelf()) {
+    const int fav = favoriteFor(entry);
+    if (fav < 0) return false;
+    const auto& book = FAVORITES.at(static_cast<size_t>(fav));
+    title = book.title.empty() ? std::string(tr(STR_LIBRARY_UNKNOWN_TITLE)) : book.title;
+    author = book.author;
+    if (fileName) *fileName = book.path;
+    return true;
+  }
   if (entry < pinnedCount()) {
     const auto& books = RECENT_BOOKS.getBooks();
     if (entry < 0 || entry >= static_cast<int>(books.size())) return false;
@@ -760,10 +1016,8 @@ bool LibraryListActivity::handleButtons() {
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
     if (tabsFocused()) {
       if (!degraded) toggleSortDirection();
-    } else if (isRecentSort(sortOrder)) {
-      showRecentBookOptions(selectedEntry());
-    } else if (deleteEligible()) {
-      if (count > 0) promptDeleteBook(selectedEntry());
+    } else if (isRecentSort(sortOrder) || favoritesShelf() || deleteEligible()) {
+      if (count > 0) showBookOptions(selectedEntry());
     } else if (!groupsCollapsed && groupable()) {
       collapseGroups(selectedEntry());
     } else {
@@ -832,7 +1086,8 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   auto& nav = activeNav();
   const int count = listCount();
   const bool authorGrouped = isAuthorSort(sortOrder);
-  const bool grouped = !isRecentSort(sortOrder);
+  // The Favorites shelf is a short flat list: no initial-letter headings.
+  const bool grouped = !isRecentSort(sortOrder) && !favoritesShelf();
 
   fui::ListProps props;
   props.count = static_cast<uint16_t>(count);
@@ -1003,6 +1258,8 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
     const char* message = tr(STR_LIBRARY_NO_RESULTS);
     if (filterFailed) {
       message = tr(STR_LIBRARY_SEARCH_UNAVAILABLE);
+    } else if (favoritesShelf()) {
+      message = tr(STR_LIBRARY_NO_FAVORITES);
     } else if (query.empty()) {
       message = tr(STR_LIBRARY_EMPTY);
     }
@@ -1045,10 +1302,8 @@ void LibraryListActivity::drawHoldHelp() const {
   const char* help = nullptr;
   if (tabsFocused() && !degraded)
     help = tr(STR_LIBRARY_HOLD_SORT);
-  else if (!tabsFocused() && isRecentSort(sortOrder) && listCount() > 0)
-    help = tr(STR_LIBRARY_HOLD_OPTIONS);  // recent rows: hold opens the row menu
-  else if (!tabsFocused() && deleteEligible() && listCount() > 0)
-    help = tr(STR_HOLD_OPEN_TO_DELETE);
+  else if (!tabsFocused() && (isRecentSort(sortOrder) || favoritesShelf() || deleteEligible()) && listCount() > 0)
+    help = tr(STR_LIBRARY_HOLD_OPTIONS);  // hold opens the row menu
   else if (!tabsFocused() && groupable())
     help = tr(STR_LIBRARY_HOLD_GROUPS);
   if (!help) return;

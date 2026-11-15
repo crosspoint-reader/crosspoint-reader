@@ -13,6 +13,7 @@
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "FavoritesStore.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -385,19 +386,61 @@ void FileBrowserActivity::showEntryActions() {
     return;
   }
 
-  const bool isDirectory = files[nav.selected].back() == '/';
-  static constexpr StrId FILE_OPTIONS[] = {StrId::STR_OPEN, StrId::STR_DELETE, StrId::STR_RENAME};
-  static constexpr StrId DIRECTORY_OPTIONS[] = {StrId::STR_OPEN, StrId::STR_DELETE};
-  optionPopup.show(StrId::STR_FILENAME, isDirectory ? DIRECTORY_OPTIONS : FILE_OPTIONS, isDirectory ? 2 : 3, 0,
-                   [this](const int index) {
-                     if (index == 0) {
-                       activateSelected();
-                     } else if (index == 1) {
-                       deleteSelected();
-                     } else if (index == 2) {
-                       startRename();
-                     }
-                   });
+  const std::string& entry = files[nav.selected];
+  const bool isDirectory = entry.back() == '/';
+  // Only books can be favorites; folders and images keep the plain menu.
+  const bool isBook =
+      !isDirectory && (FsHelpers::hasReflowableBookExtension(entry) || FsHelpers::hasXtcExtension(entry));
+
+  enum class Action { Open, Favorite, Delete, Rename };
+  Action actions[4];
+  const char* labels[4];
+  int count = 0;
+  actions[count] = Action::Open;
+  labels[count++] = tr(STR_OPEN);
+  std::string fullPath;
+  // Browse Files knows only the file name; the Library swaps in the book's
+  // own title and author the next time it lists favorites.
+  std::string stem;
+  if (isBook) {
+    fullPath = (basepath.back() == '/' ? basepath : basepath + "/") + entry;
+    stem = utf8ComposeNfc(entry.substr(0, entry.size() - getFileExtension(entry).size()));
+    // The card may have been unreadable when favorites loaded at boot.
+    FAVORITES.refreshFromCard();
+    const bool favorite = FAVORITES.isFavorite(fullPath);
+    actions[count] = Action::Favorite;
+    // A list that cannot take this book says so in place of the add.
+    labels[count++] = favorite
+                          ? tr(STR_REMOVE_FROM_FAVORITES)
+                          : (FAVORITES.canAdd(fullPath, stem, "") ? tr(STR_ADD_TO_FAVORITES) : tr(STR_FAVORITES_FULL));
+  }
+  actions[count] = Action::Delete;
+  labels[count++] = tr(STR_DELETE);
+  if (!isDirectory) {
+    actions[count] = Action::Rename;
+    labels[count++] = tr(STR_RENAME);
+  }
+
+  // The popup copies the labels; the actions travel with the callback.
+  std::vector<Action> chosen(actions, actions + count);
+  optionPopup.show(tr(STR_FILENAME), labels, count, 0, [this, chosen, fullPath, stem](const int index) {
+    if (index < 0 || index >= static_cast<int>(chosen.size())) return;
+    switch (chosen[static_cast<size_t>(index)]) {
+      case Action::Open:
+        activateSelected();
+        break;
+      case Action::Favorite:
+        // toggle() refuses an add that does not fit (the "full" entry).
+        FAVORITES.toggle(fullPath, stem, "", false);
+        break;
+      case Action::Delete:
+        deleteSelected();
+        break;
+      case Action::Rename:
+        startRename();
+        break;
+    }
+  });
   requestUpdate();
 }
 
@@ -416,7 +459,11 @@ void FileBrowserActivity::deleteSelected() {
     }
 
     LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
-    if (!removeDirFile(fullPath)) {
+    const bool deleted = removeDirFile(fullPath);
+    // A deleted book's favorite, or every favorite in a deleted folder, goes
+    // once the card confirms the path is gone (even after a partial failure).
+    FAVORITES.forgetIfGone(fullPath.c_str());
+    if (!deleted) {
       LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
       return;
     }
@@ -504,6 +551,7 @@ void FileBrowserActivity::renameSelectedFile(const std::string& oldPath, const s
   }
 
   RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);
+  FAVORITES.updatePath(oldPath.c_str(), newPath.c_str());
   if (APP_STATE.openEpubPath == oldPath) {
     APP_STATE.openEpubPath = newPath;
     if (!APP_STATE.saveToFile()) LOG_ERR("FileBrowser", "Failed to save renamed open-book path");
