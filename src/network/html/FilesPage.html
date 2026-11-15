@@ -1437,7 +1437,7 @@
     if (files.length === 0) {
       fileTable.innerHTML = '<div class="empty-state">This folder is empty</div>';
     } else {
-      let fileTableContent = '<div class="sort-bar"><label for="sortSelect">Sort by</label><select id="sortSelect" class="sort-select"><option value="name">Name</option><option value="size">Size</option><option value="created">Created</option><option value="modified" selected>Modified</option></select></div><table class="file-table"><thead>';
+      let fileTableContent = '<div class="sort-bar"><label for="sortSelect">Sort by</label><select id="sortSelect" class="sort-select"><option value="name:asc">Name (A-Z)</option><option value="name:desc">Name (Z-A)</option><option value="size:desc">Size (largest)</option><option value="size:asc">Size (smallest)</option><option value="created:desc">Created (newest)</option><option value="created:asc">Created (oldest)</option><option value="modified:desc" selected>Modified (newest)</option><option value="modified:asc">Modified (oldest)</option></select></div><table class="file-table"><thead>';
 
 				// Add select-all checkbox column
       fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th data-sort="name"><button type="button" class="sort-btn" data-sort-key="name">Name</button></th><th>Type</th><th data-sort="size"><button type="button" class="sort-btn" data-sort-key="size">Size</button></th><th data-sort="created"><button type="button" class="sort-btn" data-sort-key="created">Created</button></th><th data-sort="modified" aria-sort="descending"><button type="button" class="sort-btn" data-sort-key="modified">Modified <span class="sort-arrow">\u25BC</span></button></th><th class="actions-col">Actions</th></tr></thead><tbody>';
@@ -1507,8 +1507,9 @@
   // (descending for dates/size, ascending for name), and a second click flips the direction.
   // Folders always stay on top. Rows are reordered in place, so there is no refetch.
   let sortState = { key: 'modified', desc: true };
-  function sortRows(key, fromSelect) {
-    const desc = sortState.key === key && !fromSelect ? !sortState.desc : key !== 'name';
+  // forceDesc (from the mobile select) picks the direction explicitly; undefined means header-click behavior.
+  function sortRows(key, forceDesc) {
+    const desc = forceDesc !== undefined ? forceDesc : sortState.key === key ? !sortState.desc : key !== 'name';
     sortState = { key, desc };
     const tbody = document.querySelector('#file-table tbody');
     if (!tbody) return;
@@ -1522,7 +1523,7 @@
     });
     rows.forEach(row => tbody.appendChild(row));
     const select = document.getElementById('sortSelect');
-    if (select) select.value = key;
+    if (select) select.value = key + ':' + (desc ? 'desc' : 'asc');
     document.querySelectorAll('#file-table .sort-arrow').forEach(el => el.remove());
     document.querySelectorAll('#file-table th[data-sort]').forEach(h => h.removeAttribute('aria-sort'));
     const th = document.querySelector('#file-table th[data-sort="' + key + '"]');
@@ -2446,7 +2447,10 @@
       if (btn) sortRows(btn.dataset.sortKey);
     });
     document.getElementById('file-table').addEventListener('change', function(event) {
-      if (event.target.id === 'sortSelect') sortRows(event.target.value, true);
+      if (event.target.id === 'sortSelect') {
+        const [key, dir] = event.target.value.split(':');
+        sortRows(key, dir === 'desc');
+      }
     });
     document.getElementById('file-table').addEventListener('change', function(event) {
       if (event.target.matches('.select-item')) {
