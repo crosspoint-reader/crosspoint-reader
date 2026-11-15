@@ -13,6 +13,7 @@
 #include <OpdsFeedParser.h>
 #include <OpdsPublicationDoc.h>
 #include <OpdsSearchTemplate.h>
+#include <ResumableFetch.h>
 #include <StreamingJsonParser.h>
 #include <Util.h>
 #include <WolfsslCrypto.h>
@@ -561,12 +562,35 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     releaseEntries();
   }
 
-  const freeink::opds::HttpAuth dlAuth = opdsClient.downloadAuth();
-  std::vector<HttpDownloader::Header> headers = dlAuth.headers;
-  if (!dlAuth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + dlAuth.bearer});
-  // downloadFile() (CatalogActivity) releases font caches, checks the TLS heap
-  // floor, and pumps cancel input during the transfer.
-  const auto result = downloadFile(downloadUrl, filename, dlAuth.username, dlAuth.password, headers);
+  HttpDownloader::DownloadError result;
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    {
+      const freeink::opds::HttpAuth dlAuth = opdsClient.downloadAuth();
+      std::vector<HttpDownloader::Header> headers = dlAuth.headers;
+      if (!dlAuth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + dlAuth.bearer});
+      result = downloadFile(downloadUrl, filename, dlAuth.username, dlAuth.password, headers);
+    }
+    if (attempt != 0 || result != HttpDownloader::UNAUTHORIZED || HttpDownloader::lastStatus() != 401 ||
+        HttpDownloader::lastAnswerRedirected() ||
+        freeink::fetchOrigin(downloadUrl) != freeink::fetchOrigin(server.url) || cancelDownload)
+      break;
+    std::string title;
+    {
+      RenderLock lock;
+      title = std::move(statusMessage);
+    }
+    const bool authenticated = opdsClient.authenticateDownload(downloadUrl);
+    {
+      RenderLock lock;
+      statusMessage = std::move(title);
+    }
+    if (opdsClient.tokensDirty()) persistTokens();
+    if (cancelDownload) {
+      result = HttpDownloader::ABORTED;
+      break;
+    }
+    if (!authenticated) break;
+  }
 
   if (result == HttpDownloader::OK && !verifyAndRegisterEpub(filename)) return;
   finishDownload(result);
@@ -984,7 +1008,10 @@ const char* OpdsBookBrowserActivity::acquireLabel(const OpdsAvailability& av) co
 // frozen on the previous message.
 void OpdsBookBrowserActivity::onClientStatus(void* ctx, const freeink::opds::ClientPhase phase) {
   auto* self = static_cast<OpdsBookBrowserActivity*>(ctx);
-  self->statusMessage = phase == freeink::opds::ClientPhase::SigningIn ? tr(STR_OPDS_SIGNING_IN) : tr(STR_LOADING);
+  {
+    RenderLock lock;
+    self->statusMessage = phase == freeink::opds::ClientPhase::SigningIn ? tr(STR_OPDS_SIGNING_IN) : tr(STR_LOADING);
+  }
   self->requestUpdate(true);
 }
 
