@@ -291,6 +291,8 @@ One of the best things about open source is that anyone can take the code in a d
 
 - [Witch(hunt) Reader](https://github.com/jpirnay/witchhunt-reader) — More faithful CSS styling and background work for slightly snappier interaction. Weather information panel. Markdown support.
 
+- [Wren](https://github.com/gdaniil/wren-firmware) — A redesigned reading UI: library as home, fewer settings, new typography. Works with existing CrossPoint apps.
+
 **Note:** Many of these features will make their way into CrossPoint over time. Each project chooses its own priorities and tradeoffs.
 
 Want to build your own device? Be sure to check out the [Silkscreen](https://silkscreenreader.com) project or [OnePage Reader](https://github.com/MoveCall/onepage-reader).
