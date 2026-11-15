@@ -2,7 +2,6 @@ import importlib.util
 from pathlib import Path
 import unittest
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -16,20 +15,26 @@ class StatsTest(unittest.TestCase):
     def test_final_measurement_and_exact_bytes(self):
         log = 'RAM: [==] 2% (used 10 bytes from 200 bytes)\nRAM: [==] 3% (used 11 bytes from 200 bytes)\nFlash: [==] 4% (used 12345 bytes from 99999 bytes)'
         self.assertEqual(stats.parse_stats(log, 'default', 'abc'),
-                         dict(environment='default', sha='abc', ram=11, flash=12345))
+                         dict(environment='default', sha='abc', ram=11, flash=12345, image=None, base_sha=None))
 
-    def test_saved_tool_works_when_pr_head_lacks_ci_scripts(self):
+    def test_final_image_includes_appended_payload(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            tool = root / 'saved-parser.py'
-            shutil.copy(spec.origin, tool)
-            head = root / 'old-pr-head'
-            head.mkdir()
-            (head / 'pio.log').write_text('RAM: 1% (used 10 bytes from 1000 bytes)')
-            self.assertFalse((head / '.github/scripts/firmware-stats.py').exists())
-            result = json.loads(subprocess.check_output(
-                [sys.executable, str(tool), 'pio.log', 'default', 'a' * 40], cwd=head))
-            self.assertEqual(result['ram'], 10)
+            image = root / 'firmware.bin'
+            log = root / 'pio.log'
+            log.write_text('Flash: used 100 bytes from 1000 bytes')
+            image.write_bytes(b'x' * 100)
+            def measure():
+                return json.loads(subprocess.check_output([
+                    sys.executable, spec.origin, str(log), 'default', 'a' * 40,
+                    str(image), 'b' * 40]))
+            before = measure()
+            with image.open('ab') as output:
+                output.write(b'symbols' * 100)
+            after = measure()
+            self.assertEqual(after['image'] - before['image'], 700)
+            self.assertEqual(after['flash'], before['flash'])
+            self.assertEqual(after['base_sha'], 'b' * 40)
 
     def test_missing_and_malformed_are_not_zero(self):
         self.assertIsNone(stats.parse_stats('RAM: used NaN bytes', 'x', 'a')['ram'])

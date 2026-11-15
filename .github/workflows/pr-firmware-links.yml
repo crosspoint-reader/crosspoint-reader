@@ -18,6 +18,7 @@ jobs:
     concurrency:
       group: pr-firmware-links-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
       cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     steps:
       # Only load publisher code from the trusted default-branch revision.

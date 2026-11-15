@@ -20,6 +20,12 @@ function validateStats(value, environment, sha) {
       throw new Error('invalid byte count');
     }
   }
+  if (value.image != null && (!Number.isSafeInteger(value.image) || value.image < 0)) {
+    throw new Error('invalid image byte count');
+  }
+  if (value.base_sha != null && !/^[0-9a-f]{40}$/.test(value.base_sha)) {
+    throw new Error('invalid base SHA');
+  }
   return value;
 }
 
@@ -32,27 +38,6 @@ function cells(base, head, key) {
 async function comparison({github, context, core, run, pullRequest, builds}) {
   const {owner, repo} = context.repo;
   const api = {owner, repo};
-  let baseline;
-  let candidates = [];
-  let baselineReason = 'no saved develop build';
-  if (pullRequest.base.ref === 'develop') {
-    try {
-      const {data} = await github.rest.repos.compareCommitsWithBasehead({
-        ...api, basehead: `develop...${run.head_sha}`, per_page: 1,
-      });
-      baseline = data.merge_base_commit.sha;
-      candidates = await github.paginate(github.rest.actions.listWorkflowRuns, {
-        ...api, workflow_id: run.workflow_id, event: 'push', branch: 'develop',
-        head_sha: baseline, status: 'completed', per_page: 100,
-      });
-      candidates = candidates.filter(r => r.head_sha === baseline && r.event === 'push' && r.head_branch === 'develop')
-        .sort((a, b) => b.id - a.id || b.run_attempt - a.run_attempt);
-    } catch (error) {
-      core.warning(`Baseline lookup unavailable: ${error.message}`);
-      baselineReason = 'baseline lookup failed';
-    }
-  } else baselineReason = 'PR does not target develop';
-
   const artifactCache = new Map();
   async function readStats(buildRun, environment, sha) {
     try {
@@ -66,39 +51,69 @@ async function comparison({github, context, core, run, pullRequest, builds}) {
       if (artifact.expired) return {reason: 'measurement expired'};
       if (artifact.size_in_bytes > 65536) return {reason: 'invalid measurement'};
       const {data} = await github.rest.actions.downloadArtifact({...api, artifact_id: artifact.id, archive_format: 'zip'});
-      return {stats: validateStats(decodeArtifact(data), environment, sha)};
+      const stats = validateStats(decodeArtifact(data), environment, sha);
+      if (stats.ram === null && stats.flash === null && stats.image == null) {
+        return {reason: 'measurement contains no byte counts'};
+      }
+      return {stats};
     } catch (error) {
       core.warning(`Stats unavailable for ${environment}: ${error.message}`);
       return {reason: 'measurement invalid or unavailable'};
     }
   }
 
-  let body = '\n\n### Flash and static RAM usage\n\n';
+  const heads = [];
+  for (const build of builds) heads.push(await readStats(run, build.env, run.head_sha));
+  let baseline;
+  let candidates = [];
+  let baselineReason = 'no saved develop build';
+  if (pullRequest.base.ref === 'develop') {
+    try {
+      baseline = heads.find(head => head.stats?.base_sha)?.stats.base_sha;
+      if (!baseline) throw new Error('merge base identity missing from measurements');
+      candidates = await github.paginate(github.rest.actions.listWorkflowRuns, {
+        ...api, workflow_id: run.workflow_id, event: 'push', branch: 'develop',
+        head_sha: baseline, status: 'completed', per_page: 100,
+      });
+      candidates = candidates.filter(r => r.head_sha === baseline && r.event === 'push' && r.head_branch === 'develop')
+        .sort((a, b) => b.id - a.id || b.run_attempt - a.run_attempt);
+    } catch (error) {
+      core.warning(`Baseline lookup unavailable: ${error.message}`);
+      baselineReason = 'baseline lookup failed';
+    }
+  } else baselineReason = 'PR does not target develop';
+
+  let body = '\n\n### Flash and static RAM usage (bytes)\n\n';
   const commit = sha => `[\`${sha.slice(0, 7)}\`](https://github.com/${owner}/${repo}/commit/${sha})`;
-  body += baseline ? `PR ${commit(run.head_sha)} compared with shared ancestor ${commit(baseline)} in develop.\n\n` : `Baseline unavailable: ${baselineReason}.\n\n`;
-  body += '| Device | Flash baseline | Flash PR | Flash difference | RAM baseline | RAM PR | RAM difference |\n';
-  body += '| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n';
+  body += baseline ? `Merge build for PR ${commit(run.head_sha)} compared with its develop parent ${commit(baseline)}.\n\n` : `Baseline unavailable: ${baselineReason}.\n\n`;
+  body += '| Device | Baseline (Total image / linker Flash / RAM) | PR (Total image / linker Flash / RAM) | Difference (Total image / linker Flash / RAM) |\n';
+  body += '| --- | ---: | ---: | ---: |\n';
   const notes = [];
-  for (const build of builds) {
-    const head = await readStats(run, build.env, run.head_sha);
+  for (const [index, build] of builds.entries()) {
+    const head = heads[index];
     let base = {reason: baselineReason};
+    let baselineLink = '';
     for (const candidate of candidates) {
       const result = await readStats(candidate, build.env, baseline);
       if (result.stats) {
         base = result;
-        notes.push(`${build.device} baseline: [CI run](${candidate.html_url}).`);
+        baselineLink = ` <br>[CI run](${candidate.html_url})`;
         break;
       }
       if (base.reason === baselineReason) base = result;
     }
-    const values = [...cells(base.stats, head.stats, 'flash'), ...cells(base.stats, head.stats, 'ram')];
-    body += `| ${build.device} | ${values.join(' | ')} |\n`;
+    const image = cells(base.stats, head.stats, 'image');
+    const flash = cells(base.stats, head.stats, 'flash');
+    const ram = cells(base.stats, head.stats, 'ram');
+    const values = image.map((value, column) =>
+      `${value.replace(/ B$/, '')} / ${flash[column].replace(/ B$/, '')} / ${ram[column]}`);
+    body += `| ${build.device} | ${values[0]}${baselineLink} | ${values[1]} | ${values[2]} |\n`;
     if (!base.stats) notes.push(`${build.device}: baseline unavailable — ${base.reason}.`);
     if (base.stats && (base.stats.ram === null || base.stats.flash === null)) notes.push(`${build.device}: baseline measurement incomplete.`);
     if (head.stats && (head.stats.ram === null || head.stats.flash === null)) notes.push(`${build.device}: PR measurement incomplete.`);
     if (!head.stats) notes.push(`${build.device}: PR usage unavailable — ${head.reason}.`);
   }
-  return body + '\nDifferences are PR minus baseline. RAM is static allocation; runtime heap use is not measured.\n\n' + notes.join('\n\n');
+  return body + '\n' + notes.join('\n\n');
 }
 
 module.exports = {comparison, validateStats, cells, decodeArtifact};

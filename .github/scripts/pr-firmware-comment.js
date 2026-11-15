@@ -63,7 +63,7 @@ module.exports = async ({github, context, core}) => {
   const shortSha = run.head_sha.slice(0, 7);
   let body = `${marker}\n### Firmware builds\n\n`;
 
-  body += `Automatically generated for the latest commit of this PR (\`${shortSha}\`).\n\n`;
+  body += `Automatically generated from the merge build for the latest commit of this PR (\`${shortSha}\`).\n\n`;
   const links = builds.filter(build => artifacts.has(build.name)).map(({name, device}) => {
     const artifact = artifacts.get(name);
     return `- [${device} (\`${name}\`)](https://github.com/${owner}/${repo}/actions/runs/${run.id}/artifacts/${artifact.id})`;

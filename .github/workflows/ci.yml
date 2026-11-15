@@ -106,21 +106,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          # Include both parents of the PR merge commit for the head checkout.
-          fetch-depth: 2
-
-      # Keep the parser from the workflow revision even for older PR branches.
-      - name: Preserve measurement tool
-        run: cp .github/scripts/firmware-stats.py "$RUNNER_TEMP/firmware-stats.py"
-
-      - name: Select PR head firmware source
-        if: github.event_name == 'pull_request'
-        env:
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          git checkout --detach "$PR_HEAD_SHA"
-          git submodule update --init --recursive
-
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -179,8 +164,12 @@ jobs:
       - name: Extract firmware stats
         id: stats
         continue-on-error: true
+        env:
+          STATS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          python3 "$RUNNER_TEMP/firmware-stats.py" pio.log "${{ matrix.env }}" "$(git rev-parse HEAD)" > firmware-stats.json
+          python3 .github/scripts/firmware-stats.py pio.log "${{ matrix.env }}" "$STATS_SHA" \
+            ".pio/build/${{ matrix.env }}/firmware.bin" "$BASE_SHA" > firmware-stats.json
           {
             echo '## ${{ matrix.env }} firmware build stats'
             echo '```json'
