@@ -103,7 +103,7 @@ void LibraryListActivity::onEnter() {
                              index.header().metadataEnabled != readMetadata;
   if (rebuildNeeded) {
     index.close();
-    GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+    GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING), /*transient=*/true);
     rebuildIndex();
     if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
   }
@@ -330,7 +330,7 @@ void LibraryListActivity::swipeDelete(const int entry) {
 // the filter) around it.
 void LibraryListActivity::promptRebuildIndex() {
   RenderLock lock(*this);
-  GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+  GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING), /*transient=*/true);
   index.close();
   rebuildIndex();
   if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
@@ -420,7 +420,7 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
         LOG_DBG("LIB", "deleting %s", path.c_str());
         if (!removeBookFile(path)) LOG_ERR("LIB", "cannot delete %s", path.c_str());
         if (RECENT_BOOKS.removeByPath(path)) RECENT_BOOKS.saveToFile();
-        GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+        GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING), /*transient=*/true);
         rebuildIndex();
       }
       if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");

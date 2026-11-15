@@ -81,6 +81,10 @@ class GfxRenderer {
   // Display entry points are const but must consume the flag.
   mutable bool promotedRefreshPending_ = false;
   mutable HalDisplay::RefreshMode promotedRefresh_ = HalDisplay::FAST_REFRESH;
+  // promoteAfterTransient(): the next displayTransient() arms this promotion;
+  // any real paint first drops it.
+  mutable bool transientPromotionPending_ = false;
+  mutable HalDisplay::RefreshMode transientPromotion_ = HalDisplay::FAST_REFRESH;
   // Swap in (and clear) the promoted mode, if one is pending.
   HalDisplay::RefreshMode applyPromotedRefresh(HalDisplay::RefreshMode refreshMode) const;
 
@@ -239,11 +243,38 @@ class GfxRenderer {
   // instead of what its caller asked for, then the override clears itself.
   // Lets a closing overlay (the control center's refresh tile) hand a
   // ghost-cleanup waveform to the repaint of whatever screen is underneath,
-  // which it cannot reach directly.
+  // which it cannot reach directly. A promotion only ever strengthens the
+  // refresh: two pending promotions keep the stronger, and a caller that
+  // already asks for a stronger mode keeps its own.
   void promoteNextRefresh(const HalDisplay::RefreshMode mode) const {
+    promotedRefresh_ = promotedRefreshPending_ ? strongerRefresh(promotedRefresh_, mode) : mode;
     promotedRefreshPending_ = true;
-    promotedRefresh_ = mode;
   }
+  // FULL_REFRESH < HALF_REFRESH < FAST_REFRESH in enum order: lower is stronger.
+  static_assert(HalDisplay::FULL_REFRESH < HalDisplay::HALF_REFRESH &&
+                    HalDisplay::HALF_REFRESH < HalDisplay::FAST_REFRESH,
+                "strongerRefresh() relies on RefreshMode ordering FULL < HALF < FAST");
+  static HalDisplay::RefreshMode strongerRefresh(const HalDisplay::RefreshMode a, const HalDisplay::RefreshMode b) {
+    return a < b ? a : b;
+  }
+  // Drops a pending promotion (the sleep screen paints its own refresh).
+  void cancelPromotedRefresh() const {
+    promotedRefreshPending_ = false;
+    transientPromotionPending_ = false;
+  }
+  bool hasPromotedRefresh() const { return promotedRefreshPending_; }
+  // Promote the real paint that follows an interim frame: if the next frame
+  // shown is a displayTransient() one, it arms promoteNextRefresh(mode); a real
+  // paint before that drops this instead. For a screen change whose promotion
+  // the old screen already spent on its own clean exit.
+  void promoteAfterTransient(const HalDisplay::RefreshMode mode) const {
+    transientPromotion_ = mode;
+    transientPromotionPending_ = true;
+  }
+  // displayBuffer() for an interim frame that the screen's real paint will replace
+  // (popups, loading progress, image placeholders): sends `refreshMode` as asked and
+  // leaves a pending promotion for that real paint instead of spending it here.
+  void displayTransient(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   // Non-blocking refresh: starts the waveform and returns so CPU work (e.g.
   // grayscale strip rendering) can overlap the panel's refresh time. The
   // framebuffer must stay untouched until waitRefreshComplete(). Falls back to
