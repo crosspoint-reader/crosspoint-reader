@@ -13,36 +13,45 @@ namespace {
 
 const char* nameAt(const int idx) { return timezones::table()[idx].name; }
 
-TEST(IndexForOffset, DstZonesPreferDstRules) {
-  // Berlin/Paris: +60 min standard, observes DST.
-  int idx = timezones::indexForOffset(60, true);
+TEST(IndexForZone, RegionSelectsDstRule) {
+  int idx = timezones::indexForZone("Europe/Berlin", 60, true);
   ASSERT_GE(idx, 0);
   EXPECT_STREQ(nameAt(idx), "Berlin / Paris / Madrid / Rome");
-  // Athens: +120 min standard, observes DST.
-  idx = timezones::indexForOffset(120, true);
+  idx = timezones::indexForZone("Europe/Athens", 120, true);
   ASSERT_GE(idx, 0);
   EXPECT_STREQ(nameAt(idx), "Athens / Helsinki / Kyiv");
 }
 
-TEST(IndexForOffset, FixedZonesPreferNoDst) {
-  int idx = timezones::indexForOffset(0, false);
+TEST(IndexForZone, DistinguishesSantiagoFromHalifax) {
+  int idx = timezones::indexForZone("America/Santiago", -240, true);
+  ASSERT_GE(idx, 0);
+  EXPECT_STREQ(nameAt(idx), "Santiago");
+  idx = timezones::indexForZone("America/Halifax", -240, true);
+  ASSERT_GE(idx, 0);
+  EXPECT_STREQ(nameAt(idx), "Halifax");
+}
+
+TEST(IndexForZone, RegionOffsetMismatchRejected) {
+  EXPECT_EQ(timezones::indexForZone("America/Santiago", 60, true), -1);
+}
+
+TEST(IndexForZone, UnknownRegionWithDstIsNotGuessed) {
+  EXPECT_EQ(timezones::indexForZone("", -240, true), -1);
+  EXPECT_EQ(timezones::indexForZone("Mars/Olympus", 60, true), -1);
+}
+
+TEST(IndexForZone, UnknownRegionWithoutDstUsesFixedRule) {
+  int idx = timezones::indexForZone("", 0, false);
   ASSERT_GE(idx, 0);
   EXPECT_STREQ(nameAt(idx), "UTC");
-  idx = timezones::indexForOffset(330, false);
+  idx = timezones::indexForZone(nullptr, 330, false);
   ASSERT_GE(idx, 0);
   EXPECT_STREQ(nameAt(idx), "India / Colombo");
 }
 
-TEST(IndexForOffset, FallsBackToAnyEntryWithTheOffset) {
-  // No named zone at +05:00 observes DST; still maps to the offset.
-  const int idx = timezones::indexForOffset(300, true);
-  ASSERT_GE(idx, 0);
-  EXPECT_EQ(timezones::table()[idx].stdOffsetQ, 20);
-}
-
-TEST(IndexForOffset, RejectsUnsupportedOffsets) {
-  EXPECT_EQ(timezones::indexForOffset(7, false), -1);     // not a quarter hour
-  EXPECT_EQ(timezones::indexForOffset(15 * 60, false), -1);  // beyond UTC+14
+TEST(IndexForZone, RejectsUnsupportedOffsets) {
+  EXPECT_EQ(timezones::indexForZone("", 7, false), -1);
+  EXPECT_EQ(timezones::indexForZone("", 15 * 60, false), -1);
 }
 
 }  // namespace

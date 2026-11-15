@@ -27,11 +27,12 @@ size_t count();
 // UTC. 255 in the setting means "never chosen".
 uint8_t activeIndex();
 
-// Best table entry for a browser-reported zone: its standard UTC offset in
-// minutes east (the smaller of the January and July offsets) and whether it
-// observes DST. Entries with matching DST-ness win; the first match in table
-// order is taken. Returns -1 when no entry has that standard offset.
-int indexForOffset(int stdOffsetMinutes, bool observesDst);
+// Table entry for a browser-reported zone: its IANA region (e.g. "America/Santiago"),
+// standard UTC offset in minutes east (the smaller of the January and July offsets)
+// and whether it observes DST. A known region selects its rule if the offset agrees.
+// Unknown regions only map when they have no DST (first fixed-rule entry with that
+// offset); otherwise, or on a mismatch, returns -1.
+int indexForZone(const char* region, int stdOffsetMinutes, bool observesDst);
 
 // Format an entry's standard offset as "UTC+HH:MM" / "UTC-H:MM" / "UTC".
 void formatOffset(uint8_t index, char* buf, size_t bufSize);

@@ -2416,6 +2416,7 @@
     const jul = -new Date(new Date().getFullYear(), 6, 1).getTimezoneOffset();
     const body = new URLSearchParams({
       epochMs: String(Date.now()),
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
       stdOffsetMin: String(Math.min(jan, jul)),
       dst: jan !== jul ? '1' : '0'
     });
