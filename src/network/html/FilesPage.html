@@ -144,6 +144,9 @@
       text-align: left;
       border-bottom: 1px solid var(--border-color);
     }
+    .sort-bar {
+      display: none;
+    }
     .file-table .sort-btn {
       background: none;
       border: 0;
@@ -154,7 +157,7 @@
       cursor: pointer;
       user-select: none;
     }
-    .file-table tr:hover {
+    .file-table tbody tr:hover {
       background-color: var(--accent-color-10);
     }
     .file-icon {
@@ -1434,7 +1437,7 @@
     if (files.length === 0) {
       fileTable.innerHTML = '<div class="empty-state">This folder is empty</div>';
     } else {
-      let fileTableContent = '<table class="file-table"><thead>';
+      let fileTableContent = '<div class="sort-bar"><label for="sortSelect">Sort by</label><select id="sortSelect" class="sort-select"><option value="name">Name</option><option value="size">Size</option><option value="created">Created</option><option value="modified" selected>Modified</option></select></div><table class="file-table"><thead>';
 
 				// Add select-all checkbox column
       fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th data-sort="name"><button type="button" class="sort-btn" data-sort-key="name">Name</button></th><th>Type</th><th data-sort="size"><button type="button" class="sort-btn" data-sort-key="size">Size</button></th><th data-sort="created"><button type="button" class="sort-btn" data-sort-key="created">Created</button></th><th data-sort="modified" aria-sort="descending"><button type="button" class="sort-btn" data-sort-key="modified">Modified <span class="sort-arrow">\u25BC</span></button></th><th class="actions-col">Actions</th></tr></thead><tbody>';
@@ -1504,8 +1507,8 @@
   // (descending for dates/size, ascending for name), and a second click flips the direction.
   // Folders always stay on top. Rows are reordered in place, so there is no refetch.
   let sortState = { key: 'modified', desc: true };
-  function sortRows(key) {
-    const desc = sortState.key === key ? !sortState.desc : key !== 'name';
+  function sortRows(key, fromSelect) {
+    const desc = sortState.key === key && !fromSelect ? !sortState.desc : key !== 'name';
     sortState = { key, desc };
     const tbody = document.querySelector('#file-table tbody');
     if (!tbody) return;
@@ -1518,6 +1521,8 @@
       return (desc ? -diff : diff) || a.dataset.name.localeCompare(b.dataset.name);
     });
     rows.forEach(row => tbody.appendChild(row));
+    const select = document.getElementById('sortSelect');
+    if (select) select.value = key;
     document.querySelectorAll('#file-table .sort-arrow').forEach(el => el.remove());
     document.querySelectorAll('#file-table th[data-sort]').forEach(h => h.removeAttribute('aria-sort'));
     const th = document.querySelector('#file-table th[data-sort="' + key + '"]');
@@ -2439,6 +2444,9 @@
     document.getElementById('file-table').addEventListener('click', function(event) {
       const btn = event.target.closest('.sort-btn');
       if (btn) sortRows(btn.dataset.sortKey);
+    });
+    document.getElementById('file-table').addEventListener('change', function(event) {
+      if (event.target.id === 'sortSelect') sortRows(event.target.value, true);
     });
     document.getElementById('file-table').addEventListener('change', function(event) {
       if (event.target.matches('.select-item')) {

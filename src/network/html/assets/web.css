@@ -878,6 +878,16 @@ body.web-ui  {
     width: auto !important;
     padding: 8px 0;
   }
+  .web-ui .sort-bar  {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+  }
+  .web-ui .sort-bar .sort-select  {
+    flex: 1;
+    min-height: 44px;
+  }
   .web-ui .file-table tbody tr  {
     display: grid;
     grid-template-columns: 28px minmax(0, 1fr) auto;
