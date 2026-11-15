@@ -728,7 +728,10 @@ void CrossPointWebServer::handlePostClock() {
   trustedtime::adopt(epochMs / 1000);
 
   bool zoneSet = false;
-  if (SETTINGS.clockTimezone == 255 && server->hasArg("stdOffsetMin")) {
+  // A legacy clockUtcOffsetQ the user explicitly set (not the 48 default) and that activeIndex() still
+  // maps is preserved: choosing a zone here would silently replace it.
+  const bool legacyConfigured = SETTINGS.clockUtcOffsetQ <= 104 && SETTINGS.clockUtcOffsetQ != 48;
+  if (SETTINGS.clockTimezone == 255 && !legacyConfigured && server->hasArg("stdOffsetMin")) {
     const int idx = timezones::indexForOffset(atoi(server->arg("stdOffsetMin").c_str()), server->arg("dst") == "1");
     if (idx >= 0) {
       SETTINGS.clockTimezone = static_cast<uint8_t>(idx);
