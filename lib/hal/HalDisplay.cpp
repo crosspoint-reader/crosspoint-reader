@@ -101,6 +101,8 @@ bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
 
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
+void HalDisplay::controllerIdle() { einkDisplay.controllerIdle(); }
+
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
 uint8_t* HalDisplay::lendFrameBufferStorage(uint32_t* sizeOut) { return einkDisplay.lendBuildStorage(sizeOut); }

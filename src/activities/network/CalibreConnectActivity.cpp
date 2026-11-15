@@ -161,7 +161,13 @@ void CalibreConnectActivity::loop() {
       // Note: we DON'T reset lastProcessedCompleteAt here, so we won't re-process the old server value
       changed = true;
     }
-    if (changed) {
+    // Upload progress changes on every chunk, and each fast repaint drives the
+    // screen's black pixels again; repaint at most every kMinRepaintMs.
+    constexpr unsigned long kMinRepaintMs = 5000;
+    if (changed) repaintPending = true;
+    if (repaintPending && millis() - lastRepaintAt >= kMinRepaintMs) {
+      repaintPending = false;
+      lastRepaintAt = millis();
       requestUpdate();
     }
   }
