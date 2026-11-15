@@ -5,11 +5,15 @@
 #include <Logging.h>
 
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "ProgressFile.h"
 
 namespace EpubReaderUtils {
+
+// The reader's persisted link back-stack (see EpubReaderActivity::saveLinkStack()).
+inline std::string linkStackPath(const std::string& cachePath) { return cachePath + "/links.bin"; }
 
 // Persists reader progress for an EPUB to its cache directory. Returns true on success.
 inline bool saveProgress(const Epub& epub, int spineIndex, int pageNumber, int pageCount,
