@@ -144,7 +144,13 @@
       text-align: left;
       border-bottom: 1px solid var(--border-color);
     }
-    .file-table th[data-sort] {
+    .file-table .sort-btn {
+      background: none;
+      border: 0;
+      padding: 0;
+      margin: 0;
+      color: inherit;
+      font: inherit;
       cursor: pointer;
       user-select: none;
     }
@@ -1431,7 +1437,7 @@
       let fileTableContent = '<table class="file-table"><thead>';
 
 				// Add select-all checkbox column
-      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th data-sort="name" onclick="sortRows(\'name\')">Name</th><th>Type</th><th data-sort="size" onclick="sortRows(\'size\')">Size</th><th data-sort="created" onclick="sortRows(\'created\')">Created</th><th data-sort="modified" onclick="sortRows(\'modified\')">Modified <span class="sort-arrow">\u25BC</span></th><th class="actions-col">Actions</th></tr></thead><tbody>';
+      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th data-sort="name"><button type="button" class="sort-btn" data-sort-key="name">Name</button></th><th>Type</th><th data-sort="size"><button type="button" class="sort-btn" data-sort-key="size">Size</button></th><th data-sort="created"><button type="button" class="sort-btn" data-sort-key="created">Created</button></th><th data-sort="modified" aria-sort="descending"><button type="button" class="sort-btn" data-sort-key="modified">Modified <span class="sort-arrow">\u25BC</span></button></th><th class="actions-col">Actions</th></tr></thead><tbody>';
 
 
       sortState = { key: 'modified', desc: true };  // matches the initial order below
@@ -1513,8 +1519,12 @@
     });
     rows.forEach(row => tbody.appendChild(row));
     document.querySelectorAll('#file-table .sort-arrow').forEach(el => el.remove());
+    document.querySelectorAll('#file-table th[data-sort]').forEach(h => h.removeAttribute('aria-sort'));
     const th = document.querySelector('#file-table th[data-sort="' + key + '"]');
-    if (th) th.insertAdjacentHTML('beforeend', ' <span class="sort-arrow">' + (desc ? '\u25BC' : '\u25B2') + '</span>');
+    if (th) {
+      th.setAttribute('aria-sort', desc ? 'descending' : 'ascending');
+      th.querySelector('.sort-btn').insertAdjacentHTML('beforeend', ' <span class="sort-arrow">' + (desc ? '\u25BC' : '\u25B2') + '</span>');
+    }
   }
 
   // Image preview
@@ -2426,6 +2436,10 @@
   // Initialize quality settings handlers
   document.addEventListener('DOMContentLoaded', function() {
     syncDeviceClock();
+    document.getElementById('file-table').addEventListener('click', function(event) {
+      const btn = event.target.closest('.sort-btn');
+      if (btn) sortRows(btn.dataset.sortKey);
+    });
     document.getElementById('file-table').addEventListener('change', function(event) {
       if (event.target.matches('.select-item')) {
         event.target.closest('tr').classList.toggle('selected', event.target.checked);
