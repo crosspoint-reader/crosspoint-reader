@@ -22,7 +22,10 @@ void UiAppHost::renderUi() {
 UiAppHost::TouchRoute UiAppHost::routeTouch(const MappedInputManager& input, const bool withLongPress,
                                             const bool routeHeld) {
   TouchRoute result;  // named apart from route() — cppcheck flags the shadow
-  if (!uiReady) return result;
+  if (!uiReady) {
+    if (routeHeld) suppressContactBeforeReady(input);
+    return result;
+  }
   result.snap = touchSnapshotFrom(input, withLongPress);
   if (!result.snap.touchPressed && !result.snap.touchReleased && !(routeHeld && result.snap.touchHeld)) {
     return result;

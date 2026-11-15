@@ -1,6 +1,17 @@
 #pragma once
 #include <FreeInkUICore.h>
 
+// Call while routing is closed. A contact that is already down began before
+// the screen was ready, so its first routed frame could be held-only and bind
+// a drag at the live position instead of where the finger landed. Suppress it
+// until the finger lifts; the SDK latch also hides its release and swipe.
+template <typename Input>
+void suppressContactBeforeReady(const Input& input) {
+  int x = 0;
+  int y = 0;
+  if (input.isScreenTouchHeld(x, y)) input.suppressScreenTouch();
+}
+
 // While a contact is a tap candidate, touchSnapshotFrom() repeats the press at
 // the landing point. The press hit test needs that point, but a drag must
 // follow the live position. One snapshot holds one position, so route the
