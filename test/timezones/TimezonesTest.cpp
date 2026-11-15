@@ -54,4 +54,11 @@ TEST(IndexForZone, RejectsUnsupportedOffsets) {
   EXPECT_EQ(timezones::indexForZone("", 15 * 60, false), -1);
 }
 
+// Africa/Casablanca (2026) is UTC+1 but drops to UTC+0 around Ramadan (March 1 is UTC+0), so the
+// page reports std=0 with DST observed. It must stay unconfigured, not become fixed UTC+1 (dst='0').
+TEST(IndexForZone, SeasonalUnsupportedZoneStaysUnconfigured) {
+  EXPECT_EQ(timezones::indexForZone("Africa/Casablanca", 0, true), -1);
+  EXPECT_EQ(timezones::indexForZone("", 0, true), -1);
+}
+
 }  // namespace
