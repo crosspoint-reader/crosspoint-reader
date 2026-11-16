@@ -161,8 +161,8 @@ struct Renderer {
   bool isSdCardFont(int) const { return sdFont; }
   int getFontAscenderSize(int) const { return 12; }
   int getLineHeight(int) const { return 16; }
-  struct InkBounds { int top, bottom; };
-  InkBounds getFontInkBounds(int) const { return {2, 14}; }
+  struct InkBounds { int top = 0, bottom = 0; bool measured = false; };
+  InkBounds getTextInkBounds(int, const char*, EpdFontFamily::Style) const { return {2, 14, true}; }
   int linePitch = 16;
   int getLineHeight(int, float) const { return linePitch; }
   RenderMode getRenderMode() const { return BW; }
@@ -513,8 +513,6 @@ int main() {
     assert(cold.words[0].pageOffset == 0);
     assert(cold.words[239].pageOffset == 1);
     assert(cold.renderer.coldMeasurements == 0);
-    for (const char probe : {'d', 'H', 'l', 'p', 'g', 'y'})  // ink-bounds letters prepared for getFontInkBounds
-      assert(cold.renderer.advances.count({EpdFontFamily::REGULAR, static_cast<uint32_t>(probe)}));
     cold.mode = ClipSelectionActivity::Mode::DefinitionLookup;
     cold.borrowedPages = cold.pages;
     HalMemory::stats = {1024 * 1024, 1024 * 1024};

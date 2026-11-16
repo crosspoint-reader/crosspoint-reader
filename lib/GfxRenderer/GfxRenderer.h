@@ -75,8 +75,6 @@ class GfxRenderer {
   // recording to the (non-const) FontCacheManager. Same pragmatic compromise
   // as before, concentrated in a single pointer instead of four fields.
   mutable FontCacheManager* fontCacheManager_ = nullptr;
-  mutable bool inkBoundsCached_ = false;
-  mutable int inkBoundsFontId_ = 0, inkTop_ = 0, inkBottom_ = 0;
 
   // One-shot refresh promotion (see promoteNextRefresh). Mutable because
   // Display entry points are const but must consume the flag.
@@ -155,7 +153,6 @@ class GfxRenderer {
   void removeFont(int fontId) {
     fontMap.erase(fontId);
     sdCardFonts_.erase(fontId);
-    if (inkBoundsFontId_ == fontId) inkBoundsCached_ = false;
   }
   void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
@@ -407,11 +404,13 @@ class GfxRenderer {
 
  public:
   int getFontAscenderSize(int fontId) const;
-  // Vertical ink extent of typical letters, relative to the top passed to drawText. Cached for the last font.
+  // Vertical ink extent of the glyphs in text, relative to the top passed to drawText.
+  // measured is false when no glyph had ink (empty text, blank or missing glyphs).
   struct InkBounds {
     int top = 0, bottom = 0;
+    bool measured = false;
   };
-  InkBounds getFontInkBounds(int fontId) const;
+  InkBounds getTextInkBounds(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getLineHeight(int fontId) const;
   // Explicit line spacing scales font size; the one-argument form returns font metrics.
   int getLineHeight(int fontId, float compression) const;
