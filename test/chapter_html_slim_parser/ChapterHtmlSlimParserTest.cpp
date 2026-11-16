@@ -210,10 +210,12 @@ TEST_F(ChapterHtmlSlimParserTest, AbandonedLayoutStopsExtractingLines) {
 class ParserStopTest : public ChapterHtmlSlimParserTest {};
 
 TEST_P(ParserStopTest, PageCallbackStopsParsingAndClosesFile) {
-  filepath = (std::filesystem::temp_directory_path() / "crosspoint-parser-stop.xhtml").string();
   std::string html = "<html><body>";
   for (int i = 0; i < 100; ++i) html += GetParam();
   html += "</body></html>";
+  // One file per parameter: ctest runs the instances in parallel.
+  const std::string testId = std::to_string(std::hash<std::string>{}(html));
+  filepath = (std::filesystem::temp_directory_path() / ("crosspoint-parser-stop-" + testId + ".xhtml")).string();
   {
     HalFile file;
     ASSERT_TRUE(file.open(filepath.c_str(), "wb"));

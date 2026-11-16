@@ -40,6 +40,7 @@
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "util/PluginEvents.h"
+#include "util/TaskWatchdog.h"
 
 namespace fui = freeink::ui;
 
@@ -114,10 +115,10 @@ void SettingsActivity::rebuildSettings() {
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
 
-  // Rescan /dictionaries on every rebuild: cheap (one directory listing) and
-  // picks up dictionaries copied to the SD card since the last visit.
+  // Rescan /dictionaries on every rebuild to pick up dictionaries copied to the
+  // SD card since the last visit. Only the Reader section shows the row.
   std::vector<DictionaryEntry> dictionaries;
-  DictionaryRegistry::discover(dictionaries);
+  if (section == SettingsSection::Reader) DictionaryRegistry::discover(dictionaries);
 
   auto all = getSettingsList(&sdFontSystem.registry(), &dictionaries);
 
@@ -204,6 +205,7 @@ void SettingsActivity::rebuildSettings() {
     addAction(SettingsSection::General, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
     addAction(SettingsSection::General, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
   }
+  addAction(SettingsSection::General, StrId::STR_DISPLAY_REFRESH, SettingAction::DisplayRefresh);
   addAction(SettingsSection::General, StrId::STR_ABOUT, SettingAction::About);
   rebuildRowItems();
 }
@@ -446,6 +448,23 @@ void SettingsActivity::toggleSelectedSetting() {
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::DisplayRefresh: {
+        // Alternate full black and white refreshes to clear image retention.
+        // Back stops after the next white pass, so the screen always ends white.
+        constexpr int kCycles = 10;
+        RenderLock lock;
+        for (int cycle = 0; cycle < kCycles; ++cycle) {
+          renderer.clearScreen(0x00);
+          renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+          renderer.clearScreen(0xFF);
+          renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+          resetTaskWatchdogIfSubscribed();
+          mappedInput.update(true);
+          if (mappedInput.wasPressed(MappedInputManager::Button::Back)) break;
+        }
+        requestUpdate();
+        break;
+      }
       case SettingAction::CheckForUpdates:
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
