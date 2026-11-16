@@ -105,6 +105,7 @@ class FontDownloadActivity final : public UiListActivity {
   size_t currentFileTotal_ = 0;
   size_t fileProgress_ = 0;
   size_t fileTotal_ = 0;
+  unsigned long lastProgressRepaintMs_ = 0;
   int downloadingFamilyIndex_ = 0;
   std::string errorMessage_;
   bool cancelRequested_ = false;
@@ -123,6 +124,8 @@ class FontDownloadActivity final : public UiListActivity {
 
   int listCount() const override;
   void buildScreen(UiScreen& screen) override;
+  void drawChrome() override;
+  void drawFooter() override;
   void activateIndex(int index) override;
   freeink::ui::ListNav& activeNav() override;
   void onBackButton() override;

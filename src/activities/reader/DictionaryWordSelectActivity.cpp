@@ -57,8 +57,7 @@ void DictionaryWordSelectActivity::performLookup() {
   std::string definition;
   std::string headword;
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  DictLocation location;
-  const bool found = ok && dict.lookup(lookupText.c_str(), definition, headword, &result, &location);
+  const bool found = ok && dict.lookup(lookupText.c_str(), definition, headword, &result);
 
   if (found) {
     {
@@ -66,9 +65,13 @@ void DictionaryWordSelectActivity::performLookup() {
       popup = Popup::None;
       page.reset();
     }
+    if (SETTINGS.vocabularyHistoryEnabled &&
+        !VocabularyStore::append(vocabulary, lookupText, headword, definition, dict.definitionsAreHtml())) {
+      LOG_ERR("VOCAB", "Could not save successful dictionary lookup");
+    }
     auto activity = makeUniqueNoThrow<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
                                                                     std::move(definition), dict.definitionsAreHtml());
-    if (!activity || !activity->enableLookup(dict, location)) {
+    if (!activity || !activity->enableLookup(dict, std::move(lookupText))) {
       LOG_ERR("DICT", "OOM: definition activity");
       popup = Popup::Error;
       popupMsg = StrId::STR_DICT_LOW_MEMORY;
@@ -134,6 +137,7 @@ void DictionaryWordSelectActivity::loop() {
   }
   if (popup == Popup::NotFound || popup == Popup::Error) {
     if (millis() - popupTime >= POPUP_DURATION_MS) {
+      result.isCancelled = popup == Popup::Error;
       finish();
     }
   }

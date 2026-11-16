@@ -2,15 +2,16 @@
 
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <HiddenItems.h>
+#include <LibraryBuilder.h>
 #include <Logging.h>
 
 #include "ClippingStore.h"
+#include "ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
-constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
-
 // RFC 1123 date format helper: "Sun, 06 Nov 1994 08:49:37 GMT"
 // ESP32 doesn't have real-time clock set by default, so we use a fixed epoch date
 // as a fallback. The date is not critical for WebDAV Class 1 operations.
@@ -93,18 +94,11 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
     }
 
   } else if (raw.status == RAW_END) {
-    if (_putFile) _putFile.close();
+    // close() writes the final size: a failed close must not replace the original.
+    if (_putFile && !_putFile.close()) _putOk = false;
     if (_putOk) {
       String tempPath = _putPath + ".davtmp";
-      if (_putExisted) Storage.remove(_putPath.c_str());
-      HalFile tmp = Storage.open(tempPath.c_str());
-      if (tmp) {
-        _putOk = tmp.rename(_putPath.c_str());
-        tmp.close();
-      } else {
-        _putOk = false;
-      }
-      if (!_putOk) Storage.remove(tempPath.c_str());
+      _putOk = Storage.replaceFile(tempPath.c_str(), _putPath.c_str());
     }
     LOG_DBG("DAV", "PUT END: %u bytes, ok=%d", raw.totalSize, _putOk);
 
@@ -177,6 +171,11 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
 
   LOG_DBG("DAV", "PROPFIND %s depth=%d", path.c_str(), depth);
 
+  if (isProtectedPath(path)) {
+    s.send(403, "text/plain", "Forbidden");
+    return;
+  }
+
   // Check if path exists
   if (!Storage.exists(path.c_str()) && path != "/") {
     s.send(404, "text/plain", "Not Found");
@@ -231,7 +230,7 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       // Skip hidden/protected items
       bool shouldHide = fileName.startsWith(".");
       if (!shouldHide) {
-        for (const auto* item : HIDDEN_ITEMS) {
+        for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
           if (fileName.equals(item)) {
             shouldHide = true;
             break;
@@ -398,12 +397,14 @@ void WebDAVHandler::handlePut(WebServer& s) {
 
   if (!_putOk) {
     String tempPath = path + ".davtmp";
-    Storage.remove(tempPath.c_str());
+    // A failed replace may already have removed the original; the temp is then the only copy.
+    if (!_putExisted || Storage.exists(path.c_str())) Storage.remove(tempPath.c_str());
     s.send(500, "text/plain", "Write failed - incomplete upload or disk full");
     return;
   }
 
   clearBookCache(path.c_str());
+  if (library::isLibraryBookFile(path.c_str())) library::markLibraryIndexDirty();
   s.send(_putExisted ? 204 : 201);
   LOG_DBG("DAV", "PUT complete: %s", path.c_str());
 }
@@ -648,7 +649,10 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   while (srcFile.available()) {
     resetTaskWatchdogIfSubscribed();
     int bytesRead = srcFile.read(buf, sizeof(buf));
-    if (bytesRead <= 0) break;
+    if (bytesRead <= 0) {
+      copyOk = bytesRead == 0;
+      break;
+    }
     size_t written = dstFile.write(buf, bytesRead);
     if (written != (size_t)bytesRead) {
       copyOk = false;
@@ -660,6 +664,8 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   dstFile.close();
 
   if (copyOk) {
+    if (dstExists) clearBookCache(dstPath.c_str());  // the old book's cache does not match the new content
+    if (library::isLibraryBookFile(dstPath.c_str())) library::markLibraryIndexDirty();
     s.send(dstExists ? 204 : 201);
   } else {
     Storage.remove(dstPath.c_str());
@@ -777,6 +783,9 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
 }
 
 bool WebDAVHandler::isProtectedPath(const String& path) const {
+  // Covers the credential stores' 8.3 aliases, which no segment check can map.
+  if (protectedpaths::isSensitivePath(path.c_str())) return true;
+
   // Check every segment of the path, not just the last one.
   // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
   int start = 0;
@@ -788,11 +797,16 @@ bool WebDAVHandler::isProtectedPath(const String& path) const {
     int end = path.indexOf('/', start);
     if (end == -1) end = path.length();
 
-    String segment = path.substring(start, end);
+    // SdFat skips leading spaces and drops trailing dots and spaces when it
+    // opens a name, so check the name it would actually open.
+    int first = start;
+    int last = end;
+    while (first < last && path.charAt(first) == ' ') first++;
+    if (path.charAt(first) == '.') return true;
+    while (last > first && (path.charAt(last - 1) == '.' || path.charAt(last - 1) == ' ')) last--;
+    String segment = path.substring(first, last);
 
-    if (segment.startsWith(".")) return true;
-
-    for (const auto* item : HIDDEN_ITEMS) {
+    for (const auto* item : FsHelpers::HIDDEN_ITEMS) {
       if (segment.equals(item)) return true;
     }
 

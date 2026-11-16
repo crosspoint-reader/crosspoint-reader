@@ -67,13 +67,18 @@ class TtfEpdFont {
   // Returns false if the regular source is missing or unparseable.
   bool load(uint16_t pointSize, bool twoBit = true, size_t glyphCacheBytes = 32 * 1024, uint16_t maxGlyphs = 768);
 
+  // Initialize as a sized variant of an existing (master) font family. Borrows
+  // the master font's sources and FreeType faces (no re-parsing of font files
+  // and no duplicate FT_Face allocations in memory).
+  bool loadVariantOf(TtfEpdFont& master, uint16_t pointSize, bool twoBit = true, size_t glyphCacheBytes = 64 * 1024,
+                     uint16_t maxGlyphs = 512);
+
   EpdFontFamily family() const;
 
-  // Per-scope reset (mirrors SdCardFont::clearCache): drop every face's cached
-  // page glyphs but KEEP the allocations (byte arena + vector capacity), so a
-  // page turn re-faults into buffers already sized to the book and stops touching
-  // the allocator once converged. Driven by FontCacheManager::clearCache() /
-  // PrewarmScope, symmetrically with the SD fonts.
+  // Per-scope reset (mirrors SdCardFont::clearCache): retains resident glyph
+  // data across PrewarmScopes so build() faults only missing glyphs against
+  // f.cps and serves page turns from idle-prewarmed glyphs with zero FreeType
+  // rasterizations. Full release still happens via releaseResidentCaches().
   void clearCache();
 
   // Heap-critical teardown (mirrors SdCardFont::releaseResidentCaches): free
@@ -84,9 +89,11 @@ class TtfEpdFont {
   // transitions (WiFi + web server, image decode, dictionary, sleep).
   void releaseResidentCaches();
 
-  // Optional batch pre-warm of the REGULAR face (other styles fault lazily).
-  bool build(const char* utf8);
-  bool addCoverage(const char* utf8);
+  // Batch pre-warm of a face for a render scope (defaults to regular; styles fault lazily).
+  // Retains existing glyph coverage and accumulates across scopes until capacity is
+  // reached, topping up any earlier codepoints of the page if a flush occurs mid-pass.
+  bool build(const char* utf8, uint8_t style = 0);
+  bool addCoverage(const char* utf8, uint8_t style = 0);
 
  private:
   // A borrowed source file (one per style role that the caller supplies).
@@ -102,18 +109,33 @@ class TtfEpdFont {
 
   struct Face {
     TtfEpdFont* owner = nullptr;
-    freeink::font::FtFont ft;
-    freeink::font::PsramVector<uint8_t> bmp;
-    size_t used = 0;
+    freeink::font::FtFont ftStorage_;
+    freeink::font::FtFont* ft = &ftStorage_;
+    freeink::font::PsramVector<uint8_t> coreBmp;
+    size_t coreUsed = 0;
+    size_t coreCap = 0;
+    uint16_t maxCoreGlyphs = 0;
+    uint16_t coreCount = 0;
+    bool coreFull = false;
+
+    freeink::font::PsramVector<uint8_t> tailBmp;
+    size_t tailUsed = 0;
+    size_t tailCap = 0;
+    uint16_t maxTailGlyphs = 0;
+
     size_t cap = 0;
     uint16_t maxGlyphs = 0;
     bool twoBit = true;
     uint16_t sizePx = 0;
-    uint8_t srcIndex = 0;     // which Source this face initializes from
-    int weight = 400;         // design weight requested (wght axis / faux bold)
-    bool wantItalic = false;  // request italic from the source (axis or oblique)
-    bool inited = false;      // init attempted (lazy)
-    bool ready = false;       // FreeType face live
+    uint8_t srcIndex = 0;           // which Source this face initializes from
+    int weight = 400;               // design weight requested (wght axis / faux bold)
+    bool wantItalic = false;        // request italic from the source (axis or oblique)
+    bool inited = false;            // init attempted (lazy)
+    bool ready = false;             // FreeType face live
+    bool miniMetadataOnly = false;  // bitmap allocation failed: advance-only glyph inserted
+    bool flushed = false;           // flushFace() or trimTail() ran during the current pass
+    bool faultFailed = false;       // face init or table grow failed (no corrupt glyph inserted)
+    uint8_t initFailures = 0;       // consecutive failed initFace attempts
     // GSUB 'liga' resolution (fi fl ff ffi ffl), resolved once at initFace():
     // ligGid[i] is the raw glyph ID for U+FB00+i (0 = none), and ligPairs is
     // the EpdFont pair table (sorted by key) that routes applyLigatures() to
@@ -144,13 +166,33 @@ class TtfEpdFont {
   void initFace(Face& f);          // lazy: create the FT face on first use
   void setupFace(Face& f);         // wire data handlers + metrics
   void resolveLigatures(Face& f);  // query GSUB once, build ligGid/ligPairs
-  const EpdGlyph* faultGlyph(Face& f, uint32_t codepoint);
+  const EpdGlyph* faultGlyph(Face& f, uint32_t codepoint, bool allowFlush = true);
   int8_t faultKern(Face& f, uint32_t leftCp, uint32_t rightCp);
   static void flushFace(Face& f);
+  static void trimTail(Face& f);
 
-  Source sources_[4];      // indexed by Style role
-  Face faces_[4];          // 0=regular 1=bold 2=italic 3=bold-italic
-  uint32_t size26_6_ = 0;  // exact 26.6 ppem (pt @150DPI), no whole-pixel rounding
+  struct FaceLock {
+    FaceLock(TtfEpdFont* font, const size_t idx) : font_(font), idx_(idx) {
+      while (font_ && font_->master_) font_ = font_->master_;
+      if (font_ && idx_ < 4) font_->faceLocks_[idx_]++;
+    }
+    ~FaceLock() {
+      if (font_ && idx_ < 4 && font_->faceLocks_[idx_] > 0) font_->faceLocks_[idx_]--;
+    }
+    FaceLock(const FaceLock&) = delete;
+    FaceLock& operator=(const FaceLock&) = delete;
+
+   private:
+    TtfEpdFont* font_;
+    size_t idx_;
+  };
+
+  Source sources_[4];                    // indexed by Style role
+  Face faces_[4];                        // 0=regular 1=bold 2=italic 3=bold-italic
+  TtfEpdFont* master_ = nullptr;         // if non-null, this is a variant borrowing master's FT faces
+  uint8_t faceLocks_[4] = {0, 0, 0, 0};  // face in use by glyph fault (prevents FT_Face deinit)
+  uint32_t size26_6_ = 0;                // exact 26.6 ppem (pt @150DPI), no whole-pixel rounding
+  uint16_t pointSize_ = 0;
   bool loaded_ = false;
   // Set while a glyph fault runs MemoryManager::ensureFree(): the eviction
   // sink calls releaseResidentCaches() on every TTF font, and tearing down

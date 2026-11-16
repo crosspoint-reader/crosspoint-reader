@@ -5,6 +5,7 @@
 
 #include <array>
 #include <climits>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <string>
@@ -34,6 +35,10 @@ class ChapterHtmlSlimParser {
   int skipUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
+  // Depth of the open h1-h6, INT_MAX outside one. Blocks started inside it are not
+  // hyphenated: a title split across lines mid-word reads badly.
+  int headingDepth = INT_MAX;
+  bool blockHyphenationEnabled() const { return hyphenationEnabled && headingDepth == INT_MAX; }
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
@@ -195,9 +200,11 @@ class ChapterHtmlSlimParser {
   };
   std::vector<ListContext> listStack;
 
-  // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
+  // Anchor-to-page mapping: tracks which page each HTML id attribute lands on. A deque grows in
+  // small chunks, so a long chapter never needs one large free block (a vector doubling past 512
+  // anchors needs ~28 KB contiguous, and a failed allocation aborts).
   int completedPageCount = 0;
-  std::vector<std::pair<std::string, uint16_t>> anchorData;
+  std::deque<std::pair<std::string, uint16_t>> anchorData;
   std::string pendingAnchorId;          // deferred until after previous text block is flushed
   std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
   uint16_t xpathParagraphIndex = 0;
@@ -244,6 +251,7 @@ class ChapterHtmlSlimParser {
   void completeCurrentPage();
   void emitCurrentPage();
   void noteContent(int top, int bottom);
+  int lastLineGlyphBottom() const;
   void openBoxScope(BlockStyle& ownStyle, const CssStyle& cssStyle);
   void closeBoxScope();
   void emitBoxSegment(const BoxScope& box, bool closing);
@@ -339,7 +347,7 @@ class ChapterHtmlSlimParser {
   void requestStop();
 
   void addLineToPage(std::unique_ptr<TextBlock> line, uint32_t visibleOffset);
-  const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
+  const std::deque<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 
   // Byte progress of the in-flight parse, used to estimate a still-building section's total page
   // count (a giant single-spine book never fully lays out, so its real count is unknown). Valid

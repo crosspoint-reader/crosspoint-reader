@@ -119,6 +119,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   const std::string startOrigin = freeink::fetchOrigin(url);
   int status = 0;
   bool sinkStopped = false;
+  if (options.wwwAuthenticateOut) options.wwwAuthenticateOut->clear();
   for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
     freeink::SecureHttpClient http;
     if (!http.begin(current)) {
@@ -151,6 +152,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
       }
       return true;
     });
+    if (options.wwwAuthenticateOut) *options.wwwAuthenticateOut = http.getCombinedHeader("www-authenticate");
     if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
       const std::string location = http.getHeader("location");
       if (location.empty() || !freeink::SecureHttpClient::resolveUrl(current, location, current)) break;

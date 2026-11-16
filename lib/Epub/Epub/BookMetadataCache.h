@@ -71,14 +71,14 @@ class BookMetadataCache {
   mutable uint32_t window[SIZE_WINDOW] = {};
   bool fillWindow(int first) const;  // caller holds sizeWindowLock
 
-  // Index for fast href→spineIndex lookup (used only for large EPUBs)
+  // Index for fast href→spineIndex lookup. Exists only during a large EPUB's
+  // TOC pass; a bare deque member would hold its first node for every open book.
   struct SpineHrefIndexEntry {
     uint64_t hrefHash;  // FNV-1a 64-bit hash
     uint16_t hrefLen;   // length for collision reduction
     int16_t spineIndex;
   };
-  std::deque<SpineHrefIndexEntry> spineHrefIndex;
-  bool useSpineHrefIndex = false;
+  std::unique_ptr<std::deque<SpineHrefIndexEntry>> spineHrefIndex;
 
   static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 

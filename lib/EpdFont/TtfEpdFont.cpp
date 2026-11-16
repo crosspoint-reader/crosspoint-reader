@@ -105,25 +105,37 @@ void TtfEpdFont::resolveFaces() {
 bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t glyphCacheBytes,
                       const uint16_t maxGlyphs) {
   loaded_ = false;
+  master_ = nullptr;
+  for (uint8_t& lock : faceLocks_) lock = 0;
   if (!sources_[Regular].present) return false;
+  pointSize_ = pointSize;
   // CrossPoint speaks point-size-at-150-DPI (matching the .cpfont converter's
   // FT_Set_Char_Size(size, size, 150, 150)); FreeInkFont speaks pixels. Convert
   // so vector fonts match the on-glyph size and metrics of the bitmap fonts:
   //   ppem = pointSize * 150 / 72, kept in 26.6 so the fractional part survives
   // (glyphs raster and advance at the exact ppem; the per-face sizePx is the
   // rounded form for the integer-pixel Font API).
-  size26_6_ = (static_cast<uint32_t>(pointSize) * 150u * 64u + 36u) / 72u;
+  size26_6_ = (static_cast<uint32_t>(pointSize) * FONT_RASTER_DPI * 64u + 36u) / 72u;
   const uint16_t sizePx = static_cast<uint16_t>((size26_6_ + 32u) >> 6);
   resolveFaces();
   for (int i = 0; i < 4; ++i) {
     Face& f = faces_[i];
     f.owner = this;
+    f.ft = &f.ftStorage_;
     f.twoBit = twoBit;
     f.sizePx = sizePx;
-    f.cap = glyphCacheBytes;
-    f.maxGlyphs = maxGlyphs;
+    // Regular face (style 0) owns the full novel cache budget split into 75% core / 25% tail;
+    // styled variants (bold/italic) only hold occasional emphasis words, capped at 64KB/512 glyphs
+    // with tail-only eviction.
+    f.cap = (i == 0) ? glyphCacheBytes : std::min<size_t>(glyphCacheBytes, 64 * 1024);
+    f.maxGlyphs = (i == 0) ? maxGlyphs : std::min<uint16_t>(maxGlyphs, 512);
+    f.coreCap = (i == 0) ? (f.cap * 3) / 4 : 0;
+    f.tailCap = f.cap - f.coreCap;
+    f.maxCoreGlyphs = (i == 0) ? (f.maxGlyphs * 3) / 4 : 0;
+    f.maxTailGlyphs = f.maxGlyphs - f.maxCoreGlyphs;
     f.inited = false;
     f.ready = false;
+    f.initFailures = 0;
     // Flush the glyph/kern caches, not just the arena cursor: faultGlyph
     // consults the lookup tables before anything else, so entries rasterized
     // at a previous size would serve stale metrics — and their bitmaps get
@@ -139,17 +151,98 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
   return true;
 }
 
+bool TtfEpdFont::loadVariantOf(TtfEpdFont& master, const uint16_t pointSize, const bool twoBit,
+                               const size_t glyphCacheBytes, const uint16_t maxGlyphs) {
+  loaded_ = false;
+  TtfEpdFont* root = &master;
+  while (root->master_) root = root->master_;
+  if (!root->loaded_) return false;
+  master_ = root;
+  for (uint8_t& lock : faceLocks_) lock = 0;
+  pointSize_ = pointSize;
+  size26_6_ = (static_cast<uint32_t>(pointSize) * FONT_RASTER_DPI * 64u + 36u) / 72u;
+  const uint16_t sizePx = static_cast<uint16_t>((size26_6_ + 32u) >> 6);
+  for (int i = 0; i < 4; ++i) {
+    Face& f = faces_[i];
+    const Face& mf = root->faces_[i];
+    f.owner = this;
+    f.ft = mf.ft;
+    f.srcIndex = mf.srcIndex;
+    f.weight = mf.weight;
+    f.wantItalic = mf.wantItalic;
+    f.twoBit = twoBit;
+    f.sizePx = sizePx;
+    // Variants only use the tail buffer (no core retention)
+    f.cap = (i == 0) ? glyphCacheBytes : std::min<size_t>(glyphCacheBytes, 64 * 1024);
+    f.maxGlyphs = (i == 0) ? maxGlyphs : std::min<uint16_t>(maxGlyphs, 512);
+    f.coreCap = 0;
+    f.maxCoreGlyphs = 0;
+    f.tailCap = f.cap;
+    f.maxTailGlyphs = f.maxGlyphs;
+    f.inited = false;
+    f.ready = false;
+    f.initFailures = 0;
+    flushFace(f);
+    f.ligPairCount = 0;
+    for (uint32_t& g : f.ligGid) g = 0;
+  }
+  initFace(faces_[0]);
+  if (!faces_[0].ready) return false;
+  for (int i = 1; i < 4; ++i) setupFace(faces_[i]);
+  loaded_ = true;
+  return true;
+}
+
 void TtfEpdFont::initFace(Face& f) {
-  if (f.inited) return;
-  f.inited = true;
+  if (master_) {
+    const size_t idx = static_cast<size_t>(&f - faces_);
+    Face& mf = master_->faces_[idx];
+    if (f.inited && f.ready && mf.ready) return;
+    if (f.initFailures >= 2) return;
+    if (!mf.ready) master_->initFace(mf);
+    f.ready = mf.ready;
+    f.inited = mf.inited;
+    if (!f.ready) {
+      f.initFailures++;
+      return;
+    }
+    f.initFailures = 0;
+    f.ligPairCount = mf.ligPairCount;
+    for (int i = 0; i < 5; ++i) {
+      f.ligGid[i] = mf.ligGid[i];
+      f.ligPairs[i] = mf.ligPairs[i];
+    }
+    setupFace(f);
+    return;
+  }
+  if (f.inited && f.ready) return;
+  if (f.initFailures >= 2) return;
   const Source& s = sources_[f.srcIndex];
   if (!s.present) {
     f.ready = false;
-  } else if (s.streamed) {
-    f.ready = f.ft.initStream(s.read, s.ctx, s.fileSize, f.sizePx, f.weight, f.wantItalic);
-  } else {
-    f.ready = f.ft.init(s.data, s.len, f.sizePx, f.weight, f.wantItalic);
+    f.inited = true;
+    return;
   }
+  const auto tryInit = [&]() {
+    return s.streamed ? f.ft->initStream(s.read, s.ctx, s.fileSize, f.sizePx, f.weight, f.wantItalic)
+                      : f.ft->init(s.data, s.len, f.sizePx, f.weight, f.wantItalic);
+  };
+  f.ready = tryInit();
+  if (!f.ready) {
+    evictionLocked_ = true;
+    freeink::MemoryManager::instance().ensureFree(16 * 1024);
+    evictionLocked_ = false;
+    f.ready = tryInit();
+  }
+  if (!f.ready) {
+    // Transient failure under heap pressure; leave f.inited false so a later fault can retry,
+    // but bound retries so a persistent failure doesn't thrash ensureFree on every glyph.
+    f.inited = false;
+    f.initFailures++;
+    return;
+  }
+  f.initFailures = 0;
+  f.inited = true;
   if (f.ready) {
     // Full auto-hinting + stem darkening pair with the BW-aware quantizer in
     // faultGlyph: the 50% ink threshold needs stems snapped to full-coverage
@@ -163,18 +256,23 @@ void TtfEpdFont::initFace(Face& f) {
     freeink::font::FtFont::RenderOptions ro;
     ro.hinting = freeink::font::FtFont::HintingMode::Auto;
     ro.stemDarkening = true;
-    if (!f.ft.setRenderOptions(ro)) {
+    if (!f.ft->setRenderOptions(ro)) {
       LOG_ERR("TTF", "Auto hinting unavailable (FREEINK_FONT_ENABLE_AUTOHINT not compiled)");
     }
-    // GPOS kerning for RESIDENT faces only (they borrow a view into the font
-    // bytes — free). Unlike GSUB, GPOS must stay resident for render-time
-    // pair queries, and a STREAMED face would need an owned DRAM copy exactly
-    // when the C3 is poorest (a font big enough to stream, i.e. CJK, where
-    // Latin pair kerning barely matters). Budget 0 = streamed faces skip it.
-    f.ft.setGposByteBudget(0);
+    // GPOS kerning: modern variable fonts (e.g. Merriweather VF) ship pair kerning
+    // exclusively in GPOS. Memory-backed (resident) faces borrow a zero-copy view.
+    // For streamed faces on PSRAM-equipped boards, allow FtFont to fetch and own
+    // only the exact GPOS table (allocated via fiFontMalloc into PSRAM), keeping it
+    // bounded (256 KB) so multi-megabyte CJK GPOS tables won't allocate.
+    // On boards without PSRAM (C3), keep budget 0 to protect tight DRAM.
+#if defined(BOARD_HAS_PSRAM)
+    f.ft->setGposByteBudget(256 * 1024);
+#else
+    f.ft->setGposByteBudget(0);
+#endif
     resolveLigatures(f);
   }
-  // Caches are NOT pre-reserved: the byte arena (f.bmp) and the glyph tables
+  // Caches are NOT pre-reserved: the byte arenas (f.coreBmp / f.tailBmp) and the glyph tables
   // grow on demand in faultGlyph and converge on the book's page needs (see the
   // header's memory note). f.cap is only the hard ceiling that triggers a flush.
   setupFace(f);
@@ -186,15 +284,15 @@ void TtfEpdFont::resolveLigatures(Face& f) {
   // never keeps its (budgeted) table copy resident.
   static constexpr uint32_t kComps[5][3] = {
       {'f', 'f', 0}, {'f', 'i', 0}, {'f', 'l', 0}, {'f', 'f', 'i'}, {'f', 'f', 'l'}};
-  f.ft.setGsubByteBudget(48 * 1024);  // C3 DRAM discipline: oversized GSUB → no ligatures, not OOM
-  for (int i = 0; i < 5; ++i) f.ligGid[i] = f.ft.ligatureGlyphId(kComps[i], kComps[i][2] ? 3 : 2);
-  f.ft.releaseLigatureTable();
+  f.ft->setGsubByteBudget(48 * 1024);  // C3 DRAM discipline: oversized GSUB → no ligatures, not OOM
+  for (int i = 0; i < 5; ++i) f.ligGid[i] = f.ft->ligatureGlyphId(kComps[i], kComps[i][2] ? 3 : 2);
+  f.ft->releaseLigatureTable();
 
   // Pair table for EpdFont::applyLigatures(), keyed on the U+FB00–FB04
   // presentation codepoints. A ligature is usable if GSUB named a glyph or the
   // cmap maps the presentation codepoint directly. Entries are appended in
   // ascending key order (the ff/fi/fl keys sort below the FB00-chained ones).
-  auto avail = [&f](const int i) { return f.ligGid[i] != 0 || f.ft.hasGlyph(0xFB00u + i); };
+  auto avail = [&f](const int i) { return f.ligGid[i] != 0 || f.ft->hasGlyph(0xFB00u + i); };
   f.ligPairCount = 0;
   auto add = [&f](const uint32_t left, const uint32_t right, const uint32_t out) {
     f.ligPairs[f.ligPairCount++] = EpdLigaturePair{(left << 16) | right, out};
@@ -211,7 +309,7 @@ void TtfEpdFont::resolveLigatures(Face& f) {
 void TtfEpdFont::setupFace(Face& f) {
   // Metrics from this face once live, else borrow the (always-live) regular
   // face's — same font/size, so a fine placeholder until this face is faulted.
-  freeink::font::FtFont& src = f.ready ? f.ft : faces_[0].ft;
+  freeink::font::FtFont& src = f.ready ? *f.ft : *faces_[0].ft;
   // Fractional-ppem line metrics, rounded once here rather than per-call.
   freeink::font::FtFont::LineMetrics lm;
   int ascent, lineHeight;
@@ -245,15 +343,43 @@ void TtfEpdFont::flushFace(Face& f) {
   f.slot.clear();
   f.kernKeys.clear();
   f.kernVals.clear();
-  f.used = 0;
+  f.coreUsed = 0;
+  f.tailUsed = 0;
+  f.coreCount = 0;
+  f.coreFull = false;
+  f.miniMetadataOnly = false;
+  f.faultFailed = false;
+  f.flushed = true;
+}
+
+void TtfEpdFont::trimTail(Face& f) {
+  if (f.miniMetadataOnly || f.tailCap == 0) {
+    flushFace(f);
+    return;
+  }
+  size_t w = 0;
+  for (size_t r = 0; r < f.cps.size(); ++r) {
+    if (f.slot[r] < f.coreCount) {
+      f.cps[w] = f.cps[r];
+      f.slot[w] = f.slot[r];
+      ++w;
+    }
+  }
+  f.cps.resize(w);
+  f.slot.resize(w);
+  f.glyphs.resize(f.coreCount);
+  f.tailUsed = 0;
+  f.flushed = true;
 }
 
 void TtfEpdFont::clearCache() {
-  // Drop cached page glyphs on every inited face but keep the allocations: the
-  // vectors keep capacity (clear() does not free) and f.bmp keeps its buffer, so
-  // the next prewarm re-faults into buffers already sized to the book.
+  // Retain resident glyph data across PrewarmScopes (mirrors SdCardFont::resetStyleMiniData):
+  // build() faults only missing codepoints against f.cps, which lets the idle
+  // prewarm of page N+1 serve the actual page turn with zero FreeType rasterizations.
+  // Full cache release still happens on memory pressure via releaseResidentCaches().
+  // If an allocation failure left incomplete glyphs (miniMetadataOnly), flush so next pass retries.
   for (Face& f : faces_) {
-    if (f.inited) flushFace(f);
+    if (f.inited && f.miniMetadataOnly) flushFace(f);
   }
 }
 
@@ -261,10 +387,12 @@ void TtfEpdFont::releaseResidentCaches() {
   if (evictionLocked_) return;  // mid-fault: this font's faces are live
   for (int i = 0; i < 4; ++i) {
     Face& f = faces_[i];
+    f.initFailures = 0;
     // Actually RELEASE the caches (swap-with-empty frees capacity; clear() alone
     // would not).
     flushFace(f);
-    freeink::font::PsramVector<uint8_t>().swap(f.bmp);
+    freeink::font::PsramVector<uint8_t>().swap(f.coreBmp);
+    freeink::font::PsramVector<uint8_t>().swap(f.tailBmp);
     freeink::font::PsramVector<EpdGlyph>().swap(f.glyphs);
     freeink::font::PsramVector<uint32_t>().swap(f.cps);
     freeink::font::PsramVector<uint16_t>().swap(f.slot);
@@ -275,17 +403,26 @@ void TtfEpdFont::releaseResidentCaches() {
     // Shed the lazy bold/italic/bold-italic faces entirely; they re-init on the
     // next glyph fault for that style.
     if (i == 0) continue;
+    if (master_) {
+      f.inited = false;
+      f.ready = false;
+      continue;
+    }
+    if (faceLocks_[i] > 0) continue;
     if (f.inited) {
-      f.ft.deinit();
+      f.ft->deinit();
       f.inited = false;
       f.ready = false;
     }
   }
 }
 
-const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
-  if (!f.inited) initFace(f);
-  if (!f.ready) return nullptr;
+const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool allowFlush) {
+  if (!f.inited || (master_ && !master_->faces_[&f - faces_].ready)) initFace(f);
+  if (!f.ready) {
+    f.faultFailed = true;
+    return nullptr;
+  }
   {
     const auto it = std::lower_bound(f.cps.begin(), f.cps.end(), cp);
     if (it != f.cps.end() && *it == cp) return &f.glyphs[f.slot[static_cast<size_t>(it - f.cps.begin())]];
@@ -293,25 +430,58 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
 
   // Resolve to a glyph ID: cmap first, then the GSUB result for the ligature
   // presentation codepoints (whose glyphs commonly have no cmap entry at all).
-  freeink::font::FtFont::GlyphId gid = f.ft.glyphId(cp);
+  freeink::font::FtFont::GlyphId gid = f.ft->glyphId(cp);
   if (gid == 0 && cp >= 0xFB00u && cp <= 0xFB04u) gid = f.ligGid[cp - 0xFB00u];
-  if (gid == 0) return nullptr;
+  if (gid == 0 && cp != REPLACEMENT_GLYPH) return nullptr;
 
-  // Glyph-ID render at the exact fractional ppem. The metrics pass costs a
-  // second glyph load per MISS only (hits come from the cache) and yields the
-  // 26.6 advance, which the 12.4 EpdGlyph.advanceX preserves for the
-  // renderer's differential rounding — GlyphBitmap.advance is whole pixels.
+  const size_t faceIdx = static_cast<size_t>(&f - faces_);
+  FaceLock lock(master_ ? master_ : this, faceIdx);
+
+  // The metrics pass costs a second glyph load per miss, but retains the
+  // fractional advance; GlyphBitmap.advance is whole pixels. Truncate to 12.4
+  // below so only the renderer rounds advance + kerning to whole pixels.
   const uint32_t size26_6 = f.owner->size26_6_;
   freeink::font::FtFont::GlyphMetrics gm;
-  const bool haveMetrics = f.ft.metricsGlyph26_6(gid, size26_6, gm);
-  const freeink::font::GlyphBitmap* g = f.ft.rasterizeGlyph26_6(gid, size26_6);
+  const bool haveMetrics = f.ft->metricsGlyph26_6(gid, size26_6, gm);
+  const freeink::font::GlyphBitmap* g = f.ft->rasterizeGlyph26_6(gid, size26_6);
   uint32_t px = (g && g->pixels) ? static_cast<uint32_t>(g->width) * g->height : 0;
   size_t bytes = px ? (f.twoBit ? (px + 3) / 4 : (px + 7) / 8) : 0;
   if (bytes > f.cap) {
     bytes = 0;
     px = 0;
+    f.miniMetadataOnly = true;
   }
-  if (f.glyphs.size() >= f.maxGlyphs || f.used + bytes > f.cap) flushFace(f);
+  // Determine whether this glyph routes to coreBmp or tailBmp
+  if (!f.coreFull) {
+    if (f.coreCount >= f.maxCoreGlyphs || f.coreUsed + bytes > f.coreCap) {
+      f.coreFull = true;
+    }
+  }
+
+  // Route to tail buffer when core is full, or when this face is tail-only (coreCap == 0)
+  if (f.coreFull || f.coreCap == 0) {
+    // Route to tail buffer: trim tail on overflow (or flush if face has no core)
+    const size_t tailGlyphs = f.glyphs.size() - f.coreCount;
+    if (tailGlyphs >= f.maxTailGlyphs || f.tailUsed + bytes > f.tailCap) {
+      if (!allowFlush) {
+        f.flushed = true;
+        return nullptr;
+      }
+      trimTail(f);
+      if (bytes > f.tailCap) {
+        bytes = 0;
+        px = 0;
+        f.miniMetadataOnly = true;
+      }
+      // If trimTail fell back to flushFace, core was cleared (coreFull = false, coreCount = 0).
+      // Re-evaluate coreFull for the freshly flushed face so isTail routes to core.
+      if (!f.coreFull && (f.coreCount >= f.maxCoreGlyphs || f.coreUsed + bytes > f.coreCap)) {
+        f.coreFull = true;
+      }
+    }
+  }
+
+  const bool isTail = f.coreFull || f.coreCap == 0;
 
   // All growth below is exact and heap-checked (see reserveChecked). On a
   // failed grow, ask the memory manager to evict rebuildable caches (render
@@ -332,25 +502,35 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
   };
   if (!growTables()) {
     evictOthers();
-    if (!growTables()) return nullptr;
-  }
-  if (px && !reserveChecked(f.bmp, f.used + bytes, 4096, f.cap)) {
-    evictOthers();
-    if (!reserveChecked(f.bmp, f.used + bytes, 4096, f.cap)) {
-      bytes = 0;
-      px = 0;
+    if (!growTables()) {
+      f.faultFailed = true;
+      return nullptr;
     }
   }
 
+  auto& bmpVec = isTail ? f.tailBmp : f.coreBmp;
+  size_t& bmpUsed = isTail ? f.tailUsed : f.coreUsed;
+  const size_t bmpCap = isTail ? f.tailCap : f.coreCap;
+
+  if (px && !reserveChecked(bmpVec, bmpUsed + bytes, 4096, bmpCap)) {
+    evictOthers();
+    if (!reserveChecked(bmpVec, bmpUsed + bytes, 4096, bmpCap)) {
+      bytes = 0;
+      px = 0;
+      f.miniMetadataOnly = true;
+    }
+  }
+
+  if (!g || !haveMetrics) f.miniMetadataOnly = true;
   EpdGlyph eg{};
-  const int32_t adv12_4 = haveMetrics ? (gm.advance26_6 + 2) >> 2 : (g ? g->advance << 4 : 0);
+  const int32_t adv12_4 = haveMetrics ? fp4::truncate26_6_to_4(gm.advance26_6) : (g ? g->advance << 4 : 0);
   eg.advanceX = static_cast<uint16_t>(adv12_4 < 0 ? 0 : adv12_4);
   if (px && g && g->pixels) {
     // Grow the byte arena on demand toward the book's page high-water mark.
-    // flush above guarantees f.used + bytes <= f.cap, so this never exceeds the
-    // ceiling; capacity is retained across page turns (clearCache keeps it).
-    if (f.bmp.size() < f.used + bytes) f.bmp.resize(f.used + bytes, 0);
-    uint8_t* dst = f.bmp.data() + f.used;
+    // flush/trim above guarantees bmpUsed + bytes <= bmpCap, so this never exceeds
+    // the ceiling; capacity is retained across page turns (clearCache keeps it).
+    if (bmpVec.size() < bmpUsed + bytes) bmpVec.resize(bmpUsed + bytes, 0);
+    uint8_t* dst = bmpVec.data() + bmpUsed;
     for (size_t i = 0; i < bytes; ++i) dst[i] = 0;
     for (uint32_t i = 0; i < px; ++i) {
       const uint8_t a = g->pixels[i];
@@ -374,15 +554,18 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
     // EpdGlyph.top is positive-above (renderer computes screen Y = cursorY - top,
     // matching the .cpfont converter's top = FreeType bitmap_top). Flip the sign.
     eg.top = static_cast<int16_t>(-g->yoff);
-    eg.dataOffset = static_cast<uint32_t>(f.used);
+    eg.dataOffset = static_cast<uint32_t>(bmpUsed);
     eg.dataLength = static_cast<uint16_t>(bytes);
-    f.used += bytes;
+    bmpUsed += bytes;
   } else {
-    eg.dataOffset = static_cast<uint32_t>(f.used);
+    eg.dataOffset = static_cast<uint32_t>(bmpUsed);
     eg.dataLength = 0;
   }
 
   f.glyphs.push_back(eg);
+  if (!isTail) {
+    f.coreCount++;
+  }
   const uint16_t newIdx = static_cast<uint16_t>(f.glyphs.size() - 1);
   const auto it = std::lower_bound(f.cps.begin(), f.cps.end(), cp);
   const size_t pos = static_cast<size_t>(it - f.cps.begin());
@@ -393,7 +576,7 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
 
 int8_t TtfEpdFont::faultKern(Face& f, const uint32_t leftCp, const uint32_t rightCp) {
   if (leftCp == 0 || rightCp == 0) return 0;
-  if (!f.inited) initFace(f);
+  if (!f.inited || (master_ && !master_->faces_[&f - faces_].ready)) initFace(f);
   if (!f.ready) return 0;
   const uint64_t key = (uint64_t(leftCp) << 32) | rightCp;
   {
@@ -403,7 +586,7 @@ int8_t TtfEpdFont::faultKern(Face& f, const uint32_t leftCp, const uint32_t righ
 
   // 26.6 → 4.4 (round-half-away), clamped to the int8 contract (±8px, far
   // beyond any real kern at reader sizes).
-  const int32_t k26 = f.ft.kerning26_6(leftCp, rightCp, f.owner->size26_6_);
+  const int32_t k26 = f.ft->kerning26_6(leftCp, rightCp, f.owner->size26_6_);
   int32_t k4 = (k26 + (k26 < 0 ? -2 : 2)) / 4;
   if (k4 < -128) k4 = -128;
   if (k4 > 127) k4 = 127;
@@ -439,30 +622,64 @@ int8_t TtfEpdFont::kernThunk(void* ctx, const uint32_t leftCp, const uint32_t ri
 }
 const uint8_t* TtfEpdFont::bitmapThunk(void* ctx, const EpdGlyph* glyph) {
   if (glyph == nullptr || glyph->dataLength == 0) return nullptr;
-  return static_cast<Face*>(ctx)->bmp.data() + glyph->dataOffset;
+  Face* f = static_cast<Face*>(ctx);
+  const EpdGlyph* base = f->glyphs.data();
+  const size_t total = f->glyphs.size();
+  if (base == nullptr || total == 0) return nullptr;
+
+  const auto glyphAddr = reinterpret_cast<uintptr_t>(glyph);
+  const auto baseAddr = reinterpret_cast<uintptr_t>(base);
+  const auto endAddr = baseAddr + total * sizeof(EpdGlyph);
+  if (glyphAddr < baseAddr || glyphAddr >= endAddr) return nullptr;
+
+  if (glyph >= base + f->coreCount) {
+    if (glyph->dataOffset + glyph->dataLength > f->tailBmp.size()) return nullptr;
+    return f->tailBmp.data() + glyph->dataOffset;
+  }
+  if (glyph->dataOffset + glyph->dataLength > f->coreBmp.size()) return nullptr;
+  return f->coreBmp.data() + glyph->dataOffset;
 }
 bool TtfEpdFont::coverageThunk(void* ctx, const uint32_t codepoint) {
   // All styles share one file → coverage comes from the always-live regular face.
   Face& reg = static_cast<Face*>(ctx)->owner->faces_[0];
-  if (reg.ft.hasGlyph(codepoint)) return true;
+  if (reg.ft->hasGlyph(codepoint)) return true;
   // Ligature presentation codepoints resolvable through GSUB despite no cmap
   // entry (some EPUBs carry literal U+FB01/U+FB02 in their text).
   return codepoint >= 0xFB00u && codepoint <= 0xFB04u && reg.ligGid[codepoint - 0xFB00u] != 0;
 }
 
 EpdFontFamily TtfEpdFont::family() const {
-  return EpdFontFamily(&faces_[0].font, &faces_[1].font, &faces_[2].font, &faces_[3].font);
+  return EpdFontFamily(pointSize_, &faces_[0].font, &faces_[1].font, &faces_[2].font, &faces_[3].font);
 }
 
-bool TtfEpdFont::build(const char* utf8) {
-  if (!loaded_) return false;
-  flushFace(faces_[0]);
-  return addCoverage(utf8);
-}
-bool TtfEpdFont::addCoverage(const char* utf8) {
-  if (!loaded_ || utf8 == nullptr) return false;
+bool TtfEpdFont::build(const char* utf8, const uint8_t style) {
+  if (!loaded_ || utf8 == nullptr || style >= 4) return false;
+  Face& f = faces_[style];
+  if (f.miniMetadataOnly) flushFace(f);
+  f.flushed = false;
+  f.faultFailed = false;
   const auto* p = reinterpret_cast<const unsigned char*>(utf8);
-  while (*p != '\0') faultGlyph(faces_[0], utf8NextCodepoint(&p));
+  while (*p != '\0') faultGlyph(f, utf8NextCodepoint(&p), /*allowFlush=*/true);
+  // If faultGlyph() flushed the face mid-pass on capacity exhaustion, a second
+  // pass faults back the earlier codepoints of this page without flushing again.
+  if (f.flushed && !f.miniMetadataOnly && !f.faultFailed) {
+    if (addCoverage(utf8, style)) return true;
+    if (f.miniMetadataOnly || f.faultFailed) return false;
+    flushFace(f);
+    return addCoverage(utf8, style);
+  }
+  return !f.miniMetadataOnly && !f.faultFailed;
+}
+bool TtfEpdFont::addCoverage(const char* utf8, const uint8_t style) {
+  if (!loaded_ || utf8 == nullptr || style >= 4) return false;
+  Face& f = faces_[style];
+  f.flushed = false;
+  f.faultFailed = false;
+  const auto* p = reinterpret_cast<const unsigned char*>(utf8);
+  while (*p != '\0') {
+    faultGlyph(f, utf8NextCodepoint(&p), /*allowFlush=*/false);
+    if (f.flushed || f.miniMetadataOnly || f.faultFailed) return false;
+  }
   return true;
 }
 

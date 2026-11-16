@@ -17,7 +17,12 @@ class DictionaryHtmlPagesTest : public ::testing::Test {
   void SetUp() override {
     ESP = {};
     renderer.sdFont = true;
-    Storage.dictionaryTempPath = (std::filesystem::temp_directory_path() / "crosspoint-dicthtml.tmp").string();
+    // ctest runs each case as its own process; a shared staging file lets a
+    // concurrent case truncate or remove it mid-parse.
+    Storage.dictionaryTempPath = (std::filesystem::temp_directory_path() /
+                                  (std::string("crosspoint-dicthtml-") +
+                                   ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".tmp"))
+                                     .string();
   }
   void TearDown() override {
     std::filesystem::remove(Storage.dictionaryTempPath);

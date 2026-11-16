@@ -30,6 +30,7 @@ constexpr unsigned long CLEAR_HOLD_MS = 700;
 
 void BleSettingsActivity::onEnter() {
   UiListActivity::onEnter();
+  radioVisit = activityManager.visit();
   // A saved opt-in brings the radio up here, so scanning and pairing work at once.
   if (SETTINGS.ble.enabled) bleturner::switchOn();
   refresh();
@@ -37,6 +38,12 @@ void BleSettingsActivity::onEnter() {
 }
 
 void BleSettingsActivity::loop() {
+  // Pushed panels stop the radio; returning here does not call onEnter().
+  const uint32_t currentVisit = activityManager.visit();
+  if (radioVisit != currentVisit) {
+    radioVisit = currentVisit;
+    if (SETTINGS.ble.enabled) bleturner::switchOn();
+  }
   // Holding Confirm on an action clears it (touch: a long press on the row, onRowLongPress).
   if (view == View::Mapping && mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, CLEAR_HOLD_MS)) {
     clearMapping(nav.selected);
@@ -48,6 +55,10 @@ void BleSettingsActivity::loop() {
   if (SETTINGS.ble.enabled && bleturner::service()) SETTINGS.saveToFile();
   if (learnAction != bleturner::Action::None) stepLearning();
   if (signature() == shownSignature) return;  // an e-ink repaint only when something changed
+  // A scan finds devices one at a time, and each fast repaint drives the
+  // screen's black pixels again; status repaints come at most every 5 s.
+  if (millis() - lastStatusRepaintMs < 5000) return;
+  lastStatusRepaintMs = millis();
   refresh();
   requestUpdate();
 }

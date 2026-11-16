@@ -8,12 +8,13 @@ extern "C" {
 #undef otherwise
 
 #include <Logging.h>
+#include <Memory.h>
 #include <Utf8.h>
 
 #include <cstring>
 #include <mutex>
 
-// Guards the static bidi_char buffers in applyBidiVisual() and
+// Guards the shared workspace in applyBidiVisual() and
 // computeVisualWordOrder().  The bidi+shaping pipeline is not reentrant;
 // this mutex serialises access so multi-core callers don't corrupt each
 // other's intermediate state.
@@ -34,11 +35,24 @@ bool isNaturalDirectionClass(const uchar cls) {
   }
 }
 
-// Visual-reorder scratch shared by applyBidiVisual() and
-// computeVisualWordOrder(). Neither function calls the other, and bidiMutex
-// already serialises both, so a single buffer serves both instead of a
-// per-function static — saving ~1.5 KB of always-resident RAM.
-bidi_char sharedBidiLine[BIDI_MAX_LINE];
+struct BidiWorkspace {
+  bidi_char line[BIDI_MAX_LINE];
+  bidi_char shaped[BIDI_MAX_LINE];
+};
+
+// Retained after first use to avoid allocation churn on every RTL token.
+std::unique_ptr<BidiWorkspace> bidiWorkspace;
+
+// Caller holds bidiMutex, including during allocation and subsequent use.
+BidiWorkspace* getWorkspace() {
+  if (!bidiWorkspace) {
+    bidiWorkspace = makeUniqueNoThrow<BidiWorkspace>();
+    if (!bidiWorkspace) {
+      LOG_ERR("BIDI", "Failed to allocate %zu-byte workspace", sizeof(BidiWorkspace));
+    }
+  }
+  return bidiWorkspace.get();
+}
 
 }  // namespace
 
@@ -95,8 +109,10 @@ bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
   if (!utf8 || !*utf8) return false;
   const std::lock_guard<std::mutex> lock(bidiMutex);
 
-  bidi_char* const line = sharedBidiLine;
-  static bidi_char shaped[BIDI_MAX_LINE];
+  auto* const workspace = getWorkspace();
+  if (!workspace) return false;
+  bidi_char* const line = workspace->line;
+  bidi_char* const shaped = workspace->shaped;
   int count = 0;
   int lastBase = -1;           // last non-formatter character (mintty's ibase)
   uint8_t pendingJoiners = 0;  // ZWJ/ZWNJ seen since lastBase
@@ -191,7 +207,9 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
   if (nWords <= 1 || nWords > BIDI_MAX_LINE) return false;
   const std::lock_guard<std::mutex> lock(bidiMutex);
 
-  bidi_char* const line = sharedBidiLine;
+  auto* const workspace = getWorkspace();
+  if (!workspace) return false;
+  bidi_char* const line = workspace->line;
   int count = 0;
   bool truncated = false;
 
