@@ -2186,9 +2186,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // Paper Mono only (no other panel combines): defer the B/W base activation so
   // the gray planes join it in a single waveform. Displaying the base
   // separately makes the gray pass re-drive the whole text body — a visible
-  // flash on every AA page.
-  const bool combinedGrayscaleBase =
-      tiledGrayscale && !pageHasImages && grayscale.base == HalDisplay::GrayscaleBase::Combined;
+  // flash on every AA page. The EEGO A4 combines image pages too: its driver
+  // then shows base and grays itself instead of repainting a displayed base.
+  const bool combinedGrayscaleBase = tiledGrayscale && (!pageHasImages || BoardConfig::isEegoA4()) &&
+                                     grayscale.base == HalDisplay::GrayscaleBase::Combined;
   const bool overlapRefresh = tiledGrayscale && grayscale.asyncBase && !pageHasImages;
   auto renderGrayscalePass = [&]() {
     // A4 gray planes replace the full page, including its clipping highlights.
@@ -2223,7 +2224,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     }
     LOG_DBG("ERS", "Image page: absolute grayscale waveform");
     pagesUntilFullRefresh = 1;
-  } else if (pageHasImages) {
+  } else if (pageHasImages && !combinedGrayscaleBase) {
     // Image pages use one base refresh before the grayscale pass. FAST leaves
     // the panel receptive to the gray waveform; pending cleanup still honors
     // the scheduled/manual HALF refresh.

@@ -690,6 +690,17 @@ void setup() {
         Storage.prepareForDeepSleep();
         powerManager.startDeepSleep(gpio);
       }
+      // EEGO A4: unless a click is set to wake (Sleep above), the button must
+      // stay held until 400 ms after boot.
+      if (BoardConfig::isEegoA4() && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP) {
+        constexpr unsigned long EEGO_WAKE_HOLD_MS = 400;
+        while (millis() < EEGO_WAKE_HOLD_MS && gpio.isPowerButtonPhysicallyPressed()) delay(5);
+        if (!gpio.isPowerButtonPhysicallyPressed()) {
+          LOG_DBG("MAIN", "Power-button wake released before %lu ms, sleeping", EEGO_WAKE_HOLD_MS);
+          Storage.prepareForDeepSleep();
+          powerManager.startDeepSleep(gpio);
+        }
+      }
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // Most devices return to sleep after a USB-powered cold boot.
