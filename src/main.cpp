@@ -727,6 +727,10 @@ void setup() {
                                   ? gpio.isToggleSwitchOn()
                                   : (SETTINGS.frontlightOn != 0 && SETTINGS.frontlightRestoreOnWake != 0);
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
+  // No light to toggle: drop the action so single clicks do not wait for a double click.
+  if (!Frontlight.present() && SETTINGS.doublePwrBtn == CrossPointSettings::PWR_FRONTLIGHT) {
+    SETTINGS.doublePwrBtn = CrossPointSettings::IGNORE;
+  }
 
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
@@ -970,7 +974,8 @@ void loop() {
     enterDeepSleep();
     return;
   }
-  const bool x4ProDoubleClickEnabled = BoardConfig::isX4Pro() && SETTINGS.doublePwrBtn != CrossPointSettings::IGNORE;
+  const bool powerDoubleClickEnabled =
+      CrossPointSettings::hasPowerDoubleClick() && SETTINGS.doublePwrBtn != CrossPointSettings::IGNORE;
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
@@ -980,14 +985,14 @@ void loop() {
     return;
   }
 
-  // On X4 Pro with SLEEP, a press still within the click window is a
+  // With a double-click action and SLEEP, a press still within the click window is a
   // double-click candidate — let it be released and evaluated above instead
   // of sleeping on button-down.
-  const bool x4ProAwaitingClickWindow = x4ProDoubleClickEnabled &&
-                                        SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP &&
-                                        gpio.getPowerButtonHeldTime() <= PowerButtonClickInput::MAX_CLICK_HOLD_MS;
+  const bool awaitingClickWindow = powerDoubleClickEnabled &&
+                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP &&
+                                   gpio.getPowerButtonHeldTime() <= PowerButtonClickInput::MAX_CLICK_HOLD_MS;
 
-  if (!x4ProAwaitingClickWindow && millis() >= allowSleepAt && mappedInputManager.powerSleepRequested()) {
+  if (!awaitingClickWindow && millis() >= allowSleepAt && mappedInputManager.powerSleepRequested()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;

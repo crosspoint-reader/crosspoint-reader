@@ -56,7 +56,7 @@ bool showOnDevice(const SettingInfo& setting) {
   if (setting.category == StrId::STR_CAT_READER && setting.inTextSettings) return false;
   if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
       SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
-      !(BoardConfig::isX4Pro() && SETTINGS.doublePwrBtn == CrossPointSettings::FOOTNOTES)) {
+      !(CrossPointSettings::hasPowerDoubleClick() && SETTINGS.doublePwrBtn == CrossPointSettings::FOOTNOTES)) {
     return false;
   }
   return true;

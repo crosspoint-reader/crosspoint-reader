@@ -2175,7 +2175,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   forcedRefreshPending = false;
   const bool cleanImageBasePending = manualRefreshPending || pagesUntilFullRefresh <= 1;
   const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
-  const bool needsAnyGrayscale = needsTextGrayscale || (pageHasImages && !BoardConfig::isEegoA4());
+  const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
   const bool absoluteImageGrayscale =
       pageHasImages && !gpio.deviceIsX3() &&
       (display.getController() == HalDisplay::Controller::UC8279 || BoardConfig::isPicco()) &&
@@ -2472,6 +2472,8 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
   const auto fillHighlight = [&](const int x, const int y, const int width, const int height) {
     if (BoardConfig::isEegoA4() && renderer.getRenderMode() != GfxRenderer::BW) {
       // Gray planes start at zero and use set bits for ink, opposite to B/W.
+      // MSB plane only: light gray.
+      if (renderer.getRenderMode() != GfxRenderer::GRAYSCALE_MSB) return;
       for (int py = y + (y & 1); py < y + height; py += 2) {
         for (int px = x + (x & 1); px < x + width; px += 2) renderer.drawPixel(px, py, false);
       }
