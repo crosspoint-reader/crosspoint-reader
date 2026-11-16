@@ -399,7 +399,7 @@ On devices with a Reset button, press and release Reset, then quickly hold Power
 
 On devices with Reset and Back buttons, hold the configured Back button and Power after pressing Reset to bypass a book that repeatedly crashes. This starts at Home so you can avoid reopening the book.
 
-If one book causes problems, try Delete Book Cache from its reader menu. If you cannot open it, back up the SD card and leave the `epub_*` folders under `.crosspoint/` in place. Their names are hashes of book paths, so identifying the affected folder is difficult. Removing the wrong folder can delete saved reading progress.
+If one book causes problems, try Delete Book Cache from its reader menu. If you cannot open it, back up the SD card first, then use Settings → Reader → Clear Reading Cache. This clears caches for other books too and can remove saved reading progress. Do not manually remove unidentified `epub_*` folders under `.crosspoint/`. Their names are hashes of book paths, so identifying the affected folder is difficult. Removing the wrong folder can delete saved reading progress.
 
 Do not delete the whole `.crosspoint` folder as a first step. It also contains settings, bookmarks, and clippings. Back it up before changing or removing its contents. Removing `settings.json` resets preferences, and removing `state.json` resets saved startup state.
 

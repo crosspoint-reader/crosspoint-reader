@@ -60,12 +60,13 @@ Use this if you already sync KOReader devices against the official public server
 USERNAME="user"
 PASSWORD="$(python3 -c 'import getpass; print(getpass.getpass("Sync password: "))')"
 PASSWORD_MD5="$(printf '%s' "$PASSWORD" | openssl md5 | awk '{print $2}')"
-REQUEST_BODY="$(python3 -c 'import json, sys; print(json.dumps({"username": sys.argv[1], "password": sys.argv[2]}))' "$USERNAME" "$PASSWORD_MD5")"
 
-curl -i "https://sync.koreader.rocks/users/create" \
+printf '%s' "$PASSWORD_MD5" |
+  python3 -c 'import json, sys; print(json.dumps({"username": sys.argv[1], "password": sys.stdin.read()}))' "$USERNAME" |
+  curl -i "https://sync.koreader.rocks/users/create" \
   -H "Accept: application/vnd.koreader.v1+json" \
   -H "Content-Type: application/json" \
-  --data "$REQUEST_BODY"
+  --data-binary @-
 ```
 
 When this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, pick a different username or use that existing account.
@@ -111,25 +112,35 @@ curl -H "Accept: application/vnd.koreader.v1+json" "http://<server-ip>:17200/hea
 # Expected: {"state":"OK"}
 ```
 
-3. Register a user once.
-   CrossPoint authenticates against KOReader Sync (`koreader/kosync`) using an MD5 key, so register using the MD5 of your password:
+3. Set up HTTPS, then register your account once with the commands below.
+   They convert your password to the MD5 key that the server needs.
 
 > [!WARNING]
 > Sending a reusable MD5-derived password over plain HTTP is insecure.
 > Create unique sync-only credentials and do not reuse main account passwords.
-> Prefer `https://<server-ip>:7200` whenever traffic leaves a fully trusted LAN or when using untrusted networks.
+> Use HTTPS whenever traffic leaves a fully trusted LAN or uses an untrusted network.
+> The server's HTTPS listener on port `7200` uses a self-signed certificate by default.
 > Use `curl -k` only for self-signed certificate testing.
 
+Before registering, set up a trusted HTTPS address such as `https://sync.example.com`.
+Use a reverse proxy, which accepts HTTPS connections and passes them to your sync server.
+Configure it with a trusted certificate for your hostname and forward requests to the server's port `17200`.
+Keep that connection on localhost or a private, trusted network.
+See the [server setup instructions](https://github.com/koreader/koreader-sync-server#setup-your-own-server) for configuration details.
+Replace `https://sync.example.com` below with your HTTPS address, then use the same address on every device.
+
 ```bash
+SYNC_URL="https://sync.example.com"
 USERNAME="user"
 PASSWORD="$(python3 -c 'import getpass; print(getpass.getpass("Sync password: "))')"
 PASSWORD_MD5="$(printf '%s' "$PASSWORD" | openssl md5 | awk '{print $2}')"
-REQUEST_BODY="$(python3 -c 'import json, sys; print(json.dumps({"username": sys.argv[1], "password": sys.argv[2]}))' "$USERNAME" "$PASSWORD_MD5")"
 
-curl -i "http://<server-ip>:17200/users/create" \
+printf '%s' "$PASSWORD_MD5" |
+  python3 -c 'import json, sys; print(json.dumps({"username": sys.argv[1], "password": sys.stdin.read()}))' "$USERNAME" |
+  curl -i "$SYNC_URL/users/create" \
   -H "Accept: application/vnd.koreader.v1+json" \
   -H "Content-Type: application/json" \
-  --data "$REQUEST_BODY"
+  --data-binary @-
 ```
 
 If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, the account already exists.
@@ -140,13 +151,11 @@ If this returns `HTTP 402` with `{"code":2002,"message":"Username is already reg
 
    - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
 
-   - Set **Sync Server URL** to `http://<server-ip>:17200`.
+   - Set **Sync Server URL** to the same trusted HTTPS address used for registration, such as `https://sync.example.com`.
 
    - Set **Server Type** to **KoSync**.
 
    - Run **Authenticate**.
-
-If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only for self-signed certificate testing).
 
 ## Syncing While Reading
 
