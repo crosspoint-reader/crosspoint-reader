@@ -4,7 +4,7 @@
 
 #include "activities/UiListActivity.h"
 
-enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, USB_DRIVE, OPDS_BROWSER };
+enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, USB_DRIVE, OPDS_BROWSER, LOCAL_SEND };
 
 /**
  * NetworkModeSelectionActivity presents the user with a choice:
@@ -14,6 +14,7 @@ enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, USB_DRIV
  * - "OPDS Browser" - Browse OPDS catalogs, or add a server when none is configured.
  *   Hidden while Home shows it (plugins off and a server configured).
  * - "USB Drive" - Expose the SD card over USB (boards with USB mass storage)
+ * - "Local Send" - Receive files from nearby devices (when the SD plugin is available)
  *
  * The onModeSelected callback is called with the user's choice.
  * The onCancel callback is called if the user presses back.
@@ -25,9 +26,14 @@ class NetworkModeSelectionActivity final : public UiListActivity {
   explicit NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
 
 #if FREEINK_CAP_USB_MSC
-  static constexpr int MAX_ITEM_COUNT = 5;
+  static constexpr int BASE_MENU_ITEM_COUNT = 5;
 #else
-  static constexpr int MAX_ITEM_COUNT = 4;
+  static constexpr int BASE_MENU_ITEM_COUNT = 4;
+#endif
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+  static constexpr int MAX_ITEM_COUNT = BASE_MENU_ITEM_COUNT + 1;
+#else
+  static constexpr int MAX_ITEM_COUNT = BASE_MENU_ITEM_COUNT;
 #endif
 
   void onModeSelected(NetworkMode mode);
@@ -40,9 +46,8 @@ class NetworkModeSelectionActivity final : public UiListActivity {
   void onBackButton() override { onCancel(); }
   const char* headerTitle() const override;
 
-  // Row storage: built once in the constructor instead of every buildScreen()
-  // call, into fixed-capacity storage that avoids any heap allocation for the
-  // row list. actionValue is the row index; rowModes_ maps it to a mode.
+  // Fixed-capacity rows are built once. Row indices map to modes even when
+  // OPDS is hidden or Local Send is unavailable.
   freeink::ui::ListItem rowItems_[MAX_ITEM_COUNT]{};
   NetworkMode rowModes_[MAX_ITEM_COUNT]{};
   int rowCount_ = 0;

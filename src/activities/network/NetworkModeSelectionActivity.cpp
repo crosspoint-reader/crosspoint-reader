@@ -8,6 +8,9 @@
 #include "OpdsServerStore.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+#include "LocalSendReceiveActivity.h"
+#endif
 
 namespace fui = freeink::ui;
 
@@ -28,7 +31,7 @@ constexpr ModeRow MODE_ROWS[] = {
     {NetworkMode::USB_DRIVE, StrId::STR_USB_DRIVE, StrId::STR_USB_DRIVE_DESC, UIIcon::Usb},
 #endif
 };
-static_assert(sizeof(MODE_ROWS) / sizeof(MODE_ROWS[0]) == NetworkModeSelectionActivity::MAX_ITEM_COUNT);
+static_assert(sizeof(MODE_ROWS) / sizeof(MODE_ROWS[0]) == NetworkModeSelectionActivity::BASE_MENU_ITEM_COUNT);
 }  // namespace
 
 NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -48,6 +51,17 @@ NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer
     rowModes_[rowCount_] = row.mode;
     rowItems_[rowCount_++] = item;
   }
+#if defined(CROSSPOINT_LOCALSEND) && CROSSPOINT_LOCALSEND
+  if (LocalSendReceiveActivity::isAvailable()) {
+    fui::ListItem item;
+    item.label = "Local Send";
+    item.subtitle = I18N.get(StrId::STR_LOCAL_SEND_DESC);
+    item.icon = listIconFor(UIIcon::Wifi, 32);
+    item.actionValue = static_cast<int16_t>(rowCount_);
+    rowModes_[rowCount_] = NetworkMode::LOCAL_SEND;
+    rowItems_[rowCount_++] = item;
+  }
+#endif
 }
 
 int NetworkModeSelectionActivity::listCount() const { return rowCount_; }
