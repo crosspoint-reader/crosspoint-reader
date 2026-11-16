@@ -30,9 +30,22 @@ inline Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, cons
   }
   const int lineFont = TextBlock::renderFontId(renderer, block->blockFontId(fontId), fontId);
   // Measured ink extent, capped at the word font's line pitch so tight line spacing doesn't overlap adjacent lines.
-  // Trim from the top only: descenders (g, j, p, q, y) stay whole. The word's own font keeps larger runs intact.
-  const auto ink = renderer.getFontInkBounds(wordFont);
+  // Trim from the top only: descenders stay whole. The word's own font keeps larger runs intact.
+  // Ink is the union over the line's words in this font, so boxes share one height and any script is measured.
   const int pitch = renderer.getLineHeight(wordFont, SETTINGS.getReaderLineCompression());
+  GfxRenderer::InkBounds ink{};
+  bool measured = false;
+  for (uint16_t w = 0; w < block->wordCount(); ++w) {
+    if (clippingWordFont(renderer, fontId, *block, w) != wordFont) continue;
+    const auto wordStyle = static_cast<EpdFontFamily::Style>(block->wordStyle(w) & ~EpdFontFamily::UNDERLINE);
+    const auto b = renderer.getTextInkBounds(wordFont, block->wordText(w), wordStyle);
+    if (!b.measured) continue;
+    ink.top = measured ? std::min(ink.top, b.top) : b.top;
+    ink.bottom = measured ? std::max(ink.bottom, b.bottom) : b.bottom;
+    measured = true;
+  }
+  // Nothing measurable (glyphs not loaded yet): neutral box of one pitch from the top, never shifted.
+  if (!measured) ink = {0, pitch, false};
   int trim = ink.bottom - ink.top - pitch;
   // Glue to the line above when the gap fits in the font's own headroom above its letters (ink.top, room the
   // ascender reserves for accents): the box grows upwards but never past the font's ascender. Larger gaps stay.

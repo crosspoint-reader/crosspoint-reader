@@ -177,11 +177,9 @@ bool ClipSelectionActivity::extractWords() {
         const char* text = block->wordText(0);
         const uint16_t lastWord = block->wordCount() - 1;
         const size_t textLength = block->wordText(lastWord) + block->wordTextLen(lastWord) + 1 - text;
-        // Also load the letters getFontInkBounds measures, so selection boxes match saved highlights from the start.
-        static constexpr char kInkProbe[] = "dHlpgy";
-        const char* segments[] = {text, kInkProbe};
-        const size_t lengths[] = {textLength, sizeof(kInkProbe)};
-        renderer.ensureSdCardFontReady(fontId, segments, lengths, 2, false, false,
+        const char* segments[] = {text};
+        const size_t lengths[] = {textLength};
+        renderer.ensureSdCardFontReady(fontId, segments, lengths, 1, false, false,
                                        static_cast<uint8_t>(styleMask | (1U << EpdFontFamily::REGULAR)));
       }
 
