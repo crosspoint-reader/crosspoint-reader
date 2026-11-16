@@ -69,5 +69,5 @@ class IdxCursor {
   uint32_t logicalPos;
   size_t pos = 0;
   size_t len = 0;
-  uint8_t window[256];
+  uint8_t window[256] = {};
 };
