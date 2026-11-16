@@ -143,12 +143,11 @@ static unsigned long lastInputTime = 0;
 
 // Screens that block auto-sleep can hold one static image for as long as they
 // run. Once input stops, power the panel down as sleep does; the next paint wakes it.
-// The EEGO A4 does this on every screen 500 ms after input stops, as its stock
-// firmware does: its panel fuzzes and shows earlier screens when left powered.
+// The EEGO A4 does this on every screen, as its stock firmware does: its panel
+// fuzzes and shows earlier screens when left powered. Its driver times the
+// power-off itself, 500 ms after the last refresh, whatever the input does.
 static void idleDisplayWhileAwake() {
-  const bool eego = BoardConfig::isEegoA4();
-  const unsigned long idleAfterMs = eego ? 500 : 30000;
-  if ((!eego && !activityManager.preventAutoSleep()) || millis() - lastInputTime < idleAfterMs) return;
+  if (!BoardConfig::isEegoA4() && (!activityManager.preventAutoSleep() || millis() - lastInputTime < 30000)) return;
   RenderLock lock(RenderLock::Mode::Try);
   if (lock.ownsLock()) display.controllerIdle();
 }
