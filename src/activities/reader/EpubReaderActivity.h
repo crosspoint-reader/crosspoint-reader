@@ -91,6 +91,10 @@ class EpubReaderActivity final : public ReaderActivity {
   // overlay, letting panel->toolbar steps restore the page without a full
   // re-render. Discarded on close / whenever the page under the overlay changes.
   bool overlayPageStored = false;
+  // Counts the overlay paints renderBook() makes after rendering a page. It
+  // tells openOverlay() that the render task painted the overlay it was
+  // opening while it waited for the RenderLock.
+  std::atomic<uint32_t> overlayPaintsAfterRender{0};
   // A background build step lent the framebuffer: it came back white while the panel still shows the
   // page. Until renderBook() redraws, nothing may be painted straight onto it. Set by the loop task,
   // cleared by the render task.
