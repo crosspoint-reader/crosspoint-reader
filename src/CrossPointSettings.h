@@ -380,8 +380,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // empty = the built-in UI font. Bound to the UI font slots at boot and on
   // change. Independent of the reader font above.
   char uiFontFamilyName[SdCardFontRegistry::FAMILY_NAME_CAPACITY] = "";
-  // Dictionary folder name under /dictionaries (empty = no dictionary)
-  char dictionaryName[32] = "";
+  // Dictionary folder name under /dictionaries (empty = no dictionary).
+  // Sized to DictionaryRegistry::MAX_NAME_BYTES (checked in SettingsList.h):
+  // a UTF-8 folder name can take 2 or 3 bytes per character.
+  char dictionaryName[128] = "";
   // Save successful dictionary lookups to vocabulary history (default off).
   uint8_t vocabularyHistoryEnabled = 0;
   // Master switch for all SD-card plugin discovery/execution. New installs keep
