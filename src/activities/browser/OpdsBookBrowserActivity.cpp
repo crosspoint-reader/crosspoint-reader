@@ -488,18 +488,23 @@ void OpdsBookBrowserActivity::onBackButton() { navigateBack(); }
 // no std::string copy. exists()/mkdir() take const char*.
 const char* OpdsBookBrowserActivity::downloadFolder() const { return SETTINGS.opdsDownloadFolder; }
 
+// Where a download would be saved, creating nothing: the configured folder when it exists,
+// else SD root, where downloadDestination() saves when the folder can't be created.
+const char* OpdsBookBrowserActivity::existingDownloadFolder() const {
+  const char* folder = downloadFolder();
+  return (folder[0] != '\0' && Storage.exists(folder)) ? folder : "";
+}
+
 // SD destination from the configured download folder + filename format.
 std::string OpdsBookBrowserActivity::downloadDestination(const OpdsEntry& book) const {
   const char* folder = downloadFolder();
-  bool haveFolder = folder[0] != '\0';
-  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
+  if (folder[0] != '\0' && !Storage.exists(folder) && !Storage.mkdir(folder)) {
     // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
     // existing caller checks exists() before mkdir. On real failure, fall back
     // to SD root so the download is never lost.
     LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
-    haveFolder = false;
   }
-  return bookPathIn(haveFolder ? folder : "", book);
+  return bookPathIn(existingDownloadFolder(), book);
 }
 
 // Path of `book` inside `folder` ("" = SD root); creates nothing.
@@ -931,10 +936,10 @@ void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
   spec.description = std::move(publication.description);
   spec.descriptionHtml = true;  // publication documents may carry markup; plain text parses as-is
 
-  // A plain download can be read in place: Read when this book's file is already
-  // in the download folder, else download and read. Purchases and loans keep one button.
+  // A plain download can be read in place: Read when this book's file is already where a
+  // download would save it, else download and read. Purchases and loans keep one button.
   const bool plainDownload = !detailBook.purchase && !detailBook.indirect && !detailBook.lcpLicense;
-  std::string localPath = plainDownload ? bookPathIn(downloadFolder(), detailBook) : std::string();
+  std::string localPath = plainDownload ? bookPathIn(existingDownloadFolder(), detailBook) : std::string();
   const bool onDevice = plainDownload && Storage.exists(localPath.c_str());
   if (onDevice) {
     spec.status = tr(STR_OPDS_ON_DEVICE);  // the local copy matters more than catalog availability
