@@ -864,6 +864,9 @@ void loop() {
     // USB Drive handed the raw SD card to the host. Do not run screenshots,
     // sleep, shortcuts, or normal navigation while its filesystem is detached.
     activityManager.loop();
+    if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() || remoteActed) {
+      lastInputTime = millis();
+    }
     idleDisplayWhileAwake();
     if (activityManager.preventAutoSleep()) {
       powerManager.setPowerSaving(false);
