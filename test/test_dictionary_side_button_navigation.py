@@ -15,9 +15,11 @@ mapping = mapped_input_source[
 ]
 viewer = (ROOT / "src/activities/reader/DictionaryDefinitionActivity.cpp").read_text()
 loop_start = viewer.index("void DictionaryDefinitionActivity::loop()")
-nav_start = viewer.index("  const bool swapFront =", loop_start)
+nav_start = viewer.index("  const auto frontButtons =", loop_start)
 nav_end = viewer.index("\n}\n", nav_start)
 navigation = viewer[nav_start:nav_end]
+reader = (ROOT / "src/activities/reader/ReaderUtils.h").read_text()
+front_buttons = reader[reader.index("struct FrontPageTurnButtons"):reader.index("struct PageTurnResult")]
 
 gpio_stub = r"""
 #pragma once
@@ -67,6 +69,9 @@ static unsigned long clockMs = 1000;
 unsigned long millis() { return clockMs; }
 
 """ + mapping + r"""
+namespace ReaderUtils {
+""" + front_buttons + r"""
+}
 bool MappedInputManager::wasPressed(Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
 bool MappedInputManager::wasReleased(Button button) const { return mapButton(button, &HalGPIO::wasReleased); }
 bool MappedInputManager::isPressed(Button button) const { return mapButton(button, &HalGPIO::isPressed); }

@@ -650,25 +650,25 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  // Page buttons follow the side-button layout; front buttons follow navigation orientation.
-  const bool swapFront = mappedInput.isNavDirectionSwapped();
-  const auto nextFront = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
-  const auto prevFront = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageForward, nextFront}, [this, &currentPage] {
-    if (currentPage + 1 < content.totalPages) {
-      currentPage++;
-      content.selection.valid = false;
-      requestUpdate();
-    }
-  });
+  // Page buttons follow the side-button layout; front buttons use the reader's orientation mapping.
+  const auto frontButtons = ReaderUtils::getFrontPageTurnButtons(mappedInput);
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageForward, frontButtons.next},
+                                       [this, &currentPage] {
+                                         if (currentPage + 1 < content.totalPages) {
+                                           currentPage++;
+                                           content.selection.valid = false;
+                                           requestUpdate();
+                                         }
+                                       });
 
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageBack, prevFront}, [this, &currentPage] {
-    if (currentPage > 0) {
-      currentPage--;
-      content.selection.valid = false;
-      requestUpdate();
-    }
-  });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageBack, frontButtons.previous},
+                                       [this, &currentPage] {
+                                         if (currentPage > 0) {
+                                           currentPage--;
+                                           content.selection.valid = false;
+                                           requestUpdate();
+                                         }
+                                       });
 }
 
 // Draws the current page: a styled Page when the HTML layout succeeded,
