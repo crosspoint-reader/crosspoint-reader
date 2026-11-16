@@ -9,6 +9,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalMemory.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -20,9 +21,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <utility>
 
 #include "../../util/BookmarkFile.h"
 #include "BookmarkEntry.h"
@@ -1521,6 +1524,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
   if (isForwardTurn) {
     if (section->currentPage < section->pageCount - 1 || section->isBuilding()) {
       section->currentPage++;
+      prerenderTurnPending = true;
       lastPageTurnTime = millis();
       return true;
     } else if (currentSpineIndex + 1 < epub->getSpineItemsCount()) {
@@ -1538,6 +1542,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
   } else {
     if (section->currentPage > 0) {
       section->currentPage--;
+      prerenderTurnPending = true;
       lastPageTurnTime = millis();
       return true;
     } else if (currentSpineIndex > 0) {
@@ -2152,9 +2157,24 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
   } pxcSlotGuard;
 
+  // A page turn may land on the page prerendered during the previous turn's
+  // refresh; any other repaint drops it (see PagePrerender).
+  if (!std::exchange(prerenderTurnPending, false)) pagePrerender.valid = false;
+  const uint32_t prerenderSignature =
+      readerRenderSpecSignature(SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight));
+  const bool prerenderHit =
+      pagePrerender.valid && section && SETTINGS.textAntiAliasing && pagePrerender.spine == currentSpineIndex &&
+      pagePrerender.page == section->currentPage && pagePrerender.fontId == fontId &&
+      pagePrerender.marginLeft == orientedMarginLeft && pagePrerender.marginTop == orientedMarginTop &&
+      pagePrerender.layoutSignature == prerenderSignature &&
+      pagePrerender.orientation == static_cast<uint8_t>(renderer.getOrientation()) &&
+      pagePrerender.planeBytes == renderer.getBufferSize() && renderer.hasFrameBuffer() && !page->hasImages();
+  pagePrerender.valid = false;
+
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  // A prerendered page already has its glyphs drawn; only the status bar is new.
+  if (!prerenderHit) page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   // Scan the status bar too: a CJK book/chapter title redirected to the SD
   // fallback font joins the page's single batch prewarm instead of triggering
   // its own SD pass after the scope ends.
@@ -2211,8 +2231,12 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.clearScreen();
   }
 
-  drawClippingHighlights(*page, fontId, orientedMarginTop, orientedMarginLeft);
-  page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  if (prerenderHit) {
+    memcpy(renderer.getFrameBuffer(), pagePrerender.bw.get(), pagePrerender.planeBytes);
+  } else {
+    drawClippingHighlights(*page, fontId, orientedMarginTop, orientedMarginLeft);
+    page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  }
   renderStatusBar();
   const auto tBwRender = millis();
 
@@ -2279,7 +2303,64 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     auto lsbPlaneBuf = (overlapRefresh && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
     auto msbPlaneBuf = (lsbPlaneBuf && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
 
-    if (lsbPlaneBuf) {
+    // EEGO A4 text pages: both planes are rendered whole into PSRAM in one pass
+    // each (no per-strip re-render), and the ~0.5 s the Gray3 waveform then
+    // spends driving the panel is used to render the neighbouring page.
+    const bool wholePsramPlanes = BoardConfig::isEegoA4() && needsTextGrayscale && !pageHasImages && section &&
+                                  !page->hasImages() && planeBytes == renderer.getBufferSize() &&
+                                  ensurePrerenderBuffers(planeBytes);
+    if (wholePsramPlanes) {
+      const auto renderWholePlane = [&](const bool lsbPlane, uint8_t* buf) {
+        renderer.setRenderMode(lsbPlane ? GfxRenderer::GRAYSCALE_LSB : GfxRenderer::GRAYSCALE_MSB);
+        renderer.beginStripTarget(buf, 0, gh);
+        if (prerenderHit) {
+          // The cached plane holds the page; the status bar is always drawn fresh.
+          renderStatusBar();
+        } else {
+          renderer.clearScreen(0x00);
+          renderGrayscalePass();
+        }
+        renderer.endStripTarget();
+      };
+      renderWholePlane(true, pagePrerender.lsb.get());
+      renderWholePlane(false, pagePrerender.msb.get());
+      const auto tGrayRender = millis();
+
+      renderer.waitRefreshComplete();
+      renderer.writeGrayscalePlaneStrip(true, pagePrerender.lsb.get(), 0, gh);
+      renderer.writeGrayscalePlaneStrip(false, pagePrerender.msb.get(), 0, gh);
+      const auto tGrayWrite = millis();
+      renderer.setRenderMode(GfxRenderer::BW);
+
+      // The driver copied the planes; the page and all three buffers are free
+      // for the neighbouring page while the waveform runs.
+      page.reset();
+      struct HookContext {
+        EpubReaderActivity* self;
+        int fontId, marginLeft, marginTop, direction;
+      } hookContext{this, fontId, orientedMarginLeft, orientedMarginTop,
+                    (prerenderLastSpine == currentSpineIndex && section->currentPage < prerenderLastPage) ? -1 : 1};
+      prerenderLastSpine = currentSpineIndex;
+      prerenderLastPage = section->currentPage;
+      display.setRefreshIdleHook(
+          [](void* ctx) {
+            const auto* c = static_cast<const HookContext*>(ctx);
+            c->self->prerenderAdjacentPage(c->fontId, c->marginLeft, c->marginTop, c->direction);
+          },
+          &hookContext);
+      renderer.displayGrayBuffer();
+      display.setRefreshIdleHook(nullptr, nullptr);
+      const auto tGrayDisplay = millis();
+
+      renderer.cleanupGrayscaleWithFrameBuffer();
+      const auto tEnd = millis();
+      LOG_DBG("ERS",
+              "Page render (whole planes%s): prewarm=%lums bw_render=%lums display=%lums gray_render=%lums "
+              "gray_write=%lums gray_display=%lums cleanup=%lums total=%lums (next ready: %d)",
+              prerenderHit ? ", prerendered" : "", tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender,
+              tGrayRender - tDisplay, tGrayWrite - tGrayRender, tGrayDisplay - tGrayWrite, tEnd - tGrayDisplay,
+              tEnd - t0, pagePrerender.valid ? 1 : 0);
+    } else if (lsbPlaneBuf) {
       renderPlaneToBuffer(true, lsbPlaneBuf.get());
       if (msbPlaneBuf) renderPlaneToBuffer(false, msbPlaneBuf.get());
       const auto tGrayRender = millis();
@@ -2409,6 +2490,75 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   }
 }
 
+bool EpubReaderActivity::ensurePrerenderBuffers(const size_t planeBytes) {
+  auto& pre = pagePrerender;
+  if (pre.bw && pre.lsb && pre.msb && pre.planeBytes == planeBytes) return true;
+  pre.valid = false;
+  pre.bw = HalMemory::allocatePsram(planeBytes);
+  pre.lsb = HalMemory::allocatePsram(planeBytes);
+  pre.msb = HalMemory::allocatePsram(planeBytes);
+  if (!pre.bw || !pre.lsb || !pre.msb) {
+    pre.bw.reset();
+    pre.lsb.reset();
+    pre.msb.reset();
+    pre.planeBytes = 0;
+    return false;
+  }
+  pre.planeBytes = planeBytes;
+  return true;
+}
+
+// Runs inside the display driver while the Gray3 waveform drives the panel, so
+// it draws only into the PSRAM planes and never touches the display.
+void EpubReaderActivity::prerenderAdjacentPage(const int fontId, const int marginLeft, const int marginTop,
+                                               const int direction) {
+  auto& pre = pagePrerender;
+  pre.valid = false;
+  if (!section || !pre.bw || !pre.lsb || !pre.msb || ESP.getFreeHeap() <= RENDER_MIN_FREE_HEAP) return;
+  const int target = section->currentPage + direction;
+  if (target < 0 || target >= static_cast<int>(section->pageCount)) return;
+  auto* fcm = renderer.getFontCacheManager();
+  if (!fcm) return;
+  const auto t0 = millis();
+  const auto p = section->loadPage(target);
+  if (!p || p->hasImages()) return;
+
+  {
+    auto scope = fcm->createPrewarmScope();
+    p->render(renderer, fontId, marginLeft, marginTop);
+    scope.endScanAndPrewarm();
+  }
+
+  const int gh = renderer.getDisplayHeight();
+  const auto renderPlane = [&](const GfxRenderer::RenderMode mode, uint8_t* buf, const uint8_t background) {
+    renderer.setRenderMode(mode);
+    renderer.beginStripTarget(buf, 0, gh);
+    renderer.clearScreen(background);
+    drawClippingHighlights(*p, fontId, marginTop, marginLeft, target);
+    p->render(renderer, fontId, marginLeft, marginTop);
+    renderer.endStripTarget();
+  };
+  renderPlane(GfxRenderer::BW, pre.bw.get(), 0xFF);
+  renderPlane(GfxRenderer::GRAYSCALE_LSB, pre.lsb.get(), 0x00);
+  renderPlane(GfxRenderer::GRAYSCALE_MSB, pre.msb.get(), 0x00);
+  renderer.setRenderMode(GfxRenderer::BW);
+
+  pre.spine = currentSpineIndex;
+  pre.page = target;
+  pre.fontId = fontId;
+  pre.marginLeft = marginLeft;
+  pre.marginTop = marginTop;
+  pre.layoutSignature = readerRenderSpecSignature(SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight));
+  pre.orientation = static_cast<uint8_t>(renderer.getOrientation());
+  pre.valid = true;
+  // The next page's glyphs are now cached, so the idle prewarm starts one page
+  // further on. After a backward turn it still covers the next page itself.
+  idlePrewarmSpine = currentSpineIndex;
+  idlePrewarmPage = section->currentPage;
+  idlePrewarmOffset = direction > 0 ? 1 : 0;
+  LOG_DBG("ERS", "Prerendered page %d in %lums", target, millis() - t0);
+}
+
 int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int y) const {
   int top, right, bottom, left;
   renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
@@ -2444,10 +2594,10 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
 }
 
 void EpubReaderActivity::drawClippingHighlights(const Page& page, const int fontId, const int orientedMarginTop,
-                                                const int orientedMarginLeft) const {
-  if (!section || !CLIPPINGS.hasClippings() || section->currentPage < 0 || section->currentPage >= section->pageCount) {
-    return;
-  }
+                                                const int orientedMarginLeft, const int pageIndex) const {
+  if (!section || !CLIPPINGS.hasClippings()) return;
+  const int pageNumber = pageIndex >= 0 ? pageIndex : section->currentPage;
+  if (pageNumber < 0 || pageNumber >= section->pageCount) return;
 
   size_t chapterClippings = 0;
   for (size_t i = 0; i < CLIPPINGS.clippingCount(); ++i) {
@@ -2457,7 +2607,7 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
 
   const auto started = millis();
   size_t highlightedWords = 0;
-  const uint16_t currentPage = static_cast<uint16_t>(section->currentPage);
+  const uint16_t currentPage = static_cast<uint16_t>(pageNumber);
   const uint32_t layoutSignature =
       readerRenderSpecSignature(SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight));
   const auto isHighlighted = [&](const uint16_t wordIndex, const TextBlock::SourceRange range) {
