@@ -157,3 +157,11 @@ TEST(FontCacheManagerTest, ReleaseCallbackFiresOnReleaseSdFontCaches) {
   manager.releaseSdFontCaches();
   EXPECT_EQ(1, callbackCallCount);
 }
+
+TEST(FontCacheManagerTest, IdleLookaheadDefaultsToOneForNonTtfFonts) {
+  const std::map<int, EpdFontFamily> noBuiltinFonts;
+  const std::map<int, SdCardFont*> noSdFonts;
+  FontCacheManager manager(noBuiltinFonts, noSdFonts, kNoTtfFonts);
+
+  EXPECT_EQ(1, manager.getIdleLookaheadPages(7));
+}

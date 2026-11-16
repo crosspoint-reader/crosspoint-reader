@@ -363,17 +363,19 @@ void FileBrowserActivity::activateSelected() {
   // buildScreen() runs on the render task and reads basepath plus `files`
   // through the row provider; mutate only under the render lock.
   RenderLock lock(*this);
-  if (basepath.back() != '/') basepath += "/";
+  // A file open can fail and leave this screen up, so only a directory change edits basepath.
+  std::string dir = basepath;
+  if (dir.back() != '/') dir += "/";
 
   if (isDirectory) {
-    basepath += entry.substr(0, entry.length() - 1);
+    basepath = dir + entry.substr(0, entry.length() - 1);
     loadFiles();
     nav.selected = 0;
     nav.top = 0;
     lock.unlock();
     requestUpdate();
   } else {
-    const std::string fullPath = basepath + entry;
+    const std::string fullPath = dir + entry;
     lock.unlock();  // onSelectBook launches an activity; don't hold the lock across it
     onSelectBook(fullPath);
   }

@@ -115,7 +115,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-
+          fetch-depth: 2
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -164,24 +164,38 @@ jobs:
           set -euo pipefail
           pio run -e ${{ matrix.env }} | tee pio.log
 
-      - name: Extract firmware stats
-        run: |
-          set -euo pipefail
-          ram_line="$(grep -E "RAM:\\s" -m1 pio.log || true)"
-          flash_line="$(grep -E "Flash:\\s" -m1 pio.log || true)"
-          echo "ram_line=${ram_line}" >> "$GITHUB_OUTPUT"
-          echo "flash_line=${flash_line}" >> "$GITHUB_OUTPUT"
-          {
-            echo "## ${{ matrix.env }} firmware build stats"
-            if [ -n "$ram_line" ]; then echo "- ${ram_line}"; else echo "- RAM: not found"; fi
-            if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset }}
           path: .pio/build/${{ matrix.env }}/firmware.bin
+          if-no-files-found: error
+
+      - name: Extract firmware stats
+        id: stats
+        continue-on-error: true
+        env:
+          STATS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git rev-parse --verify HEAD^2 >/dev/null 2>&1; then
+            BASE_SHA="$(git rev-parse HEAD^1)"
+          fi
+          python3 .github/scripts/firmware-stats.py pio.log "${{ matrix.env }}" "$STATS_SHA" \
+            ".pio/build/${{ matrix.env }}/firmware.bin" "$BASE_SHA" > firmware-stats.json
+          {
+            echo '## ${{ matrix.env }} firmware build stats'
+            echo '```json'
+            cat firmware-stats.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload firmware stats
+        if: steps.stats.outcome == 'success'
+        uses: actions/upload-artifact@v6
+        with:
+          name: firmware-stats-${{ matrix.env }}
+          path: firmware-stats.json
           if-no-files-found: error
 
   unit-tests:
@@ -190,6 +204,11 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+
+      - name: Test firmware comment and measurements
+        run: |
+          python3 -m unittest discover -s test -p test_firmware_stats.py
+          node --test test/firmware_comment.test.js
 
       - name: Install build tools
         run: |
