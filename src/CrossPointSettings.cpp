@@ -277,9 +277,10 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   longPressSideNextFunction = loadLongPressFunction("longPressSideNextFunction", LONG_PRESS_PAGE_FUNCTION_COUNT);
   longPressSidePrevFunction = loadLongPressFunction("longPressSidePrevFunction", LONG_PRESS_PAGE_FUNCTION_COUNT);
   shortPwrBtn = clamp(doc["shortPwrBtn"] | (uint8_t)IGNORE, (uint8_t)SHORT_PWRBTN_COUNT, (uint8_t)IGNORE);
-  doublePwrBtn =
-      clamp(doc["doublePwrBtn"] | (uint8_t)((doc["doubleClickPwrLight"] | (uint8_t)1) ? PWR_FRONTLIGHT : IGNORE),
-            (uint8_t)SHORT_PWRBTN_COUNT, (uint8_t)PWR_FRONTLIGHT);
+  const uint8_t legacyDoublePwrBtn = doc["doubleClickPwrLight"].isNull()         ? defaultDoublePwrBtn()
+                                     : (doc["doubleClickPwrLight"] | (uint8_t)1) ? (uint8_t)PWR_FRONTLIGHT
+                                                                                 : (uint8_t)IGNORE;
+  doublePwrBtn = clamp(doc["doublePwrBtn"] | legacyDoublePwrBtn, (uint8_t)SHORT_PWRBTN_COUNT, defaultDoublePwrBtn());
   if (BoardConfig::hasHomeKey() && doc["homeButtonLongPressAction"].isNull() &&
       !doc["longPressMenuFunction"].isNull()) {
     static constexpr HomeButtonAction LEGACY[] = {HomeButtonAction::Sync,       HomeButtonAction::Ignore,

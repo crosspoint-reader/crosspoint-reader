@@ -27,6 +27,7 @@ Use the table to find guidance for the decisions being changed. Read relevant se
 | Routine builds or host setup | [existing environment](.agents/rules/environment.md#build-in-an-existing-environment) |
 | Personal build flags or ports | [local overrides](.agents/rules/environment.md#platformiolocalini-personal-overrides) |
 | Allocation size/failure, buffer or cache lifetime, hot-path containers, or hardware limits | [hardware-resources.md](.agents/rules/hardware-resources.md); use `heap-discipline` for allocation decisions |
+| Optional features in shared code, new struct fields or template code, device-specific code, or SDK bumps | [flash size](.agents/rules/hardware-resources.md#flash-size-unused-features-must-cost-nothing) |
 | Hardware/storage access, rendering contracts, input ownership, or SDK boundaries | [HAL contracts](.agents/rules/architecture-hal.md#hardware-abstraction-layer-hal) and relevant sections of `hal-and-abstractions` |
 | Build flags, dependencies, or board profiles | [build environment and flags](.agents/rules/architecture-hal.md#build-environment) |
 | C or C++ implementation | [coding conventions](.agents/rules/coding-standards.md#naming-conventions); consult the relevant pitfall/allocation section and use `control-flow-clarity` for state modeling |
