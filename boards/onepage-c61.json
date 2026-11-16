@@ -1,6 +1,9 @@
 {
   "build": {
     "core": "esp32",
+    "extra_flags": [
+      "-DBOARD_HAS_PSRAM"
+    ],
     "f_cpu": "160000000L",
     "f_flash": "80000000L",
     "flash_mode": "dio",
