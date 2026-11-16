@@ -67,7 +67,7 @@ To return to Browse Files from a book, hold Back. The Short Back to File Browser
 
 Hold Power for about half a second to sleep or wake the reader. CrossPoint reopens the last book when it wakes after sleeping in the reader. If you sleep from Home or another screen, it normally returns Home.
 
-The reader also sleeps after a period of inactivity. Change this in Settings → Display → Time to Sleep. To use a short Power press for sleep, change Settings → Controls → Power button → Short click.
+The reader also sleeps after a period of inactivity. Change this in Settings → Display → Time to Sleep. You can pick 1 to 30 minutes, or Never. To use a short Power press for sleep, change Settings → Controls → Power button → Short click.
 
 ## Find and manage books
 
@@ -93,9 +93,9 @@ Press Back to focus the tabs. Press Confirm to change tabs, or hold Confirm to r
 
 With touch, tap a tab or book, swipe to scroll, and tap the Search icon to search. Tap the active tab again to reverse its sort direction.
 
-In Title or Author, hold Confirm on a book, or long-press its row, to show the letter or author groups. Select a group to expand it. With buttons, Back restores your previous book selection. In Recent, hold Confirm on a book, or long-press its row, to open its action menu.
+In Title or Author, hold Confirm on a book, or long-press its row, to show the letter or author groups. Select a group to expand it. With buttons, Back restores your previous book selection. In Recent, hold Confirm on a book, or long-press its row, to open its action menu. Choose Remove from Recents to remove a book from recent reading without deleting its file. The book stays in your library.
 
-Library creates its index the first time you open it. After adding books or changing their title or author information, choose Refresh library from a Recent book's action menu. On touch devices, you can also use the refresh icon in the Library header. The Use Book Metadata setting under Settings → Library controls whether the index reads titles and authors from inside books.
+Library creates its index the first time you open it. After adding books or changing their title or author information, choose Refresh library from a Recent book's action menu. On touch devices, you can also use the refresh icon in the Library header. The Use Book Metadata setting under Settings → Library controls whether the index reads titles and authors from inside books. Two other settings under Settings → Library act after you finish an EPUB. Clear Read Books from Recent List removes finished EPUBs from recent reading. Move Finished Books to Read Folder moves finished EPUBs to `/read` when you close them.
 
 ### Browse Files
 
@@ -109,13 +109,13 @@ Hold Confirm on a selected item, or long-press its row, to open its action menu.
 
 ## While reading
 
-The tools in this section describe EPUB reading. Other book formats can offer fewer options.
+The tools in this section describe EPUB reading. Other book formats can offer fewer options. In XTC and XTCH books, Confirm or a center tap opens chapter selection when chapters exist.
 
 ### Reader menu
 
-Press Confirm or tap the center of the page to open the reader menu. Settings → Reader → Reader Menu Style offers List and Toolbar layouts.
+Press Confirm or tap the center of the page to open the reader menu. Touch devices use the Toolbar layout by default, and button-only devices use List. Change this in Settings → Reader → Reader Menu Style.
 
-In List mode, select an action directly. In Toolbar mode, use Contents for chapters, Text for appearance, and More for additional actions. Use the direction buttons and Confirm, or tap the controls. Press Back to close the list menu. In Toolbar mode, Back returns from a panel to the toolbar, then closes it.
+In List mode, select an action directly. In Toolbar mode, use the chapter arrows and progress bar to jump chapters. Use Contents for the table of contents, Text for appearance, and More for other actions. Use the direction buttons and Confirm, or tap the controls. Press Back to close the list menu. In Toolbar mode, Back returns from a panel to the toolbar, then closes it.
 
 | Action | Use it to |
 | --- | --- |
@@ -133,7 +133,7 @@ In List mode, select an action directly. In Toolbar mode, use Contents for chapt
 | Show page as QR | Show a QR code containing the current page's text |
 | Sync Progress | Sync this book's reading position |
 | Bluetooth Page Turner | Toggle Bluetooth for a paired remote |
-| Night Mode / Frontlight | Invert the display or open light controls, where available |
+| Night Mode / Frontlight | Invert the display or switch the frontlight on or off, where available |
 | Go Home | Close the book and return Home |
 | Delete Book Cache | Rebuild this book's cached layout on the next open |
 
@@ -145,7 +145,7 @@ Open Select Chapter in the list menu, or Contents in the toolbar. Select a chapt
 
 To enable chapter shortcuts, set Settings → Controls → Front buttons or Side buttons → Page turn long press to Chapter Skip. Hold Next to open the next chapter. Hold Previous to return to the chapter start, or to the previous chapter if already at the start. This behavior is off by default.
 
-Auto Turn advances pages at the speed you choose in the reader menu. Tilt Page Turn is also available in Controls on devices with a supported tilt sensor.
+Auto Turn advances pages at the speed you choose in the reader menu. Press Confirm, Back, or open the touch menu to stop it. Tilt Page Turn is also available in Controls on devices with a supported tilt sensor. At the end of a book, CrossPoint shows up to three next books in the same folder and a Home option.
 
 ### Bookmarks
 
@@ -170,6 +170,8 @@ You can look up words offline with a StarDict dictionary on the SD card:
 5. Select the last word and press Confirm again to look it up. For one word, press Confirm twice without moving.
 
 On touch devices, hold a word and choose Look Up from the selection toolbar. On button-only devices, you can also assign Dictionary to the Menu long press shortcut.
+
+Enable Settings → Reader → Save Vocabulary Lookups to append each book lookup to `Vocabulary.txt` on the SD card. This setting is off by default.
 
 See the [dictionary guide](docs/dictionary.md) for supported files and installation details.
 
@@ -238,7 +240,7 @@ If your device has a frontlight, drag the brightness slider or tap the sun icon 
 
 The quick controls provide night mode, screen refresh, reading orientation, and a toggle for reader touch controls. Builds with Bluetooth support also offer a Bluetooth toggle for a saved remote. Enabling Bluetooth here does not pair a new remote. Filled toggles are enabled, and outlined toggles are disabled. Refresh and orientation always have outlines.
 
-You can also open the light panel through Frontlight in the reader menu, where available. Light adjustment is in this panel rather than Display settings. On the X4 Pro, double-clicking Power also toggles the frontlight when that shortcut is enabled. Settings → Display → Restore Light on Wake controls whether the light returns to its saved state after waking.
+Control Center is the only on-device panel for adjusting brightness and warmth. Frontlight in the reader menu switches the light on or off. On the X4 Pro, double-clicking Power also switches the frontlight when that shortcut is enabled. Settings → Display → Restore Light on Wake controls whether the light returns to its saved state after waking.
 
 ### Sleep screen
 
@@ -314,8 +316,10 @@ OPDS catalogs let you browse and download books from a library server:
 1. Open Settings → Connectivity → OPDS Servers.
 2. Select Add Server and enter the catalog URL. A Calibre Content Server URL usually ends in `/opds`.
 3. Add a display name and credentials if the server requires them.
-4. Open File Transfer → OPDS Browser. With plugins disabled and a server saved, you can also open OPDS Browser from Home.
+4. With plugins disabled and a server saved, open Home → OPDS Browser. Otherwise, open File Transfer → OPDS Browser.
 5. Select a server to browse its catalog.
+
+Select a book to open its details. Depending on the catalog, you can download it, borrow it, or place a hold. Account shelves appear when the catalog provides them.
 
 With no server saved, File Transfer → OPDS Browser opens the server list so you can add one. In a catalog, hold Back for one second and release to return to the main menu.
 
@@ -351,22 +355,22 @@ Open Settings from Home. The categories below match the device. Some settings ap
 | --- | --- |
 | System | Language, keyboard layouts, hidden-file and file-extension visibility, clock where available, firmware updates, and About |
 | Display | Sleep screen, Time to Sleep, battery percentage visibility, full-refresh frequency, theme, night mode, and light restoration |
-| Reader | Text Settings, Manage Fonts, orientation, images, dictionary, reader menu style, status bar, and Clear Reading Cache |
+| Reader | Text Settings, Manage Fonts, orientation, images, dictionary, Save Vocabulary Lookups, reader menu style, status bar, and Clear Reading Cache |
 | Controls | Button actions, page-turn gestures, touch controls, and device-specific input settings |
 | Library | Use Book Metadata, Clear Read Books from Recent List, and Move Finished Books to Read Folder |
 | Connectivity | Wi-Fi, Bluetooth Page Turner, CrossPoint Sync, OPDS Servers, and Plugins |
 
 ### Display choices
 
-Refresh Frequency controls full screen refreshes while reading. More frequent refreshes clear lingering marks from previous pages, also called ghosting. Night Mode inverts the display. UI Theme offers Classic, Lyra, Lyra Extended, and RoundedRaff. Devices with external RAM also offer Cover Grid for a grid of book covers. Lyra Extended shows three books on Home rather than one.
+Refresh Frequency controls full screen refreshes while reading (1 to 30 pages, or Never). More frequent refreshes clear lingering marks from previous pages, also called ghosting. Night Mode inverts the display. UI Theme offers Classic, Lyra (default), Lyra Extended, and RoundedRaff. Devices with external RAM also offer Cover Grid for a grid of book covers. Lyra Extended shows three books on Home rather than one.
 
-Hide Battery % can hide the number in the reader or everywhere. The battery icon remains visible. Sunlight Fading Fix is available on supported button devices for screen fading in direct sunlight.
+Hide Battery % can hide the number in the reader or everywhere. The battery icon remains visible. Sunlight Fading Fix is available on supported button devices for screen fading in direct sunlight. Choosing Quick Resume as the Sleep Screen also turns on Quick Resume on Timeout.
 
 ### Reader choices
 
 Images controls pictures inside EPUBs. Display shows grayscale images with an extra grayscale refresh. Black & White uses a dot pattern without that extra refresh. Placeholder shows alternative text. Suppress leaves images out.
 
-Customise Status Bar controls the reading information and progress display. Dictionary appears when a dictionary folder is available under `/dictionaries/`. Clear Reading Cache removes book cache folders so CrossPoint can rebuild them. Back up the SD card first if you need to preserve cached reading positions.
+Customise Status Bar controls the reading information, progress display, XTC Status Bar position, and status-bar clock where available. Dictionary appears when a dictionary folder is available under `/dictionaries/`. Clear Reading Cache removes book cache folders so CrossPoint can rebuild them. Back up the SD card first if you need to preserve cached reading positions.
 
 ### Control shortcuts
 
@@ -380,12 +384,12 @@ Controls are grouped into Home button gestures, Power button, Front buttons, Sid
 | Orient Side Buttons | Reverse the selected side-button layout in both landscape orientations; off by default |
 | Page turn long press | Under Front buttons and Side buttons; both change the same setting: Off (default), Chapter Skip, or Orientation Change |
 | Menu long press | On button-only devices: Bookmark, CrossPoint Sync, Dictionary, Create Clipping, Links and Footnotes, or Disabled |
-| Short click | Ignore, Sleep, Page Turn, Links and Footnotes, or Refresh, plus device-specific shortcuts described below |
-| Quick return from links | Use a short Power press to return after following a link |
+| Short click | Ignore, Sleep, Page Turn, Links and Footnotes, or Refresh Screen, plus device-specific shortcuts described below |
+| Quick return from links | When Short click or Double click uses Links and Footnotes, let a short Power press return after following a link |
 | Touch controls while reading | Enable or disable touch reading controls |
 | Next / Previous Page Gesture | Choose taps, swipes, both, inverted taps, or Disabled |
 
-Short click also offers Create Clipping on button-only devices, or Confirm on touch devices. Touch devices without a Home key additionally offer Bookmark, CrossPoint Sync, and Reader Menu.
+Short click also offers Create Clipping on button-only devices, or Confirm on touch devices. Touch devices without a Home key additionally offer Bookmark, CrossPoint Sync, and Reader Menu. Devices with a Home key offer Show Reader Menu under Taps and gestures to choose Off, Tap, or Swipe Up.
 
 Orient Side Buttons is available on touch and button-only devices with side page buttons. Portrait keeps the selected layout; upside-down portrait reverses it regardless of this setting. Layouts with identical actions or disabled buttons are unchanged. Upgrading keeps saved choices; a missing setting defaults to off.
 
@@ -399,7 +403,9 @@ On devices with a Reset button, press and release Reset, then quickly hold Power
 
 On devices with Reset and Back buttons, hold the configured Back button and Power after pressing Reset to bypass a book that repeatedly crashes. This starts at Home so you can avoid reopening the book.
 
-If one book causes problems, try Delete Book Cache from its reader menu. If you cannot open it, back up the SD card first, then use Settings → Reader → Clear Reading Cache. This clears caches for other books too and can remove saved reading progress. Do not manually remove unidentified `epub_*` folders under `.crosspoint/`. Their names are hashes of book paths, so identifying the affected folder is difficult. Removing the wrong folder can delete saved reading progress.
+To open the SD firmware picker at startup, hold Up and Power when turning on the reader. On the X4 Pro and X4 Classic, hold Down and Power instead. This recovery shortcut is not available on Paper Mono or BOOX Picco.
+
+If one book causes problems, try Delete Book Cache from its reader menu. If you cannot open it, back up the SD card first, then use Settings → Reader → Clear Reading Cache. This clears caches for other books too and can remove saved reading progress. Do not manually remove unidentified `epub_*`, `xtc_*`, or `txt_*` folders under `.crosspoint/`. Their names are hashes of book paths, so identifying the affected folder is difficult. Removing the wrong folder can delete saved reading progress.
 
 Do not delete the whole `.crosspoint` folder as a first step. It also contains settings, bookmarks, and clippings. Back it up before changing or removing its contents. Removing `settings.json` resets preferences, and removing `state.json` resets saved startup state.
 
@@ -419,7 +425,7 @@ See [network troubleshooting](docs/troubleshooting.md) for connection drops, fai
 
 ### Update CrossPoint
 
-Open Settings → System → Check for updates to update over Wi-Fi. You can also place `firmware.bin` on the SD card and use the SD firmware update action. For BOOX Picco, connect it to your computer over USB and use the [web installer](https://crosspointreader.com/install). For other devices, see [Install firmware](README.md#install-firmware).
+Open Settings → System → Check for updates to update over Wi-Fi. You can also copy a `.bin` firmware file to the SD card and pick it with the SD firmware update action. For BOOX Picco, connect it to your computer over USB and use the [web installer](https://crosspointreader.com/install). For other devices, see [Install firmware](README.md#install-firmware).
 
 ### Report a problem
 

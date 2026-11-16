@@ -14,6 +14,22 @@ ROOT = Path(__file__).parent.parent
 SOURCE_MD = ROOT / "USER_GUIDE.md"
 OUTPUT_EPUB = ROOT / "CrossPoint_User_Guide.epub"
 LOGO_PNG = ROOT / "src/images/Logo120.png"
+GITHUB_BLOB_BASE = "https://github.com/crosspoint-reader/crosspoint-reader/blob/develop"
+
+# Extracted user reference pages linked from USER_GUIDE.md, bundled so offline
+# EPUB readers keep the full instructions.
+REFERENCE_DOCS = [
+    "docs/controls.md",
+    "docs/clippings.md",
+    "docs/dictionary.md",
+    "docs/sd-card-fonts.md",
+    "docs/sleep-images.md",
+    "docs/webserver.md",
+    "docs/calibre-wireless.md",
+    "docs/progress-sync.md",
+    "docs/sd-plugins.md",
+    "docs/troubleshooting.md",
+]
 
 # Portrait cover dimensions matching the X4 display (480×800)
 COVER_W, COVER_H = 480, 800
@@ -204,7 +220,7 @@ def preprocess_callouts(text: str) -> str:
 def strip_toc(text: str) -> str:
     """Remove the inline TOC list that follows the H1 heading."""
     return re.sub(
-        r'(\n# CrossPoint User Guide\n)(.*?)(\n## 1\.)',
+        r'^(# CrossPoint User Guide\n)(.*?)(\n## )',
         lambda m: m.group(1) + m.group(3),
         text,
         flags=re.DOTALL,
@@ -241,13 +257,83 @@ def split_chapters(html: str):
     return chapters
 
 
+def github_slugify(value: str, separator: str) -> str:
+    """Match GitHub's Markdown heading anchor rules."""
+    slug = value.strip().lower()
+    slug = re.sub(r'[^\w\s-]', '', slug)
+    return re.sub(r'\s', separator, slug)
+
+
+def render_markdown(source: str) -> str:
+    """Convert Markdown with GitHub-compatible heading IDs."""
+    md = markdown.Markdown(
+        extensions=['tables', 'fenced_code', 'attr_list', 'toc'],
+        extension_configs={'toc': {'slugify': github_slugify}},
+    )
+    return md.convert(source)
+
+
+def extract_doc_title(source: str, fallback: str) -> str:
+    """Return the first H1 heading text, or fallback if absent."""
+    for line in source.splitlines():
+        m = re.match(r'^#\s+(.+)$', line)
+        if m:
+            return m.group(1).strip()
+    return fallback
+
+
+def collect_heading_ids(fragment: str) -> list[str]:
+    """Return all id attributes on h1-h6 elements in an HTML fragment."""
+    return re.findall(r'<h[1-6][^>]*\sid="([^"]+)"', fragment)
+
+
+def rewrite_links(fragment: str, source_rel: str, target_by_heading: dict[tuple[str, str], str],
+                  doc_entry_by_path: dict[str, str]) -> str:
+    """Rewrite relative Markdown and anchor links to EPUB chapter files or GitHub URLs."""
+    source_dir = (ROOT / source_rel).parent
+
+    def replace(match: re.Match[str]) -> str:
+        prefix, href, suffix = match.group(1), match.group(2), match.group(3)
+        if href.startswith(('http://', 'https://', 'mailto:')):
+            return match.group(0)
+
+        if href.startswith('#'):
+            frag = href[1:]
+            target_file = target_by_heading.get((source_rel, frag))
+            if target_file:
+                return f'{prefix}{target_file}#{frag}{suffix}'
+            return match.group(0)
+
+        path_part, _, frag = href.partition('#')
+        resolved = (source_dir / path_part).resolve()
+        try:
+            rel_path = resolved.relative_to(ROOT.resolve()).as_posix()
+        except ValueError:
+            return match.group(0)
+
+        if rel_path == 'USER_GUIDE.md':
+            target_file = target_by_heading.get(('USER_GUIDE.md', frag)) if frag else doc_entry_by_path.get('USER_GUIDE.md')
+            if target_file:
+                return f'{prefix}{target_file}{"#" + frag if frag else ""}{suffix}'
+        elif rel_path in doc_entry_by_path:
+            target_file = target_by_heading.get((rel_path, frag)) if frag else doc_entry_by_path[rel_path]
+            if not target_file:
+                target_file = doc_entry_by_path[rel_path]
+            return f'{prefix}{target_file}{"#" + frag if frag else ""}{suffix}'
+
+        external = f'{GITHUB_BLOB_BASE}/{rel_path}{"#" + frag if frag else ""}'
+        return f'{prefix}{external}{suffix}'
+
+    return re.sub(r'(<a\s+[^>]*href=")([^"]+)(")', replace, fragment)
+
+
 def make_xhtml(title: str, body: str) -> bytes:
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" '
         '"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n'
         '<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">\n'
-        f'<head><title>{title}</title>\n'
+        f'<head><title>{_html.escape(title)}</title>\n'
         '<link rel="stylesheet" type="text/css" href="../style/main.css"/>\n'
         f'</head>\n<body>\n{body}\n</body>\n</html>'
     ).encode('utf-8')
@@ -257,9 +343,7 @@ def build_epub():
     source = SOURCE_MD.read_text(encoding='utf-8')
     source = strip_toc(source)
     source = preprocess_callouts(source)
-
-    md = markdown.Markdown(extensions=['tables', 'fenced_code', 'attr_list'])
-    body_html = md.convert(source)
+    body_html = render_markdown(source)
 
     book = epub.EpubBook()
     book.set_identifier('crosspoint-user-guide-v1')
@@ -302,24 +386,54 @@ def build_epub():
     book.add_item(cover_page)
 
     chapters_data = split_chapters(body_html)
-    epub_chapters = []
+    target_by_heading: dict[tuple[str, str], str] = {}
+    doc_entry_by_path: dict[str, str] = {}
+    pending_pages: list[tuple[str, str, str, str, bool]] = []
 
     for anchor, title, fragment in chapters_data:
         filename = f'chap_{anchor}.xhtml'
+        doc_entry_by_path.setdefault('USER_GUIDE.md', filename)
+        for hid in collect_heading_ids(fragment):
+            target_by_heading[('USER_GUIDE.md', hid)] = filename
+        pending_pages.append(('USER_GUIDE.md', filename, title, fragment, False))
+
+    for rel_path in REFERENCE_DOCS:
+        doc_path = ROOT / rel_path
+        if not doc_path.exists():
+            continue
+        raw = doc_path.read_text(encoding='utf-8')
+        doc_title = extract_doc_title(raw, doc_path.stem)
+        doc_html = render_markdown(preprocess_callouts(raw))
+        filename = f'chap_doc_{doc_path.stem}.xhtml'
+        doc_entry_by_path[rel_path] = filename
+        for hid in collect_heading_ids(doc_html):
+            target_by_heading[(rel_path, hid)] = filename
+        pending_pages.append((rel_path, filename, doc_title, doc_html, True))
+
+    main_chapters = []
+    ref_chapters = []
+    for source_rel, filename, title, fragment, is_ref in pending_pages:
+        rewritten = rewrite_links(fragment, source_rel, target_by_heading, doc_entry_by_path)
         chapter = epub.EpubHtml(title=title, file_name=filename, lang='en')
-        chapter.content = make_xhtml(title, fragment)
+        chapter.content = make_xhtml(title, rewritten)
         chapter.add_item(style)
         book.add_item(chapter)
-        epub_chapters.append(chapter)
+        if is_ref:
+            ref_chapters.append(chapter)
+        else:
+            main_chapters.append(chapter)
 
-    book.toc = (epub.Link('cover.xhtml', 'Cover', 'cover'),) + tuple(epub_chapters)
+    toc_entries: list = [epub.Link('cover.xhtml', 'Cover', 'cover')] + main_chapters
+    if ref_chapters:
+        toc_entries.append((epub.Section('Reference Guides'), tuple(ref_chapters)))
+    book.toc = tuple(toc_entries)
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
 
     # nav is excluded from the spine — CrossPoint locates it via properties="nav" in
     # the manifest and does not respect linear="no", so omitting it prevents it from
     # appearing as a readable page. Cover is the first spine item.
-    book.spine = [cover_page] + epub_chapters
+    book.spine = [cover_page] + main_chapters + ref_chapters
 
     epub.write_epub(str(OUTPUT_EPUB), book)
     print(f'Generated: {OUTPUT_EPUB}')
