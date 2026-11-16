@@ -1060,7 +1060,7 @@ void LibraryListActivity::drawHoldHelp() const {
   const int y = area.y + area.height - metrics.buttonHintsHeight - lineHeight;
   GUI.drawHelpText(
       renderer, Rect{left + SIDE_PADDING, y, ((renderer.getScreenWidth() / 3) * 2 - left - SIDE_PADDING), lineHeight},
-      help);
+      help, false);
 }
 
 // OptionPopup is a self-contained modal: it owns the whole frame (hints
