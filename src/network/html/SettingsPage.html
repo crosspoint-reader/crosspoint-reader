@@ -235,6 +235,13 @@
     const footnotesSelected = getControlValue('shortPwrBtn') === 4 || getControlValue('doublePwrBtn') === 4;
     const row = document.getElementById('row-setting-pwrBtnFootnoteBack');
     if (row) row.style.display = footnotesSelected ? '' : 'none';
+    // Page-button long-press functions only apply to the Custom (3) long-press behavior.
+    const customLongPress = getControlValue('longPressButtonBehavior') === 3;
+    for (const key of ['longPressFrontNextFunction', 'longPressFrontPrevFunction',
+                       'longPressSideNextFunction', 'longPressSidePrevFunction']) {
+      const customRow = document.getElementById('row-setting-' + key);
+      if (customRow) customRow.style.display = customLongPress ? '' : 'none';
+    }
   }
 
   function handleSettingChanged(key, source) {
@@ -244,7 +251,7 @@
       if (duplicate) duplicate.value = source.value;
     }
     syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'quickResumeSleepScreen');
-    if (key === 'shortPwrBtn' || key === 'doublePwrBtn') {
+    if (key === 'shortPwrBtn' || key === 'doublePwrBtn' || key === 'longPressButtonBehavior') {
       updateSettingsVisibility();
     }
     markChanged();
@@ -271,8 +278,13 @@
       const title = definition[0];
       const keys = definition[1];
       if (!settings.some(function(s) { return keys.includes(s.key); })) return;
-      if (title === 'Front buttons') keys.push('longPressButtonBehavior', 'longPressMenuFunction');
-      if (title === 'Side buttons') keys.push('longPressButtonBehavior');
+      if (title === 'Front buttons') {
+        keys.push('longPressButtonBehavior', 'longPressFrontNextFunction', 'longPressFrontPrevFunction',
+                  'longPressMenuFunction');
+      }
+      if (title === 'Side buttons') {
+        keys.push('longPressButtonBehavior', 'longPressSideNextFunction', 'longPressSidePrevFunction');
+      }
       grouped += '<section class="controls-group"><h3>' + title + '</h3>';
       keys.forEach(function(key) {
         const setting = settings.find(function(s) { return s.key === key; });
