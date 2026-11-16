@@ -210,10 +210,12 @@ TEST_F(ChapterHtmlSlimParserTest, AbandonedLayoutStopsExtractingLines) {
 class ParserStopTest : public ChapterHtmlSlimParserTest {};
 
 TEST_P(ParserStopTest, PageCallbackStopsParsingAndClosesFile) {
-  filepath = (std::filesystem::temp_directory_path() / "crosspoint-parser-stop.xhtml").string();
   std::string html = "<html><body>";
   for (int i = 0; i < 100; ++i) html += GetParam();
   html += "</body></html>";
+  // One file per parameter: ctest runs the instances in parallel.
+  const std::string testId = std::to_string(std::hash<std::string>{}(html));
+  filepath = (std::filesystem::temp_directory_path() / ("crosspoint-parser-stop-" + testId + ".xhtml")).string();
   {
     HalFile file;
     ASSERT_TRUE(file.open(filepath.c_str(), "wb"));
@@ -475,6 +477,30 @@ TEST_F(ChapterHtmlSlimParserTest, HeaderWithHiddenAttributeShouldBeSkipped) {
   ChapterHtmlSlimParser::characterData(&parser, "[HIDDEN]", 8);
 
   ASSERT_EQ(parser.partWordBufferIndex, 0);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, HeadingBlocksAreNotHyphenated) {
+  const XML_Char* noAttributes[] = {nullptr};
+  parser.hyphenationEnabled = true;
+
+  parser.beginParse();
+  ChapterHtmlSlimParser::startElement(&parser, "h2", noAttributes);
+  ChapterHtmlSlimParser::characterData(&parser, "Title ", 6);
+  ASSERT_NE(parser.currentTextBlock, nullptr);
+  EXPECT_FALSE(parser.currentTextBlock->isHyphenationEnabled());
+  // A line break inside the heading starts another block of the same heading.
+  ChapterHtmlSlimParser::startElement(&parser, "br", noAttributes);
+  ChapterHtmlSlimParser::endElement(&parser, "br");
+  ChapterHtmlSlimParser::characterData(&parser, "More ", 5);
+  EXPECT_FALSE(parser.currentTextBlock->isHyphenationEnabled());
+  ChapterHtmlSlimParser::endElement(&parser, "h2");
+
+  ChapterHtmlSlimParser::startElement(&parser, "p", noAttributes);
+  ChapterHtmlSlimParser::characterData(&parser, "Body ", 5);
+  ASSERT_NE(parser.currentTextBlock, nullptr);
+  EXPECT_TRUE(parser.currentTextBlock->isHyphenationEnabled());
+  ChapterHtmlSlimParser::endElement(&parser, "p");
+  parser.abortParse();
 }
 
 TEST_F(ChapterHtmlSlimParserTest, SpanWithHiddenAttributeShouldBeSkipped) {

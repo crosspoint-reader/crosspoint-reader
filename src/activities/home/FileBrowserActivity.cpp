@@ -155,9 +155,13 @@ void FileBrowserActivity::provideRow(void* ctx, const uint16_t index, fui::ListI
   const std::string& entry = self->files[index];
   formatFileName(entry, self->rowNameBuf, sizeof(self->rowNameBuf));
   item.label = self->rowNameBuf;
-  formatFileExtension(entry, self->rowExtBuf, sizeof(self->rowExtBuf));
-  if (self->rowExtBuf[0] != '\0') {
-    item.value = self->rowExtBuf;
+  // With extensions hidden the row has no value column, so the name gets the full width. A name that is only an
+  // extension (".epub", " .epub") keeps it, or the row would have no visible text.
+  if (SETTINGS.showFileExtensions || self->rowNameBuf[strspn(self->rowNameBuf, " ")] == '\0') {
+    formatFileExtension(entry, self->rowExtBuf, sizeof(self->rowExtBuf));
+    if (self->rowExtBuf[0] != '\0') {
+      item.value = self->rowExtBuf;
+    }
   }
   item.icon = listIconFor(UITheme::getFileIcon(entry));
   item.actionValue = static_cast<int16_t>(index);
@@ -359,17 +363,19 @@ void FileBrowserActivity::activateSelected() {
   // buildScreen() runs on the render task and reads basepath plus `files`
   // through the row provider; mutate only under the render lock.
   RenderLock lock(*this);
-  if (basepath.back() != '/') basepath += "/";
+  // A file open can fail and leave this screen up, so only a directory change edits basepath.
+  std::string dir = basepath;
+  if (dir.back() != '/') dir += "/";
 
   if (isDirectory) {
-    basepath += entry.substr(0, entry.length() - 1);
+    basepath = dir + entry.substr(0, entry.length() - 1);
     loadFiles();
     nav.selected = 0;
     nav.top = 0;
     lock.unlock();
     requestUpdate();
   } else {
-    const std::string fullPath = basepath + entry;
+    const std::string fullPath = dir + entry;
     lock.unlock();  // onSelectBook launches an activity; don't hold the lock across it
     onSelectBook(fullPath);
   }

@@ -1314,14 +1314,15 @@ int Epub::resolveHrefToSpineIndex(const std::string& href) const {
   size_t targetSlash = target.find_last_of('/');
   std::string targetFilename = (targetSlash != std::string::npos) ? target.substr(targetSlash + 1) : target;
 
+  // An exact path match anywhere beats the first filename-only match.
+  int filenameMatch = -1;
   for (int i = 0; i < getSpineItemsCount(); i++) {
     const auto& spineHref = getSpineItem(i).href;
-    // Try exact match first
     if (spineHref == target) return i;
-    // Then filename-only match
-    size_t spineSlash = spineHref.find_last_of('/');
-    std::string spineFilename = (spineSlash != std::string::npos) ? spineHref.substr(spineSlash + 1) : spineHref;
-    if (spineFilename == targetFilename) return i;
+    if (filenameMatch != -1) continue;
+    const size_t spineSlash = spineHref.find_last_of('/');
+    if (spineHref.compare(spineSlash == std::string::npos ? 0 : spineSlash + 1, std::string::npos, targetFilename) == 0)
+      filenameMatch = i;
   }
-  return -1;
+  return filenameMatch;
 }
