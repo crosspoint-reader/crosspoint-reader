@@ -650,7 +650,11 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this, &currentPage] {
+  // Page buttons follow the side-button layout; front buttons follow navigation orientation.
+  const bool swapFront = mappedInput.isNavDirectionSwapped();
+  const auto nextFront = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
+  const auto prevFront = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageForward, nextFront}, [this, &currentPage] {
     if (currentPage + 1 < content.totalPages) {
       currentPage++;
       content.selection.valid = false;
@@ -658,7 +662,7 @@ void DictionaryDefinitionActivity::loop() {
     }
   });
 
-  buttonNavigator.onPrevious([this, &currentPage] {
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageBack, prevFront}, [this, &currentPage] {
     if (currentPage > 0) {
       currentPage--;
       content.selection.valid = false;
