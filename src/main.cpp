@@ -69,6 +69,7 @@ MappedInputManager mappedInputManager(gpio, renderer);
 #if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_X4PRO
 static WakeHoldWatch wakeHoldWatch;
 static esp_timer_handle_t wakeHoldTimer = nullptr;
+static bool wakeHoldWatchRan = true;
 #endif
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
@@ -638,6 +639,7 @@ void setup() {
     if (esp_timer_create(&timerArgs, &wakeHoldTimer) != ESP_OK ||
         esp_timer_start_periodic(wakeHoldTimer, 5000) != ESP_OK) {
       LOG_ERR("MAIN", "Wake hold timer failed to start");
+      wakeHoldWatchRan = false;
     }
   }
 #endif
@@ -733,7 +735,7 @@ void setup() {
     wakeHoldTimer = nullptr;
   }
   if (needsWakeHold) {
-    if (!wakeHoldVerified || !wakeHoldWatch.held()) {
+    if (!wakeHoldAccepted(wakeHoldVerified, wakeHoldWatch.held(), wakeHoldWatchRan, gpio.isPowerButtonDown())) {
       LOG_DBG("MAIN", "Power button released before the wake hold, sleeping");
       Storage.prepareForDeepSleep();
       powerManager.startDeepSleep(gpio);

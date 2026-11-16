@@ -20,6 +20,23 @@ TEST(WakeHold, ASilentRebootIsNotHeldUp) {
   EXPECT_FALSE(wakeNeedsLongPress(true, false, true));
 }
 
+TEST(WakeHold, AWatchedHoldIsAcceptedAfterTheButtonIsUp) {
+  EXPECT_TRUE(wakeHoldAccepted(true, true, true, false));
+  EXPECT_TRUE(wakeHoldAccepted(true, true, true, true));
+}
+
+TEST(WakeHold, ABrokenOrUnverifiedHoldIsRefused) {
+  EXPECT_FALSE(wakeHoldAccepted(true, false, true, true));
+  EXPECT_FALSE(wakeHoldAccepted(false, true, true, true));
+}
+
+// Without the background watch an early release may have been missed: only a button that is
+// still down counts, and one that is still down is never refused.
+TEST(WakeHold, AnUnwatchedHoldNeedsTheButtonStillDown) {
+  EXPECT_FALSE(wakeHoldAccepted(true, true, false, false));
+  EXPECT_TRUE(wakeHoldAccepted(true, true, false, true));
+}
+
 TEST(WakeHoldWatch, AButtonKeptDownIsHeld) {
   WakeHoldWatch watch;
   for (unsigned long ms = 300; ms <= kWakeHoldMs + 100; ms += 5) watch.sample(true, ms);
