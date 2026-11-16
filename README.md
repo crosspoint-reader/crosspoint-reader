@@ -19,11 +19,11 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, adaptive table layouts, native CJK ruby annotations, chapter navigation, footnotes, bookmarks, dictionary lookups ([StarDict](docs/dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more.
 
-- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
+- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, `.md`, `.bmp`, `.png`, and `.jpg/.jpeg`.
 
 - **Touch reading**: follow EPUB links and look up words in the dictionary on touch-enabled devices.
 
-- **Highlights and clippings**: highlight text in EPUBs and save excerpts as clippings. Use the reader menu on button devices, or hold a word and drag the selection handles on touch devices. Look up selected words or phrases in the dictionary. Enable Sync Clippings to sync saved excerpts through a compatible CrossPoint Sync server. See [Clippings and Highlights](USER_GUIDE.md#53-clippings-and-highlights).
+- **Highlights and clippings**: highlight text in EPUBs and save excerpts as clippings. Use the reader menu on button devices, or hold a word and drag the selection handles on touch devices. Look up selected words or phrases in the dictionary. Enable Sync Clippings to sync saved excerpts through a compatible CrossPoint Sync server. See [Clippings and Highlights](USER_GUIDE.md#clippings-and-highlights).
 
 - **Screenshots.**
 
@@ -33,7 +33,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **Bluetooth page turners**: pair a remote under Settings → Connectivity → Bluetooth Page Turner. Map short and long presses to page turns, chapter navigation, the reader menu, or clipping selection.
 
-- **USB Drive mode (X4Pro)**: access the SD card as USB mass storage.
+- **USB Drive mode (Xteink X4 Pro, X4 Classic, Paper Mono, Metalio E-Ink 4, EEGOREAD A4, and BOOX Picco)**: access the SD card as USB mass storage.
 
 - **Library workflow**: indexed title/author search, recently-added and alphabetical views, multilingual grouping, folder browser, recent books, and SD-cache management.
 
@@ -51,7 +51,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **Customization**: night mode, multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes including transparent overlays, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
-- **Localization**: 34 UI languages and counting, including CJK font fallback and RTL support.
+- **Localization**: 35 UI languages and counting, including CJK font fallback and RTL support.
 
 - **SD card plugins**: install plugins for book catalogs, downloads, and tools in the device's web interface. Enable Plugins under Settings → Connectivity to show them on Home. On-device plugins use existing firmware screens and operations. JavaScript runs in a browser on your phone or computer, and its page must stay open while it works. Plugins follow [CrossPoint's reading-focused scope](SCOPE.md#out-of-scope). See the [plugin guide](docs/sd-plugins.md).
 
@@ -88,13 +88,19 @@ USB port or browser before assuming the device is locked. Only reach for the unl
 ### Web installer (recommended)
 
 1. Connect your device to your computer via USB-C and wake/unlock the device
-2. Go to https://crosspointreader.com/#flash-tools, select your device (X3, X4, Xteink X4Pro, Seeed reTerminal Sticky, or M5PaperMono), and choose an official CrossPoint release.
+2. Go to https://crosspointreader.com/install, select your device, and choose an official CrossPoint release.
 
 ### Web installer (specific version)
 
 1. Connect your device to your computer via USB-C and wake/unlock the device
 2. Download the firmware file for your device from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases), or compile yourself.
-3. Go to https://crosspointreader.com/#flash-tools, select your device, click "Custom .bin" and upload the firmware file.
+3. Go to https://crosspointreader.com/install, select your device, click "Custom .bin" and upload the firmware file.
+
+### BOOX Picco USB updates
+
+Connect your Picco to your computer with a USB data cable. Open the [web installer](https://crosspointreader.com/install), select BOOX Picco, and follow its instructions.
+
+Developers building from source can compile and flash with `pio run -e picco -t upload`. See [Development quick start](#development-quick-start) for setup.
 
 ### Revert to Official Firmware
 
