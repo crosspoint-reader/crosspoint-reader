@@ -604,6 +604,15 @@ void setup() {
   // The Metalio boots after the button is released, so it skips the check.
   const bool wakeHoldVerified = wakeupReason != HalGPIO::WakeupReason::PowerButton || BoardConfig::isMetalioEInk4() ||
                                 gpio.verifyPowerButtonWakeup();
+  // EEGO A4: a power-button wake needs the button held until 400 ms after boot
+  // unless a click is set to wake. Sampled here, at the deadline; the decision
+  // waits for SETTINGS like the one above. A released button ends the wait.
+  constexpr unsigned long EEGO_WAKE_HOLD_MS = 400;
+  bool eegoWakeHeld = true;
+  if (BoardConfig::isEegoA4() && wakeupReason == HalGPIO::WakeupReason::PowerButton) {
+    while (millis() < EEGO_WAKE_HOLD_MS && gpio.isPowerButtonPhysicallyPressed()) delay(5);
+    eegoWakeHeld = gpio.isPowerButtonPhysicallyPressed();
+  }
 
   // X4 Pro and X4 Classic both map BTN_UP to GPIO0 — an ESP32-S3 boot strap — so
   // gate recovery on the non-strap Down key (GPIO7) to avoid a stuck-in-recovery loop.
@@ -690,16 +699,10 @@ void setup() {
         Storage.prepareForDeepSleep();
         powerManager.startDeepSleep(gpio);
       }
-      // EEGO A4: unless a click is set to wake (Sleep above), the button must
-      // stay held until 400 ms after boot.
-      if (BoardConfig::isEegoA4() && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP) {
-        constexpr unsigned long EEGO_WAKE_HOLD_MS = 400;
-        while (millis() < EEGO_WAKE_HOLD_MS && gpio.isPowerButtonPhysicallyPressed()) delay(5);
-        if (!gpio.isPowerButtonPhysicallyPressed()) {
-          LOG_DBG("MAIN", "Power-button wake released before %lu ms, sleeping", EEGO_WAKE_HOLD_MS);
-          Storage.prepareForDeepSleep();
-          powerManager.startDeepSleep(gpio);
-        }
+      if (!eegoWakeHeld && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP) {
+        LOG_DBG("MAIN", "Power-button wake released before %lu ms, sleeping", EEGO_WAKE_HOLD_MS);
+        Storage.prepareForDeepSleep();
+        powerManager.startDeepSleep(gpio);
       }
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
