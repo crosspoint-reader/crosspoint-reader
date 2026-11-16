@@ -184,8 +184,7 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                           StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
                          "longPressButtonBehavior", StrId::STR_CAT_CONTROLS));
   emit(buildLongPressMenuSetting());
-  // Double-click power frontlight shortcut only exists on the X4 Pro.
-  if (BoardConfig::isX4Pro()) emit(buildDoublePowerButtonSetting());
+  if (CrossPointSettings::hasPowerDoubleClick()) emit(buildDoublePowerButtonSetting());
   emit(buildShortPowerButtonSetting());
   // Always persisted; isHiddenOnDevice() hides it when the IMU probe fails.
   emit(SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
