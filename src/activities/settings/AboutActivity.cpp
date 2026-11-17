@@ -28,6 +28,9 @@ enum MenuItem {
   ITEM_SD_USED,
   ITEM_SD_FREE,
   ITEM_DISPLAY,
+#if FREEINK_DEVICE_PICCO
+  ITEM_PANEL,
+#endif
   ITEM_RESOLUTION,
   ITEM_TOUCH,
   ITEM_FRONTLIGHT,
@@ -37,7 +40,9 @@ enum MenuItem {
 #if FREEINK_DEVICE_EEGO_A4
   ITEM_UID,
 #endif
+  ITEM_ENUM_COUNT,
 };
+static_assert(ITEM_ENUM_COUNT == AboutActivity::ITEM_COUNT, "About rows and ITEM_COUNT differ");
 
 // Deliberately hardcoded English, exempt from the tr() rule: support reads
 // these screenshots across every device language, so the labels must be
@@ -51,6 +56,9 @@ const char* const menuNames[AboutActivity::ITEM_COUNT] = {
     "SD Used",
     "SD Free",
     "Display Controller",
+#if FREEINK_DEVICE_PICCO
+    "Display Panel",
+#endif
     "Resolution",
     "Touch",
     "Frontlight",
@@ -159,6 +167,10 @@ void AboutActivity::onEnter() {
   const char* liveController = display.controllerName();
   rowValues_[ITEM_DISPLAY] =
       liveController ? liveController : displayControllerName(BoardConfig::ACTIVE.displayController);
+#if FREEINK_DEVICE_PICCO
+  const char* panel = display.panelName();
+  rowValues_[ITEM_PANEL] = panel ? panel : "Unknown";
+#endif
   snprintf(buf, sizeof(buf), "%ux%u", static_cast<unsigned>(BoardConfig::ACTIVE.displayWidth),
            static_cast<unsigned>(BoardConfig::ACTIVE.displayHeight));
   rowValues_[ITEM_RESOLUTION] = buf;
