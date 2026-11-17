@@ -9,12 +9,20 @@ Import("env")
 extra = {(str(offset), env.subst(path)) for offset, path in env.get("FLASH_EXTRA_IMAGES", [])}
 flags = list(env.get("UPLOADERFLAGS", []))
 kept = []
+removed = set()
 i = 0
 while i < len(flags):
-    if i + 1 < len(flags) and (str(flags[i]), env.subst(flags[i + 1])) in extra:
+    pair = (str(flags[i]), env.subst(flags[i + 1])) if i + 1 < len(flags) else None
+    if pair in extra:
+        removed.add(pair)
         i += 2
         continue
     kept.append(flags[i])
     i += 1
+
+# Fail closed: an extra image left in the upload would overwrite the vendor boot area.
+missing = extra - removed
+if missing:
+    raise RuntimeError(f"app_only_upload: extra images still in UPLOADERFLAGS: {sorted(missing)}")
 
 env.Replace(FLASH_EXTRA_IMAGES=[], UPLOADERFLAGS=kept)
