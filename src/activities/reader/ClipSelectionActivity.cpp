@@ -199,6 +199,10 @@ bool ClipSelectionActivity::extractWords() {
                                                    block->laidOutWord(i), style, characterSpacing);
         if (width <= 0) continue;
         const Rect rect = clippingWordRect(renderer, fontId, line, i, marginTop, marginLeft, width, lineInk);
+        if (rect.width <= 0) {  // e.g. a lone em-space: nothing left once its indent is removed
+          ++pageWordIndex;      // still counts, so saved word indexes match EpubReaderActivity's
+          continue;
+        }
 
         if (!isRtl && wordCount == capacity) break;
 

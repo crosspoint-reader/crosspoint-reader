@@ -557,6 +557,22 @@ int main() {
     assert(dense.words[300].pageOffset == 1);
     assert(dense.words[309].pageOffset == 1);
   }
+  {
+    ClipSelectionActivity emSpace;
+    auto page = std::make_unique<Page>();
+    auto line = std::make_unique<PageLine>();
+    for (const char* word : {"\xe2\x80\x83", "word"}) {  // a lone em-space has no width left after its indent
+      line->block.packedText += word;
+      line->block.packedText += '\0';
+      line->block.styles.push_back(EpdFontFamily::REGULAR);
+    }
+    page->elements.push_back(std::move(line));
+    emSpace.pages.push_back(std::move(page));
+    assert(emSpace.extractWords());
+    assert(emSpace.wordCount == 1);
+    assert(emSpace.words[0].width > 0);
+    assert(emSpace.words[0].pageWordIndex == 1);  // the skipped em-space still takes index 0
+  }
   HalMemory::stats = {5908, 3444};  // Physical X3 crash workload.
   assert(selectionLowMemory(0, 0));
   HalMemory::stats = {4500, 4200};  // A large enough block still needs spare heap.

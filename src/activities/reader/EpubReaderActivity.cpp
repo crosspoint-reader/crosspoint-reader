@@ -2431,6 +2431,7 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
       const uint16_t index = wordIndex++;
       const Rect rect = clippingWordRect(renderer, fontId, line, i, top + SETTINGS.screenMargin,
                                          left + SETTINGS.screenMargin, width, lineInk);
+      if (rect.width <= 0) continue;
       if (x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height) continue;
       const auto range = block->wordSourceRange(i);
       for (size_t j = 0; j < CLIPPINGS.clippingCount(); ++j) {
