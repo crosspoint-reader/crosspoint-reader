@@ -2523,11 +2523,11 @@ void EpubReaderActivity::prerenderAdjacentPage(const int fontId, const int margi
   const auto p = section->loadPage(target);
   if (!p || p->hasImages()) return;
 
-  {
-    auto scope = fcm->createPrewarmScope();
-    p->render(renderer, fontId, marginLeft, marginTop);
-    scope.endScanAndPrewarm();
-  }
+  // The scope lives until the planes are drawn: ending it drops the warmed
+  // glyph cache, as it does in renderContents().
+  auto scope = fcm->createPrewarmScope();
+  p->render(renderer, fontId, marginLeft, marginTop);
+  scope.endScanAndPrewarm();
 
   const int gh = renderer.getDisplayHeight();
   const auto renderPlane = [&](const GfxRenderer::RenderMode mode, uint8_t* buf, const uint8_t background) {
