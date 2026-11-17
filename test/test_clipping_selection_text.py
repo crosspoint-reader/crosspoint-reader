@@ -45,6 +45,7 @@ harness = r"""
 #include <climits>
 #include <cstdio>
 #include <memory>
+#include <map>
 #include <set>
 #include <span>
 #include <string>
@@ -165,7 +166,12 @@ struct Renderer {
     ++metricPrewarms;
     for (uint32_t i = 0; i < count; ++i) getter(ctx, i);
   }
-  InkBounds getGlyphInkBounds(int, uint32_t, EpdFontFamily::Style) const { return {2, 14, true}; }
+  bool measureAll = true;  // false: only glyphInk entries have ink (a font without the usual letters)
+  std::map<uint32_t, InkBounds> glyphInk;
+  InkBounds getGlyphInkBounds(int, uint32_t cp, EpdFontFamily::Style) const {
+    if (const auto it = glyphInk.find(cp); it != glyphInk.end()) return it->second;
+    return measureAll ? InkBounds{2, 14, true} : InkBounds{};
+  }
   int linePitch = 16;
   int getLineHeight(int, float) const { return linePitch; }
   RenderMode getRenderMode() const { return BW; }
@@ -471,6 +477,21 @@ int main() {
     decorated.renderer.linePitch = 15;
     assert(decorated.extractWords());
     assert(decorated.words[0].height == 12 && decorated.words[0].y == inkY);
+    // Nothing measurable (e.g. glyphs not loaded): a neutral one-pitch box from the top, never shifted down.
+    decorated.renderer.measureAll = false;
+    for (const int pitch : {10, 16, 20}) {
+      decorated.renderer.linePitch = pitch;
+      assert(decorated.extractWords());
+      assert(decorated.words[0].height == pitch && decorated.words[0].y == inkY - 2);
+    }
+    // Ink is the union over the line's words, so both words share one box regardless of script.
+    decorated.renderer.linePitch = 16;
+    decorated.renderer.glyphInk = {{'o', {4, 12, true}}, {'t', {1, 15, true}}};
+    assert(decorated.extractWords());
+    assert(decorated.words[0].y == inkY - 1 && decorated.words[0].height == 14);
+    assert(decorated.words[1].y == decorated.words[0].y && decorated.words[1].height == 14);
+    decorated.renderer.measureAll = true;
+    decorated.renderer.glyphInk.clear();
     decorated.renderer.linePitch = 16;
     assert(decorated.extractWords());
     const auto originalInk = decorated.renderer.ink;
