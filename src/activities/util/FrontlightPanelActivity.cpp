@@ -161,7 +161,7 @@ void FrontlightPanelActivity::runTile(const int idx) {
       close();
       break;
     case 2:  // Cycle the reading orientation
-      SETTINGS.orientation = static_cast<uint8_t>((SETTINGS.orientation + 1) % 4);
+      SETTINGS.orientation = static_cast<uint8_t>((SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION_COUNT);
       SETTINGS.saveToFile();
       // Only the setting changes: turning the renderer cropped the portrait-only
       // screens the panel opens over. The reader reflows on its next loop().
@@ -395,10 +395,13 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
     const bool enabled[kTileCount] = {SETTINGS.screenInverted != 0, false, false,
                                       SETTINGS.touchReaderControls != CrossPointSettings::TOUCH_READER_OFF,
                                       SETTINGS.ble.enabled != 0};
-    static constexpr fui::Rotation rotations[] = {fui::Rotation::None, fui::Rotation::CW90, fui::Rotation::R180,
-                                                  fui::Rotation::CCW90};
+    static constexpr fui::Rotation rotations[] = {fui::Rotation::None, fui::Rotation::CCW90, fui::Rotation::R180,
+                                                  fui::Rotation::CW90};
     // The underline rotates around the same 32px square as the toolbar's T.
-    static constexpr fui::Rect underlines[] = {{4, 29, 24, 3}, {0, 4, 3, 24}, {4, 0, 24, 3}, {29, 4, 3, 24}};
+    static constexpr fui::Rect underlines[] = {{4, 29, 24, 3}, {29, 4, 3, 24}, {4, 0, 24, 3}, {0, 4, 3, 24}};
+    // The panel inherits the current screen rotation until the reader resumes.
+    constexpr int orientationCount = CrossPointSettings::ORIENTATION_COUNT;
+    const int preview = (SETTINGS.orientation + orientationCount - renderer.getOrientation()) % orientationCount;
     const fui::Rect row = screen.takeTop(kQuickControlSize);
     const fui::Paint ink = fui::Paint::solid(fui::Color::Black);
     for (int id = 0; id < tileCount; ++id) {
@@ -416,11 +419,10 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
                                static_cast<int16_t>(control.y + (control.height - kQuickIconSize) / 2), kQuickIconSize,
                                kQuickIconSize};
       const fui::Paint foreground = fui::Paint::solid(enabled[id] ? fui::Color::White : fui::Color::Black);
-      const int orientation = SETTINGS.orientation % CrossPointSettings::ORIENTATION_COUNT;
       screen.target().bitmap(iconRect, icons[id], fui::BitmapMode::Center, foreground,
-                             id == 2 ? rotations[orientation] : fui::Rotation::None);
+                             id == 2 ? rotations[preview] : fui::Rotation::None);
       if (id == 2) {
-        const auto& line = underlines[orientation];
+        const auto& line = underlines[preview];
         screen.target().fill(fui::Rect{static_cast<int16_t>(iconRect.x + line.x),
                                        static_cast<int16_t>(iconRect.y + line.y), line.width, line.height},
                              ink);

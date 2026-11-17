@@ -145,6 +145,40 @@ TEST_P(Utf8ComposeNfc, PreservesFourByteCodepointsAfterComposition) {
   EXPECT_EQ(compose("e" + kCombAcute + "\xF0\x9F\x93\x96.epub"), "\xC3\xA9\xF0\x9F\x93\x96.epub");
 }
 
+TEST(Utf8Decoder, MalformedBytesUseReplacementGlyphWithDefinedConsumption) {
+  const unsigned char missingContinuation[] = {0xE2, 0x82, 'x', 0};
+  const unsigned char* cursor = missingContinuation;
+  EXPECT_EQ(utf8NextCodepoint(&cursor), REPLACEMENT_GLYPH);
+  EXPECT_EQ(cursor, missingContinuation + 2);
+  EXPECT_EQ(utf8NextCodepoint(&cursor), static_cast<uint32_t>('x'));
+
+  const unsigned char overlong[] = {0xC0, 0xAF, 0};
+  cursor = overlong;
+  EXPECT_EQ(utf8NextCodepoint(&cursor), REPLACEMENT_GLYPH);
+  EXPECT_EQ(cursor, overlong + 1);
+  EXPECT_EQ(utf8NextCodepoint(&cursor), REPLACEMENT_GLYPH);
+
+  const unsigned char surrogate[] = {0xED, 0xA0, 0x80, 0};
+  cursor = surrogate;
+  EXPECT_EQ(utf8NextCodepoint(&cursor), REPLACEMENT_GLYPH);
+  EXPECT_EQ(cursor, surrogate + 1);
+
+  const unsigned char incomplete[] = {0xF0, 0x90, 0};
+  cursor = incomplete;
+  EXPECT_EQ(utf8NextCodepoint(&cursor), REPLACEMENT_GLYPH);
+  EXPECT_EQ(cursor, incomplete + 2);
+
+  const unsigned char beyondUnicode[] = {0xF4, 0x90, 0x80, 0x80, 0};
+  cursor = beyondUnicode;
+  EXPECT_EQ(utf8NextCodepoint(&cursor), REPLACEMENT_GLYPH);
+  EXPECT_EQ(cursor, beyondUnicode + 1);
+
+  char output[4] = {};
+  const char* end = utf8AppendCodepoint(output, REPLACEMENT_GLYPH);
+  EXPECT_EQ(std::string(output, static_cast<size_t>(end - output)), "\xEF\xBF\xBD");
+  EXPECT_EQ(static_cast<size_t>(end - output), 3u);
+}
+
 TEST(Utf8ComposeNfcInPlace, FitsWithinOriginalBuffer) {
   char buffer[] = {'a', '\xCC', '\x82', '\xCC', '\x81', '\0', '!'};
   utf8ComposeNfcInPlace(buffer);

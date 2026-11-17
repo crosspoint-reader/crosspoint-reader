@@ -76,7 +76,11 @@ std::string KOReaderDocumentId::calculate(const std::string& filePath) {
 
     // Read up to CHUNK_SIZE bytes
     const size_t bytesToRead = std::min(CHUNK_SIZE, fileSize - offset);
-    const size_t bytesRead = file.read(buffer, bytesToRead);
+    const int bytesRead = file.read(buffer, bytesToRead);
+    if (bytesRead < 0) {  // an SD error must not produce a hash of partial data
+      LOG_ERR("KODoc", "Read failed at offset %zu", offset);
+      return "";
+    }
 
     if (bytesRead > 0) {
       md5.add(buffer, bytesRead);

@@ -411,6 +411,7 @@ void SdCardFontSystem::freeTtfSources() {
 }
 
 bool SdCardFontSystem::loadTtfVariant(const uint8_t pointSize, const int fontId) {
+  if (!ttf_) return false;
   for (auto& variant : ttfVariants_) {
     if (variant.fontId == fontId) {
       variant.lastUse = ++variantClock_;
@@ -429,9 +430,9 @@ bool SdCardFontSystem::loadTtfVariant(const uint8_t pointSize, const int fontId)
     LOG_ERR("SDFS", "OOM: TtfEpdFont variant @%upt", pointSize);
     return false;
   }
-  // Variants carry headings and inline runs, so a modest cache covers them.
-  addTtfSources(*font);
-  if (!font->load(pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/64 * 1024, /*maxGlyphs=*/512)) return false;
+  // Variants carry headings and inline runs, sharing ttf_'s FreeType faces.
+  if (!font->loadVariantOf(*ttf_, pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/64 * 1024, /*maxGlyphs=*/512))
+    return false;
   font->build(" ");
   renderer_->insertFont(fontId, font->family());
   renderer_->registerTtfFont(fontId, font.get());
@@ -471,19 +472,6 @@ void SdCardFontSystem::unloadTtf(GfxRenderer& renderer) {
 
 bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& path) {
   if (style >= 4) return false;
-  // Small fonts are read fully into RAM (fastest, fewest SD reads; PSRAM when
-  // present). Large fonts (e.g. multi-MB variable/CJK) STREAM from SD so the
-  // whole file never sits in RAM — the handle is kept open for the font's life.
-  // PSRAM boards only (this whole path is vector-font gated), so size the
-  // resident cap for the 8MB parts: a 4.5MB variable font held resident gets
-  // GPOS kerning (streamed faces skip it, and GPOS-only fonts like
-  // Merriweather VF lose ALL kerning when streamed) and skips per-glyph SD
-  // reads. The heap gate below still falls back to streaming when PSRAM
-  // can't fund the buffer.
-  static constexpr size_t kResidentMax = 6 * 1024 * 1024;
-  // Working headroom that must remain in internal DRAM after a resident load
-  // (FreeType face setup, glyph caches, and the rest of the system).
-  static constexpr size_t kInternalHeadroom = 96 * 1024;
   HalFile f = Storage.open(path.c_str());
   if (!f) {
     LOG_ERR("SDFS", "Failed to open TTF: %s", path.c_str());
@@ -496,48 +484,23 @@ bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& pat
     return false;
   }
   TtfSource& s = ttfSources_[style];
-  // A resident buffer lands in PSRAM when fiFontMalloc can place it there;
-  // otherwise it competes with everything else in internal DRAM. PsramAlloc
-  // aborts on OOM, so this gate is load-bearing on no-PSRAM boards (X4/C3):
-  // fall back to streaming instead of attempting an allocation that can fail.
-  bool resident = len <= kResidentMax;
-  if (resident && heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < len) {
-    const size_t internalFree = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    if (internalFree < len + kInternalHeadroom) {
-      LOG_DBG("SDFS", "TTF %s (%u KB) too large for DRAM (largest block %u KB), streaming", path.c_str(),
-              static_cast<unsigned>(len / 1024), static_cast<unsigned>(internalFree / 1024));
-      resident = false;
+  s.file = std::move(f);  // kept open; prefixRead() reads it on demand
+  s.streamed = true;
+  // Cache the file's head in PSRAM: an sfnt's per-glyph-fault tables (cmap,
+  // loca, hmtx) sit before the multi-MB glyf table, so serving the first
+  // 1 MB from RAM turns each glyph fault's 4-6 scattered SD seeks into one
+  // glyf read. Gated per source so a small-PSRAM board takes what fits.
+  static constexpr size_t kStreamPrefix = 1024 * 1024;
+  const size_t prefix = len < kStreamPrefix ? len : kStreamPrefix;
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) > prefix + 256 * 1024) {
+    s.bytes.resize(prefix);
+    if (s.file.seek(0) && static_cast<size_t>(s.file.read(s.bytes.data(), prefix)) == prefix) {
+      LOG_DBG("SDFS", "Cached %u KB TTF prefix in PSRAM", static_cast<unsigned>(prefix / 1024));
+    } else {
+      s.bytes.clear();  // fall back to pure streaming
     }
   }
-  if (resident) {
-    s.bytes.resize(len);
-    const int got = f.read(s.bytes.data(), len);
-    f.close();
-    if (static_cast<size_t>(got) != len) {
-      LOG_ERR("SDFS", "Short read on TTF %s (%d/%u)", path.c_str(), got, static_cast<unsigned>(len));
-      s.bytes.clear();
-      return false;
-    }
-    s.streamed = false;
-  } else {
-    s.file = std::move(f);  // kept open; prefixRead() reads it on demand
-    s.streamed = true;
-    // Cache the file's head in PSRAM: an sfnt's per-glyph-fault tables (cmap,
-    // loca, hmtx) sit before the multi-MB glyf table, so serving the first
-    // 1 MB from RAM turns each glyph fault's 4-6 scattered SD seeks into one
-    // glyf read. Gated per source so a small-PSRAM board takes what fits.
-    static constexpr size_t kStreamPrefix = 1024 * 1024;
-    const size_t prefix = len < kStreamPrefix ? len : kStreamPrefix;
-    if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) > prefix + 256 * 1024) {
-      s.bytes.resize(prefix);
-      if (s.file.seek(0) && static_cast<size_t>(s.file.read(s.bytes.data(), prefix)) == prefix) {
-        LOG_DBG("SDFS", "Cached %u KB TTF prefix in PSRAM", static_cast<unsigned>(prefix / 1024));
-      } else {
-        s.bytes.clear();  // fall back to pure streaming
-      }
-    }
-    LOG_DBG("SDFS", "Streaming TTF %s (%u KB) from SD", path.c_str(), static_cast<unsigned>(len / 1024));
-  }
+  LOG_DBG("SDFS", "Streaming TTF %s (%u KB) from SD", path.c_str(), static_cast<unsigned>(len / 1024));
   s.size = static_cast<unsigned long>(len);
   s.present = true;
   return true;
@@ -574,16 +537,12 @@ void SdCardFontSystem::addTtfSources(TtfEpdFont& font) {
 }
 
 void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
-  if (ttfFamily_.empty()) return;
-  // Small caches: UI strings (titles/rows) are short. Each UI family is 4-style
-  // but LAZY, so only the regular face is ever built for UI text — the bold/
-  // italic faces cost nothing. All faces share the reader's sources (streamed
-  // handles or resident bytes), so no extra copy of any font file.
-  // Each fallback instance carries its own FreeType face and lazy glyph
-  // arena. Without PSRAM those compete with the reader's section build for
-  // internal DRAM, and the build must win: below this floor, skip the
-  // fallback (built-in bitmap UI fonts keep covering Latin UI text).
-  static constexpr size_t kUiFallbackMinInternalHeap = 160 * 1024;
+  if (!ttf_ || ttfFamily_.empty()) return;
+
+  // Small caches: UI strings (titles/rows) are short. Each UI family is a sized
+  // variant of ttf_, sharing its FreeType faces without parsing font files or
+  // allocating separate FT_Face objects in DRAM.
+  static constexpr size_t kUiFallbackMinInternalHeap = 24 * 1024;
   for (const auto& ui : kUiFontSizes) {
     if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) == 0) {
       const size_t internalFree = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -598,8 +557,8 @@ void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
       LOG_ERR("SDFS", "OOM: TtfEpdFont for UI fallback @%upt", ui.pointSize);
       continue;  // built-in bitmap UI fonts keep covering this size
     }
-    addTtfSources(*f);
-    const bool ok = f->load(ui.pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/16 * 1024, /*maxGlyphs=*/384);
+    const bool ok =
+        f->loadVariantOf(*ttf_, ui.pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/16 * 1024, /*maxGlyphs=*/384);
     if (!ok) continue;
     LOG_DBG("SDFS", "TTF UI fallback @%upt loaded (heap free %u)", ui.pointSize, (unsigned)ESP.getFreeHeap());
     // Distinct id from the reader-size font: a UI size can equal the reader size

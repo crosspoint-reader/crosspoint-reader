@@ -216,8 +216,9 @@ inline std::vector<ShortPowerButtonOption> shortPowerButtonOptions() {
   } else {
     options.push_back({StrId::STR_SAVE_CLIPPING, CrossPointSettings::CREATE_CLIPPING});
   }
-  // Touch boards without a home key have no button for these shortcuts.
-  if (BoardConfig::hasTouch() && !BoardConfig::hasHomeKey()) {
+  // Touch boards without a home key have no button for these shortcuts; the
+  // EEGO A4 offers them on the power button as well.
+  if (BoardConfig::hasTouch() && (!BoardConfig::hasHomeKey() || BoardConfig::isEegoA4())) {
     options.push_back({StrId::STR_BOOKMARK_OPTION, CrossPointSettings::PWR_BOOKMARK});
     options.push_back({StrId::STR_KOSYNC, CrossPointSettings::PWR_SYNC});
     options.push_back({StrId::STR_READER_MENU, CrossPointSettings::PWR_READER_MENU});
@@ -247,6 +248,32 @@ inline void setShortPowerButtonFromDisplayValue(const uint8_t displayValue) {
 inline SettingInfo buildShortPowerButtonSetting() {
   return SettingInfo::DynamicEnum(StrId::STR_SHORT_PWR_BTN, buildShortPowerButtonValues(), shortPowerButtonDisplayValue,
                                   setShortPowerButtonFromDisplayValue, "shortPwrBtn", StrId::STR_CAT_CONTROLS);
+}
+
+inline std::vector<ShortPowerButtonOption> doublePowerButtonOptions() {
+  auto options = shortPowerButtonOptions();
+  if (Frontlight.present()) options.push_back({StrId::STR_FRONTLIGHT, CrossPointSettings::PWR_FRONTLIGHT});
+  return options;
+}
+
+inline SettingInfo buildDoublePowerButtonSetting() {
+  std::vector<StrId> labels;
+  labels.reserve(CrossPointSettings::SHORT_PWRBTN_COUNT);
+  for (const auto& option : doublePowerButtonOptions()) labels.push_back(option.label);
+  return SettingInfo::DynamicEnum(
+      StrId::STR_POWER_DOUBLE_CLICK, std::move(labels),
+      []() -> uint8_t {
+        const auto options = doublePowerButtonOptions();
+        for (size_t i = 0; i < options.size(); ++i) {
+          if (options[i].value == SETTINGS.doublePwrBtn) return static_cast<uint8_t>(i);
+        }
+        return 0;
+      },
+      [](uint8_t value) {
+        const auto options = doublePowerButtonOptions();
+        SETTINGS.doublePwrBtn = value < options.size() ? options[value].value : CrossPointSettings::IGNORE;
+      },
+      "doublePwrBtn", StrId::STR_CAT_CONTROLS);
 }
 
 inline std::vector<StrId> homeThemeValues() {
@@ -334,6 +361,10 @@ void forEachSetting(const SdCardFontRegistry* registry, const std::vector<Dictio
   };
   auto each = [&](SettingInfo& s) {
     if (isHiddenOnDevice(s)) return;
+    if (s.valuePtr == &CrossPointSettings::vocabularyHistoryEnabled) {
+      if (!dictionaryPending) return;
+      visitDictionary();
+    }
     if (dictionaryPending && s.category == StrId::STR_CAT_CONTROLS) visitDictionary();
     if (!wants(s.key)) return;
     buildFontOptions(s, registry);

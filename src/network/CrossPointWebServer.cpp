@@ -1765,6 +1765,7 @@ void CrossPointWebServer::handleGetOpdsServers() const {
   char output[512];
   constexpr size_t outputSize = sizeof(output);
   JsonDocument doc;
+  bool seenFirst = false;  // an oversize entry is skipped, so the index cannot place the commas
 
   for (size_t i = 0; i < servers.size(); i++) {
     doc.clear();
@@ -1785,7 +1786,8 @@ void CrossPointWebServer::handleGetOpdsServers() const {
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) continue;
 
-    if (i > 0) server->sendContent(",");
+    if (seenFirst) server->sendContent(",");
+    seenFirst = true;
     server->sendContent(output);
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
@@ -2497,8 +2499,8 @@ void CrossPointWebServer::handleFetch() {
     server->send(400, "application/json", "{\"error\":\"unsupported method\"}");
     return;
   }
-  // The body stays in DRAM, and goes out as one TLS record, while the session
-  // needs its heap: keep it small, and check it before copying.
+  // The body stays in DRAM while the session needs its heap: keep it small, and
+  // check it before copying.
   static constexpr size_t FETCH_MAX_REQUEST_BODY = 4 * 1024;
   const JsonVariantConst bodyField = req["body"];
   if (!bodyField.isNull() && !bodyField.is<const char*>()) {

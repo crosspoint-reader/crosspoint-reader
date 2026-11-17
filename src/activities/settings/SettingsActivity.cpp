@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <LibraryBuilder.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
@@ -40,6 +41,7 @@
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "util/PluginEvents.h"
+#include "util/TaskWatchdog.h"
 
 namespace fui = freeink::ui;
 
@@ -50,23 +52,16 @@ SettingsSection sectionFor(const SettingInfo& setting);
 
 bool showOnDevice(const SettingInfo& setting) {
   if (sectionFor(setting) == SettingsSection::End || home_button::isSetting(setting.valuePtr)) return false;
-  // The sunlight fading fix is a grayscale-waveform compensation that does
-  // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
-  if (setting.valuePtr == &CrossPointSettings::fadingFix && (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
-    return false;
-  }
+  if (setting.valuePtr == &CrossPointSettings::fadingFix && !CrossPointSettings::fadingFixSupported()) return false;
   // Merged into the Text Settings screen.
   if (setting.category == StrId::STR_CAT_READER && setting.inTextSettings) return false;
-  // Touch boards act on the text directly; the X4 Pro home key and the
-  // short power click on other touch boards carry the remaining shortcuts.
-  if (BoardConfig::hasTouch() && setting.valuePtr == &CrossPointSettings::longPressMenuFunction) return false;
   return true;
 }
-
 // End = not a row here: other categories (KOReader Sync, Status Bar, ...)
 // only group the web UI; their rows live on their own sub-screens.
 SettingsSection sectionFor(const SettingInfo& setting) {
   if (setting.valuePtr == &CrossPointSettings::libraryUseMetadata ||
+      setting.valuePtr == &CrossPointSettings::libraryRecentOpenedOnly ||
       setting.valuePtr == &CrossPointSettings::removeReadBooksFromRecents ||
       setting.valuePtr == &CrossPointSettings::moveFinishedToReadFolder) {
     return SettingsSection::Library;
@@ -79,6 +74,34 @@ SettingsSection sectionFor(const SettingInfo& setting) {
   return SettingsSection::End;
 }
 
+// The shared long-press setting deliberately appears in both button groups.
+bool belongsToControlsGroup(const SettingInfo& setting, ControlsGroup group) {
+  const auto field = setting.valuePtr;
+  const bool power =
+      setting.key && (std::strcmp(setting.key, "shortPwrBtn") == 0 || std::strcmp(setting.key, "doublePwrBtn") == 0);
+  const bool menu = setting.key && std::strcmp(setting.key, "longPressMenuFunction") == 0;
+  const bool shared = field == &CrossPointSettings::longPressButtonBehavior;
+  switch (group) {
+    case ControlsGroup::Power:
+      return power;
+    case ControlsGroup::Front:
+      return shared || menu || field == &CrossPointSettings::frontButtonFollowOrientation ||
+             field == &CrossPointSettings::backShortToFileBrowser;
+    case ControlsGroup::Side:
+      return shared || field == &CrossPointSettings::sideButtonLayout ||
+             field == &CrossPointSettings::sideButtonFollowOrientation;
+    case ControlsGroup::Touch:
+      return field == &CrossPointSettings::touchReaderControls || field == &CrossPointSettings::pageTurnGesture ||
+             field == &CrossPointSettings::previousPageGesture || field == &CrossPointSettings::showReaderMenu;
+    case ControlsGroup::Root:
+      return !belongsToControlsGroup(setting, ControlsGroup::Power) &&
+             !belongsToControlsGroup(setting, ControlsGroup::Front) &&
+             !belongsToControlsGroup(setting, ControlsGroup::Side) &&
+             !belongsToControlsGroup(setting, ControlsGroup::Touch);
+  }
+  return false;
+}
+
 // Device-only action rows added per section, beyond the shared list.
 constexpr size_t EXTRA_ROWS_PER_SECTION = 6;
 }  // namespace
@@ -88,16 +111,18 @@ void SettingsActivity::rebuildSettings() {
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
 
-  // Rescan /dictionaries on every rebuild: cheap (one directory listing) and
-  // picks up dictionaries copied to the SD card since the last visit.
+  // Rescan /dictionaries on every rebuild to pick up dictionaries copied to the
+  // SD card since the last visit. Only the Reader section shows the row.
   std::vector<DictionaryEntry> dictionaries;
-  DictionaryRegistry::discover(dictionaries);
+  if (section == SettingsSection::Reader) DictionaryRegistry::discover(dictionaries);
 
   auto all = getSettingsList(&sdFontSystem.registry(), &dictionaries);
 
-  const size_t count = std::count_if(all.begin(), all.end(), [this](const SettingInfo& setting) {
-    return sectionFor(setting) == section && showOnDevice(setting);
-  });
+  const auto include = [this](const SettingInfo& setting) {
+    return sectionFor(setting) == section && showOnDevice(setting) &&
+           (section != SettingsSection::Controls || belongsToControlsGroup(setting, controlsGroup));
+  };
+  const size_t count = std::count_if(all.begin(), all.end(), include);
   settings.clear();
   settings.reserve(count + EXTRA_ROWS_PER_SECTION);
 
@@ -110,16 +135,47 @@ void SettingsActivity::rebuildSettings() {
   addAction(SettingsSection::General, StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts);
   addAction(SettingsSection::Reader, StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings);
   addAction(SettingsSection::Reader, StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts);
-  if (BoardConfig::hasHomeKey()) {
-    addAction(SettingsSection::Controls, StrId::STR_HOME_BUTTON, SettingAction::HomeButton);
-  }
-  if (!BoardConfig::hasTouch()) {
-    addAction(SettingsSection::Controls, StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons);
+  if (section == SettingsSection::Controls) {
+    if (controlsGroup == ControlsGroup::Root) {
+      if (BoardConfig::hasHomeKey()) {
+        addAction(section, StrId::STR_HOME_BUTTON, SettingAction::HomeButton);
+      }
+      const auto addGroup = [&](ControlsGroup group, StrId title, SettingAction action) {
+        if (std::any_of(all.begin(), all.end(),
+                        [&](const SettingInfo& setting) {
+                          return sectionFor(setting) == section && showOnDevice(setting) &&
+                                 belongsToControlsGroup(setting, group);
+                        }) ||
+            (group == ControlsGroup::Front && !BoardConfig::hasTouch())) {
+          addAction(section, title, action);
+        }
+      };
+      addGroup(ControlsGroup::Power, StrId::STR_POWER_BUTTON, SettingAction::ControlsPower);
+      if (!BoardConfig::hasTouch()) {
+        addGroup(ControlsGroup::Front, StrId::STR_FRONT_BUTTONS, SettingAction::ControlsFront);
+      }
+      addGroup(ControlsGroup::Side, StrId::STR_SIDE_BUTTONS, SettingAction::ControlsSide);
+      addGroup(ControlsGroup::Touch, StrId::STR_TAPS_AND_GESTURES, SettingAction::ControlsTouch);
+    } else if (controlsGroup == ControlsGroup::Front && !BoardConfig::hasTouch()) {
+      addAction(section, StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons);
+    }
   }
 
   for (auto& setting : all) {
-    if (sectionFor(setting) != section || !showOnDevice(setting)) continue;
+    if (!include(setting)) continue;
+    if (section == SettingsSection::Controls && setting.valuePtr == &CrossPointSettings::longPressButtonBehavior) {
+      setting.nameId = StrId::STR_PAGE_TURN_LONG_PRESS;
+    }
     settings.push_back(std::move(setting));
+  }
+
+  if (section == SettingsSection::Controls && controlsGroup == ControlsGroup::Front) {
+    for (const char* key : {"longPressButtonBehavior", "longPressMenuFunction"}) {
+      const auto row = std::find_if(settings.begin(), settings.end(), [key](const SettingInfo& setting) {
+        return setting.key && std::strcmp(setting.key, key) == 0;
+      });
+      if (row != settings.end()) std::rotate(row, row + 1, settings.end());
+    }
   }
 
   // Clock configuration only exists where the RTC probe found hardware.
@@ -128,6 +184,8 @@ void SettingsActivity::rebuildSettings() {
   }
   addAction(SettingsSection::Reader, StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar);
   addAction(SettingsSection::Reader, StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache);
+
+  addAction(SettingsSection::Library, StrId::STR_LIBRARY_REBUILD, SettingAction::RefreshLibrary);
 
   addAction(SettingsSection::Network, StrId::STR_WIFI_NETWORKS, SettingAction::Network);
   if (bleturner::status().compiledIn) {
@@ -145,13 +203,14 @@ void SettingsActivity::rebuildSettings() {
     addAction(SettingsSection::General, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
     addAction(SettingsSection::General, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
   }
+  addAction(SettingsSection::General, StrId::STR_DISPLAY_REFRESH, SettingAction::DisplayRefresh);
   addAction(SettingsSection::General, StrId::STR_ABOUT, SettingAction::About);
   rebuildRowItems();
 }
 
 SettingsActivity::SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                   const SettingsSection section)
-    : UiListActivity("Settings", renderer, mappedInput), section(section) {}
+                                   const SettingsSection section, const ControlsGroup controlsGroup)
+    : UiListActivity("Settings", renderer, mappedInput), section(section), controlsGroup(controlsGroup) {}
 
 void SettingsActivity::onEnter() {
   UiListActivity::onEnter();
@@ -181,6 +240,18 @@ void SettingsActivity::rebuildRowItems() {
 }
 
 const char* SettingsActivity::headerTitle() const {
+  switch (controlsGroup) {
+    case ControlsGroup::Power:
+      return tr(STR_POWER_BUTTON);
+    case ControlsGroup::Front:
+      return tr(STR_FRONT_BUTTONS);
+    case ControlsGroup::Side:
+      return tr(STR_SIDE_BUTTONS);
+    case ControlsGroup::Touch:
+      return tr(STR_TAPS_AND_GESTURES);
+    case ControlsGroup::Root:
+      break;
+  }
   return I18N.get(SETTINGS_SECTION_TITLES[static_cast<size_t>(section)]);
 }
 
@@ -282,6 +353,36 @@ void SettingsActivity::toggleSelectedSetting() {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
     switch (setting.action) {
+      case SettingAction::ControlsPower:
+      case SettingAction::ControlsFront:
+      case SettingAction::ControlsSide:
+      case SettingAction::ControlsTouch: {
+        ControlsGroup group = ControlsGroup::Root;
+        switch (setting.action) {
+          case SettingAction::ControlsPower:
+            group = ControlsGroup::Power;
+            break;
+          case SettingAction::ControlsFront:
+            group = ControlsGroup::Front;
+            break;
+          case SettingAction::ControlsSide:
+            group = ControlsGroup::Side;
+            break;
+          case SettingAction::ControlsTouch:
+            group = ControlsGroup::Touch;
+            break;
+          default:
+            break;  // Only the four group actions reach this branch.
+        }
+        // The activity stack owns the child until Back returns to this menu.
+        auto activity = makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, SettingsSection::Controls, group);
+        if (!activity) {
+          LOG_ERR("SET", "OOM: Controls settings (%u bytes)", static_cast<unsigned>(sizeof(SettingsActivity)));
+          return;
+        }
+        startActivityForResult(std::move(activity), [this](const ActivityResult&) { requestUpdate(); });
+        return;
+      }
       case SettingAction::HomeButton: {
         // Activities must outlive this call and are owned by the activity stack.
         auto activity = makeUniqueNoThrow<HomeButtonSettingsActivity>(renderer, mappedInput);
@@ -345,6 +446,36 @@ void SettingsActivity::toggleSelectedSetting() {
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::RefreshLibrary: {
+        // Blocking, like the Library screen's own rebuild: the walk needs the
+        // card to itself, so the render task stays locked out.
+        RenderLock lock;
+        GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+        library::BuildStats stats;
+        const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
+        if (!ok) LOG_ERR("SET", "library index build failed");
+        GUI.drawPopup(renderer, ok ? tr(STR_LIBRARY_REBUILD_DONE) : tr(STR_LIBRARY_REBUILD_FAILED));
+        delay(1000);
+        requestUpdate();
+        break;
+      }
+      case SettingAction::DisplayRefresh: {
+        // Alternate full black and white refreshes to clear image retention.
+        // Back stops after the next white pass, so the screen always ends white.
+        constexpr int kCycles = 10;
+        RenderLock lock;
+        for (int cycle = 0; cycle < kCycles; ++cycle) {
+          renderer.clearScreen(0x00);
+          renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+          renderer.clearScreen(0xFF);
+          renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+          resetTaskWatchdogIfSubscribed();
+          mappedInput.update(true);
+          if (mappedInput.wasPressed(MappedInputManager::Button::Back)) break;
+        }
+        requestUpdate();
+        break;
+      }
       case SettingAction::CheckForUpdates:
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -462,7 +593,6 @@ void SettingsActivity::openSleepTimeoutPicker() {
 }
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
-  if (setting.action == SettingAction::HomeButton) return tr(STR_CONFIGURE);
   if (setting.action == SettingAction::Plugins) return SETTINGS.pluginsEnabled ? tr(STR_ENABLED) : tr(STR_DISABLED);
   if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Guard like the valueGetter branch below: a corrupt/migrated settings
