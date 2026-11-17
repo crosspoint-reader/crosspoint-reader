@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BoardConfig.h>
 #include <CrossPointSettings.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
@@ -287,8 +288,12 @@ inline bool handleBackNavigation(const MappedInputManager& mappedInput, Activity
     return false;
   }
 
-  const bool backTriggered = mappedInput.wasLongPressed(MappedInputManager::Button::Back, GO_BACK_OR_HOME_MS) ||
-                             mappedInput.wasReleased(MappedInputManager::Button::Back);
+  const bool isBackSharedWithPower = (BoardConfig::ACTIVE.input.back == BoardConfig::ACTIVE.input.power &&
+                                      BoardConfig::ACTIVE.input.back != BoardConfig::PIN_UNASSIGNED);
+  const bool backTriggered =
+      (!isBackSharedWithPower && mappedInput.wasLongPressed(MappedInputManager::Button::Back, GO_BACK_OR_HOME_MS)) ||
+      (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+       (!isBackSharedWithPower || mappedInput.getHeldTime() < GO_BACK_OR_HOME_MS));
   if (!backTriggered) return false;
 
   const bool longPress = mappedInput.getHeldTime() >= GO_BACK_OR_HOME_MS;
