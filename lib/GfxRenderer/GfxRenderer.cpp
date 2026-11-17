@@ -2455,23 +2455,15 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
   return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
 }
 
-GfxRenderer::InkBounds GfxRenderer::getTextInkBounds(const int fontId, const char* text,
-                                                     const EpdFontFamily::Style style) const {
+GfxRenderer::InkBounds GfxRenderer::getGlyphInkBounds(const int fontId, const uint32_t cp,
+                                                      const EpdFontFamily::Style style) const {
   const auto fontIt = fontMap.find(fontId);
-  if (fontIt == fontMap.end() || !text) return {};
-  // Measure the glyphs actually in the text, so any script works (no fixed probe letters).
-  int above = 0, below = 0;
-  const auto* p = reinterpret_cast<const unsigned char*>(text);
-  while (const uint32_t cp = utf8NextCodepoint(&p)) {
-    if (!fontIt->second.hasCodepoint(cp, style)) continue;  // getGlyph would return the replacement glyph
-    const EpdGlyph* glyph = fontIt->second.getGlyph(cp, style);
-    if (!glyph || glyph->height == 0) continue;  // spaces and other blank glyphs carry no ink
-    above = std::max<int>(above, glyph->top);
-    below = std::max<int>(below, glyph->height - glyph->top);
-  }
-  if (above <= 0 && below <= 0) return {};
+  if (fontIt == fontMap.end()) return {};
+  if (!fontIt->second.hasCodepoint(cp, style)) return {};  // getGlyph would return the replacement glyph
+  const EpdGlyph* glyph = fontIt->second.getGlyph(cp, style);
+  if (!glyph || glyph->height == 0) return {};  // spaces and other blank glyphs carry no ink
   const int ascender = fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
-  return {ascender - above, ascender + below, true};
+  return {ascender - glyph->top, ascender + glyph->height - glyph->top, true};
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {

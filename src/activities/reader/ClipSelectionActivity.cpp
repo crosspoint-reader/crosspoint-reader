@@ -183,6 +183,7 @@ bool ClipSelectionActivity::extractWords() {
                                        static_cast<uint8_t>(styleMask | (1U << EpdFontFamily::REGULAR)));
       }
 
+      ClippingLineInk lineInk;
       const size_t lineStart = wordCount;
       const bool isRtl = block->getBlockStyle().isRtl;
       const int8_t characterSpacing = block->getBlockStyle().characterSpacing;
@@ -197,7 +198,7 @@ bool ClipSelectionActivity::extractWords() {
         const int width = renderer.getTextAdvanceX(clippingWordFont(renderer, fontId, *block, i),
                                                    block->laidOutWord(i), style, characterSpacing);
         if (width <= 0) continue;
-        const Rect rect = clippingWordRect(renderer, fontId, line, i, marginTop, marginLeft, width);
+        const Rect rect = clippingWordRect(renderer, fontId, line, i, marginTop, marginLeft, width, lineInk);
 
         if (!isRtl && wordCount == capacity) break;
 

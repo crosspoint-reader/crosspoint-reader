@@ -162,7 +162,7 @@ struct Renderer {
   int getFontAscenderSize(int) const { return 12; }
   int getLineHeight(int) const { return 16; }
   struct InkBounds { int top = 0, bottom = 0; bool measured = false; };
-  InkBounds getTextInkBounds(int, const char*, EpdFontFamily::Style) const { return {2, 14, true}; }
+  InkBounds getGlyphInkBounds(int, uint32_t, EpdFontFamily::Style) const { return {2, 14, true}; }
   int linePitch = 16;
   int getLineHeight(int, float) const { return linePitch; }
   RenderMode getRenderMode() const { return BW; }

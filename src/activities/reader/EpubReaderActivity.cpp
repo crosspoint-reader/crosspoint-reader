@@ -2420,6 +2420,7 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
     const auto& line = static_cast<const PageLine&>(*element);
     const auto& block = line.getBlock();
     if (!block || !block->valid()) continue;
+    ClippingLineInk lineInk;
     for (uint16_t i = 0; i < block->wordCount(); ++i) {
       const char* text = block->wordText(i);
       if (!clippingText::hasVisibleText(text)) continue;
@@ -2428,8 +2429,8 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
                                                  style, block->getBlockStyle().characterSpacing);
       if (width <= 0) continue;
       const uint16_t index = wordIndex++;
-      const Rect rect =
-          clippingWordRect(renderer, fontId, line, i, top + SETTINGS.screenMargin, left + SETTINGS.screenMargin, width);
+      const Rect rect = clippingWordRect(renderer, fontId, line, i, top + SETTINGS.screenMargin,
+                                         left + SETTINGS.screenMargin, width, lineInk);
       if (x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height) continue;
       const auto range = block->wordSourceRange(i);
       for (size_t j = 0; j < CLIPPINGS.clippingCount(); ++j) {
@@ -2492,6 +2493,7 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     bool hasPreviousHighlight = false;
     int previousHighlightX = 0;
     int previousHighlightWidth = 0;
+    ClippingLineInk lineInk;
     for (uint16_t i = 0; i < block->wordCount(); ++i) {
       const char* text = block->wordText(i);
       if (!clippingText::hasVisibleText(text)) continue;
@@ -2505,7 +2507,8 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
         continue;
       }
 
-      const Rect rect = clippingWordRect(renderer, fontId, line, i, orientedMarginTop, orientedMarginLeft, width);
+      const Rect rect =
+          clippingWordRect(renderer, fontId, line, i, orientedMarginTop, orientedMarginLeft, width, lineInk);
       const int x = rect.x;
       const int y = rect.y;
       width = rect.width;
