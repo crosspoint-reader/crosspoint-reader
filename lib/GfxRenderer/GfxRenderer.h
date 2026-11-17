@@ -370,13 +370,13 @@ class GfxRenderer {
                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const;
   int getFontAscenderSize(int fontId) const;
-  // Vertical ink extent of the glyphs in text, relative to the top passed to drawText.
-  // measured is false when no glyph had ink (empty text, blank or missing glyphs).
+  // Vertical ink extent of one glyph, relative to the top passed to drawText.
+  // measured is false when the glyph has no ink (blank or missing).
   struct InkBounds {
     int top = 0, bottom = 0;
     bool measured = false;
   };
-  InkBounds getTextInkBounds(int fontId, const char* text, EpdFontFamily::Style style) const;
+  InkBounds getGlyphInkBounds(int fontId, uint32_t cp, EpdFontFamily::Style style) const;
   int getLineHeight(int fontId) const;
   // Explicit line spacing scales font size; the one-argument form returns font metrics.
   int getLineHeight(int fontId, float compression) const;
