@@ -19,6 +19,22 @@ inline int clippingWordFont(const GfxRenderer& renderer, const int fontId, const
   return TextBlock::renderFontId(renderer, block.wordFontId(i, fontId), fontId);
 }
 
+// Yields the text of the line's words that use one font; other words are skipped (null).
+struct ClippingLineWords {
+  const GfxRenderer* renderer;
+  const TextBlock* block;
+  int fontId;
+  int wordFont;
+
+  static const char* get(const void* ctx, const uint32_t index) {
+    const auto& self = *static_cast<const ClippingLineWords*>(ctx);
+    if (clippingWordFont(*self.renderer, self.fontId, *self.block, static_cast<uint16_t>(index)) != self.wordFont) {
+      return nullptr;
+    }
+    return self.block->wordText(static_cast<uint16_t>(index));
+  }
+};
+
 // Ink extent per word font for one line, measured lazily and once: the union over the line's unique glyphs, so every
 // word box on the line shares one height and any script is measured. Create one per line, outside the word loop.
 struct ClippingLineInk {
@@ -28,6 +44,15 @@ struct ClippingLineInk {
                              const int pitch) {
     for (const auto& entry : byFont) {
       if (entry.first == wordFont) return entry.second;
+    }
+    // SD fonts: load the line's glyph metrics in one prewarm instead of faulting each glyph from the file.
+    if (renderer.isSdCardFont(wordFont)) {
+      uint8_t styleMask = 0;
+      for (uint16_t w = 0; w < block.wordCount(); ++w) {
+        styleMask |= static_cast<uint8_t>(1U << (static_cast<uint8_t>(block.wordStyle(w)) & 0x03));
+      }
+      const ClippingLineWords words{&renderer, &block, fontId, wordFont};
+      renderer.ensureSdGlyphMetrics(wordFont, &ClippingLineWords::get, &words, block.wordCount(), styleMask);
     }
     // Unique (style, codepoint) keys, so repeated letters are looked up once.
     std::vector<uint32_t> keys;
