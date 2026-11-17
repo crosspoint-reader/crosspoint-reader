@@ -592,7 +592,12 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
             cancelRequested_ = true;
             goHomeRequested_ = true;
           }
-          requestUpdate(true);
+          // Progress arrives on every chunk, and each fast repaint drives the
+          // screen's black pixels again; repaint at most every 5 s.
+          if (millis() - lastProgressRepaintMs_ >= 5000) {
+            lastProgressRepaintMs_ = millis();
+            requestUpdate(true);
+          }
         },
         // Bulk font transfers follow GitHub's release-asset redirect over plain
         // HTTP: the CRC check below (manifest fetched over TLS) covers

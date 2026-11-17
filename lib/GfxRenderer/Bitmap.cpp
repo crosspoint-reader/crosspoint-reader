@@ -136,6 +136,8 @@ BmpReaderError Bitmap::parseHeaders() {
   rowBytes = (width * bpp + 31) / 32 * 4;
 
   for (int i = 0; i < 256; i++) paletteLum[i] = static_cast<uint8_t>(i);
+  // The palette follows the DIB header, which is longer than 40 bytes for V4/V5 files.
+  if (colorsUsed > 0 && !file.seek(14 + biSize)) return BmpReaderError::SeekPixelDataFailed;
   if (colorsUsed > 0) {
     for (uint32_t i = 0; i < colorsUsed; i++) {
       uint8_t rgb[4];
