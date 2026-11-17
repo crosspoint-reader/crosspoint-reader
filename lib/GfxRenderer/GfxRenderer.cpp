@@ -2455,6 +2455,14 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
   return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
 }
 
+void GfxRenderer::ensureSdGlyphMetrics(const int fontId, const TextGetter getter, const void* ctx,
+                                       const uint32_t textCount, const uint8_t styleMask) const {
+  const auto sdIt = sdCardFonts_.find(fontId);
+  if (sdIt == sdCardFonts_.end() || !getter || textCount == 0) return;
+  // Metrics only, no kern/ligature data: ink bounds need neither, and a full mini built later still supersedes it.
+  sdIt->second->prewarm(getter, ctx, textCount, styleMask, /*metadataOnly=*/true, /*loadKernLig=*/false);
+}
+
 GfxRenderer::InkBounds GfxRenderer::getGlyphInkBounds(const int fontId, const uint32_t cp,
                                                       const EpdFontFamily::Style style) const {
   const auto fontIt = fontMap.find(fontId);

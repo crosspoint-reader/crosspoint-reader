@@ -162,6 +162,12 @@ struct Renderer {
   int getFontAscenderSize(int) const { return 12; }
   int getLineHeight(int) const { return 16; }
   struct InkBounds { int top = 0, bottom = 0; bool measured = false; };
+  mutable size_t metricPrewarms = 0;
+  void ensureSdGlyphMetrics(int, const char* (*getter)(const void*, uint32_t), const void* ctx, uint32_t count,
+                            uint8_t) const {
+    ++metricPrewarms;
+    for (uint32_t i = 0; i < count; ++i) getter(ctx, i);
+  }
   InkBounds getGlyphInkBounds(int, uint32_t, EpdFontFamily::Style) const { return {2, 14, true}; }
   int linePitch = 16;
   int getLineHeight(int, float) const { return linePitch; }
@@ -513,6 +519,7 @@ int main() {
     assert(cold.words[0].pageOffset == 0);
     assert(cold.words[239].pageOffset == 1);
     assert(cold.renderer.coldMeasurements == 0);
+    assert(cold.renderer.metricPrewarms > 0 && cold.renderer.metricPrewarms < cold.wordCount);  // once per line
     cold.mode = ClipSelectionActivity::Mode::DefinitionLookup;
     cold.borrowedPages = cold.pages;
     HalMemory::stats = {1024 * 1024, 1024 * 1024};
