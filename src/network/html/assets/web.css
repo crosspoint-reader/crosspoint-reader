@@ -878,6 +878,16 @@ body.web-ui  {
     width: auto !important;
     padding: 8px 0;
   }
+  .web-ui .sort-bar  {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+  }
+  .web-ui .sort-bar .sort-select  {
+    flex: 1;
+    min-height: 44px;
+  }
   .web-ui .file-table tbody tr  {
     display: grid;
     grid-template-columns: 28px minmax(0, 1fr) auto;
@@ -890,7 +900,7 @@ body.web-ui  {
     padding: 0;
   }
   .web-ui .file-table td:first-child  {
-    grid-row: 1 / 4;
+    grid-row: 1 / 6;
     align-self: start;
   }
   .web-ui .file-table td:nth-child(2)  {
@@ -903,7 +913,12 @@ body.web-ui  {
     grid-column: 3;
     text-align: right;
   }
-  .web-ui .file-table td:nth-child(5)  {
+  .web-ui .file-table td:nth-child(5),
+  .web-ui .file-table td:nth-child(6)  {
+    grid-column: 2 / 4;
+    font-size: 0.85em;
+  }
+  .web-ui .file-table td:nth-child(7)  {
     grid-column: 2 / 4;
     width: auto;
     text-align: right;

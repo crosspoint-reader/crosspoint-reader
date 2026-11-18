@@ -124,6 +124,44 @@ constexpr uint8_t UTC_INDEX = 17;
 static_assert(TABLE[UTC_INDEX].stdOffsetQ == 0, "UTC_INDEX must point at the UTC entry");
 static_assert(TABLE_COUNT < 255, "255 is the 'never chosen' sentinel in clockTimezone");
 
+// Browser (IANA) region -> TABLE entry name, for zones that observe DST where the
+// offset alone is ambiguous.
+struct RegionMap {
+  const char* region;
+  const char* entryName;
+};
+constexpr RegionMap REGIONS[] = {
+    {"America/Anchorage", "Anchorage"},
+    {"America/Los_Angeles", "Los Angeles / Vancouver"},
+    {"America/Vancouver", "Los Angeles / Vancouver"},
+    {"America/Denver", "Denver / Edmonton"},
+    {"America/Edmonton", "Denver / Edmonton"},
+    {"America/Chicago", "Chicago / Winnipeg"},
+    {"America/Winnipeg", "Chicago / Winnipeg"},
+    {"America/New_York", "New York / Toronto"},
+    {"America/Toronto", "New York / Toronto"},
+    {"America/Halifax", "Halifax"},
+    {"America/Santiago", "Santiago"},
+    {"America/St_Johns", "St. John's"},
+    {"Atlantic/Azores", "Azores"},
+    {"Europe/London", "London / Dublin / Lisbon"},
+    {"Europe/Dublin", "London / Dublin / Lisbon"},
+    {"Europe/Lisbon", "London / Dublin / Lisbon"},
+    {"Europe/Berlin", "Berlin / Paris / Madrid / Rome"},
+    {"Europe/Paris", "Berlin / Paris / Madrid / Rome"},
+    {"Europe/Madrid", "Berlin / Paris / Madrid / Rome"},
+    {"Europe/Rome", "Berlin / Paris / Madrid / Rome"},
+    {"Europe/Athens", "Athens / Helsinki / Kyiv"},
+    {"Europe/Helsinki", "Athens / Helsinki / Kyiv"},
+    {"Europe/Kyiv", "Athens / Helsinki / Kyiv"},
+    {"Africa/Cairo", "Cairo"},
+    {"Asia/Jerusalem", "Jerusalem"},
+    {"Australia/Adelaide", "Adelaide"},
+    {"Australia/Sydney", "Sydney / Melbourne"},
+    {"Australia/Melbourne", "Sydney / Melbourne"},
+    {"Pacific/Auckland", "Auckland"},
+};
+
 }  // namespace
 
 const TimezoneInfo* table() { return TABLE; }
@@ -148,6 +186,29 @@ uint8_t activeIndex() {
     }
   }
   return UTC_INDEX;
+}
+
+int indexForZone(const char* region, const int stdOffsetMinutes, const bool observesDst) {
+  if (stdOffsetMinutes % 15 != 0) return -1;
+  const int q = stdOffsetMinutes / 15;
+  if (region != nullptr && region[0] != '\0') {
+    for (const RegionMap& m : REGIONS) {
+      if (strcmp(m.region, region) != 0) continue;
+      for (size_t i = 0; i < TABLE_COUNT; i++) {
+        if (strcmp(TABLE[i].name, m.entryName) == 0) {
+          // Reject a stale/mismatched report rather than apply the wrong rule.
+          return TABLE[i].stdOffsetQ == q ? static_cast<int>(i) : -1;
+        }
+      }
+    }
+  }
+  // Unknown region: offset + DST-ness can't tell zones apart (Halifax vs Santiago),
+  // so only no-DST offsets, which have no rule to get wrong, are guessed.
+  if (observesDst) return -1;
+  for (size_t i = 0; i < TABLE_COUNT; i++) {
+    if (TABLE[i].stdOffsetQ == q && strchr(TABLE[i].posixTz, ',') == nullptr) return static_cast<int>(i);
+  }
+  return -1;
 }
 
 void formatOffset(const uint8_t index, char* buf, const size_t bufSize) {

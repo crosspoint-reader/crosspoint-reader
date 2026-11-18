@@ -17,6 +17,7 @@
 #include <Memory.h>
 #include <ResumableFetch.h>
 #include <SecureHttpClient.h>
+#include <TrustedTime.h>
 #include <Utf8.h>
 #include <Util.h>
 #include <WiFi.h>
@@ -65,6 +66,7 @@
 #include "util/PluginHttp.h"
 #include "util/PluginLocations.h"
 #include "util/TaskWatchdog.h"
+#include "util/Timezones.h"
 #include "util/UrlUtils.h"
 
 static void sendStaticContent(WebServer* server, const char* data, size_t len, const char* etag,
@@ -321,6 +323,7 @@ class CrossPointWebServer::RouteHandler final : public RequestHandler {
          nullptr},
 
         {"/api/status", HTTP_GET, [](S& s) { s.handleStatus(); }, nullptr},
+        {"/api/clock", HTTP_POST, [](S& s) { s.handlePostClock(); }, nullptr},
         {"/api/files", HTTP_GET, [](S& s) { s.handleFileListData(); }, nullptr},
         {"/download", HTTP_GET, [](S& s) { s.handleDownload(); }, nullptr},
         {"/upload", HTTP_POST, [](S& s) { s.handleUploadPost(s.upload); }, [](S& s) { s.handleUpload(s.upload); }},
@@ -713,6 +716,35 @@ void CrossPointWebServer::handleNotFound() const {
   server->send(404, "text/plain", message);
 }
 
+// The browser knows the real time and zone; a device without an RTC loses both on power-off.
+// adopt() only ever moves the clock forward and rejects implausible values. The zone is only
+// chosen here when the user never picked one (255), so a deliberate setting is never overridden.
+void CrossPointWebServer::handlePostClock() {
+  const long long epochMs = atoll(server->arg("epochMs").c_str());
+  if (epochMs <= 0) {
+    server->send(400, "text/plain", "epochMs required");
+    return;
+  }
+  trustedtime::adopt(epochMs / 1000);
+
+  bool zoneSet = false;
+  // A legacy clockUtcOffsetQ the user explicitly set (not the 48 default) and that activeIndex() still
+  // maps is preserved: choosing a zone here would silently replace it.
+  const bool legacyConfigured = SETTINGS.clockUtcOffsetQ <= 104 && SETTINGS.clockUtcOffsetQ != 48;
+  if (SETTINGS.clockTimezone == 255 && !legacyConfigured && server->hasArg("stdOffsetMin")) {
+    const int idx = timezones::indexForZone(server->arg("tz").c_str(), atoi(server->arg("stdOffsetMin").c_str()),
+                                            server->arg("dst") == "1");
+    if (idx >= 0) {
+      SETTINGS.clockTimezone = static_cast<uint8_t>(idx);
+      if (!SETTINGS.saveToFile()) LOG_ERR("WEB", "Failed to persist timezone from browser");
+      timezones::applyToClock();
+      zoneSet = true;
+    }
+  }
+  LOG_DBG("WEB", "Clock from browser: epochMs=%lld zoneSet=%d", epochMs, zoneSet);
+  server->send(200, "application/json", zoneSet ? "{\"zoneSet\":true}" : "{\"zoneSet\":false}");
+}
+
 void CrossPointWebServer::handleStatus() const {
   // Get correct IP based on AP vs STA mode
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
@@ -813,6 +845,8 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
       FileInfo info;
       info.name = fileName;
       info.isDirectory = file.isDirectory();
+      info.modified = file.modificationTime();
+      info.created = file.creationTime();
 
       if (info.isDirectory) {
         info.size = 0;
@@ -859,6 +893,8 @@ void CrossPointWebServer::handleFileListData() const {
     doc["size"] = info.size;
     doc["isDirectory"] = info.isDirectory;
     doc["isEpub"] = info.isEpub;
+    doc["modified"] = info.modified;
+    doc["created"] = info.created;
     if (doc.overflowed()) {
       LOG_ERR("WEB", "OOM: file entry JSON for %s", info.name.c_str());
       return;
