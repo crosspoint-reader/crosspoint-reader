@@ -242,8 +242,7 @@ class GfxRenderer {
   // fadingFix isn't forcing the blocking path. Callers can skip overlap
   // scaffolding (e.g. whole-plane grayscale buffers) when false.
   bool supportsAsyncRefresh() const;
-  // True when the display can overlap an ordinary B/W refresh with grayscale
-  // composition without bypassing a required grayscale base waveform.
+  // When checking stripUploads, pass the grayscale mode used for the planes.
   HalDisplay::GrayscaleCapabilities grayscaleCapabilities(
       HalDisplay::GrayscaleMode mode = HalDisplay::GrayscaleMode::Overlay) const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
@@ -397,7 +396,8 @@ class GfxRenderer {
 
   // Tiled grayscale (X4): stream one band of a plane straight to controller RAM
   // from `scratch` (panelWidthBytes * numRows, physical rows [yStart, yStart+
-  // numRows)), bypassing the framebuffer. Check grayscaleCapabilities().stripUploads first.
+  // numRows)), bypassing the framebuffer. Check grayscaleCapabilities(mode).stripUploads
+  // with the same grayscale mode used for the planes.
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const;
   bool storeBwBuffer();  // Returns true if buffer was stored successfully
   // Restore and free the stored buffer. resyncPanelBaseline rewrites the

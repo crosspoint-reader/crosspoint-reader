@@ -13,6 +13,7 @@ class HalDisplay {
   using GrayscaleBase = freeink::GrayscaleBase;
   using GrayscaleEncoding = freeink::GrayscaleEncoding;
 
+  // When checking stripUploads, pass the grayscale mode used for the planes.
   GrayscaleCapabilities grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const;
   // Controller of the driver chosen at boot (null if the driver does not say).
   const char* controllerName() const { return einkDisplay.getControllerName(); }
@@ -113,7 +114,8 @@ class HalDisplay {
   void displayGrayBuffer(bool turnOffScreen = false);
 
   // Tiled grayscale: stream one band of a plane (lsbPlane selects LSB/MSB RAM)
-  // straight to the controller. Check grayscaleCapabilities().stripUploads first.
+  // straight to the controller. Check grayscaleCapabilities(mode).stripUploads
+  // with the same grayscale mode used for the planes.
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows);
 
   // Runtime geometry passthrough
