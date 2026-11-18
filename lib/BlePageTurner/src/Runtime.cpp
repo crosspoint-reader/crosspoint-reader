@@ -114,6 +114,17 @@ RadioInputs heapInputs(const Phase phase, const Heap heap, const bool storageBus
   return in;
 }
 
+#ifdef BLE_HEAP_CENSUS
+// TEMPORARY diagnostic: map the heap around a start; a few maps per boot keep the log readable.
+void census(const char* tag) {
+  static uint8_t mapsLeft = 4;
+  if (mapsLeft > 0 && host->heapMap != nullptr) {
+    mapsLeft--;
+    host->heapMap(tag);
+  }
+}
+#endif
+
 void logSkipped(const char* reason, const Heap& heap) {
   say(true, "HID begin skipped (%s): free=%zu largest=%zu required_free=%zu required_largest=%zu\n", reason,
       heap.freeBytes, heap.largestBlock, activeProfile().startFreeBytes, activeProfile().minimumLargest);
@@ -155,6 +166,9 @@ bool beginOwned() {
   // What the stack comes up in: the reader released its layout parser before this (yieldForRadio).
   say(false, "HID begin heap free=%zu largest=%zu\n", heap.freeBytes, heap.largestBlock);
 #endif
+#ifdef BLE_HEAP_CENSUS
+  census("ble-before-start");
+#endif
   // One attempt. Callers decide when a later one is allowed; there is no retry loop here.
   if (attemptCancelled.load(std::memory_order_acquire) || host->fileTransferActive() || !port::begin()) {
     heapTracker.inconclusive();
@@ -173,6 +187,9 @@ bool beginOwned() {
     say(true, "HID begin rolled back (post-init-headroom): free=%zu largest=%zu required_largest=%zu\n",
         after.freeBytes, after.largestBlock, activeProfile().minimumLargest);
     heapTracker.refused(started);
+#ifdef BLE_HEAP_CENSUS
+    census("ble-after-start");
+#endif
   } else if (started != Why::Ok) {
     heapTracker.inconclusive();
   }

@@ -50,7 +50,16 @@ inline constexpr size_t kS3MinimumLargest = 6 * kS3InternalAllocMax;
 inline constexpr Profile kX3Profile{kStackBytes, kStartFreeBytes, kMinimumLargestBlockBytes, 0};
 inline constexpr Profile kS3Profile{kS3StackBytes, kS3StackBytes + kS3MinimumLargest, kS3MinimumLargest,
                                     kS3MinimumLargest + kS3StackLargestDrop + 2048};
-#ifdef FREEINK_BLE_STACK_IN_PSRAM
+// C61 (OnePage, FREEINK_BLE_PROFILE_C61), measured 18/11/2026 on the settings screen: the stack took 36,620 to
+// 37,244 B of internal RAM, most of it from IDF's 64 KiB internal pool (CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL).
+// Malloc and new never use that pool and fall back to PSRAM, so the reader needs no internal block of its own.
+// The block kept after the start is for two more 4 KiB task stacks or DMA buffers.
+inline constexpr size_t kC61StackBytes = 37244 + 4096;  // measured, plus a margin of one allocator page
+inline constexpr size_t kC61MinimumLargest = 2 * 4096;
+inline constexpr Profile kC61Profile{kC61StackBytes, kC61StackBytes + kC61MinimumLargest, kC61MinimumLargest, 0};
+#if defined(FREEINK_BLE_PROFILE_C61)
+inline constexpr const Profile& activeProfile() { return kC61Profile; }
+#elif defined(FREEINK_BLE_STACK_IN_PSRAM)
 inline constexpr const Profile& activeProfile() { return kS3Profile; }
 #else
 inline constexpr const Profile& activeProfile() { return kX3Profile; }
