@@ -3,6 +3,7 @@
  *
  * Original author:  Ahmad Khalifa (www.arabeyes.org, MIT licence)
  * Mintty changes:   Thomas Wolff (rules N0, W7/L1/X9 fixes, isolates)
+ * License and copyright notices: licenses/borrowed-code.txt.
  *
  * UAX #9: https://www.unicode.org/reports/tr9/
  */
@@ -173,50 +174,49 @@ typedef struct {
 enum { SHAPE_FIRST = 0x621, SHAPE_LAST = 0x64A };
 
 /* mintty's shapetypes[] — verbatim */
-static const shape_node shapetypes[] = {
-    /* index, Typ, Iso, Ligature Index */
-    /* 621 */ {SU, 0x80},
-    /* 622 */ {SR, 0x81},
-    /* 623 */ {SR, 0x83},
-    /* 624 */ {SR, 0x85},
-    /* 625 */ {SR, 0x87},
-    /* 626 */ {SD, 0x89},
-    /* 627 */ {SR, 0x8D},
-    /* 628 */ {SD, 0x8F},
-    /* 629 */ {SR, 0x93},
-    /* 62A */ {SD, 0x95},
-    /* 62B */ {SD, 0x99},
-    /* 62C */ {SD, 0x9D},
-    /* 62D */ {SD, 0xA1},
-    /* 62E */ {SD, 0xA5},
-    /* 62F */ {SR, 0xA9},
-    /* 630 */ {SR, 0xAB},
-    /* 631 */ {SR, 0xAD},
-    /* 632 */ {SR, 0xAF},
-    /* 633 */ {SD, 0xB1},
-    /* 634 */ {SD, 0xB5},
-    /* 635 */ {SD, 0xB9},
-    /* 636 */ {SD, 0xBD},
-    /* 637 */ {SD, 0xC1},
-    /* 638 */ {SD, 0xC5},
-    /* 639 */ {SD, 0xC9},
-    /* 63A */ {SD, 0xCD},
-    /* 63B */ {SU, 0x0},
-    /* 63C */ {SU, 0x0},
-    /* 63D */ {SU, 0x0},
-    /* 63E */ {SU, 0x0},
-    /* 63F */ {SU, 0x0},
-    /* 640 */ {SC, 0x0},
-    /* 641 */ {SD, 0xD1},
-    /* 642 */ {SD, 0xD5},
-    /* 643 */ {SD, 0xD9},
-    /* 644 */ {SD, 0xDD},
-    /* 645 */ {SD, 0xE1},
-    /* 646 */ {SD, 0xE5},
-    /* 647 */ {SD, 0xE9},
-    /* 648 */ {SR, 0xED},
-    /* 649 */ {SR, 0xEF},
-    /* 64A */ {SD, 0xF1}};
+static const shape_node shapetypes[] = {/* index, Typ, Iso, Ligature Index */
+                                        /* 621 */ {SU, 0x80},
+                                        /* 622 */ {SR, 0x81},
+                                        /* 623 */ {SR, 0x83},
+                                        /* 624 */ {SR, 0x85},
+                                        /* 625 */ {SR, 0x87},
+                                        /* 626 */ {SD, 0x89},
+                                        /* 627 */ {SR, 0x8D},
+                                        /* 628 */ {SD, 0x8F},
+                                        /* 629 */ {SR, 0x93},
+                                        /* 62A */ {SD, 0x95},
+                                        /* 62B */ {SD, 0x99},
+                                        /* 62C */ {SD, 0x9D},
+                                        /* 62D */ {SD, 0xA1},
+                                        /* 62E */ {SD, 0xA5},
+                                        /* 62F */ {SR, 0xA9},
+                                        /* 630 */ {SR, 0xAB},
+                                        /* 631 */ {SR, 0xAD},
+                                        /* 632 */ {SR, 0xAF},
+                                        /* 633 */ {SD, 0xB1},
+                                        /* 634 */ {SD, 0xB5},
+                                        /* 635 */ {SD, 0xB9},
+                                        /* 636 */ {SD, 0xBD},
+                                        /* 637 */ {SD, 0xC1},
+                                        /* 638 */ {SD, 0xC5},
+                                        /* 639 */ {SD, 0xC9},
+                                        /* 63A */ {SD, 0xCD},
+                                        /* 63B */ {SU, 0x0},
+                                        /* 63C */ {SU, 0x0},
+                                        /* 63D */ {SU, 0x0},
+                                        /* 63E */ {SU, 0x0},
+                                        /* 63F */ {SU, 0x0},
+                                        /* 640 */ {SC, 0x0},
+                                        /* 641 */ {SD, 0xD1},
+                                        /* 642 */ {SD, 0xD5},
+                                        /* 643 */ {SD, 0xD9},
+                                        /* 644 */ {SD, 0xDD},
+                                        /* 645 */ {SD, 0xE1},
+                                        /* 646 */ {SD, 0xE5},
+                                        /* 647 */ {SD, 0xE9},
+                                        /* 648 */ {SR, 0xED},
+                                        /* 649 */ {SR, 0xEF},
+                                        /* 64A */ {SD, 0xF1}};
 
 /* ── CrossPoint extension: joining types outside U+0621–U+064A ──────────
  * Source: Unicode ArabicShaping.txt (joining type column).  Ranges of
@@ -888,6 +888,10 @@ int do_bidi(bool autodir, int paragraphLevel, bidi_char* line, int count) {
     }
   }
 
+  /* ── L4: mirror characters in RTL runs (while still in logical order, before L2 reorders line[]) ── */
+  for (i = 0; i < count; i++)
+    if (levels[i] & 1) line[i].wc = mirror(line[i].wc);
+
   /* ── L2: reverse from highest level down to lowest odd ── */
   uchar max_level = (uchar)paragraphLevel, min_odd = 255;
   for (i = 0; i < count; i++) {
@@ -895,10 +899,6 @@ int do_bidi(bool autodir, int paragraphLevel, bidi_char* line, int count) {
     if ((levels[i] & 1) && levels[i] < min_odd) min_odd = levels[i];
   }
   for (int level = max_level; level >= (int)min_odd; level--) flip_runs(line, levels, level, count);
-
-  /* ── L4: mirror characters in RTL runs ── */
-  for (i = 0; i < count; i++)
-    if (levels[i] & 1) line[i].wc = mirror(line[i].wc);
 
   return paragraphLevel;
 }

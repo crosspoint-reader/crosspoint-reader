@@ -1,122 +1,138 @@
 #include "OpdsBatchDownload.h"
 
 #include <HalStorage.h>
+#include <LibraryBuilder.h>
 #include <Logging.h>
-#include <OpdsParser.h>
-#include <OpdsStream.h>
+#include <OpdsFeedParser.h>
 
 #include <utility>
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
 #include "util/OpdsFilename.h"
 #include "util/UrlUtils.h"
 
 namespace {
-// A page carries at most 62 entries (OpdsParser's storage cap), so this bounds
-// the walk well above MAX_ENTRIES while still stopping a `next` link cycle.
+// A page carries at most OpdsLimits::MAX_ENTRIES entries, so this bounds the
+// walk well above MAX_ENTRIES while still stopping a `next` link cycle.
 constexpr int MAX_PAGES = 8;
+
+// The fields a transfer needs, copied out of the page so the parsed feed can
+// be freed before TLS claims its buffers.
+struct PendingBook {
+  std::string title;
+  std::string author;
+  std::string href;
+  bool indirect = false;
+};
+
+// A purchase link (or any misbehaving endpoint) can answer 200 with an HTML
+// page; a real EPUB is a ZIP container.
+bool looksLikeEpub(const std::string& path) {
+  uint8_t magic[4] = {0};
+  HalFile check;
+  if (Storage.openFileForRead("OPDS", path.c_str(), check)) {
+    check.read(magic, sizeof(magic));
+    check.close();
+  }
+  return magic[0] == 'P' && magic[1] == 'K' && magic[2] == 3 && magic[3] == 4;
+}
 }  // namespace
 
 namespace OpdsBatchDownload {
 
-std::string destPath(const std::string& author, const std::string& title, const bool haveFolder) {
-  // Mirrors OpdsBookBrowserActivity::downloadBook(): folder prefix, '/', then
-  // opdsBookFilename() under the configured format.
+std::string destPath(const std::string& author, const std::string& title) {
+  // opdsDownloadFolder is already a null-terminated char[64]; use it directly.
+  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
+  bool haveFolder = folder[0] != '\0';
+  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
+    // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
+    // existing caller checks exists() before mkdir. On real failure, fall back
+    // to SD root so the download is never lost.
+    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
+    haveFolder = false;
+  }
+  // Titles are unbounded (a fixed char[] would truncate). Cold path (a
+  // multi-second download follows), so one reserve'd owning string is right.
   std::string path;
   path.reserve(96);
-  if (haveFolder) path += SETTINGS.opdsDownloadFolder;
+  if (haveFolder) path += folder;
   path += '/';
   path += opdsBookFilename(author, title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
   return path;
 }
 
-bool ensureDownloadFolder() {
-  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
-  if (folder[0] == '\0') return false;
-  // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
-  // existing caller checks exists() before mkdir. On real failure, fall back to
-  // SD root so the download is never lost.
-  if (Storage.exists(folder) || Storage.mkdir(folder)) return true;
-  LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
-  return false;
-}
+Result run(freeink::opds::OpdsClient& client, const std::string& feedUrl, const Hooks& hooks, Status& status) {
+  if (feedUrl.empty() || !hooks.transfer) return Result::FAILED;
+  const auto notify = [&hooks, &status] { return hooks.progress ? hooks.progress(hooks.ctx, status) : true; };
 
-Result run(const OpdsServer& server, const std::string& startPath, const Observer& observer, Status& status) {
-  if (server.url.empty()) return Result::FAILED;
-
-  const bool haveFolder = ensureDownloadFolder();
-  const auto notify = [&observer, &status] { return observer.fn ? observer.fn(observer.ctx, status) : true; };
-
-  std::string path = startPath;
+  std::string pageUrl = feedUrl;
   for (int page = 0; page < MAX_PAGES && status.examined < MAX_ENTRIES; page++) {
-    const std::string feedUrl = UrlUtils::buildUrl(server.url, path);
-    LOG_DBG("OPDS", "Batch page %d: %s", page, feedUrl.c_str());
+    LOG_DBG("OPDS", "Batch page %d: %s", page, pageUrl.c_str());
 
     std::string nextHref;
-    std::vector<OpdsEntry> entries;
+    std::vector<PendingBook> books;
     {
-      OpdsParser parser;
-      {
-        OpdsParserStream stream{parser};
-        if (!HttpDownloader::fetchUrl(feedUrl, stream, server.username, server.password)) return Result::FAILED;
-      }
-      if (!parser) return Result::FAILED;
+      OpdsFeedParser parser;
+      if (client.fetchFeed(pageUrl, parser) != freeink::opds::OpdsClient::FetchStatus::Ok) return Result::FAILED;
       nextHref = parser.getNextPageUrl();
-      entries = std::move(parser).getEntries();
+      for (auto& entry : parser.takeEntries()) {
+        // Buying is never implied by "download new", and LCP books need the
+        // per-book passphrase flow.
+        if (entry.type != OpdsEntryType::BOOK || entry.purchase || entry.lcpLicense) continue;
+        books.push_back({std::move(entry.title), std::move(entry.author), std::move(entry.href), entry.indirect});
+      }
     }
 
-    for (const auto& entry : entries) {
-      if (entry.type != OpdsEntryType::BOOK) continue;
+    for (const auto& book : books) {
       if (status.examined >= MAX_ENTRIES) break;
       status.examined++;
 
-      const std::string filename = destPath(entry.author, entry.title, haveFolder);
+      const std::string filename = destPath(book.author, book.title);
       if (Storage.exists(filename.c_str())) {
         status.skipped++;
         if (!notify()) return Result::CANCELLED;
         continue;
       }
 
-      status.title = entry.title.c_str();  // Borrowed for this iteration only
-      status.bytes = status.bytesTotal = 0;
+      status.title = book.title.c_str();  // Borrowed for this iteration only
       if (!notify()) {
         status.title = "";
         return Result::CANCELLED;
       }
 
-      bool cancelled = false;
-      const std::string downloadUrl = UrlUtils::buildUrl(feedUrl, entry.href);
-      const auto result = HttpDownloader::downloadToFile(
-          downloadUrl, filename,
-          [&status, &notify, &cancelled](const size_t downloaded, const size_t total) {
-            status.bytes = downloaded;
-            status.bytesTotal = total;
-            if (!notify()) cancelled = true;
-          },
-          &cancelled, server.username, server.password);
+      // Resolve against the page it came from, like the browser does.
+      std::string downloadUrl = UrlUtils::buildUrl(pageUrl, book.href);
+      bool resolved = true;
+      if (book.indirect) {
+        std::string direct;
+        bool isEpub = false;
+        resolved = client.resolveIndirect(downloadUrl, direct, isEpub);
+        if (resolved) downloadUrl = std::move(direct);
+      }
 
+      const auto result = resolved ? hooks.transfer(hooks.ctx, downloadUrl, filename, client.downloadAuth())
+                                   : HttpDownloader::HTTP_ERROR;
       status.title = "";
-      status.bytes = status.bytesTotal = 0;
-      if (result == HttpDownloader::OK) {
+      if (result == HttpDownloader::OK && looksLikeEpub(filename)) {
         status.downloaded++;
         clearBookCache(filename);
+        library::markLibraryIndexDirty();
       } else if (result == HttpDownloader::ABORTED) {
         return Result::CANCELLED;
       } else {
         // One bad book must not end the sync; the rest of the catalog is still
         // worth fetching.
         LOG_ERR("OPDS", "Batch download failed (%d): %s", static_cast<int>(result), filename.c_str());
+        if (result == HttpDownloader::OK) Storage.remove(filename.c_str());
         status.failed++;
       }
       if (!notify()) return Result::CANCELLED;
     }
 
     if (nextHref.empty()) break;
-    // Resolve the next page against the page it came from, like navigateToEntry().
-    path = UrlUtils::buildUrl(feedUrl, nextHref);
+    pageUrl = UrlUtils::buildUrl(pageUrl, nextHref);
   }
 
   return Result::COMPLETED;

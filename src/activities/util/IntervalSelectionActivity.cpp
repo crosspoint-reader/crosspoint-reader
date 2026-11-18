@@ -17,8 +17,8 @@ namespace fui = freeink::ui;
 namespace {
 constexpr fui::ActionId ACTION_SLIDER = 1;
 constexpr fui::ActionId ACTION_STEP = 2;
-constexpr fui::ActionId ACTION_CANCEL = 3;
 constexpr fui::ActionId ACTION_OK = 4;
+constexpr fui::ActionId ACTION_CHROME = 5;  // absorbs taps on the dialog body; no handler
 }  // namespace
 
 IntervalSelectionActivity::IntervalSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -49,7 +49,6 @@ void IntervalSelectionActivity::onEnter() {
   resetUi();
   app.on(ACTION_SLIDER, &IntervalSelectionActivity::onSliderEvent, this);
   app.on(ACTION_STEP, &IntervalSelectionActivity::onStepEvent, this);
-  app.on(ACTION_CANCEL, &IntervalSelectionActivity::onCancelEvent, this);
   app.on(ACTION_OK, &IntervalSelectionActivity::onOkEvent, this);
   app.setScreen(&IntervalSelectionActivity::intervalScreen, this);
   requestUpdate();
@@ -91,12 +90,6 @@ void IntervalSelectionActivity::onStepEvent(const fui::ActionEvent& event, void*
   self->adjustValue(event.value * self->smallStep);
 }
 
-void IntervalSelectionActivity::onCancelEvent(const fui::ActionEvent&, void* user) {
-  auto* self = static_cast<IntervalSelectionActivity*>(user);
-  self->app.clearTapFlash();  // the tap leaves this screen
-  self->cancel();
-}
-
 void IntervalSelectionActivity::onOkEvent(const fui::ActionEvent&, void* user) {
   auto* self = static_cast<IntervalSelectionActivity*>(user);
   self->app.clearTapFlash();  // the tap leaves this screen
@@ -118,6 +111,13 @@ void IntervalSelectionActivity::loop() {
   if (routingReady() && draggingSlider) {
     // Drag ended (possibly off the slider): swallow the tap/swipe events it produced.
     if (!route.snap.touchHeld) draggingSlider = false;
+    return;
+  }
+  // Tap released outside the dialog (inside-taps are absorbed by the chrome
+  // guard): cancel. Swipe-end releases arrive with -1,-1 coords and fall
+  // through — same rule as OptionPopup.
+  if (route.routed && route.snap.touchReleased && route.snap.touchX >= 0) {
+    cancel();
     return;
   }
 
@@ -179,26 +179,31 @@ void IntervalSelectionActivity::buildIntervalScreen(UiScreen& screen) {
     hintIndex++;
   }
 
+  char minText[32];
+  formatValue(minText, sizeof(minText), minValue);
+  char maxText[32];
+  formatValue(maxText, sizeof(maxText), maxValue);
+
   UiSliderDialogSpec spec;
+  spec.title = I18N.get(titleId);
   spec.readout = readout;
   spec.value = value - minValue;
   spec.max = std::max(1, maxValue - minValue);
+  spec.minLabel = minText;
+  spec.maxLabel = maxText;
   spec.sliderAction = ACTION_SLIDER;
   spec.stepAction = ACTION_STEP;
-  spec.cancelAction = ACTION_CANCEL;
   spec.okAction = ACTION_OK;
+  spec.chromeAction = ACTION_CHROME;
   spec.hintLine1 = hints[0];
   spec.hintLine2 = hints[1];
-  buildSliderDialogScreen(screen, renderer, mappedInput, spec);
+  buildSliderDialogScreen(screen, uiTarget, mappedInput, spec);
 }
 
 void IntervalSelectionActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, I18N.get(titleId), true, EpdFontFamily::BOLD);
-
-  // Value readout, slider, hints, and the touch Cancel/OK pair render through the
-  // app so the interactive elements register touch hit rects.
+  // No clearScreen: the dialog is a popup — it dims the frame it opened over
+  // and draws the card on top. Everything renders through the app so the
+  // interactive elements register touch hit rects.
   renderUi();
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");

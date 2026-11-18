@@ -1,5 +1,6 @@
 #include "BaseTheme.h"
 
+#include <BoardConfig.h>
 #include <FreeInkUIGfxRenderer.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
@@ -9,17 +10,28 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
+#include "clippings/SelectionGeometry.h"
+#include "components/HeaderBackTapTarget.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "components/icons/bookmark.h"
+#include "components/icons/cover.h"
+#include "components/icons/headerIcons.h"
 #include "fontIds.h"
+
+void BaseTheme::setCheckboxRow(freeink::ui::ListItem& item, const bool checked) {
+  item.value = nullptr;
+  item.toggle = true;
+  item.toggleChecked = checked;
+}
 
 // Internal constants
 namespace {
@@ -100,7 +112,16 @@ void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
 void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   // Left aligned: icon on left, percentage on right (reader mode)
   const uint16_t percentage = powerManager.getBatteryPercentage();
-  const int y = rect.y + 6;
+  // Center the icon on the digits' ink, which sits a font-dependent distance
+  // below the text line's top (the font scales with uiScale).
+  int y = rect.y + 6;
+  const auto fontIt = renderer.getFontMap().find(SMALL_FONT_ID);
+  if (fontIt != renderer.getFontMap().end()) {
+    if (const auto glyph = fontIt->second.getGlyph('0', EpdFontFamily::REGULAR)) {
+      const int inkTop = renderer.getFontAscenderSize(SMALL_FONT_ID) - static_cast<int>(glyph->top);
+      y = rect.y + inkTop + (static_cast<int>(glyph->height) - rect.height) / 2;
+    }
+  }
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
@@ -112,8 +133,36 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
   fillBatteryIcon(renderer, iconRect, percentage);
 }
 
-void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const size_t current,
-                                const size_t total) const {
+void BaseTheme::drawCoverPlaceholder(const GfxRenderer& renderer, Rect rect) {
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const int topHeight = rect.height / 3;
+  renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
+  renderer.fillRect(rect.x, rect.y + topHeight, rect.width, rect.height - topHeight, true);
+  renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
+  constexpr int ICON_SIZE = 32;
+  if (rect.width >= ICON_SIZE + 4 && topHeight >= ICON_SIZE + 4) {
+    const int insetX = std::min(24, (rect.width - ICON_SIZE) / 2);
+    const int insetY = std::min(24, (topHeight - ICON_SIZE) / 2);
+    renderer.drawIcon(CoverIcon, rect.x + insetX, rect.y + insetY, ICON_SIZE);
+  }
+}
+
+bool BaseTheme::drawCoverThumbFill(const GfxRenderer& renderer, const Bitmap& bitmap, Rect slot, const int xOffset) {
+  if (slot.width <= 0 || slot.height <= 0) return false;
+  // xOffset nudges the centered art sideways; the clip stays on the slot.
+  const int x = slot.x + (slot.width - bitmap.getWidth()) / 2 + xOffset;
+  const int y = slot.y + (slot.height - bitmap.getHeight()) / 2;
+  const auto clip = renderer.getClipRect();
+  const int left = std::max(slot.x, clip[0]);
+  const int top = std::max(slot.y, clip[1]);
+  renderer.setClipRect(left, top, std::max(0, std::min(slot.x + slot.width, clip[0] + clip[2]) - left),
+                       std::max(0, std::min(slot.y + slot.height, clip[1] + clip[3]) - top));
+  const bool drawn = renderer.drawBitmap(bitmap, x, y, bitmap.getWidth(), bitmap.getHeight());
+  renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
+  return drawn;
+}
+
+void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const size_t current, const size_t total) {
   if (total == 0) {
     return;
   }
@@ -136,19 +185,17 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
 }
 
-// Centre a button-hint label inside its box. A label that fits is drawn on the
-// single baseline it always was; one too wide used to overflow the button border
-// and run into the neighbouring hint, and now wraps to at most two centred lines
-// (wrappedText() ellipsises anything that still doesn't fit). Shared so every
-// theme's drawButtonHints() gets the same behaviour.
-void BaseTheme::drawHintLabel(GfxRenderer& renderer, const int fontId, const char* label, const int x,
-                              const int boxWidth, const int boxTop, const int boxHeight, const int singleLineYOffset) {
+// Centre hint labels by text height, wrapping to at most two lines.
+void BaseTheme::drawHintLabel(const GfxRenderer& renderer, const int fontId, const char* label, const int x,
+                              const int boxWidth, const int boxTop, const int boxHeight) {
   constexpr int textPadding = 4;  // keeps a wrapped label off the button's border
   const int maxTextWidth = boxWidth - (textPadding * 2);
 
+  const int textHeight = renderer.getTextHeight(fontId);
   const int textWidth = renderer.getTextWidth(fontId, label);
   if (textWidth <= maxTextWidth) {
-    renderer.drawText(fontId, x + (boxWidth - 1 - textWidth) / 2, boxTop + singleLineYOffset, label);
+    const int textY = boxTop + std::max(1, (boxHeight - textHeight) / 2);
+    renderer.drawText(fontId, x + (boxWidth - 1 - textWidth) / 2, textY, label);
     return;
   }
 
@@ -156,7 +203,7 @@ void BaseTheme::drawHintLabel(GfxRenderer& renderer, const int fontId, const cha
   // full advanceY (leading included), which stacks two lines taller than the
   // button and clips the second one.
   constexpr int lineGap = 2;
-  const int step = renderer.getTextHeight(fontId) + lineGap;
+  const int step = textHeight + lineGap;
   const auto lines = renderer.wrappedText(fontId, label, maxTextWidth, 2);
   const int block = static_cast<int>(lines.size()) * step - lineGap;
   int lineY = boxTop + std::max(1, (boxHeight - block) / 2);
@@ -180,22 +227,23 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = BaseMetrics::values.buttonHintsHeight;
   constexpr int buttonY = BaseMetrics::values.buttonHintsHeight;  // Distance from bottom
-  constexpr int textYOffset = 7;                                  // Distance from top of button to text baseline
   // Keyed to the portrait panel width: the 528-wide X3 gets more spacing than
   // the 480-wide boards (X4, X4 Pro, and the other 800x480 panels).
   constexpr int narrowButtonPositions[] = {25, 130, 245, 350};
   constexpr int wideButtonPositions[] = {38, 154, 268, 384};
   const int* buttonPositions = renderer.getScreenWidth() >= 528 ? wideButtonPositions : narrowButtonPositions;
   const char* labels[] = {btn1, btn2, btn3, btn4};
+  const bool grayscale = renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute();
 
   for (int i = 0; i < 4; i++) {
     // Only draw if the label is non-empty
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       const int x = buttonPositions[i];
-      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
+      // Zero gray-plane bits leave the monochrome hint from the base pass intact.
+      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, grayscale);
+      if (grayscale) continue;
       renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
-      drawHintLabel(renderer, UI_10_FONT_ID, labels[i], x, buttonWidth, pageHeight - buttonY, buttonHeight,
-                    textYOffset);
+      drawHintLabel(renderer, UI_10_FONT_ID, labels[i], x, buttonWidth, pageHeight - buttonY, buttonHeight);
     }
   }
 
@@ -271,7 +319,92 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   }
 }
 
-void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+// Slightly inside the side padding: the battery's boxed glyph and the clock
+// digits read wider than text/cover ink on the same line, so flush placement
+// looks like it overhangs the content columns.
+int BaseTheme::headerStatusInset() { return UITheme::getInstance().getMetrics().headerSidePadding + 4; }
+
+void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::HeaderProps& props) {
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  auto& status = props.status;
+
+  // Status text stays at the fixed small font on every screen: FONT_LABEL is
+  // bound to SMALL_FONT_ID by makeUiTarget() (FUI screens) and drawHeader()
+  // (passive frames), while the uiScale FONT_SMALL is for list subtitles.
+  status.battery.text.font = freeink::ui::GfxRendererTarget::FONT_LABEL;
+
+  status.showBattery = true;
+  const uint16_t percentage = powerManager.getBatteryPercentage();
+  status.battery.percent = static_cast<uint8_t>(percentage > 100 ? 100 : percentage);
+  status.battery.charging = gpio.isUsbConnected();
+  // Static label buffers: headers draw on the single render task, and the
+  // strings only need to outlive the fui::header() call that consumes them.
+  static char percentText[8];
+  if (SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS) {
+    snprintf(percentText, sizeof(percentText), "%u%%", static_cast<unsigned>(percentage));
+    status.battery.label = percentText;
+  }
+  status.battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
+  status.battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
+  status.battery.gap = batteryPercentSpacing;
+  status.batteryLeft = metrics.headerBatterySide == 1;
+  status.edgeInset = static_cast<int16_t>(headerStatusInset());
+
+  // Header chrome geometry. Status lives on the theme's thin top strip in
+  // fixed corners — battery top-right, a corner clock (headerClockCentered =
+  // false) top-left, a centered clock top-center — and never repositions.
+  // The content row (title, back arrow, trailing action buttons) centers on
+  // the region between the strip and the band bottom, so its padding reads
+  // as balanced under the status line rather than against the full band.
+  // Text hangs low in its line cell by the font's internal leading; the icon
+  // buttons drop by that amount to align with the glyphs the user sees.
+  // Buttons keep a standard square (a band-8 button dwarfs its 24px icon);
+  // the boxes are invisible and minTouchSize pads the tap target.
+  constexpr int16_t headerButtonSize = 48;
+  const int16_t bandHeight = static_cast<int16_t>(metrics.headerHeight);
+  const int16_t strip = static_cast<int16_t>(metrics.batteryBarHeight);
+  const int titleFontId = uiScaleSpec().titleFontId;
+  const int16_t opticalDrop =
+      static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
+  props.leadingSize = headerButtonSize;
+  props.trailingSize = headerButtonSize;
+  props.leadingStyles = freeink::ui::plainStyles(freeink::ui::Paint::solid(freeink::ui::Color::Black));
+  props.actionOffsetY = static_cast<int16_t>(strip + (bandHeight - strip - headerButtonSize) / 2 - 4 + opticalDrop);
+  // Shift the title's band-centered box down by half the strip: its center
+  // lands on the below-strip region's midline with the buttons.
+  // headerBand lowers only the band's top edge, which moves a centered title
+  // half as far as the buttons; the second half keeps the title on their line.
+  props.titleOffsetY = static_cast<int16_t>(strip / 2 + BoardConfig::ACTIVE.headerOffsetY / 2);
+  status.stripHeight = strip;
+  status.clockCentered = metrics.headerClockCentered;
+
+  // Header clock, opposite the battery, on every screen that draws this band
+  // (SETTINGS.clockShowInHeader). Themes whose title layout has no room for
+  // the clock's left reserve opt out via headerShowsClock.
+  static char clockText[10];
+  if (metrics.headerShowsClock && SETTINGS.clockShowInHeader && halClock.isAvailable() &&
+      halClock.formatTime(clockText, sizeof(clockText), SETTINGS.clockFormat == 1)) {
+    status.clockText = clockText;
+  }
+}
+
+freeink::ui::Rect BaseTheme::headerBand(const GfxRenderer& renderer, const freeink::ui::Rect rect,
+                                        freeink::ui::HeaderProps& props) {
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  const auto l = static_cast<int16_t>(left);
+  const auto r = static_cast<int16_t>(right);
+  const int16_t offset = BoardConfig::ACTIVE.headerOffsetY;
+  props.bleed = freeink::ui::Insets{0, r, 0, l};
+  // Only the status line sits up in the rounded corners; it alone gets their clearance.
+  const int corner = BoardConfig::ACTIVE.cornerRadius;
+  props.status.edgeInset = static_cast<int16_t>(props.status.edgeInset + std::max(0, corner - std::min(left, right)));
+  return freeink::ui::Rect{static_cast<int16_t>(rect.x + l), static_cast<int16_t>(rect.y + offset),
+                           static_cast<int16_t>(rect.width - l - r), static_cast<int16_t>(rect.height - offset)};
+}
+
+void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                           const bool backButton) const {
   // Every activity header renders through the FreeInkUI header + battery
   // indicator components, styled by the active theme's tokens (padding,
   // centering, underline). Non-interactive frame: no hit rects registered.
@@ -289,39 +422,38 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // small font like the legacy headers; the uiScale small font is for list
   // subtitles.
   ui.target.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
-  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const fui::Rect band{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y), static_cast<int16_t>(rect.width),
-                       static_cast<int16_t>(rect.height)};
-
-  const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  const uint16_t percentage = powerManager.getBatteryPercentage();
-  char percentText[8];
-  snprintf(percentText, sizeof(percentText), "%u%%", static_cast<unsigned>(percentage));
-  // The icon glyph extends 2px past glyphWidth (terminal nub); reserve it or
-  // the percent label's rect comes up short and the text truncates.
-  constexpr int16_t batteryNubWidth = 2;
-  int16_t batteryReserve = static_cast<int16_t>(metrics.batteryWidth + batteryNubWidth);
-  if (showBatteryPercentage) {
-    batteryReserve = static_cast<int16_t>(
-        batteryReserve + batteryPercentSpacing +
-        ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, percentText, tokens.smallText).width);
-  }
+  ui.target.setFont(fui::GfxRendererTarget::FONT_LABEL, SMALL_FONT_ID);
 
   fui::HeaderProps props;
   props.title = title;
   props.rightLabel = subtitle;  // firmware headers right-align the secondary text
-  const bool batteryLeft = metrics.headerBatterySide == 1;
-  const bool batteryDetached = metrics.headerBatteryDetached;
-  // Shared-line headers with the battery on the right: the header component
-  // places rightLabel inside the battery reserve, so it sits mid-band next to
-  // the icon and shifts with the percent label's width. Draw it manually below
-  // instead, pinned at the fixed side inset in the band's lower half — the
-  // same corner the detached (Lyra) layout puts it — so the label holds one
-  // position across themes and battery states.
-  const bool manualRightLabel = subtitle != nullptr && !batteryDetached && !batteryLeft;
-  if (manualRightLabel) {
-    props.rightLabel = nullptr;
+  // Battery + clock chrome and their title reserves live in the FreeInkUI
+  // header component; this only fills the values from settings and metrics.
+  applyHeaderStatus(renderer, props);
+  // Callers pass a full-width header rect; headerBand fits it to the board's bezel.
+  const fui::Rect band = headerBand(renderer,
+                                    fui::Rect{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y),
+                                              static_cast<int16_t>(rect.width), static_cast<int16_t>(rect.height)},
+                                    props);
+  if (rect.height < UITheme::getInstance().getMetrics().headerHeight) {
+    // Short bands (home) are not split into strip + content row: the title
+    // centers on the band, clear of the band's bottom edge.
+    props.titleOffsetY = 0;
+  }
+  // Tappable back button leading the band on touch boards, so every pushed
+  // screen offers a visible way out beside the edge-swipe gesture. This frame
+  // registers no hit rects, so the rect is recorded in HeaderBackTapTarget and
+  // MappedInputManager folds taps on it into Button::Back. Same geometry as
+  // the FUI header's leading slot (applyHeaderStatus set the size/offset) so
+  // the recorded rect matches the drawn button.
+  const int16_t backBtnSize = props.leadingSize;
+  const bool showBackButton = backButton && title != nullptr && gpio.hasTouch();
+  if (showBackButton) {
+    props.leadingIcon = fui::bitmapFromIcon(icon_header_back_32);
+    props.leadingAction = 1;  // any non-NO_ACTION id: paints the button, routing is via HeaderBackTapTarget
+    HeaderBackTapTarget::set(band.x + 4, band.y + 4 + props.actionOffsetY, backBtnSize, backBtnSize);
+  } else {
+    HeaderBackTapTarget::clear();
   }
   props.borderEdges = fui::EdgeBottom;
   props.titleText = tokens.titleText;
@@ -329,23 +461,6 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   props.subtitleText = tokens.smallText;
   props.styles = tokens.popup;
   props.sidePadding = tokens.headerSidePadding;
-  if (batteryDetached) {
-    // Battery in its own corner strip; the title owns the full width of the
-    // lower sub-band, so long book titles span the header (Lyra layout).
-    // Anchor the title with explicit clearance above the band's bottom rule
-    // instead of naive sub-band centering, which left the glyphs nearly
-    // touching it.
-    const int titleLineHeight = ui.target.lineHeight(fui::GfxRendererTarget::FONT_TITLE);
-    const int titleTop = static_cast<int>(band.height) - tokens.headerUnderline - tokens.spaceMd - titleLineHeight;
-    props.titleOffsetY = static_cast<int16_t>(titleTop - (static_cast<int>(band.height) - titleLineHeight) / 2);
-  } else {
-    const int16_t reserve = static_cast<int16_t>(batteryReserve + tokens.spaceMd);
-    if (batteryLeft) {
-      props.leftReserve = reserve;
-    } else {
-      props.rightReserve = reserve;
-    }
-  }
   // Underline only under a titled header: an untitled band (Lyra home screen)
   // historically drew no rule, and the old themes keyed the line on the title.
   if (title != nullptr && props.styles.normal.border.kind == fui::PaintKind::None && tokens.headerUnderline > 0) {
@@ -353,34 +468,6 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     props.styles.normal.borderWidth = tokens.headerUnderline;
   }
   fui::header(ui.frame, band, props);
-
-  fui::BatteryIndicatorProps battery;
-  battery.percent = static_cast<uint8_t>(percentage > 100 ? 100 : percentage);
-  battery.charging = gpio.isUsbConnected();
-  battery.label = showBatteryPercentage ? percentText : nullptr;
-  battery.text = tokens.smallText;
-  battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
-  battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
-  battery.gap = batteryPercentSpacing;
-  // Detached: hug the corner (12px, the legacy inset) within the battery
-  // strip; shared line: sit on the content grid. Both anchor to the band's top
-  // strip (batteryBarHeight) — the legacy shared-line headers drew the battery
-  // at the top edge, and it keeps the lower-right corner free for the manual
-  // right label below.
-  const int16_t batteryEdgeInset = batteryDetached ? 12 : tokens.headerSidePadding;
-  const int16_t batteryX = batteryLeft ? static_cast<int16_t>(band.x + batteryEdgeInset)
-                                       : static_cast<int16_t>(band.right() - batteryEdgeInset - batteryReserve);
-  const int16_t batteryH = static_cast<int16_t>(metrics.batteryBarHeight);
-  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, band.y, batteryReserve, batteryH}, battery);
-
-  if (manualRightLabel) {
-    const fui::Size labelSize = ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, subtitle, tokens.smallText);
-    const int16_t labelH = ui.target.lineHeight(fui::GfxRendererTarget::FONT_SMALL);
-    const fui::Rect labelRect{static_cast<int16_t>(band.right() - tokens.headerSidePadding - labelSize.width),
-                              static_cast<int16_t>(band.bottom() - tokens.headerUnderline - tokens.spaceSm - labelH),
-                              labelSize.width, labelH};
-    ui.target.text(labelRect, subtitle, tokens.smallText);
-  }
 }
 
 void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {
@@ -480,8 +567,9 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           LOG_DBG("THEME", "Rendering bmp");
 
-          // Draw the cover image (bookWidth and bookHeight already match image aspect ratio)
-          renderer.drawBitmap(bitmap, bookX, bookY, bookWidth, bookHeight);
+          // The card matches the cover aspect except when width-capped; fill
+          // the card 1:1 and crop the overflow rather than rescale the dither.
+          drawCoverThumbFill(renderer, bitmap, Rect{bookX, bookY, bookWidth, bookHeight});
 
           // Draw border around the card
           renderer.drawRect(bookX, bookY, bookWidth, bookHeight);
@@ -540,8 +628,6 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       // Draw selection border (no bookmark inversion needed since cover has no bookmark)
       renderer.drawRect(bookX + 1, bookY + 1, bookWidth - 2, bookHeight - 2);
       renderer.drawRect(bookX + 2, bookY + 2, bookWidth - 4, bookHeight - 4);
-    } else if (!coverRendered && !bufferRestored) {
-      // Selection border already handled above in the no-cover case
     }
   }
 
@@ -625,11 +711,28 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       renderer.drawCenteredText(UI_10_FONT_ID, continueY, tr(STR_CONTINUE_READING), !bookSelected);
     }
   } else {
-    // No book to continue reading
-    const int y =
-        bookY + (bookHeight - renderer.getLineHeight(UI_12_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-    renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK));
-    renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), tr(STR_START_READING));
+    // No book to continue reading. Keep each line inside the empty cover frame: a longer translation
+    // (e.g. Russian "Нет открытой книги") steps down one font size; wrapping is only the last resort.
+    const int textWidth = std::max(1, bookWidth - 16);
+    const auto fitFont = [&](const char* text, const int preferred, const int smaller) {
+      return renderer.getTextWidth(preferred, text) <= textWidth ? preferred : smaller;
+    };
+    const int titleFont = fitFont(tr(STR_NO_OPEN_BOOK), UI_12_FONT_ID, UI_10_FONT_ID);
+    const int hintFont = fitFont(tr(STR_START_READING), UI_10_FONT_ID, SMALL_FONT_ID);
+    const auto title = renderer.wrappedText(titleFont, tr(STR_NO_OPEN_BOOK), textWidth, 3);
+    const auto hint = renderer.wrappedText(hintFont, tr(STR_START_READING), textWidth, 3);
+    const int titleLine = renderer.getLineHeight(titleFont);
+    const int hintLine = renderer.getLineHeight(hintFont);
+    int y = bookY +
+            (bookHeight - static_cast<int>(title.size()) * titleLine - static_cast<int>(hint.size()) * hintLine) / 2;
+    for (const auto& line : title) {
+      renderer.drawCenteredText(titleFont, y, line.c_str());
+      y += titleLine;
+    }
+    for (const auto& line : hint) {
+      renderer.drawCenteredText(hintFont, y, line.c_str());
+      y += hintLine;
+    }
   }
 }
 
@@ -722,7 +825,7 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
                               const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
-                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated) const {
+                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated) {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -732,10 +835,17 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // Draw Progress Text
   const auto screenHeight = renderer.getScreenHeight();
-  auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4;
+  const int statusBarHeight =
+      fillMargin ? UITheme::getReaderStatusBarHeight() : UITheme::getInstance().getStatusBarHeight();
+  auto textY =
+      screenHeight - statusBarHeight - orientedMarginBottom - paddingBottom - 4 + BoardConfig::ACTIVE.statusBarOffsetY;
 
-  const int leftClusterX = metrics.statusBarHorizontalMargin + orientedMarginLeft + 1;
-  const int rightClusterX = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight;
+  // The side clusters sit in the bottom corners: clear the panel's rounded corners too.
+  const int corner = BoardConfig::ACTIVE.bottomCornerRadius != 0 ? BoardConfig::ACTIVE.bottomCornerRadius
+                                                                 : BoardConfig::ACTIVE.cornerRadius;
+  const int leftClusterX = metrics.statusBarHorizontalMargin + std::max(orientedMarginLeft, corner) + 1;
+  const int rightClusterX =
+      renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - std::max(orientedMarginRight, corner);
   int leftClusterWidth = 0;
   int rightClusterWidth = 0;
 
@@ -770,11 +880,6 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // Draw Progress Bar
   if (sb.showsProgressBar()) {
-    const int barMarginLeft = fillMargin ? 0 : orientedMarginLeft;
-    const int barMarginRight = fillMargin ? 0 : orientedMarginRight;
-    const int progressBarMaxWidth = renderer.getScreenWidth() - barMarginLeft - barMarginRight;
-    const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom - sb.progressBarHeightPx -
-                             paddingBottom + (fillMargin ? 1 : 0);
     size_t progress;
     if (sb.progressBarMode == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
       progress = static_cast<size_t>(bookProgress);
@@ -782,9 +887,31 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       // Chapter progress
       progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
     }
-    const int barWidth = progressBarMaxWidth * progress / 100;
-    const int barHeight = sb.progressBarHeightPx + (fillMargin ? orientedMarginBottom - 1 : 0);
-    renderer.fillRect(barMarginLeft, progressBarY, barWidth, barHeight, true);
+    if (BoardConfig::isEegoA4() && fillMargin) {
+      // EEGO A4: a slim line hugging the bottom bezel instead of a slab filling
+      // the bottom inset. Its top row sits edgeGap px above the panel edge and
+      // it fills down to the edge, so no gap shows under it at any viewing
+      // angle. Both ends stop where the rounded corners start to cut in.
+      constexpr int edgeGap = 7;
+      const int barY = screenHeight - edgeGap - sb.progressBarHeightPx - paddingBottom;
+      const int radius = corner;
+      const int d = std::max(0, radius - edgeGap);
+      const int intrusion =
+          radius > 0 ? static_cast<int>(std::ceil(radius - std::sqrt(static_cast<float>(radius * radius - d * d)))) : 0;
+      const int barLeft = std::max(orientedMarginLeft, intrusion + 1);
+      const int barRight = renderer.getScreenWidth() - std::max(orientedMarginRight, intrusion + 1);
+      const int barWidth = std::max(0, barRight - barLeft) * static_cast<int>(std::min<size_t>(progress, 100)) / 100;
+      renderer.fillRect(barLeft, barY, barWidth, sb.progressBarHeightPx + edgeGap, true);
+    } else {
+      const int barMarginLeft = fillMargin ? 0 : orientedMarginLeft;
+      const int barMarginRight = fillMargin ? 0 : orientedMarginRight;
+      const int progressBarMaxWidth = renderer.getScreenWidth() - barMarginLeft - barMarginRight;
+      const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom - sb.progressBarHeightPx -
+                               paddingBottom + (fillMargin ? 1 : 0);
+      const int barWidth = progressBarMaxWidth * progress / 100;
+      const int barHeight = sb.progressBarHeightPx + (fillMargin ? orientedMarginBottom - 1 : 0);
+      renderer.fillRect(barMarginLeft, progressBarY, barWidth, barHeight, true);
+    }
   }
 
   // Draw Battery
@@ -806,10 +933,10 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     leftClusterWidth += batteryWidth;
   }
 
-  // Draw Clock (X3 only — DS3231 RTC)
+  // Draw Clock (any board whose RTC probe succeeded)
   if (sb.showsClock() && halClock.isAvailable()) {
     char timeBuf[9];
-    if (halClock.formatTime(timeBuf, sizeof(timeBuf), sb.clockUtcOffsetQ, sb.clock12h)) {
+    if (halClock.formatTime(timeBuf, sizeof(timeBuf), sb.clock12h)) {
       int clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
       int clockX = 0;
       // Position to the left or right of the progress text (with a small gap)
@@ -868,7 +995,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 }
 
-void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {
+void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   auto truncatedLabel =
       renderer.truncatedText(SMALL_FONT_ID, label, rect.width - metrics.contentSidePadding * 2, EpdFontFamily::REGULAR);
@@ -888,5 +1015,24 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
     const int lineW = textWidth + metrics.textFieldHorizontalPadding * 2;
     const int lineStart = rect.x + (rect.width - lineW) / 2;
     renderer.drawLine(lineStart, lineY, lineStart + lineW + metrics.textFieldLineEndOffset, lineY, thickness, true);
+  }
+}
+
+void BaseTheme::drawSelectionHandle(const GfxRenderer& renderer, const Rect rect, const bool left) {
+  const int radius = rect.width / 2;
+  renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, radius, Color::Black);
+  renderer.fillRect(left ? rect.x + radius : rect.x, rect.y, radius, radius);
+}
+
+void BaseTheme::drawSelectionActions(const GfxRenderer& renderer, const Rect rect, const int count,
+                                     const int firstAction) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const char* labels[] = {tr(STR_LOOKUP), tr(STR_CLIP), tr(STR_BOOKMARK_OPTION)};
+  for (int i = 0; i < count; ++i) {
+    const Rect button = selectionGeometry::button(rect, i, metrics.menuSpacing, count);
+    renderer.fillRoundedRect(button.x, button.y, button.width, button.height, metrics.controlRadius, Color::White);
+    renderer.drawRoundedRect(button.x, button.y, button.width, button.height, 1, metrics.controlRadius, true);
+    UITheme::drawCenteredWrappedText(renderer, button, uiScaleSpec().smallFontId, labels[firstAction + i], 2, true,
+                                     EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::CENTER);
   }
 }

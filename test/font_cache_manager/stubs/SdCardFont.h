@@ -8,14 +8,16 @@ class SdCardFont {
   struct PrewarmCall {
     char text[32] = {};
     uint8_t styleMask = 0;
+    bool accumulate = true;
   };
 
   void clearCache() {}
   void releaseResidentCaches() {}
-  int prewarm(const char* text, uint8_t styleMask) {
+  int prewarm(const char* text, uint8_t styleMask, bool, bool, bool accumulate) {
     auto& call = prewarmCalls[prewarmCallCount++];
     std::snprintf(call.text, sizeof(call.text), "%s", text);
     call.styleMask = styleMask;
+    call.accumulate = accumulate;
     return 0;
   }
   uint8_t resolveStyle(uint8_t style) const { return resolvedStyles[style & 0x03]; }

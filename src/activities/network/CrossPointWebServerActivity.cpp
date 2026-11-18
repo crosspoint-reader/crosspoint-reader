@@ -4,6 +4,7 @@
 #include <ESPmDNS.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 #include <WiFi.h>
 
@@ -16,6 +17,7 @@
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/PluginEvents.h"
 #include "util/QrUtils.h"
 #include "util/TaskWatchdog.h"
 
@@ -68,7 +70,7 @@ void CrossPointWebServerActivity::onEnter() {
 
   // Heap-critical transition: WiFi (~45KB) plus the web server have to fit in
   // what's left of the ~380KB parts. SD-font caches retained for the CJK UI
-  // fallback (mini glyph/kern arenas, kern class tables) are rebuildable on
+  // fallback (mini glyph/kern arenas, ligature tables) are rebuildable on
   // demand — release them up front instead of aborting in startWebServer()
   // when the heap comes up short (observed on X3 with a Korean SD font).
   if (auto* fcm = renderer.getFontCacheManager()) {
@@ -84,6 +86,14 @@ void CrossPointWebServerActivity::onEnter() {
   connectedSSID.clear();
   lastHandleClientTime = 0;
   requestUpdate();
+
+  if (startInJoinNetwork) {
+    // Came back from the heap-defrag reboot on a pristine heap: skip the mode
+    // picker and go straight into Join Network (onNetworkModeSelected won't
+    // reboot again while this flag is set).
+    onNetworkModeSelected(NetworkMode::JOIN_NETWORK);
+    return;
+  }
 
   // Launch network mode selection subactivity
   LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
@@ -106,6 +116,11 @@ void CrossPointWebServerActivity::onExit() {
   stopDnsServer();
   MDNS.end();
 
+  // Web uploads may have installed or removed plugins. Non-touch devices
+  // reboot below (setup() re-reads everything), but touch devices end the
+  // session in place, so re-read event subscriptions here.
+  pluginevents::refreshSubscriptions();
+
   // Skip reboot if WiFi was never activated (e.g. user backed out of mode selection).
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     if (isApMode) {
@@ -121,17 +136,39 @@ void CrossPointWebServerActivity::onExit() {
 }
 
 void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) {
+  // Join Network brings up WiFi + the web server + TLS relays, whose working set
+  // needs a large *contiguous* block. After reading/browsing the heap is
+  // fragmented enough that tight boards (X3) abort mid-activation. Reboot once
+  // into a pristine heap and land straight back here; the flag prevents a second
+  // reboot on that return. No-op on touch boards, which fall through.
+  if (mode == NetworkMode::JOIN_NETWORK && !startInJoinNetwork) {
+    silentRestartToJoinNetwork();  // does not return on non-touch boards
+  }
+
   const char* modeName = "Join Network";
   if (mode == NetworkMode::CONNECT_CALIBRE) {
     modeName = "Connect to Calibre";
   } else if (mode == NetworkMode::CREATE_HOTSPOT) {
     modeName = "Create Hotspot";
+  } else if (mode == NetworkMode::OPDS_BROWSER) {
+    modeName = "OPDS Browser";
 #if FREEINK_CAP_USB_MSC
   } else if (mode == NetworkMode::USB_DRIVE) {
     modeName = "USB Drive";
 #endif
   }
   LOG_DBG("WEBACT", "Network mode selected: %s", modeName);
+
+  // The OPDS browser joins Wi-Fi itself. Wi-Fi is still on if the user backed
+  // out of Join Network; turn it off so onExit does not restart to Home.
+  if (mode == NetworkMode::OPDS_BROWSER) {
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+      WiFi.disconnect(false);
+      WiFi.mode(WIFI_OFF);
+    }
+    activityManager.goToBrowser();
+    return;
+  }
 
 #if FREEINK_CAP_USB_MSC
   if (mode == NetworkMode::USB_DRIVE) {
@@ -277,12 +314,31 @@ void CrossPointWebServerActivity::startWebServer() {
 
   // Create the web server instance
   webServer.reset(new CrossPointWebServer());
+  // An upload holds loop() inside handleClient(), so input is sampled on each received chunk instead. On a slow
+  // link chunks come ~0.5 s apart, so a button found down gets a second sample past the SDK's 5 ms debounce.
+  webServer->setUploadCancelCheck([this] {
+    mappedInput.update(true);
+    if (gpio.rawInputActive()) {
+      delay(6);
+      mappedInput.update(true);
+    }
+    leaveRequested = leaveRequested || mappedInput.isPressed(MappedInputManager::Button::Back) ||
+                     mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasHomeGesture();
+    return leaveRequested;
+  });
   webServer->begin();
 
   if (webServer->isRunning()) {
     state = WebServerActivityState::SERVER_RUNNING;
     LOG_DBG("WEBACT", "Web server started successfully");
     lastWifiBars = isApMode ? 0 : barsForRssi(WiFi.RSSI(), 0);
+
+    // The device is online: deliver queued plugin events through their
+    // manifest handlers. STA only (AP mode has no internet route); bounded by
+    // the drain's per-call event budget so serving is not noticeably delayed.
+    if (!isApMode) {
+      pluginevents::drain(&renderer);
+    }
 
     // Force an immediate render since we're transitioning from a subactivity
     // that had its own rendering task. We need to make sure our display is shown.
@@ -365,6 +421,10 @@ void CrossPointWebServerActivity::loop() {
       constexpr int MAX_ITERATIONS = 500;
       for (int i = 0; i < MAX_ITERATIONS && webServer->isRunning(); i++) {
         webServer->handleClient();
+        if (leaveRequested) {
+          onGoHome();
+          return;
+        }
         // Reset watchdog every 32 iterations
         if ((i & 0x1F) == 0x1F) {
           resetTaskWatchdogIfSubscribed();
@@ -373,9 +433,9 @@ void CrossPointWebServerActivity::loop() {
         if ((i & 0x3F) == 0x3F) {
           yield();
           // Pump input inside this blocking loop so exit events remain responsive.
-          mappedInput.update();
-          // This update consumes the one-shot Home event before ActivityManager
-          // can see it, so handle Home here alongside Back.
+          mappedInput.update(true);
+          // Home remains available now; other configured actions are deferred
+          // to the next main-loop pass.
           if (mappedInput.wasReleased(MappedInputManager::Button::Back) || mappedInput.wasHomeGesture()) {
             onGoHome();
             return;
@@ -421,11 +481,6 @@ void CrossPointWebServerActivity::render(RenderLock&&) {
 void CrossPointWebServerActivity::renderServerRunning() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER), nullptr);
-  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
-                    connectedSSID.c_str());
 
   if (!isApMode) {
     renderWifiIndicator(metrics.topPadding + metrics.headerHeight);

@@ -1,9 +1,27 @@
 #pragma once
 #include <Arduino.h>
+#include <BoardConfig.h>
 #include <EInkDisplay.h>
 
 class HalDisplay {
  public:
+  using Controller = BoardConfig::DisplayController;
+  Controller getController() const;
+
+  using GrayscaleMode = freeink::GrayscaleMode;
+  using GrayscaleCapabilities = freeink::GrayscaleCapabilities;
+  using GrayscaleBase = freeink::GrayscaleBase;
+  using GrayscaleEncoding = freeink::GrayscaleEncoding;
+
+  GrayscaleCapabilities grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const;
+  // Controller of the driver chosen at boot (null if the driver does not say).
+  const char* controllerName() const { return einkDisplay.getControllerName(); }
+  // True while book pages are presented; panels with a reading waveform use it.
+  void setReaderRefresh(bool reading) { einkDisplay.setReaderRefresh(reading); }
+  bool displayRetainedGrayscaleOverlay(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool restore) {
+    return einkDisplay.displayRetainedGrayscaleOverlay(x, y, w, h, restore);
+  }
+
   // Constructor with pin configuration
   HalDisplay();
 
@@ -50,6 +68,9 @@ class HalDisplay {
   // True when displayBufferAsync() genuinely overlaps (panel driver defers);
   // false where it falls back to a blocking refresh.
   bool supportsAsyncRefresh() const;
+  // True when an ordinary deferred B/W refresh is suitable as the base for a
+  // grayscale pass. X3 needs its controller-specific grayscale base waveform.
+  bool supportsAsyncGrayscaleBase() const;
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   // Output polarity. The framebuffer remains in normal polarity; inversion is
@@ -60,6 +81,8 @@ class HalDisplay {
 
   // Power management
   void deepSleep();
+  // Power the panel down between frames, keeping its image; the next paint wakes it.
+  void controllerIdle();
 
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
@@ -84,6 +107,7 @@ class HalDisplay {
   // displayBuffer(HALF); FAST fallback keeps the OEM differential base waveform
   // ("AA-pre-BW(mid)"). Other panels display normally with `fallback` mode.
   void displayGrayscaleBase(RefreshMode fallback = HALF_REFRESH, bool turnOffScreen = false);
+  bool displayGrayscaleBase(GrayscaleMode mode, RefreshMode fallback = HALF_REFRESH, bool turnOffScreen = false);
 
   void copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer);
   void copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer);

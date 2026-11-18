@@ -2,6 +2,11 @@
 
 #include <HalGPIO.h>
 
+#include "util/HomeButtonInput.h"
+#include "util/PowerButtonClickInput.h"
+#include "util/PowerButtonInput.h"
+#include "util/RemoteButtonInput.h"
+
 class GfxRenderer;
 namespace freeink {
 namespace ui {
@@ -39,12 +44,43 @@ class MappedInputManager {
 
   MappedInputManager(HalGPIO& gpio, const GfxRenderer& renderer) : gpio(gpio), renderer(renderer) {}
 
-  void update() const;
-#if FREEINK_CAP_TOUCH
-  // X4 Pro delays a single power click until its frontlight double-click window
-  // expires. The main loop supplies that one-frame event here.
-  void setPowerConfirmClickFrame(const bool clicked) { powerConfirmClickFrame = clicked; }
+  // Blocking transfer loops pump physical input themselves. Defer configured
+  // Home-key actions so the next main-loop pass can dispatch them, while the
+  // current action remains available for immediate Home cancellation.
+  void update(bool deferHomeButtonAction = false) const;
+  bool powerSleepClick() const { return powerSleepFrame; }
+  bool wasPowerSingleClick() const {
+    return powerSingleClickFrame || (wasReleased(Button::Power) && wasShortPowerReleased());
+  }
+  void resetPowerButtonInput() const {
+    powerButtonClickInput.reset();
+    powerSingleClickFrame = false;
+    powerSleepFrame = false;
+    deferredPowerSleepFrame = false;
+  }
+  bool isPowerHeld() const {
+#ifdef SIMULATOR
+    return gpio.isPressed(HalGPIO::BTN_POWER);
+#else
+    return gpio.isPressed(HalGPIO::BTN_POWER) || gpio.isPowerButtonPhysicallyPressed();
 #endif
+  }
+  void beginPowerInput(bool suppressHold, bool held) {
+    powerButtonInput.begin(suppressHold, held);
+    resetPowerButtonInput();
+  }
+  bool wasShortPowerReleased() const {
+    return gpio.wasReleased(HalGPIO::BTN_POWER) && powerButtonInput.wasShortReleased();
+  }
+  bool powerSleepRequested() const { return powerButtonInput.shouldSleep(); }
+  bool wasPowerReleaseConsumed() const { return powerButtonInput.wasReleaseConsumed(); }
+  void consumePowerGesture() const {
+    powerButtonInput.consume();
+    resetPowerButtonInput();
+  }
+  bool suppressPowerAfterRestart() const { return isPowerHeld() && powerButtonInput.suppressesHold(); }
+  bool injectRemoteClick(RemoteButton button);
+  bool hasRemoteClick() const { return remoteInput.button != RemoteButton::None; }
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   // One-shot threshold event while the button is down; consumes its release.
@@ -53,6 +89,8 @@ class MappedInputManager {
   bool isPressed(Button button) const;
   bool hasTouch() const;
   bool wasScreenTapped(int& x, int& y) const;
+  // Immediate press edge for drag handles, without the row-selection dwell.
+  bool wasScreenTouchPressed(int& x, int& y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
   // One-shot long-press from the SDK touch classifier, fired WHILE the finger
   // is still down (stationary contact held past the SDK threshold). Consuming
@@ -66,7 +104,6 @@ class MappedInputManager {
   // (which wasScreenTapped never reports). InputSnapshot builders forward it
   // off-target so FreeInkUI routing clears its pressed-element state.
   bool wasScreenTouchReleased() const;
-  bool wasTapInRect(int x, int y, int width, int height) const;
 
   // Combined touch interaction for a band of equal rows with caller-supplied
   // geometry — the shared hit-test for lists the theme helpers above do not
@@ -80,7 +117,7 @@ class MappedInputManager {
   // Horizontal variant for side-by-side button pairs (confirmation prompts).
   RowTouch colTouch(int& col, int left, int colStep, int colCount, int yStart, int yEnd, int colWidth = 0) const;
 
-  SwipeDir wasSwipe() const;
+  SwipeDir wasSwipe(int* startX = nullptr, int* startY = nullptr) const;
   // Back = left-to-right swipe anchored at the left edge. Public so swipe-mode
   // page turns (reader) can exclude it from a plain SwipeDir::Right.
   bool wasBackGesture() const;
@@ -88,19 +125,21 @@ class MappedInputManager {
   // is intentionally unused. Other boards retain the bottom-edge Home gesture.
   // The reader menu remains on its existing top-edge gesture and middle tap.
   bool wasHomeGesture() const;
-  // A Home-key hold runs the configured long-press action in the reader.
-  bool wasHomeKeyHold() const;
+  // Configured one-frame action, independent of the gesture that triggered it.
+  HomeButtonAction homeButtonAction() const { return homeAction; }
+  void resetHomeButtonInput() const {
+    homeButtonInput.reset();
+    deferredHomeAction = HomeButtonAction::Ignore;
+  }
   bool wasMenuGesture() const;
   // Bottom-edge up-swipe as the reader-menu gesture (SHOW_READER_MENU's Swipe
   // Up option). Only meaningful on home-key boards, where Home lives on the
   // key and the bottom edge is free; elsewhere the same swipe is the Home
   // gesture and this returns false.
   bool wasReaderMenuSwipeUp() const;
-  // Top-edge down-swipe opens the light panel when the active board actually
-  // has a frontlight. ActivityManager consumes it before activity input.
+  // Top-edge down-swipe opens the control center on touch boards.
+  // ActivityManager consumes it before activity input.
   bool wasLightPanelGesture() const;
-  bool wasAnyPressed() const;
-  bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
   const GfxRenderer& getRenderer() const { return renderer; }
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;
@@ -125,6 +164,7 @@ class MappedInputManager {
   const GfxRenderer& renderer;
 
   Button mapScreenDirection(Button button) const;
+  bool areSidePageButtonsSwapped() const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
   // SDK edge classification (fui::edgeSwipe) + the shared decode/held-time
@@ -140,12 +180,18 @@ class MappedInputManager {
   void rememberTouchHeldTime() const;
   void suppressNextRelease(Button button) const;
 
+  mutable RemoteButtonInput remoteInput;
+  mutable HomeButtonInput homeButtonInput;
+  mutable PowerButtonInput powerButtonInput;
+  mutable PowerButtonClickInput powerButtonClickInput;
+  mutable bool powerSingleClickFrame = false;
+  mutable bool powerSleepFrame = false;
+  mutable bool deferredPowerSleepFrame = false;
+  mutable HomeButtonAction homeAction = HomeButtonAction::Ignore;
+  mutable HomeButtonAction deferredHomeAction = HomeButtonAction::Ignore;
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;
   mutable unsigned long touchHeldOverrideAt = 0;
   mutable uint16_t longPressFiredButtons = 0;
   mutable uint16_t suppressedReleaseButtons = 0;
-#if FREEINK_CAP_TOUCH
-  bool powerConfirmClickFrame = false;
-#endif
 };

@@ -40,7 +40,7 @@ bool KeyboardLayoutsActivity::isLocked(const uint8_t i) const {
 
 void KeyboardLayoutsActivity::activateIndex(const int index) {
   nav.selected = index;
-  // The row stays on screen with a new ON/OFF value; a lingering flash would
+  // The row stays on screen with a new checkbox state; a lingering flash would
   // gray an unrelated row on the repaint below.
   app.clearTapFlash();
 
@@ -57,20 +57,16 @@ void KeyboardLayoutsActivity::activateIndex(const int index) {
 
 void KeyboardLayoutsActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  // Content: the safe area minus the header band GUI.drawHeader paints.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
-                                      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
-                                      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)),
-                                      static_cast<int16_t>(safe.x)});
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                                static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   for (int i = 0; i < keyboard_layouts::COUNT; ++i) {
     const uint8_t row = static_cast<uint8_t>(i);
+    GUI.setCheckboxRow(rowItems[i], (workingMask & keyboard_layouts::bitAt(row)) != 0);
     if (isLocked(row)) {
+      rowItems[i].toggle = false;
       rowItems[i].value = tr(STR_DEFAULT_VALUE);
-    } else {
-      rowItems[i].value = (workingMask & keyboard_layouts::bitAt(row)) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     }
   }
 

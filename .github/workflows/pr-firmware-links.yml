@@ -1,0 +1,33 @@
+name: PR firmware links
+
+on:
+  workflow_run:
+    workflows:
+      - CI (build)
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+jobs:
+  update-comment:
+    if: github.event.workflow_run.event == 'pull_request'
+    concurrency:
+      group: pr-firmware-links-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    steps:
+      # Only load publisher code from the trusted default-branch revision.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Update firmware links and size comparison
+        uses: actions/github-script@v9
+        with:
+          script: |
+            await require('./.github/scripts/pr-firmware-comment.js')({github, context, core});

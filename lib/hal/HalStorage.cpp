@@ -3,6 +3,7 @@
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
 #include <Logging.h>
 #include <SDCardManager.h>
+#include <esp_heap_caps.h>
 #if FREEINK_CAP_USB_MSC
 #include <UsbMassStorage.h>
 #endif
@@ -49,16 +50,12 @@ void HalStorage::prepareForDeepSleep() {
   SDCard.shutdown();
 }
 
-#if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC
-#error "USB Drive requires an SDMMC-backed storage profile"
-#endif
-
 bool HalStorage::beginUsbDrive() {
 #if FREEINK_CAP_USB_MSC
   StorageLock lock;
   auto* const blockDevice = SDCard.detachFilesystemForRawAccess();
   if (!blockDevice) {
-    LOG_ERR("USB", "USB Drive requires a mounted SDMMC filesystem");
+    LOG_ERR("USB", "USB Drive requires a mounted SD filesystem");
     return false;
   }
 
@@ -79,6 +76,15 @@ bool HalStorage::disconnectUsbDriveHost() {
 #if FREEINK_CAP_USB_MSC
   StorageLock lock;
   return usbMassStorage.disconnectHost();
+#else
+  return false;
+#endif
+}
+
+bool HalStorage::usbDriveHostSuspended() const {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  return usbMassStorage.hostSuspended();
 #else
   return false;
 #endif
@@ -117,6 +123,9 @@ UsbDriveState HalStorage::usbDriveState() const {
   HalStorage::StorageLock lock;               \
   return SDCard.method(__VA_ARGS__);
 
+uint64_t HalStorage::sdTotalBytes() { HAL_STORAGE_WRAPPED_CALL(sdTotalBytes); }
+bool HalStorage::sdUsedBytes(uint64_t& usedBytes) { HAL_STORAGE_WRAPPED_CALL(sdUsedBytes, usedBytes); }
+
 std::vector<String> HalStorage::listFiles(const char* path, int maxFiles) {
   HAL_STORAGE_WRAPPED_CALL(listFiles, path, maxFiles);
 }
@@ -129,6 +138,25 @@ bool HalStorage::readFileToStream(const char* path, Print& out, size_t chunkSize
 
 size_t HalStorage::readFileToBuffer(const char* path, char* buffer, size_t bufferSize, size_t maxBytes) {
   HAL_STORAGE_WRAPPED_CALL(readFileToBuffer, path, buffer, bufferSize, maxBytes);
+}
+
+// Composed of already-locked HalStorage/HalFile operations; needs no
+// StorageLock of its own.
+bool HalStorage::readFileToString(const char* moduleName, const std::string& path, size_t cap, std::string& out) {
+  out.clear();
+  HalFile file;
+  if (!openFileForRead(moduleName, path, file)) return false;
+  if (file.isDirectory()) return false;
+  const size_t size = file.fileSize();
+  if (size == 0 || size > cap) return false;
+  // string growth is a bare allocation under -fno-exceptions; probe first so
+  // a large file on a fragmented heap fails soft instead of abort()ing.
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < size + 512) {
+    LOG_ERR(moduleName, "readFileToString OOM: %u bytes for %s", static_cast<unsigned>(size), path.c_str());
+    return false;
+  }
+  out.resize(size);
+  return file.read(out.data(), size) == static_cast<int>(size);
 }
 
 bool HalStorage::writeFile(const char* path, const String& content) {
@@ -171,6 +199,10 @@ bool HalStorage::exists(const char* path) { HAL_STORAGE_WRAPPED_CALL(exists, pat
 bool HalStorage::remove(const char* path) { HAL_STORAGE_WRAPPED_CALL(remove, path); }
 bool HalStorage::rename(const char* oldPath, const char* newPath) {
   HAL_STORAGE_WRAPPED_CALL(rename, oldPath, newPath);
+}
+
+bool HalStorage::replaceFile(const char* tmpPath, const char* path) {
+  HAL_STORAGE_WRAPPED_CALL(replaceFile, tmpPath, path);
 }
 
 bool HalStorage::rmdir(const char* path) { HAL_STORAGE_WRAPPED_CALL(rmdir, path); }
@@ -227,10 +259,18 @@ size_t HalFile::getName(char* name, size_t len) { HAL_FILE_WRAPPED_CALL(getName,
 size_t HalFile::size() { HAL_FILE_FORWARD_CALL(size, ); }              // already thread-safe, no need to wrap
 size_t HalFile::fileSize() { HAL_FILE_FORWARD_CALL(fileSize, ); }      // already thread-safe, no need to wrap
 uint64_t HalFile::fileSize64() { HAL_FILE_FORWARD_CALL(fileSize, ); }  // already thread-safe, no need to wrap
+uint32_t HalFile::modificationTime() {
+  HalStorage::StorageLock lock;
+  uint16_t date = 0;
+  uint16_t time = 0;
+  if (!impl || !impl->file.getModifyDateTime(&date, &time) || date == 0) return 0;
+  return (static_cast<uint32_t>(date) << 16) | time;
+}
 bool HalFile::seek(size_t pos) { HAL_FILE_WRAPPED_CALL(seekSet, pos); }
 bool HalFile::seek64(uint64_t pos) { HAL_FILE_WRAPPED_CALL(seekSet, pos); }
 bool HalFile::seekCur(int64_t offset) { HAL_FILE_WRAPPED_CALL(seekCur, offset); }
 bool HalFile::seekSet(size_t offset) { HAL_FILE_WRAPPED_CALL(seekSet, offset); }
+bool HalFile::truncate(const uint64_t length) { HAL_FILE_WRAPPED_CALL(truncate, length); }
 int HalFile::available() const { HAL_FILE_WRAPPED_CALL(available, ); }
 size_t HalFile::position() const { HAL_FILE_WRAPPED_CALL(position, ); }
 int HalFile::read(void* buf, size_t count) { HAL_FILE_WRAPPED_CALL(read, buf, count); }

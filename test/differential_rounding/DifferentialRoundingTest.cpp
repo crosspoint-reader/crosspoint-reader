@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <utility>
 
 #include "lib/EpdFont/EpdFont.h"
 #include "lib/EpdFont/EpdFontData.h"
@@ -127,6 +128,46 @@ TEST(Fp4Math, RoundingBoundaries) {
   EXPECT_EQ(fp4::toPixel(137 + (-9)), 8);  // 128 = 8.0 exact
   EXPECT_EQ(fp4::toPixel(137 + (-5)), 8);  // 132 = 8.25
   EXPECT_EQ(fp4::toPixel(137 + (-1)), 9);  // 136 = 8.5 (half rounds up)
+}
+
+TEST(Fp4Math, TtfAdvancesDoNotRoundUpBeforePixelSnapping) {
+  // SDK 26.6 advances for Caecilia LT i/l (16pt), x (13pt), & (14pt), K/X (16pt), taken directly from the TTF
+  for (const auto [advance26_6, pixels] : {std::pair{670, 10}, {1054, 16}, {1438, 22}, {1502, 23}}) {
+    EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(advance26_6)), pixels);
+    EXPECT_EQ(fp4::toPixel((advance26_6 + 2) >> 2), pixels + 1);
+  }
+}
+
+TEST(Fp4Math, TtfConversionPreservesPixelAndHalfPixelBoundaries) {
+  for (int pixels = 0; pixels < 256; ++pixels) {
+    EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(pixels * 64 + 31)), pixels);
+    EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(pixels * 64 + 32)), pixels + 1);
+    EXPECT_EQ(fp4::truncate26_6_to_4(pixels * 64), fp4::fromPixel(pixels));
+  }
+}
+
+TEST(Fp4Math, TtfConversionMatchesSingleSnapWithEveryFp4Kern) {
+  // Test [0, 64) pixels at 64 fixed-point steps per pixel; 64px is a chosen range, not a font limit.
+  for (int advance26_6 = 0; advance26_6 < 64 * 64; ++advance26_6) {
+    for (int kern = -128; kern <= 127; ++kern) {
+      const int singleSnap = (advance26_6 + kern * 4 + 32) >> 6;
+      EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(advance26_6) + kern), singleSnap)
+          << "advance26_6=" << advance26_6 << " kern=" << kern;
+    }
+  }
+}
+
+TEST(EpdFont, TtfConvertedAdvancesDriveTextBounds) {
+  const uint16_t advance = static_cast<uint16_t>(fp4::truncate26_6_to_4(670));
+  const EpdGlyph glyphs[] = {{7, 8, advance, 0, 8, 0, 0}, {7, 8, advance, 0, 8, 0, 0}};
+  const EpdUnicodeInterval intervals[] = {{'i', 'i', 0}, {'l', 'l', 1}};
+  const EpdFontData data = {.glyph = glyphs, .intervals = intervals, .intervalCount = 2};
+  const EpdFont font(&data);
+  int width = 0, height = 0;
+  font.getTextDimensions("il", &width, &height);
+  EXPECT_EQ(width, 17);  // second glyph starts at 10, not 11
+  font.getTextDimensions("illi", &width, &height);
+  EXPECT_EQ(width, 37);
 }
 
 TEST(Fp4Math, OldApproachInconsistency) {
@@ -384,4 +425,87 @@ TEST(EpdFont, HeightCalculation) {
   EXPECT_EQ(textHeight("T"), 12);
   EXPECT_EQ(textHeight("To"), 12);
   EXPECT_EQ(textHeight("oo"), 8);
+}
+
+TEST(EpdFont, MissingSolidSymbolsHaveVisibleBounds) {
+  // No M or replacement glyph: the fallback uses 3/4 of the 12px ascender.
+  EXPECT_EQ(textWidth("█"), 9);
+  EXPECT_EQ(textHeight("█"), 12);
+  EXPECT_EQ(textWidth("███"), 27);
+  EXPECT_EQ(textWidth("■"), 8);
+  EXPECT_EQ(textHeight("■"), 10);
+  EXPECT_EQ(textWidth("o█o"), 26);
+}
+
+TEST(EpdFont, SolidSymbolsUseEmAdvanceAndKeepRealGlyphs) {
+  const EpdGlyph glyphs[] = {{10, 12, 168, 0, 12, 0, 0}, {3, 4, 64, 1, 4, 1, 0}};
+  const EpdUnicodeInterval intervals[] = {{'M', 'M', 0}, {0x25A0, 0x25A0, 1}};
+  EpdFontData data{};
+  data.glyph = glyphs;
+  data.intervals = intervals;
+  data.intervalCount = 2;
+  data.ascender = 12;
+  const EpdFont font(&data);
+  EpdGlyph fallback;
+  const auto* block = font.getGlyphMetrics(0x2588, fallback);
+  ASSERT_EQ(block, &fallback);
+  EXPECT_EQ(block->advanceX, 168);
+  EXPECT_EQ(block->width, 11);
+  EXPECT_EQ(block->height, 12);
+  EXPECT_EQ(font.getGlyphMetrics(0x25A0, fallback), &glyphs[1]);
+}
+
+TEST(EpdFont, SolidFallbackOverridesReplacementGlyph) {
+  const EpdGlyph replacement{2, 3, 32, 0, 3, 1, 0};
+  const EpdUnicodeInterval interval{0xFFFD, 0xFFFD, 0};
+  EpdFontData data{};
+  data.glyph = &replacement;
+  data.intervals = &interval;
+  data.intervalCount = 1;
+  data.ascender = 12;
+  const EpdFont font(&data);
+  EpdGlyph fallback;
+  EXPECT_EQ(font.getGlyphMetrics(0x2588, fallback), &fallback);
+  EXPECT_EQ(fallback.advanceX, fp4::fromPixel(9));
+  EXPECT_EQ(fallback.width, 9);
+  EXPECT_EQ(fallback.height, 12);
+  EXPECT_EQ(font.getGlyphMetrics('Z', fallback), &replacement);
+}
+
+TEST(EpdFont, SolidSymbolsRespectOnDemandFontCoverage) {
+  const EpdGlyph realBlock{7, 9, 112, 0, 9, 1, 0};
+  EpdFontData data{};
+  data.ascender = 12;
+  data.glyphMissCtx = const_cast<EpdGlyph*>(&realBlock);
+  data.coverageHandler = [](void*, uint32_t cp) { return cp == 0x2588; };
+  data.glyphMissHandler = [](void* ctx, uint32_t cp) -> const EpdGlyph* {
+    return cp == 0x2588 ? static_cast<const EpdGlyph*>(ctx) : nullptr;
+  };
+  const EpdFont font(&data);
+  EpdGlyph fallback;
+  EXPECT_EQ(font.getGlyphMetrics(0x2588, fallback), &realBlock);
+  EXPECT_EQ(font.getGlyphMetrics(0x25A0, fallback), &fallback);
+}
+
+TEST(EpdFont, EmptyFontStillMeasuresSolidSymbols) {
+  const EpdFontData data{};
+  const EpdFont font(&data);
+  int width, height;
+  font.getTextDimensions("██", &width, &height);
+  EXPECT_EQ(width, 12);
+  EXPECT_EQ(height, 8);
+}
+
+TEST(EpdFont, MissingTurnedCommaUsesQuoteAndNativeGlyphWins) {
+  const EpdGlyph glyphs[] = {{3, 5, 64, 0, 8, 1, 0}, {4, 6, 80, 0, 9, 1, 1}};
+  const EpdUnicodeInterval intervals[] = {{0x02BB, 0x02BB, 0}, {0x2018, 0x2018, 1}};
+  EpdFontData data{};
+  data.glyph = glyphs;
+  data.intervals = intervals + 1;
+  data.intervalCount = 1;
+  const EpdFont font(&data);
+  EXPECT_EQ(font.getGlyph(0x02BB), &glyphs[1]);
+  data.intervals = intervals;
+  data.intervalCount = 2;
+  EXPECT_EQ(font.getGlyph(0x02BB), &glyphs[0]);
 }

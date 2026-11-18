@@ -22,8 +22,10 @@ int detectParagraphLevel(const char* utf8, int fallbackLevel = 0, int maxStrongC
 bool isTransparentMark(uint32_t cp);
 
 // paragraphLevel: -1 = auto-detect, 0 = LTR, 1 = RTL
+// On failure (including workspace OOM), returns false and leaves out unchanged.
 bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel = -1);
 
+// Returns false with empty visualOrder when no order is produced, including OOM.
 bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragraphIsRtl,
                             std::vector<uint16_t>& visualOrder);
 

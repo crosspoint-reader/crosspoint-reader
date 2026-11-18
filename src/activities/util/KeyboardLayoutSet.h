@@ -24,6 +24,7 @@ inline constexpr LayoutInfo ALL[] = {
     {freeink::ui::KeyboardLayoutId::CyrillicBe, Language::BE},
     {freeink::ui::KeyboardLayoutId::CyrillicKk, Language::KK},
     {freeink::ui::KeyboardLayoutId::HebrewIl, Language::HE},
+    {freeink::ui::KeyboardLayoutId::ArabicAr, Language::AR},
 };
 inline constexpr uint8_t COUNT = sizeof(ALL) / sizeof(ALL[0]);
 static_assert(COUNT <= 16, "keyboard layout mask is uint16_t");

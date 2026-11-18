@@ -9,8 +9,10 @@ extern HalClock halClock;  // Singleton
 class HalClock {
   bool _available = false;
   mutable Rtc _sdkRtc;
-  mutable uint8_t _cachedHour = 0;
-  mutable uint8_t _cachedMinute = 0;
+  // The RTC keeps UTC; local time comes from newlib's localtime_r under the
+  // POSIX TZ rule set via setTimezone(), so zones with DST are correct
+  // year-round. Cached as a UTC epoch to keep the RTC bus quiet.
+  mutable time_t _cachedUtc = 0;
   mutable bool _hasCachedTime = false;
   mutable unsigned long _lastPollMs = 0;
 
@@ -23,16 +25,23 @@ class HalClock {
   // True if an RTC is present on this device
   bool isAvailable() const { return _available; }
 
-  // Get current hour (0-23) and minute (0-59).
+  // Set the POSIX TZ rule (e.g. "CET-1CEST,M3.5.0,M10.5.0/3") applied to every
+  // read. nullptr/empty falls back to UTC. Drops the read cache so the change
+  // shows immediately.
+  void setTimezone(const char* posixTz);
+
+  // Current wall-clock time in the configured timezone.
+  // Returns false if RTC is not available.
+  bool localTime(struct tm& out) const;
+
+  // Get current local hour (0-23) and minute (0-59).
   // Returns false if RTC is not available.
   bool getTime(uint8_t& hour, uint8_t& minute) const;
 
-  // Format time into a caller-provided buffer.
+  // Format the local time into a caller-provided buffer.
   // 24h mode produces "HH:MM" (needs >=6 bytes); 12h mode produces "H:MM AM"/"HH:MM PM" (needs >=9 bytes).
-  // utcOffsetQuarterHoursBiased: biased quarter-hour offset (48 = UTC+0, 0 = UTC-12, 104 = UTC+14).
-  // use12Hour: when true, format as 12-hour clock with AM/PM suffix.
   // Returns false if RTC is not available.
-  bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48, bool use12Hour = false) const;
+  bool formatTime(char* buf, size_t bufSize, bool use12Hour = false) const;
 
   // Sync the RTC from an NTP server. Requires WiFi to be connected.
   // Blocks for up to ~5s while waiting for SNTP response.

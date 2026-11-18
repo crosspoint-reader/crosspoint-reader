@@ -53,7 +53,8 @@ class EndOfBookOptions : private UiAppHost {
   // Written by the render task in loadOnce(), immutable afterwards; the main task only
   // reads it after isLoaded is observed true (acquire), so no further locking is needed.
   std::vector<std::string> names;
-  int selector = 0;
+  // Main-task selection updates may overlap a repaint on the render task.
+  std::atomic<int> selector{0};
   std::atomic<bool> isLoaded{false};
 
   // Row storage, built once in loadOnce() (same acquire/release publication

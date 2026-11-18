@@ -27,11 +27,17 @@ UiAppHost::TouchRoute UiAppHost::routeTouch(const MappedInputManager& input, con
     return result;
   }
   result.routed = true;
-  result.event = app.route(result.snap);
+  result.event = route(result.snap);
   return result;
 }
 
 fui::ActionEvent UiAppHost::route(const fui::InputSnapshot& snap) {
   if (!uiReady) return {};
-  return app.route(snap);
+  const auto event = app.route(snap);
+  // Releases activate controls; held/pressed frames only highlight or drag.
+  // Empty/disabled hit regions produce no event and therefore no feedback.
+  if (event && (snap.touchReleased || snap.swipeLeft || snap.swipeRight)) {
+    haptic_feedback::touchAction(event.longPress);
+  }
+  return event;
 }

@@ -6,7 +6,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
   - [1. Hardware Overview](#1-hardware-overview)
     - [Button Layout](#button-layout)
     - [Taking a Screenshot](#taking-a-screenshot)
-    - [Frontlight (X4 Pro only)](#frontlight-x4-pro-only)
+    - [Control Center and Frontlight](#control-center-and-frontlight)
   - [2. Power \& Startup](#2-power--startup)
     - [Power On / Off](#power-on--off)
     - [First Launch](#first-launch)
@@ -14,7 +14,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [3.1 Home Screen](#31-home-screen)
     - [3.2 Reading Mode](#32-reading-mode)
     - [3.3 Browse Files Screen](#33-browse-files-screen)
-    - [3.4 Recent Books Screen](#34-recent-books-screen)
+    - [3.4 Library Screen](#34-library-screen)
     - [3.5 File Transfer Screen](#35-file-transfer-screen)
     - [3.5.1 Calibre Wireless Transfers](#351-calibre-wireless-transfers)
       - [Installing the Plugin in Calibre](#installing-the-plugin-in-calibre)
@@ -42,13 +42,14 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [Chapter Navigation](#chapter-navigation)
     - [Auto Page Turn](#auto-page-turn)
     - [Tilt Page Turn (X3 only)](#tilt-page-turn-x3-only)
-    - [Footnote Navigation](#footnote-navigation)
+    - [Links and footnotes](#links-and-footnotes)
     - [Dictionary Lookup](#dictionary-lookup)
     - [System Navigation](#system-navigation)
     - [Supported Languages](#supported-languages)
   - [5. Reader Menu](#5-reader-menu)
     - [5.1 Chapter Selection](#51-chapter-selection)
     - [5.2 Bookmarks](#52-bookmarks)
+    - [5.3 Clippings and Highlights](#53-clippings-and-highlights)
   - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
   - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
 
@@ -71,12 +72,13 @@ When the Power button and the lower side button (Side Down) are pressed at the s
 
 Alternatively, while reading a book, press the **Confirm** button to open the reader menu and select **Take screenshot**.
 
-### Frontlight (X4 Pro only)
+### Control Center and Frontlight
 
-The X4 Pro has a built-in frontlight with adjustable brightness and warmth. It is controlled from a swipe panel rather than the Settings menu:
+The Control Center is available on all touch devices. Devices with a frontlight also show light controls. The X4 Pro has adjustable brightness and warmth; the Paper Mono has adjustable brightness only.
 
-* **Open the frontlight panel:** Swipe down from the top edge of the screen, from almost any screen (Home, Browse Files, Reading Mode, etc.). Drag the brightness and warmth sliders to adjust the light live, or tap the sun icon to turn it on or off.
-* **Quick toggle:** Double-click the **Power** button to turn the frontlight on or off instantly, without opening the panel.
+* **Open the panel:** Swipe down from the top edge of the screen, from almost any screen (Home, Browse Files, Reading Mode, etc.). You can also tap the status bar on Home, Browse Files, or Settings. On devices with a frontlight, drag the brightness slider (and the warmth slider, where available) to adjust the light live, or tap the sun icon to turn it on or off.
+* **Quick controls:** The panel has one row of icons: moon for night mode, circular arrows to refresh the screen, an underlined **T** to cycle reading direction, and the Settings Controls pointer to toggle reader touch controls. On builds with Bluetooth support, a fifth button enables or disables the Bluetooth page turner. Its crossed-out icon means disabled. The **T** rotates with the selected direction. A filled toggle means enabled; an outlined toggle means disabled. Refresh and direction always have outlines. Turning reader touch controls off leaves the panel usable. Bluetooth reconnection follows the normal rules after you close the panel; enabling it does not pair a new remote.
+* **Quick toggle:** On devices with a frontlight, set **Settings → Controls → Power button → Double click** to **Frontlight** (the default on X4 Pro and EEGO A4), then double-click the **Power** button to turn the frontlight on or off instantly, without opening the panel.
 
 > [!NOTE]
 > Frontlight brightness and warmth are intentionally not listed in **[Display Settings](#361-display)** — the swipe panel is the only place to adjust them. The on/off state can also be toggled with the Power-button double-click above.
@@ -107,7 +109,7 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 ### 3.1 Home Screen
 
-The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, the **[Browse Files](#33-browse-files-screen)** screen, the **[Recent Books](#34-recent-books-screen)** screen, the **[File Transfer](#35-file-transfer-screen)** screen, or **[Settings](#36-settings)**.
+The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Browse Files](#33-browse-files-screen)**, the **[Library](#34-library-screen)**, **[File Transfer](#35-file-transfer-screen)**, or **[Settings](#36-settings)**.
 
 ### 3.2 Reading Mode
 
@@ -115,20 +117,39 @@ See [Reading Mode](#4-reading-mode) below for more information.
 
 ### 3.3 Browse Files Screen
 
-The Browse Files screen acts as a file and folder browser. The full path to the current directory is shown at the top of the screen. File extensions are displayed alongside each filename, and directories are shown with brackets (e.g. `[folder-name]`). Hidden directories (those beginning with `.`) are also visible.
+The Browse Files screen acts as a file and folder browser. The full path to the current directory is shown at the top of the screen. File extensions are displayed alongside each filename (turn off **Show File Extensions** in **Settings → System** to give names the full row; files that differ only by extension, such as `book.epub` and `book.xtc`, then look alike), and directories are shown with brackets (e.g. `[folder-name]`). Hidden directories (those beginning with `.`) are also visible.
 
 * **Navigate List:** Use **Left** (or **Side Up**), or **Right** (or **Side Down**) to move the selection cursor up and down through folders and books. You can also long-press these buttons to scroll a full page up or down.
 * **Open Selection:** Press **Confirm** to open a folder or start reading a selected book. Selecting a `.bmp` file will open the image viewer.
 * **Delete Files or Folders:** Hold and release **Confirm** to delete the selected file or folder. You will be given an option to either confirm or cancel. Multiple files can be selected for deletion in a single operation.
 * **Rename or Move:** Files can be renamed or moved to a different folder from within the browse screen.
 
-### 3.4 Recent Books Screen
+### 3.4 Library Screen
 
-The Recent Books screen lists the most recently opened books in a chronological view, displaying title and author.
+The Library indexes up to 4,096 supported books on the SD card and shows their titles and authors without requiring you to remember their folders. Its three tabs provide different views. An arrow beside the active tab shows the sort direction:
+
+- **Recent** shows the books you opened most recently (up to ten) at the top, followed by the rest of the library ordered by when each file arrived on the card. Down shows the newest first; up shows the oldest files first, without the opened books on top. With **Hide New Files in Recent** turned on, the tab lists only the books you opened: down shows the most recently opened first, and up shows the least recently opened first. The setting applies only while no search is active; search results include books you have not opened.
+- **Title** groups books by the first letter of the title. Up sorts A-Z and down sorts Z-A. Titles beginning with numbers or punctuation appear under `#`; letters from non-English scripts, including Hebrew, have their own groups.
+- **Author** groups books by author. Up sorts A-Z and down sorts Z-A.
+
+`My Clippings.txt` and `crash_report.txt` are not listed in the Library. They remain available in the file browser.
+
+On a button-only device:
+
+- Use **Up/Down** or **Left/Right** to move one row at a time. Hold a direction to move a page at a time.
+- Press **Confirm** to open the selected book.
+- Press **Back** from the book list to focus the tabs. While the tabs are focused, press **Confirm** to switch to the next tab, hold **Confirm** to reverse the sort direction, press **Up** to open Search, or press **Down** to return to the list.
+- In the Recent view, hold **Confirm** on a book to open its options: **Open**, **Remove from Recents** (opened books only), **Delete**, and **Refresh Library**.
+- In the Title or Author views, hold **Confirm** on a book to collapse the list to its letter or author groups. The matching group remains selected. Press **Confirm** to enter a group, or **Back** to restore the exact book and position you came from.
+- While a search is active in the Title or Author views, hold **Confirm** on a book to delete it. Press **Back** to clear the search.
+
+On a touch device, tap tabs, books, and the Search icon directly. Tap the active tab again to reverse its sort direction. Swipe up or down to scroll. Long-press a book in the Recent view to open its options. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. Swipe a row sideways to reveal a delete button. Tap the refresh icon in the header to rebuild the index.
+
+The index is created automatically the first time the Library is opened, and it is rebuilt after books are added through file transfer. To pick up other file changes or updated metadata, choose **Refresh Library** from a Recent book's options, or tap the refresh icon on a touch device. **Settings → Library → Refresh Library** does the same from any device, including when the Library shows no books. The **Use Book Metadata** setting controls whether the index reads titles and authors stored inside books.
 
 ### 3.5 File Transfer Screen
 
-The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode.
+The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode. The screen also lists **OPDS Browser**, which opens your OPDS catalogs; with no server configured it opens the server list so you can add one (see [OPDS Servers](#365-opds-servers-multiple-libraries)). When the plugin system is off and a server is configured, OPDS Browser is on the Home screen instead.
 
 See the [web server docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
 
@@ -187,7 +208,7 @@ Books cannot be removed from your device through Calibre. Use the web interface 
 
 ### 3.6 Settings
 
-The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
+Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **Library**, and **Connectivity**. System contains language, keyboard layouts, hidden-file visibility, file-extension visibility, Clock (where available), firmware updates, and About. Library contains Use Book Metadata, Hide New Files in Recent, Clear Read Books from Recent List, Move Finished Books to Read Folder, and Refresh Library. Time to Sleep is under Display; Clear Reading Cache is under Reader. Connectivity contains Wi-Fi, Bluetooth Page Turner, CrossPoint Sync, OPDS, and the Plugins toggle. The options below describe these settings.
 
 #### 3.6.1 Display
 
@@ -196,15 +217,16 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Dark" (default) - The default dark Crosspoint logo sleep screen
   - "Light" - The same default sleep screen, on a white background
   - "Custom" - Custom images from the SD card; see [Sleep Screen](#37-sleep-screen) below for more information
-  - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
+  - "Cover" - The book cover image
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
   - "Quick resume" - The text of the last page read will be displayed on the sleep screen and a moon icon is shown on the edge of the screen. Waking up the device will return to the same page of the opened book. This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book.
   - "Transparent" - A transparent overlay image drawn over the current screen; see [Sleep Screen](#37-sleep-screen) below for more information
-- **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
+  - "Cover + Transparent" - The transparent overlay image drawn over the cover of the last opened book, falls back to "Transparent" behavior if there is no book cover
+- **Sleep Screen Cover Mode**: How to display the book cover or custom sleep image:
   
-  - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
-  - "Crop" - Scale the image down and crop as necessary to try to fill the screen (Note: this is experimental and may not work as expected)
+  - "Fit" (default) - Scale the image to fit centered on the screen, padding with white borders as necessary
+  - "Crop" - Scale the image and crop as necessary to try to fill the screen
 
 - **Sleep Screen Cover Filter**: What filter will be applied to the book cover when "Cover" sleep screen is selected:
   
@@ -212,7 +234,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
   - "Inverted" - The image will be inverted as in white & black and will be displayed without grayscale conversion
 
-- **Quick Resume on Timeout**: Whether to enable the "Quick Resume" sleep screen when the device goes to sleep due to inactivity (System > Time to Sleep). This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book. This overwrites the Sleep Screen Cover Mode when enabled.
+- **Quick Resume on Timeout**: Whether to enable the "Quick Resume" sleep screen when the device goes to sleep due to inactivity (Display > Time to Sleep). This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book. This overwrites the Sleep Screen Cover Mode when enabled.
 
 - **Status Bar**: Configure the status bar displayed while reading:
   
@@ -243,19 +265,16 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "OFF" (default) - Disable the fix
   - "ON" - Enable the fix
 
-> [!NOTE]
-> A battery charging indicator is shown on the battery icon whenever the device is actively charging.
-
 #### 3.6.2 Reader
 
 - **Reader Font Family**: Choose the font used for reading:
   
-  - "Noto Serif" (default) - Google's serif font
-  - "Noto Sans" - Google's sans-serif font
+  - "Noto Sans" (default) - Google's sans-serif font
+  - Installed SD card families
 
-- **Reader Font Size**: Adjust the text size for reading; options are "Small", "Medium" (default), "Large", or "X Large".
+- **Reader Font Size**: Choose a point size. Built-in and direct TTF/OTF/TTC fonts offer 12, 14, 16, and 18 pt. A `.cpfont` family offers the sizes installed for that family.
 
-- **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal" (default), or "Wide".
+- **Reader Line Spacing**: Space added between lines, as a percentage of font size: 0%, +10%, +20% (default), +30%, +45%, +60%, or +75%.
 
 - **Reader Screen Margin**: Controls the screen margins in Reading Mode between 5 and 40 pixels in 5-pixel increments.
 
@@ -263,7 +282,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
 
-- **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF".
+- **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF". Korean text wraps only at spaces when "OFF"; when "ON", a Korean word may also wrap at the end of a line between syllables or where it meets digits, Latin letters, or brackets (no hyphen is drawn).
 
 - **Reading Orientation**: Set the screen orientation for reading EPUB files:
   
@@ -281,58 +300,90 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
 
-- **Images**: Whether to display embedded images (JPG/PNG) found in EPUB files; options are "ON" (default) or "OFF".
+- **Images**: How embedded images (JPG/PNG/GIF) in EPUB files are shown. GIFs render only the first frame; interlaced GIFs are not supported.
+  - **Display** (default): images in gray levels. Pages with images take an extra grayscale refresh.
+  - **Placeholder**: the image's alt text in place of the image.
+  - **Suppress**: images are left out.
+  - **Black & White**: images drawn as a black-and-white dot pattern. Pages with images turn like text pages, without the extra refresh.
 
 - **Focus Reading**: Bolds the first part of each word to create visual fixation points, similar to Bionic Reading. This can help improve reading speed and focus; options are "ON" or "OFF" (default).
 
 #### 3.6.3 Controls
 
+Controls are grouped into Home button gestures, Power button, Front buttons,
+Side buttons, and Taps and gestures where supported by the device. See the
+[Controls guide](docs/controls.md) for the menu hierarchy and X4 Pro double-click actions.
+
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
 
-- **Side Button Layout (reader)**: Swap the order of the up and down side buttons from "Prev/Next" (default) to "Next/Prev". You can also disable them entirely. This change is only in effect when reading.
+- **Layout (reader only)**: Swap the order of the up and down side buttons from "Prev/Next" (default) to "Next/Prev". You can also disable them entirely. This change is only in effect when reading.
 
-- **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skips to the next/previous chapter:
-  
-  - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
-  - "Page Scroll" - Long-pressing scrolls a page up/down
-- **Long-press Menu**: Selects the function bound to holding the menu button (Confirm) while reading an EPUB. **Cycles through the available functions** each time the setting is selected — additional functions may be added in future releases, so this is not a binary on/off toggle. A short press of Confirm always opens the reader menu as normal:
+- **Orient Front Buttons**: Make front-button directions follow the reading orientation. Available on devices without touch.
+- **Orient Side Buttons**: Available on all supported devices with side page buttons, including touch and button-only devices. Reverse the reader's selected **Layout (reader only)** in both landscape modes when enabled. Normal portrait always keeps the selected layout, and upside-down portrait always reverses it, whether this option is on or off. Layouts that give both buttons the same action, or disable them, are unchanged. This option is off by default, including when upgrading from a version without it. Existing saved choices are preserved.
+
+- **Page turn long press**: Set the action for a long press of a page-turn button.
+  Open **Settings → Controls → Front buttons** or **Settings → Controls → Side buttons** on supported devices.
+  Both entries change the same setting:
+
+  - "Off" (default) - No special long-press action.
+  - "Chapter Skip" - In EPUBs, hold Next to open the next chapter or Previous to return to the chapter start. At the chapter start, hold Previous to open the previous chapter.
+  - "Orientation Change" - Hold a page-turn button to rotate the reading orientation.
+
+- **Menu long press**: Selects the function bound to holding the menu button (Confirm) while reading an EPUB. **Cycles through the available functions** each time the setting is selected — additional functions may be added in future releases, so this is not a binary on/off toggle. A short press of Confirm always opens the reader menu as normal:
   - "Bookmark" (default) - Hold Confirm (~0.4 second) to drop a bookmark at the current page.
-  - "KOSync" - Hold Confirm (~1 second) to launch KOReader sync directly.
+  - "CrossPoint Sync" - Hold Confirm (~1 second) to launch KOReader sync directly.
   - "Dictionary" - Hold Confirm (~0.4 second) to start dictionary word selection on the current page (see [docs/dictionary.md](docs/dictionary.md)).
+  - "Create Clipping" - Hold Confirm (~0.4 second) to start clipping selection on the current page.
   - "Disabled" - Long-press is ignored; only short-press opens the reader menu.
 
-- **Short Power Button Click**: Controls the effect of a short click of the power button:
+- **Short click**: Controls the effect of a short click of the power button:
   
   - "Ignore" (default) - Require a long press to turn off the device
   - "Sleep" - A short press puts the device into sleep mode
   - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
-  - "Footnotes" - A short press in reading mode opens the footnotes submenu; if only one footnote is present on the page, the referenced page is opened directly. The short press on the power button can be used to select the footnote in the submenu, and to go back to the original page after finish reading the footnote (like the back button).
+  - "Links and Footnotes" - A short press in reading mode opens link selection. If the page has only one link, it opens directly. After following a link, a short press returns to the previous location.
   - "Refresh" - A short press triggers a manual full-screen refresh, useful for clearing ghosting
-- **Quick-return from footnotes**: Toggles on and off the quick return functionality from the footnotes. When the functionality it's active, a short press of the power button will act as the back button from the footnotes page.
+- **Quick return from links**: Controls whether a short press of the power button acts as Back after following a link or footnote.
 
 #### 3.6.4 System
 
-- **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
+**About** shows hardware and firmware information. On EEGO Reader A4, it also shows the factory UID, matching the stock firmware. If the UID cannot be read, its value shows **Error.**
+
+- **Time to Sleep** (**Settings → Display**): Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
 
 - **Wi-Fi Networks**: Connect to Wi-Fi networks for file transfers and firmware updates.
 
-- **KOReader Sync**: Options for setting up KOReader for syncing book progress. **Smart sync** is the default for new configurations and auto-resolves simple push/pull decisions. Existing credential files retain **Ask every time** when migrated; you can switch Sync Behavior at any time if you prefer manual confirmation.
+- **Bluetooth Page Turner** (**Settings → Connectivity**): Enable Bluetooth, then open **Scan for Remotes** to connect a page turner. **Paired Remotes** lists saved remotes; selecting a row marked **Forget** removes it. Once connected, open **Map Buttons**, choose a page, chapter, Confirm, Back, reader menu, or clipping action, and press the remote button within 15 seconds. Release the button within 15 seconds: a hold of at least 0.7 seconds is mapped separately from its tap. If the remote never reports a release, learning waits 15 seconds and saves the press as a tap. Hold Confirm on an action, or long-press its row, to clear it. Back cancels learning or returns to the Bluetooth menu. Mapping is optional: without custom mappings, the default remote controls remain available. Each button gesture maps to one action; assigning it again replaces its previous action. Confirm and Back act like the device buttons while reading and in the reader list menu. Next/Previous Page navigate items while a reader menu is open and turn pages when it is closed. Bluetooth can also be toggled from the reader list menu or the toolbar’s **More** menu.
+
+- **CrossPoint Sync**: Settings for syncing book progress with CrossPoint Sync or a compatible KOSync server. **Smart sync** is the default for new configurations and auto-resolves simple push/pull decisions. Existing credential files retain **Ask every time** when migrated; you can switch Sync Behavior at any time if you prefer manual confirmation.
 
 - **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
 
-- **Clear Reading Cache**: Clear the internal SD card cache.
+- **Clear Reading Cache** (**Settings → Reader**): Clear the internal SD card cache.
 
-- **Check for updates**: Check for Crosspoint firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card.
+- **Use book metadata**: Read the title and author stored inside each book when the Library index is rebuilt. When disabled or unavailable, the Library uses the filename.
 
-- **Language**: Set the UI language. CrossPoint supports 24 languages: English, Spanish, French, German, Czech, Brazilian Portuguese, Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish, Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, and Hebrew.
+- **Refresh Library** (**Settings → Library**): Rescan the SD card for books while preserving the arrival history of books already in the index.
+
+- **Check for updates**: Check for Crosspoint firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card. Neither option is available on the BOOX Picco, which is updated over USB.
+
+- **Plugins** (**Settings → Connectivity**): Enable or disable SD-card plugins. Clean installs start disabled; upgrades with existing plugins are kept enabled automatically. Disabling plugins leaves all plugin files on the SD card but stops plugin discovery and execution until they are enabled again.
+  - Enabling plugins immediately adds **Plugins** to the Home screen, even when no plugins are installed yet. Sideloaded SD-card plugins work without Plugin Hub.
+  - Open **Home → Plugins** to view installed plugins. Hold **Confirm** on a selected installed plugin for one second (or long-press its row on a touch device) to open an uninstall confirmation. Confirming deletes that plugin's installed folder and files; cancelling leaves it installed. If no usable on-device Plugin Hub is available and its installer has not been hidden, a **Plugin Hub — Download, discover, and update plugins** entry is also shown. A manually sideloaded Hub with a valid `device.json` is recognized without requiring the optional README or browser files.
+  - Selecting that Plugin Hub entry offers **Install**, **Hide**, or **Cancel**. **Install** downloads Plugin Hub over Wi-Fi. If you back out of Wi-Fi selection, installation is cancelled, Wi-Fi is turned back off, and you return to Plugins with the installer still available. **Hide** removes only the Plugin Hub install entry; it does not disable plugins or affect sideloaded plugins. **Cancel** leaves the entry unchanged.
+  - **Hide** persists across reboots. Setting **Settings → Connectivity → Plugins** to **Enabled** again brings the installer back.
+  - Plugins with web settings appear on the **Plugins** page of the web UI while **File Transfer** is running. Its link is hidden while plugins are disabled.
+  - Plugin Hub is optional. Users who prefer manual installation can download it directly from [crosspoint-plugin-hub releases](https://github.com/crosspoint-reader/crosspoint-plugin-hub/releases) and copy/extract the `pluginhub` folder so it ends up at `/.crosspoint/plugins/pluginhub/`, `/plugins/pluginhub/`, or `/.plugins/pluginhub/`. Once installed, Plugin Hub appears as a normal entry under **Home → Plugins**.
+
+- **Language**: Set the UI language. CrossPoint supports 32 languages: English, Spanish, French, German, Czech, Brazilian Portuguese, European Portuguese, Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish, Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, Hebrew, Arabic, Slovak, Bosnian, Vietnamese, Norwegian Bokmål, Indonesian, and Orangutan.
 
 - **Manage Fonts**: Browse, download, and manage custom font families installed from the SD card. See [Custom Fonts (SD Card)](#38-custom-fonts-sd-card) for more information.
 
 #### 3.6.5 OPDS Servers (Multiple Libraries)
 
-CrossPoint supports saving multiple OPDS servers and switching between them when browsing catalogs.
+CrossPoint supports saving multiple OPDS servers and switching between them when browsing catalogs. Browse them from **OPDS Browser** on the Home screen (plugin system off and a server saved), otherwise from **File Transfer -> OPDS Browser**.
 
-1. Open **Settings -> System -> OPDS Servers**.
+1. Open **Settings -> Connectivity -> OPDS Servers**.
 
 2. Select **Add Server** to create a new entry, or select an existing server to edit it.
 
@@ -379,17 +430,27 @@ Behavior notes:
 CrossPoint can sync reading progress with KOReader-compatible sync servers.
 It also interoperates with KOReader apps/devices when they use the same server and credentials.
 
+**Server Type** controls which progress and metadata format CrossPoint sends:
+
+- **CrossPoint** - For the default service or a self-hosted CrossPoint-compatible sync server. Sends standard KOReader progress plus CrossPoint's richer reading position when available.
+- **KoSync** - For standard KOReader Sync servers such as `sync.koreader.rocks` or `koreader/kosync`. Uses the strict standard payload without CrossPoint-specific rich position data.
+- **Other** - For custom servers that explicitly support CrossPoint's enhanced payload. Rich position is enabled, and when **Send Metadata** is on CrossPoint may also send recognized ISBN, ASIN, series name, and series index in addition to title/author metadata.
+
+**Send Metadata** remains the privacy switch for bibliographic data. Turn it off if you want to sync progress without sending title, author, ISBN/ASIN, or series information.
+
 ##### Option A: CrossPoint Sync Server (`sync.crosspointreader.com`, default)
 
 When **Sync Server URL** is left empty, CrossPoint uses the free CrossPoint sync server at `https://sync.crosspointreader.com`. It speaks the standard KOReader sync protocol (so KOReader apps can use it too). CrossPoint records page starts as chapter-content offsets and sends the corresponding standard KOReader XPath, so devices with different fonts or layouts can return to the same text.
 
 1. On each CrossPoint device:
 
-   - Go to **Settings -> System -> KOReader Sync**.
+   - Go to **Settings -> Connectivity -> CrossPoint Sync**.
 
    - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
 
    - Leave **Sync Server URL** empty (or set it to `https://sync.crosspointreader.com`).
+
+   - Set **Server Type** to **CrossPoint**.
 
    - On the first device, run **Sign Up** once to create the account directly from the device. On every other device, just run **Authenticate**.
 
@@ -401,9 +462,11 @@ Use this if you already sync KOReader devices against the official public server
 
 1. On each CrossPoint device:
 
-   - Go to **Settings -> System -> KOReader Sync**.
+   - Go to **Settings -> Connectivity -> CrossPoint Sync**.
 
    - Set **Sync Server URL** to `https://sync.koreader.rocks` (required; an empty URL now points at the CrossPoint server instead).
+
+   - Set **Server Type** to **KoSync**.
 
    - Set **Username** and **Password** to your existing KOReader Sync credentials.
 
@@ -487,11 +550,13 @@ If this returns `HTTP 402` with `{"code":2002,"message":"Username is already reg
 
 4. On each CrossPoint device:
    
-   - Go to **Settings -> System -> KOReader Sync**.
+   - Go to **Settings -> Connectivity -> CrossPoint Sync**.
    
    - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
    
    - Set **Sync Server URL** to `http://<server-ip>:17200`.
+
+   - Set **Server Type** to **KoSync**.
    
    - Run **Authenticate**.
 
@@ -499,8 +564,9 @@ If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only fo
 
 ##### Syncing While Reading
 
-Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Long-press Menu** to **KOSync** and hold Confirm to launch sync directly.
+Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Front buttons -> Menu long press** to **CrossPoint Sync** and hold Confirm to launch sync directly.
 
+- **Sync Clippings** is off by default. Enable it only for a compatible CrossPoint Sync server; manual **Sync Progress** then uploads and downloads this book’s clippings too. Leave it off for ordinary KOSync servers.
 - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
 - With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 
@@ -516,11 +582,12 @@ The **Sleep Screen** setting controls what is displayed when the device goes to 
 | **Cover**          | The cover of the currently open book. Falls back to **Dark** if no book is open.                                             |
 | **Cover + Custom** | The cover of the currently open book, shown only while actively reading. Falls back to **Custom** behavior when not reading. |
 | **Transparent**    | A BMP or PNG overlay drawn over the current screen. Supports PNG and 32-bit BGRA alpha transparency, and treats white as transparent in regular BMPs. Falls back to **Dark** if no valid overlay image is found. |
+| **Cover + Transparent** | The **Transparent** overlay drawn over the cover of the last opened book, from any screen. Falls back to **Transparent** behavior if there is no book cover, and to the plain cover if no valid overlay image is found. |
 | **None**           | A blank screen.                                                                                                              |
 
 #### Cover settings
 
-When using **Cover** or **Cover + Custom**, two additional settings apply:
+When using **Custom**, **Cover**, **Cover + Custom** or **Cover + Transparent**, two additional settings apply:
 
 - **Sleep Screen Cover Mode**: **Fit** (scale to fit, white borders) or **Crop** (scale and crop to fill the screen).
 - **Sleep Screen Cover Filter**: **None** (grayscale), **Contrast** (black & white), or **Inverted** (inverted black & white).
@@ -532,9 +599,11 @@ To use custom sleep images, set the sleep screen mode to **Custom** or **Cover +
 - **Multiple Images (recommended):** Create a `.sleep` directory in the root of the SD card and place any number of `.bmp` images inside. One will be randomly selected each time the device sleeps. (A directory named `sleep` is also accepted as a fallback.)
 - **Single Image:** Place a file named `sleep.bmp` in the root directory. This takes priority over the `.sleep`/`sleep` directories.
 
+Like book covers, custom images are scaled to the screen using **Sleep Screen Cover Mode**. The first sleep with a new image takes longer while it is converted.
+
 #### Transparent overlay images
 
-To use transparent sleep overlays, set the sleep screen mode to **Transparent**, then place BMP or PNG files on the SD card:
+To use transparent sleep overlays, set the sleep screen mode to **Transparent** or **Cover + Transparent**, then place BMP or PNG files on the SD card:
 
 - **Multiple Images (recommended):** Create a `.sleep-overlay` directory in the root of the SD card and place any number of valid overlay `.bmp` or `.png` images inside. One will be randomly selected each time the device sleeps. A directory named `sleep-overlay` is also accepted as a fallback.
 - **Single Image:** Place `sleep-overlay.bmp` or `sleep-overlay.png` in the root directory. A root BMP takes priority over a root PNG, and both take priority over the `.sleep-overlay`/`sleep-overlay` directories.
@@ -549,21 +618,28 @@ Transparent overlay files are intentionally separate from normal sleep images. R
 > - X3: Use a resolution of 528x792 pixels to match the device's screen resolution.
 
 > [!TIP]
-> You can set an image as the sleep screen cover directly from the BMP image viewer in the **[Browse Files](#33-browse-files-screen)** screen.
+> You can set an image as the sleep screen cover directly from the BMP image viewer in the **[Browse Files](#33-browse-files-screen)** screen. On touch devices, long-press the image.
 
 ---
 
 ### 3.8 Custom Fonts (SD Card)
 
-CrossPoint supports loading additional fonts from the SD card, extending beyond the two built-in families (Noto Serif, Noto Sans). Custom fonts can include extended Unicode coverage, enabling CJK (Chinese, Japanese, Korean) and other scripts.
+Noto Serif and OpenDyslexic are optional SD card fonts. Install `NotoSerif` to use
+the former built-in serif family. On upgrade, an existing Noto Serif selection
+uses `NotoSerif` if installed; otherwise, the reader switches to Noto Sans. After
+installing the family later, select it in **Settings → Reader → Font Family**.
+
+CrossPoint loads additional fonts from the SD card. Custom fonts can add Chinese, Japanese, Korean, and other scripts that the built-in reader fonts lack. If your device have external RAM, you can copy `.ttf`, `.otf`, and `.ttc` files directly. Otherwise, use `.cpfont` files made from those fonts. 
 
 There are three ways to install fonts:
 
-1. **Download from device (recommended):** Go to **Settings -> System -> Manage Fonts**, browse the available font families, and select one to download over Wi-Fi.
-2. **Upload via web interface:** While in **File Transfer** mode, open the web UI in a browser and navigate to the **Fonts** tab to upload `.cpfont` files.
-3. **Manual SD card copy:** Download font files from the [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts) and copy them to `/.fonts/` (preferred) or `/fonts/` on your SD card.
+1. **Download from device (recommended):** Go to **Settings -> Reader -> Manage Fonts**, browse the available font families, and select one to download over Wi-Fi.
+2. **Upload via web interface:** While in **File Transfer** mode, open the web UI and use the **Fonts** tab to upload `.cpfont` files. If your device has external RAM, the Fonts tab also accepts `.ttf` and `.otf` files. Choose the folder that contains the font family's files; the picker selects folders, not single files. The Fonts tab does not accept `.ttc` files; on devices with external RAM, copy those to the SD card instead (see item 3).
+3. **Manual SD card copy:** Copy `.cpfont` families from the [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts) to `/.fonts/` or `/fonts/`. If your device have external RAM, you can also copy TTF/OTF/TTC files there without conversion.
 
 Once installed, custom fonts appear in **Settings → Reader → Font Family** alongside the built-in fonts.
+
+If the reader shows **Damaged font file**, a `.cpfont` file on the SD card is broken (for example, from an interrupted copy). The affected characters are drawn blank. Delete the font family's folder and install it again.
 
 See [docs/sd-card-fonts.md](./docs/sd-card-fonts.md) for full installation details and SD card folder structure.
 
@@ -582,7 +658,7 @@ Once you have opened a book, the button layout changes to facilitate reading.
 
 The role of the side buttons can be swapped in the **[Controls Settings](#363-controls)**.
 
-If the **Short Power Button Click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
+If the **Short click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
 
 ### Chapter Navigation
 
@@ -599,15 +675,15 @@ Auto Page Turn automatically advances pages at a set interval, useful for hands-
 
 On the **Xteink X3**, the gyroscope can be used to turn pages by tilting the device. This feature is available in the Controls settings.
 
-### Footnote Navigation
+### Links and footnotes
 
-When reading an EPUB that contains footnotes, you can navigate to the footnote text by selecting the footnote reference in the book. From the footnote, you can return to your original reading position.
+Internal EPUB links include chapter links, cross-references, and footnotes. Tap a link on a touchscreen device, or choose "Links and Footnotes" from the Reader Menu to select a link. Press Back to return to the previous location.
 
-If the device goes to sleep or you close the book while viewing a footnote, the book reopens to your original reading position, not the footnote.
+If the device sleeps or you close the book after following a link, the book reopens on the page you were viewing. Back still returns you to where you followed the link. The reader keeps the three most recent return positions.
 
 ### Dictionary Lookup
 
-Words on the current page can be looked up in an offline StarDict dictionary stored on the SD card. Copy a dictionary to the `/dictionaries/` folder, select it in **Settings → Reader → Dictionary**, then start a lookup by choosing **Look Up** in the **[Reader Menu](#5-reader-menu)** (or by holding **Confirm**, if the **Long-press Menu** setting in **[Controls Settings](#363-controls)** is set to "Dictionary"). Use **Left/Right** to highlight a word and press **Confirm** to show its definition.
+Words on the current page can be looked up in an offline StarDict dictionary stored on the SD card. Copy a dictionary to the `/dictionaries/` folder, select it in **Settings → Reader → Dictionary**, then start a lookup by choosing **Look Up** in the **[Reader Menu](#5-reader-menu)** (or by holding **Confirm**, if the **Menu long press** setting in **[Controls Settings](#363-controls)** is set to "Dictionary"). Use **Left/Right** to highlight a word and press **Confirm** to show its definition.
 
 See [docs/dictionary.md](docs/dictionary.md) for supported formats, setup, and where to find dictionaries.
 
@@ -616,7 +692,7 @@ See [docs/dictionary.md](docs/dictionary.md) for supported formats, setup, and w
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
 * **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#5-reader-menu)**, which includes chapter navigation, reading options, and more.
-* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — "Bookmark" (default) drops a bookmark, "KOSync" launches KOReader Sync, "Dictionary" starts a word lookup, "Disabled" does nothing. A short press always opens the Reader Menu.
+* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Menu long press** setting in **[Controls Settings](#363-controls)** — including bookmarks, KOReader Sync, dictionary lookup, or clipping selection. A short press always opens the Reader Menu.
 
 ### Supported Languages
 
@@ -626,7 +702,7 @@ CrossPoint renders text using the following Unicode character blocks, enabling s
 * **Cyrillic Script (Standard and Extended):** Covers Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh, Kyrgyz, Mongolian, and others.
 * **Vietnamese:** Supported via extended Latin glyph coverage in the built-in reader fonts.
 
-What is not supported with built-in reader fonts: Chinese, Japanese, Korean, Arabic, Greek, Hebrew, and Farsi. However, **CJK, Hebrew, Greek, and other extended scripts can be enabled by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card).
+The UI includes Arabic and Hebrew (menus use built-in fonts with presentation-form coverage). Built-in **reader** fonts do not cover Chinese, Japanese, Korean, Arabic, Greek, Hebrew, or Farsi for book text. **CJK, Hebrew, Arabic, Greek, and other extended scripts can be enabled for reading by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card).
 
 ---
 
@@ -634,18 +710,23 @@ What is not supported with built-in reader fonts: Chinese, Japanese, Korean, Ara
 
 Press **Confirm** while reading to open the Reader Menu. From here you can access reading utilities and navigation options without leaving the book.
 
+The list menu remembers the selected entry while the book stays open. If that entry is no longer available, the cursor returns to the first entry. Closing the book resets the selection.
+
 Available options include:
 
 - **Select Chapter** – Open the table of contents to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
-- **Footnotes** – Navigate to the footnotes for the current section *(only shown in books that contain footnotes)*.
+- **Links and Footnotes** – Select an internal link on the current page. This option appears when the page contains links.
 - **Look Up** – Select a word on the current page and show its dictionary definition (see [docs/dictionary.md](docs/dictionary.md)). Requires a dictionary to be selected in **Settings → Reader → Dictionary**.
+- **Bluetooth Page Turner** – Toggle Bluetooth for the saved remote. This entry appears after pairing a remote in **Settings → Connectivity → Bluetooth Page Turner** and disappears if that selected remote is forgotten.
+- **Create Clipping** – Select a range of text on the current page and save it as a highlighted clipping.
+- **View Clippings** – Open this book's saved clippings *(shown after the first clipping is saved)*.
 - **Reading Orientation** – Cycle through screen orientations without leaving the reader.
 - **Auto Turn (Pages Per Minute)** – Cycle through automatic page turn speed options for hands-free reading.
 - **Go to %** – Jump to a specific position in the book by percentage.
 - **Take screenshot** – Save a screenshot of the current page to the `screenshots/` folder.
 - **Show page as QR** – Display a QR code encoding the current reading position.
 - **Go Home** – Close the book and return to the Home screen.
-- **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
+- **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)). This entry appears when sync credentials are saved or an enabled plugin subscribes to device events. Without sync credentials, it connects to Wi-Fi to send queued plugin events.
 - **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
 
 Press **Back** at any time to close the menu and return to your current page.
@@ -670,12 +751,24 @@ To open bookmarks, press **Confirm** while inside a book. Then navigate to the *
 
 Bookmarks are stored in the `.crosspoint/bookmarks` folder in the JSON format.
 
+### 5.3 Clippings and Highlights
+
+Select **Create Clipping** from the Reader Menu, move to the first word, and press **Confirm**. Move to the last word and press **Select** again to choose **Look Up**, **Clip**, or **Bookmark**. **Back** closes that popup without losing the selection. On touch devices, press and hold a word in the reader to select it. Drag either selection handle to adjust the range, then tap **Look Up**, **Clip**, or **Bookmark** above it. Hold the ending handle at the bottom edge or over the final word for one second to extend onto the next preloaded page. Selection covers up to three pages in the same chapter, subject to the 240 selectable-word limit. The toolbar overlays the page without shifting the text. Releasing a handle keeps the selection open; tapping outside the text dismisses it. **Look Up** searches the selected text in your dictionary; **Bookmark** toggles the bookmark on the selection’s final page. Saved ranges with source offsets remain highlighted after changes to font, spacing, orientation, or pagination. Ranges without source offsets can only be highlighted when their saved layout still matches. Press and hold highlighted text to remove that clipping; its deletion is sent on the next manual sync when **Sync Clippings** is enabled.
+
+Select **View Clippings** to browse saved excerpts for the current book. Press **Confirm** to choose **Open** or **Go to Passage**, or hold **Confirm** for about 0.7 seconds to delete it. **Go to Passage** uses the saved text offset and is available for new, source-anchored clippings. Older clippings can still be read or deleted. Touch devices can open a clipping with a tap or delete it with a long press.
+
+Each book can store up to **1,024 clippings on ESP32-S3 devices** or **256 on ESP32-C3 devices**. These limits also apply to clippings downloaded through sync.
+
+The structured clipping store under `.crosspoint/clippings` keeps up to **4 KiB of UTF-8 text per clipping**. Longer selections must be shortened before saving. CrossPoint also appends up to **2,000 UTF-8 bytes** of each saved excerpt to `My Clippings.txt` in the root of the SD card, using Kindle-compatible formatting. If that export fails, the clipping remains saved and the message reports the export failure.
+
+Local book and folder moves carry clipping data with them. Deleting a local book removes its local clipping data; it does not delete already synced server copies or historical entries in `My Clippings.txt`. Deleting an individual clipping likewise leaves the text export untouched, but queues its server deletion for the next enabled manual sync. `My Clippings.txt` is an independent append-only export, not the source used to restore or sync highlights.
+
 ## 6. Current Limitations & Roadmap
 
 Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
 
 * **Cover Images:** Large cover images embedded into EPUB require several seconds (~10s for ~2000 pixel tall image) to convert for sleep screen and home screen thumbnail. Consider optimizing the EPUB with e.g. https://github.com/bigbag/epub-to-xtc-converter to speed this up.
-* **Unsupported Image Formats:** Most JPG and PNG images in EPUBs render correctly. GIFs and progressive JPEGs are not supported and will fall back to an `[Image]` placeholder.
+* **Image Support:** Most JPG, PNG and non-interlaced GIF images in EPUBs render correctly, including book covers. Animated GIFs show only the first frame. Interlaced GIFs are not supported and use an outlined image placeholder.
 
 ---
 

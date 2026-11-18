@@ -4,43 +4,15 @@
 #include <PowerManager.h>
 #include <Preferences.h>
 #include <SPI.h>
-#include <Wire.h>
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
 
+#if FREEINK_DEVICE_LILYGO
+#include <BoardT5S3.h>
+#endif
+
 // Global HalGPIO instance
 HalGPIO gpio;
-
-namespace X3GPIO {
-
-bool readI2CReg16LE(uint8_t addr, uint8_t reg, uint16_t* outValue) {
-  Wire.beginTransmission(addr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) {
-    return false;
-  }
-  if (Wire.requestFrom(addr, static_cast<uint8_t>(2), static_cast<uint8_t>(true)) < 2) {
-    while (Wire.available()) {
-      Wire.read();
-    }
-    return false;
-  }
-  const uint8_t lo = Wire.read();
-  const uint8_t hi = Wire.read();
-  *outValue = (static_cast<uint16_t>(hi) << 8) | lo;
-  return true;
-}
-
-bool readBQ27220CurrentMA(int16_t* outCurrent) {
-  uint16_t raw = 0;
-  if (!readI2CReg16LE(I2C_ADDR_BQ27220, BQ27220_CUR_REG, &raw)) {
-    return false;
-  }
-  *outCurrent = static_cast<int16_t>(raw);
-  return true;
-}
-
-}  // namespace X3GPIO
 
 namespace {
 constexpr char HW_NAMESPACE[] = "cphw";
@@ -137,10 +109,22 @@ void HalGPIO::begin() {
   _deviceType = DeviceType::X4;
 #endif
   inputMgr.begin();
+#if FREEINK_DEVICE_LILYGO
+  // T5S3 IO48 key sits behind the PCA9535 expander. Mirrors BoardT5S3::begin(), which also
+  // re-inits I2C/SPI and is unsafe to call here. inputMgr.begin() has started Wire.
+  if (BoardConfig::ACTIVE.board == BoardConfig::Board::LilyGoT5S3) {
+    BoardT5S3::setPca9535PinMode(PCA9535_IO12_BUTTON, INPUT);
+    InputManager::setButtonHook(
+        []() -> uint8_t { return BoardT5S3::readButton() ? static_cast<uint8_t>(1U << InputManager::BTN_DOWN) : 0; });
+  }
+#endif
 }
 
 void HalGPIO::update() {
   inputMgr.update();
+  const uint8_t pageButtons = inputMgr.capacitivePageButtonMask();
+  capacitivePagePressed = (pageButtons & ~previousCapacitivePageButtons) != 0;
+  previousCapacitivePageButtons = pageButtons;
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
@@ -150,6 +134,10 @@ bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
 bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
 
+void HalGPIO::prepareForDeepSleep() {
+  if (!inputMgr.prepareForDeepSleep()) LOG_ERR("GPIO", "Failed to put touch controller to sleep");
+}
+
 bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
 
 bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
@@ -157,6 +145,24 @@ bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
 bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
 
 bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+
+bool HalGPIO::rawInputActive() {
+  if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
+#if FREEINK_DEVICE_LILYGO
+  if (BoardConfig::ACTIVE.board == BoardConfig::Board::LilyGoT5S3 && BoardT5S3::readButton()) return true;
+#endif
+  const int8_t pins[] = {BoardConfig::ACTIVE.input.back, BoardConfig::ACTIVE.input.confirm,
+                         BoardConfig::ACTIVE.input.left, BoardConfig::ACTIVE.input.right,
+                         BoardConfig::ACTIVE.input.up,   BoardConfig::ACTIVE.input.down};
+  for (const int8_t pin : pins) {
+    if (pin >= 0 && digitalRead(pin) == LOW) return true;
+  }
+  InputManager::ButtonAdcSample g1{}, g2{};
+  inputMgr.readButtonAdc(g1, g2);
+  // The Xteink ladder idles at the ADC full-scale rail (~4095); every button band sits below 3900.
+  constexpr int kIdleRailMin = 4000;
+  return (g1.raw >= 0 && g1.raw < kIdleRailMin) || (g2.raw >= 0 && g2.raw < kIdleRailMin);
+}
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
@@ -166,7 +172,13 @@ bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 
 bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
 
+bool HalGPIO::wasHomeKeyPressed() const { return inputMgr.wasHomeKeyPressed(); }
+
 bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
+
+bool HalGPIO::hasToggleSwitch() const { return inputMgr.hasToggleSwitch(); }
+
+bool HalGPIO::isToggleSwitchOn() const { return inputMgr.isToggleSwitchOn(); }
 
 bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPressed(); }
 
@@ -232,27 +244,21 @@ bool HalGPIO::verifyPowerButtonWakeup() {
 }
 
 bool HalGPIO::isUsbConnected() const {
-  if (deviceIsX3()) {
-    // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
-    // Positive current means charging.
-    for (uint8_t attempt = 0; attempt < 2; ++attempt) {
-      int16_t currentMa = 0;
-      if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {
-        return currentMa > 0;
-      }
-      delay(2);
-    }
-    return false;
-  }
-  if (BoardConfig::ACTIVE.usbDetect >= 0) {
+  if (!deviceIsX3() && BoardConfig::ACTIVE.usbDetect >= 0) {
     return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
   }
-  // No digital USB-detect line (e.g. Sticky, whose PWR_IN_VOLT is an analog
+  // X3 uses GPIO20 for I2C, not USB detection. Boards without a digital
+  // USB-detect line (e.g. Sticky, whose PWR_IN_VOLT is an analog
   // divider): infer external power from charging state instead. BatteryMonitor
   // picks the board's best source — charger IC status, gauge Current() sign, or
   // a /STAT pin — and reports false on boards with no battery telemetry at all.
-  // Caveat: charge termination at 100% reads as "not connected".
+  // A charger IC that reports its input rail (BQ25896, SGM41562, M5 PMIC)
+  // answers directly; otherwise infer from charging state, where charge
+  // termination at 100% reads as "not connected".
   static const BatteryMonitor battery;
+  bool known = false;
+  const bool present = battery.isExternalPowerPresent(&known);
+  if (known) return present;
   return battery.isCharging();
 }
 
@@ -265,7 +271,8 @@ bool HalGPIO::coldBootImpliesPowerButton() const {
   // post-flash boots as battery button boots, and STAT-only boards like the
   // EEGO A4 misread them the same way once the charger terminates at 100%
   // (STAT inactive reads as "no USB").
-  return isXteinkDevice() || BoardConfig::isPaperMono() || BoardConfig::isSticky();
+  // The Metalio sleeps powered off and only its button turns it back on.
+  return isXteinkDevice() || BoardConfig::isPaperMono() || BoardConfig::isSticky() || BoardConfig::isMetalioEInk4();
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {

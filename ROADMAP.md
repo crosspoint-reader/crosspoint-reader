@@ -6,26 +6,26 @@ intentionally phased: Phase 0 closed out the commitments already in flight befor
 
 Phases are sequential. We do not start the next phase until the prior one is wrapped or explicitly carried over.
 
+Status: ✅ done · 🚧 in progress · ❌ shelved
+
 ---
 
-## Phase 0 - Close Out Legacy Scope Items — **COMPLETE**
+## ✅ Phase 0 - Close Out Legacy Scope Items
 
 **Goal:** Land the work that was already in motion under the prior, broader scope so contributors are not left
 hanging, and so we enter the stricter phases with a clean slate.
 
-**Landed in Phase 0:**
-
-* **RTL support PRs.** The in-flight right-to-left work was reviewed, iterated, and merged.
-* **Dictionary PR.** The offline dictionary lookup work was reviewed and merged.
-* **Bookmarks** feature. First-class navigation markers in EPUBs.
-* ~~**Transparent sleep screens.**~~ Shelved; not picked back up under the stricter phases.
+* ✅ **RTL support PRs.** The in-flight right-to-left work was reviewed, iterated, and merged.
+* ✅ **Dictionary PR.** The offline dictionary lookup work was reviewed and merged.
+* ✅ **Bookmarks** feature. First-class navigation markers in EPUBs.
+* ✅ **Transparent sleep screens.**
 
 Phase 0 is closed. The tighter scope in [SCOPE.md](SCOPE.md) is now fully enforced. "But it was on the old roadmap"
 is not a valid argument for accepting a PR.
 
 ---
 
-## Phase 1 - Consolidation, Footprint, and Multi-Device Support — **IN PROGRESS**
+## 🚧 Phase 1 - Consolidation, Footprint, and Multi-Device Support
 
 **Goal:** Reduce memory and flash usage, clean up the codebase, and land the SDK / HAL generalization work so
 CrossPoint runs cleanly on ESP32-based e-reader hardware beyond Xteink (X3 / X4), including ESP32-S3 class devices.
@@ -35,8 +35,8 @@ CrossPoint runs cleanly on ESP32-based e-reader hardware beyond Xteink (X3 / X4)
 * DRAM and heap fragmentation reduction across the reader core.
 * Flash footprint reduction (dead code, redundant strings, oversized tables).
 * Refactors that tighten the HAL / SDK boundary.
-* ~~Pluggable per-device SDK layers (display, input, storage, battery) and per-device build configuration without
-  forking the reader core.~~ **Done.** CrossPoint now builds for and runs on multiple device targets beyond the
+* ✅ Pluggable per-device SDK layers (display, input, storage, battery) and per-device build configuration without
+  forking the reader core. CrossPoint now builds for and runs on multiple device targets beyond the
   Xteink X3 / X4, including ESP32-S3 class hardware (X4 Pro, PaperMono, Seeed Sticky).
 * Adding support for a new device is done in the [FreeInk SDK](https://freeink.org) first (display, input,
   storage, battery drivers), followed by a commit to this repo adding board support (build environment and
@@ -58,9 +58,9 @@ flash.
 
 * Multi-language reading support (underserved languages, complex script support where realistic on ESP32 hardware).
   Substantial progress has already landed: RTL reading (Arabic, Hebrew) and CJK via SD card fonts.
-* ~~Better font support and custom fonts.~~ **Landed early.** SD card fonts with a downloader and font manager,
+* ✅ Better font support and custom fonts. **Landed early.** SD card fonts with a downloader and font manager,
   script grouping, and CJK support are shipped (see [docs/sd-card-fonts.md](docs/sd-card-fonts.md)).
-* ~~UI languages and localization.~~ **Landed early.** The UI ships with 30+ translations, including RTL languages,
+* ✅ UI languages and localization. **Landed early.** The UI ships with 30+ translations, including RTL languages,
   and continues to receive improvements.
 * Moving themes off-firmware to SD-loaded assets (see SCOPE.md Section 6).
 * **SD-loaded plugins.** Extend the device from the SD card without growing the firmware: plugin packages that add

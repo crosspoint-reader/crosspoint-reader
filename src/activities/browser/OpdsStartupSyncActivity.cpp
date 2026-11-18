@@ -10,6 +10,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "OpdsTokenStore.h"
 #include "SilentRestart.h"
 #include "WifiCredentialStore.h"
 #include "components/UITheme.h"
@@ -120,8 +121,23 @@ void OpdsStartupSyncActivity::loop() {
 void OpdsStartupSyncActivity::runSync() {
   renderedPercent = -1;
   lastProgressUpdateMs = 0;
-  const OpdsBatchDownload::Observer observer{this, &OpdsStartupSyncActivity::onProgress};
-  const auto result = OpdsBatchDownload::run(server, "", observer, status);
+  opdsClient.setServer(server.url, server.username, server.password, server.activeCustomHeaders());
+  const std::string tokenKey = server.url + '\x1f' + server.username;
+  {
+    const OpdsTokens t = OPDS_TOKENS.get(tokenKey);
+    opdsClient.setTokens(t.accessToken, t.refreshToken, t.refreshUrl);
+  }
+  opdsClient.resetAuthState();
+  const OpdsBatchDownload::Hooks hooks{this, &OpdsStartupSyncActivity::onProgress,
+                                       &OpdsStartupSyncActivity::onTransfer};
+  const auto result = OpdsBatchDownload::run(opdsClient, server.url, hooks, status);
+  if (opdsClient.tokensDirty()) {
+    OpdsTokens tokens;
+    tokens.accessToken = opdsClient.accessToken();
+    tokens.refreshToken = opdsClient.refreshToken();
+    tokens.refreshUrl = opdsClient.refreshUrl();
+    if (!OPDS_TOKENS.put(tokenKey, tokens)) LOG_ERR("OPDS", "Failed to persist OPDS tokens for %s", server.url.c_str());
+  }
   LOG_INF("OPDS", "Startup sync: %d new, %d skipped, %d failed of %d (result %d)", status.downloaded, status.skipped,
           status.failed, status.examined, static_cast<int>(result));
 }
@@ -129,24 +145,42 @@ void OpdsStartupSyncActivity::runSync() {
 bool OpdsStartupSyncActivity::onProgress(void* ctx, const OpdsBatchDownload::Status& progress) {
   auto* self = static_cast<OpdsStartupSyncActivity*>(ctx);
   self->statusMessage = progress.title;
+  self->bytes = self->bytesTotal = 0;
+  self->pumpProgress();
+  return !self->cancelled;
+}
 
+HttpDownloader::DownloadError OpdsStartupSyncActivity::onTransfer(void* ctx, const std::string& url,
+                                                                  const std::string& dest,
+                                                                  const freeink::opds::HttpAuth& auth) {
+  auto* self = static_cast<OpdsStartupSyncActivity*>(ctx);
+  std::vector<HttpDownloader::Header> headers = auth.headers;
+  if (!auth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + auth.bearer});
+  return HttpDownloader::downloadToFile(
+      url, dest,
+      [self](const size_t downloaded, const size_t total) {
+        self->bytes = downloaded;
+        self->bytesTotal = total;
+        self->pumpProgress();
+      },
+      &self->cancelled, auth.username, auth.password, headers);
+}
+
+void OpdsStartupSyncActivity::pumpProgress() {
   // The activity loop is blocked for the whole sync; pump input here so Back or
   // the Cancel button can abort between chunks.
-  self->mappedInput.update();
-  if (self->mappedInput.wasReleased(MappedInputManager::Button::Back)) self->cancelled = true;
-  self->routeTouch(self->mappedInput);
+  mappedInput.update();
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) cancelled = true;
+  routeTouch(mappedInput);
 
-  const int percent =
-      progress.bytesTotal > 0 ? static_cast<int>(static_cast<uint64_t>(progress.bytes) * 100 / progress.bytesTotal) : 0;
+  const int percent = bytesTotal > 0 ? static_cast<int>(static_cast<uint64_t>(bytes) * 100 / bytesTotal) : 0;
   const unsigned long now = millis();
-  if (percent >= 100 || self->renderedPercent < 0 || percent < self->renderedPercent ||
-      percent >= self->renderedPercent + PROGRESS_STEP_PERCENT ||
-      now - self->lastProgressUpdateMs >= PROGRESS_MIN_UPDATE_MS) {
-    self->renderedPercent = percent;
-    self->lastProgressUpdateMs = now;
-    self->requestUpdate(true);
+  if (percent >= 100 || renderedPercent < 0 || percent < renderedPercent ||
+      percent >= renderedPercent + PROGRESS_STEP_PERCENT || now - lastProgressUpdateMs >= PROGRESS_MIN_UPDATE_MS) {
+    renderedPercent = percent;
+    lastProgressUpdateMs = now;
+    requestUpdate(true);
   }
-  return !self->cancelled;
 }
 
 void OpdsStartupSyncActivity::rootScreen(UiScreen& screen, void* user) {
@@ -181,10 +215,10 @@ void OpdsStartupSyncActivity::rootScreen(UiScreen& screen, void* user) {
   screen.target().text(screen.takeTop(lh, gap), counters, centered);
 
   const fui::Rect bar = screen.takeTop(barH, gap).inset(fui::Insets{0, 50, 0, 50});
-  if (self->status.bytesTotal > 0) {
+  if (self->bytesTotal > 0) {
     fui::ProgressBarProps progress;
-    progress.value = static_cast<int32_t>(self->status.bytes);
-    progress.max = static_cast<int32_t>(self->status.bytesTotal);
+    progress.value = static_cast<int32_t>(self->bytes);
+    progress.max = static_cast<int32_t>(self->bytesTotal);
     progress.border = fui::Paint::solid(fui::Color::Black);
     progress.borderWidth = 1;
     fui::progressBar(screen.frame(), bar, progress);

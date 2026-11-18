@@ -1,10 +1,13 @@
 #pragma once
+#include <OpdsClient.h>
+
 #include <string>
 
 #include "OpdsServerStore.h"
 #include "activities/Activity.h"
 #include "components/UiAppHost.h"
 #include "network/OpdsBatchDownload.h"
+#include "network/OpdsHttpTransport.h"
 
 /**
  * Boot-time OPDS sync (SETTINGS.opdsSyncOnStartup). Joins a saved WiFi network,
@@ -42,12 +45,22 @@ class OpdsStartupSyncActivity final : public Activity, private UiAppHost {
 
   std::string statusMessage;
   OpdsBatchDownload::Status status;
+  size_t bytes = 0;       // Bytes of the current transfer
+  size_t bytesTotal = 0;  // Content-Length of the current transfer, 0 if unknown
+  // Same client setup as the OPDS browser (credentials, custom headers, saved
+  // tokens). The transport must outlive the client, so it is declared first.
+  OpdsHttpTransport opdsTransport;
+  freeink::opds::OpdsClient opdsClient{opdsTransport};
   int renderedPercent = -1;
   unsigned long lastProgressUpdateMs = 0;
 
   static void rootScreen(UiScreen& screen, void* user);
   static void onCancelEvent(const freeink::ui::ActionEvent& event, void* user);
   static bool onProgress(void* ctx, const OpdsBatchDownload::Status& progress);
+  static HttpDownloader::DownloadError onTransfer(void* ctx, const std::string& url, const std::string& dest,
+                                                  const freeink::opds::HttpAuth& auth);
+  // Pumps input and repaints at most every PROGRESS_STEP_PERCENT / interval.
+  void pumpProgress();
 
   bool startWifi();
   void runSync();
