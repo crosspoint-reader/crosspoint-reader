@@ -26,9 +26,12 @@
 #include <esp_wifi.h>
 #include <time.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdarg>
 #include <cstring>
+#include <utility>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -350,8 +353,41 @@ static bool loadSleepFrameBuffer() {
   return true;
 }
 
-// Joins the last-used saved network for work done on the way into sleep.
-// Bounded by a 10-second deadline and skipped below 20% battery; every reason
+// The saved networks to try at sleep, best first, at most two. One saved
+// network is tried directly. With several, a scan finds which are in range:
+// the last-used one comes first, then the strongest. The scan costs a few
+// seconds but avoids waiting out the join deadline on a network that is not there.
+static std::vector<WifiCredential> pickSleepNetworks() {
+  std::vector<WifiCredential> picked;
+  if (WIFI_STORE.getCredentialCount() <= 1) {
+    if (auto only = WIFI_STORE.getCredentialAt(0)) picked.push_back(std::move(*only));
+    return picked;
+  }
+  const std::string last = WIFI_STORE.getLastConnectedSsid();
+  std::vector<std::pair<int32_t, WifiCredential>> inRange;
+  const int16_t found = WiFi.scanNetworks();
+  for (int16_t i = 0; i < found; i++) {
+    auto cred = WIFI_STORE.findCredential(WiFi.SSID(i).c_str());
+    if (!cred) continue;
+    // A network can be listed once per access point; keep its strongest entry.
+    const int32_t rssi = cred->ssid == last ? INT32_MAX : WiFi.RSSI(i);
+    const auto same = std::find_if(inRange.begin(), inRange.end(),
+                                   [&](const auto& entry) { return entry.second.ssid == cred->ssid; });
+    if (same == inRange.end()) {
+      inRange.emplace_back(rssi, std::move(*cred));
+    } else if (rssi > same->first) {
+      same->first = rssi;
+    }
+  }
+  WiFi.scanDelete();
+  std::sort(inRange.begin(), inRange.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+  for (size_t i = 0; i < inRange.size() && i < 2; i++) picked.push_back(std::move(inRange[i].second));
+  return picked;
+}
+
+// Joins a saved network for work done on the way into sleep.
+// Bounded by a 10-second deadline per network, two networks at most, and
+// skipped below 20% battery; every reason
 // for not connecting is logged, because sleep itself never reports a failure.
 static bool joinWifiForSleep(const bool showPopup) {
   if (WiFi.status() == WL_CONNECTED) return true;
@@ -365,23 +401,34 @@ static bool joinWifiForSleep(const bool showPopup) {
   }
   // Sleep can be the first WiFi use since boot or deep-sleep wake.
   WIFI_STORE.loadFromFile();
-  const auto cred = WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
-  if (!cred) {
-    LOG_INF("SLP", "Sleep WiFi join skipped: no saved credential for the last network");
-    return false;
-  }
-
   if (showPopup) GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   WiFi.mode(WIFI_STA);
-  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
-  const unsigned long joinDeadline = millis() + 10000;
-  while (WiFi.status() != WL_CONNECTED && millis() < joinDeadline) {
-    delay(100);
-  }
-  if (WiFi.status() != WL_CONNECTED) {
-    LOG_INF("SLP", "Sleep WiFi join timed out");
+  const std::vector<WifiCredential> networks = pickSleepNetworks();
+  if (networks.empty()) {
+    LOG_INF("SLP", "Sleep WiFi join skipped: no saved network in range");
     return false;
   }
+  // A network can be in range and still refuse the join (changed password, weak
+  // signal), so a second saved network gets one attempt.
+  // Same preparation as the WiFi screen's connect: no SDK-stored network, a
+  // clean station state after the scan, and the strongest access point of a
+  // network that has several.
+  WiFi.persistent(false);
+  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+  for (const WifiCredential& network : networks) {
+    LOG_INF("SLP", "Joining %s", network.ssid.c_str());
+    WiFi.disconnect(true, true);
+    delay(100);
+    WiFi.begin(network.ssid.c_str(), network.password.c_str());
+    const unsigned long joinDeadline = millis() + 10000;
+    while (WiFi.status() != WL_CONNECTED && millis() < joinDeadline) {
+      delay(100);
+    }
+    if (WiFi.status() == WL_CONNECTED) break;
+    LOG_INF("SLP", "Join of %s timed out (status %d)", network.ssid.c_str(), static_cast<int>(WiFi.status()));
+  }
+  if (WiFi.status() != WL_CONNECTED) return false;
   // Modem sleep can stall requests for seconds; the radio is torn down right after this work.
   WiFi.setSleep(false);
   trustedtime::startSync();  // snap the clock floor while the network is up

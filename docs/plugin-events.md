@@ -184,8 +184,9 @@ something queued, not only handlers subscribed to `sleep.enter`. So a
 sleep that ends the reading turn.
 
 If WiFi is not already up, the device brings it up for the drain: with battery at
-least 20% and a saved credential for the last-connected network, it shows a
-popup, joins with a 10-second deadline, drains, and proceeds to sleep. Sleep is
+least 20% and a saved network in range (the last-connected one is preferred;
+with several saved networks a scan picks one), it shows a popup, joins with a
+10-second deadline, drains, and proceeds to sleep. Sleep is
 never blocked on the network — a failed join, low battery, or a mid-drain failure
 just sleeps with the previous image, and the queued events retry on the next
 drain like any other (at-least-once; a handler whose action only made sense for
