@@ -77,7 +77,6 @@ class HalStorage {
  private:
   static HalStorage instance;
 
-  bool initialized = false;
   SemaphoreHandle_t storageMutex = nullptr;
 };
 

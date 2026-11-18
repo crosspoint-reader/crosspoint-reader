@@ -31,9 +31,7 @@ namespace {
 constexpr int hPaddingInSelection = 8;
 constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
-constexpr int maxListValueWidth = 200;
 constexpr int mainMenuIconSize = 32;
-constexpr int mainMenuColumns = 2;
 int coverWidth = 0;
 
 const uint8_t* iconForName(UIIcon icon) {

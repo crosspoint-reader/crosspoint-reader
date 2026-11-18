@@ -19,7 +19,6 @@
 constexpr bool USE_8BIT_OUTPUT = false;
 constexpr bool USE_ATKINSON = true;
 constexpr bool USE_FLOYD_STEINBERG = false;
-constexpr bool USE_PRESCALE = true;
 // ============================================================================
 
 // BMP writing helpers (same as JpegToBmpConverter)
