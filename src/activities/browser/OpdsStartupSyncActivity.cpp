@@ -130,7 +130,7 @@ void OpdsStartupSyncActivity::runSync() {
   opdsClient.resetAuthState();
   const OpdsBatchDownload::Hooks hooks{this, &OpdsStartupSyncActivity::onProgress,
                                        &OpdsStartupSyncActivity::onTransfer};
-  const auto result = OpdsBatchDownload::run(opdsClient, server.url, hooks, status);
+  const auto result = OpdsBatchDownload::run(opdsClient, server.url, server.url, hooks, status);
   if (opdsClient.tokensDirty()) {
     OpdsTokens tokens;
     tokens.accessToken = opdsClient.accessToken();
@@ -145,8 +145,12 @@ void OpdsStartupSyncActivity::runSync() {
 
 bool OpdsStartupSyncActivity::onProgress(void* ctx, const OpdsBatchDownload::Status& progress) {
   auto* self = static_cast<OpdsStartupSyncActivity*>(ctx);
-  self->statusMessage = progress.title;
-  self->bytes = self->bytesTotal = 0;
+  {
+    RenderLock lock;
+    self->statusMessage = progress.title;
+    self->shown = progress;
+    self->bytes = self->bytesTotal = 0;
+  }
   self->pumpProgress();
   return !self->cancelled;
 }
@@ -160,8 +164,11 @@ HttpDownloader::DownloadError OpdsStartupSyncActivity::onTransfer(void* ctx, con
   return HttpDownloader::downloadToFile(
       url, dest,
       [self](const size_t downloaded, const size_t total) {
-        self->bytes = downloaded;
-        self->bytesTotal = total;
+        {
+          RenderLock lock;
+          self->bytes = downloaded;
+          self->bytesTotal = total;
+        }
         self->pumpProgress();
       },
       &self->cancelled, auth.username, auth.password, headers);
@@ -212,7 +219,7 @@ void OpdsStartupSyncActivity::rootScreen(UiScreen& screen, void* user) {
   screen.target().text(screen.takeTop(lh, gap), self->statusMessage.c_str(), centered);
 
   char counters[24];
-  snprintf(counters, sizeof(counters), "%d / %d", self->status.downloaded, self->status.examined);
+  snprintf(counters, sizeof(counters), "%d / %d", self->shown.downloaded, self->shown.examined);
   screen.target().text(screen.takeTop(lh, gap), counters, centered);
 
   const fui::Rect bar = screen.takeTop(barH, gap).inset(fui::Insets{0, 50, 0, 50});

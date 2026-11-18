@@ -73,11 +73,11 @@ class CatalogActivity : public UiListActivity {
                                              const char* postContentType = nullptr);
   void screenHeader(UiScreen& screen, const char* title);
   bool buildStatusScreen(UiScreen& screen, bool boldError = true, bool showDownloadTotal = false);
+  void onDownloadProgress(size_t downloaded, size_t total);
 
  private:
   static void onSearchEvent(const freeink::ui::ActionEvent&, void* user);
   static void onCancelEvent(const freeink::ui::ActionEvent&, void* user);
-  void onDownloadProgress(size_t downloaded, size_t total);
   // Download input consumes home gestures before ActivityManager sees them.
   bool goHomeAfterCancel = false;
   bool searchPending = false;  // NavPrevious pressed on a searchable top row

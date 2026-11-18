@@ -667,6 +667,7 @@ void setup() {
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
   OPDS_TOKENS.loadFromFile();
+  if (SETTINGS.opdsSyncOnStartup) WIFI_STORE.loadFromFile();  // OPDS startup sync needs it before WiFi is used
   LCP_PASSPHRASES.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);

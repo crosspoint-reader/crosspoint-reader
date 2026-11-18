@@ -4,6 +4,7 @@
 #include <LibraryBuilder.h>
 #include <Logging.h>
 #include <OpdsFeedParser.h>
+#include <ResumableFetch.h>
 
 #include <utility>
 #include <vector>
@@ -62,7 +63,13 @@ std::string destPath(const std::string& author, const std::string& title) {
   return path;
 }
 
-Result run(freeink::opds::OpdsClient& client, const std::string& feedUrl, const Hooks& hooks, Status& status) {
+bool authRetryAllowed(const HttpDownloader::DownloadError result, const std::string& url, const std::string& serverUrl) {
+  return result == HttpDownloader::UNAUTHORIZED && HttpDownloader::lastStatus() == 401 &&
+         !HttpDownloader::lastAnswerRedirected() && freeink::fetchOrigin(url) == freeink::fetchOrigin(serverUrl);
+}
+
+Result run(freeink::opds::OpdsClient& client, const std::string& serverUrl, const std::string& feedUrl,
+           const Hooks& hooks, Status& status) {
   if (feedUrl.empty() || !hooks.transfer) return Result::FAILED;
   const auto notify = [&hooks, &status] { return hooks.progress ? hooks.progress(hooks.ctx, status) : true; };
 
@@ -111,8 +118,14 @@ Result run(freeink::opds::OpdsClient& client, const std::string& feedUrl, const 
         if (resolved) downloadUrl = std::move(direct);
       }
 
-      const auto result = resolved ? hooks.transfer(hooks.ctx, downloadUrl, filename, client.downloadAuth())
-                                   : HttpDownloader::HTTP_ERROR;
+      auto result = resolved ? hooks.transfer(hooks.ctx, downloadUrl, filename, client.downloadAuth())
+                             : HttpDownloader::HTTP_ERROR;
+      if (authRetryAllowed(result, downloadUrl, serverUrl)) {
+        if (!notify()) return Result::CANCELLED;
+        if (client.authenticateDownload(downloadUrl)) {
+          result = hooks.transfer(hooks.ctx, downloadUrl, filename, client.downloadAuth());
+        }
+      }
       status.title = "";
       if (result == HttpDownloader::OK && looksLikeEpub(filename)) {
         status.downloaded++;

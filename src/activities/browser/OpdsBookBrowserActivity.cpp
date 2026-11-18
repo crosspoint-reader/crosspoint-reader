@@ -571,10 +571,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       if (!dlAuth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + dlAuth.bearer});
       result = downloadFile(downloadUrl, filename, dlAuth.username, dlAuth.password, headers);
     }
-    if (attempt != 0 || result != HttpDownloader::UNAUTHORIZED || HttpDownloader::lastStatus() != 401 ||
-        HttpDownloader::lastAnswerRedirected() ||
-        freeink::fetchOrigin(downloadUrl) != freeink::fetchOrigin(server.url) || cancelDownload)
-      break;
+    if (attempt != 0 || cancelDownload || !OpdsBatchDownload::authRetryAllowed(result, downloadUrl, server.url)) break;
     std::string title;
     {
       RenderLock lock;
@@ -601,6 +598,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 // carries the counters and the title of the book in flight.
 bool OpdsBookBrowserActivity::onBatchProgress(void* ctx, const OpdsBatchDownload::Status& status) {
   auto* self = static_cast<OpdsBookBrowserActivity*>(ctx);
+  self->onDownloadProgress(0, 0);  // pumps Back, Home and the Cancel button
   char counters[24];
   snprintf(counters, sizeof(counters), "%d / %d", status.downloaded, status.examined);
   {
@@ -639,7 +637,7 @@ void OpdsBookBrowserActivity::downloadAllNew() {
 
   const OpdsBatchDownload::Hooks hooks{this, &OpdsBookBrowserActivity::onBatchProgress,
                                        &OpdsBookBrowserActivity::onBatchTransfer};
-  const auto result = OpdsBatchDownload::run(opdsClient, feedUrl, hooks, batchStatus);
+  const auto result = OpdsBatchDownload::run(opdsClient, server.url, feedUrl, hooks, batchStatus);
   if (opdsClient.tokensDirty()) persistTokens();
   LOG_INF("OPDS", "Batch: %d new, %d skipped, %d failed of %d", batchStatus.downloaded, batchStatus.skipped,
           batchStatus.failed, batchStatus.examined);

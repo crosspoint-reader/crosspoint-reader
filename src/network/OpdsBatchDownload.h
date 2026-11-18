@@ -54,9 +54,14 @@ constexpr int MAX_ENTRIES = 200;
 // a file the browser wrote is recognised as already-present.
 std::string destPath(const std::string& author, const std::string& title);
 
+// True when a failed download may sign in again and retry once: a 401 answered
+// by `serverUrl`'s origin itself, not after a redirect.
+bool authRetryAllowed(HttpDownloader::DownloadError result, const std::string& url, const std::string& serverUrl);
+
 // Walks the catalog starting at `feedUrl` (absolute) through `client`, which
 // carries the server's credentials and tokens, and downloads what is missing.
 // Purchases and LCP-protected books are left to the per-book flow.
-Result run(freeink::opds::OpdsClient& client, const std::string& feedUrl, const Hooks& hooks, Status& status);
+Result run(freeink::opds::OpdsClient& client, const std::string& serverUrl, const std::string& feedUrl,
+           const Hooks& hooks, Status& status);
 
 }  // namespace OpdsBatchDownload
