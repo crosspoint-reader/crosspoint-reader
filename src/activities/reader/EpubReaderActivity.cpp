@@ -58,6 +58,7 @@
 #include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "sync/SyncEngine.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
@@ -3423,6 +3424,14 @@ void EpubReaderActivity::restoreSavedPosition() {
     section.reset();
   }
   requestUpdate();
+}
+
+void EpubReaderActivity::prepareForSleep() {
+  ReaderActivity::prepareForSleep();
+  if (!epub || !KOREADER_STORE.getSyncOnSleep() || !KOREADER_STORE.hasCredentials()) return;
+  // Sync On Sleep runs after this activity is gone, so hand over the position now.
+  RenderLock lock;
+  syncEngine::noteSleepBook(epub->getPath(), getCurrentPosition());
 }
 
 void EpubReaderActivity::loadCachedBookmarks() {

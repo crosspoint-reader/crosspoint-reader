@@ -86,8 +86,15 @@ when it remains visible for at least 2 seconds; one dwell is capped at 1800
 seconds. Reverse turns, chapter skips, failed turns, and shorter displays are
 excluded and re-anchor the timer. At least 10 active seconds and a trustworthy
 positive start time are required. EPUB retains basis-point precision; TXT/XTC
-may report whole-percent steps. The document hash is calculated lazily only
-when an emit-worthy summary and a subscriber both exist.
+may report whole-percent steps. The file is hashed only for an emit-worthy
+summary, and only when a subscriber exists or KOSync document matching is
+set to Binary.
+
+The firmware also appends every emit-worthy summary to its own history,
+`/.crosspoint/reading_sessions.jsonl`, with or without a subscriber. That
+history is what **Sync Progress** uploads to a CrossPoint Sync server. Its
+`doc` field follows the KOSync document matching setting, so it can differ
+from the binary `document` that plugins receive.
 
 `end_time` is deliberately not the wall-clock time of the last interaction.
 Idle gaps are removed, so it always equals `start_time + duration_seconds` and

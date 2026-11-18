@@ -46,6 +46,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
+#include "sync/SyncEngine.h"
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
@@ -349,6 +350,39 @@ static bool loadSleepFrameBuffer() {
   return true;
 }
 
+// Joins the last-used saved network for work done on the way into sleep.
+// Bounded by a 10-second deadline and skipped below 20% battery; every reason
+// for not connecting is logged, because sleep itself never reports a failure.
+static bool joinWifiForSleep(const bool showPopup) {
+  if (WiFi.status() == WL_CONNECTED) return true;
+  const uint16_t battery = powerManager.getBatteryPercentage();
+  if (battery < 20) {
+    LOG_INF("SLP", "Sleep WiFi join skipped: battery %u%% is below 20%%", battery);
+    return false;
+  }
+  // Sleep can be the first WiFi use since boot or deep-sleep wake.
+  WIFI_STORE.loadFromFile();
+  const auto cred = WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
+  if (!cred) {
+    LOG_INF("SLP", "Sleep WiFi join skipped: no saved credential for the last network");
+    return false;
+  }
+
+  if (showPopup) GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+  const unsigned long joinDeadline = millis() + 10000;
+  while (WiFi.status() != WL_CONNECTED && millis() < joinDeadline) {
+    delay(100);
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    LOG_INF("SLP", "Sleep WiFi join timed out");
+    return false;
+  }
+  trustedtime::startSync();  // snap the clock floor while the network is up
+  return true;
+}
+
 // Plugin-event delivery on the way into deep sleep. sleep.enter is delivered
 // now — over the live connection, or by bringing WiFi up when a plugin
 // subscribes (e.g. fetching a fresh /sleep.bmp so THIS sleep shows it — the
@@ -381,7 +415,10 @@ static void deliverSleepPluginEvents(const bool allowNetwork) {
     vars[varCount++] = {"end_percent", endPercent};
   }
   pluginevents::emit(pluginevents::Event::SleepEnter, vars, varCount);
-  if (!allowNetwork) return;
+  if (!allowNetwork) {
+    LOG_INF("SLP", "Sleep events not delivered: network not allowed");
+    return;
+  }
   if (WiFi.status() == WL_CONNECTED) {
     pluginevents::drain(&renderer);
     return;
@@ -389,26 +426,32 @@ static void deliverSleepPluginEvents(const bool allowNetwork) {
   // Any connect-flagged queued event justifies the join, not only
   // sleep.enter: reader.session is queued while reading and delivered on this
   // same sleep, and a progress-sync plugin usually subscribes to it alone.
-  if (!pluginevents::wantsConnectAny()) return;
-  if (powerManager.getBatteryPercentage() < 20) return;
-  // Sleep can be the first WiFi use since boot or deep-sleep wake.
-  WIFI_STORE.loadFromFile();
-  const auto cred = WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
-  if (!cred) return;
+  if (!pluginevents::wantsConnectAny()) {
+    LOG_INF("SLP", "Sleep events not delivered: no queued event asks for a connection");
+    return;
+  }
+  if (joinWifiForSleep(true)) pluginevents::drain(&renderer);
+}
 
-  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
-  const unsigned long joinDeadline = millis() + 10000;
-  while (WiFi.status() != WL_CONNECTED && millis() < joinDeadline) {
-    delay(100);
+// Sync On Sleep: syncs the book the reader was showing. Runs after the sleep
+// screen is up, so the reader's memory is free and nothing is drawn afterwards.
+static void syncBookOnSleep(const bool allowNetwork) {
+  if (!syncEngine::sleepSyncPending()) return;
+  if (!allowNetwork) {
+    LOG_INF("SLP", "Sync on sleep skipped: network not allowed");
+    return;
   }
-  if (WiFi.status() == WL_CONNECTED) {
-    trustedtime::startSync();  // snap the clock floor while the network is up
-    pluginevents::drain(&renderer);
-  } else {
-    LOG_DBG("MAIN", "Sleep-event WiFi join timed out; deferring delivery");
+#if FREEINK_DEVICE_PICCO
+  // The USB charge strip redraws from the framebuffer, which the sync borrows.
+  if (gpio.isUsbConnected()) {
+    LOG_INF("SLP", "Sync on sleep skipped on USB power");
+    return;
   }
+#endif
+  if (!joinWifiForSleep(false)) return;
+  RenderLock lock;
+  GfxRenderer::FrameBufferLoan loan(renderer);
+  syncEngine::syncOnSleep();
 }
 
 #if FREEINK_DEVICE_PICCO
@@ -484,6 +527,8 @@ void enterDeepSleep(bool fromTimeout = false) {
     // A stale Quick Resume frame must not replace the selected sleep screen during wake.
     Storage.remove(SLEEP_FRAME_FILE);
   }
+
+  syncBookOnSleep(bluetoothStopped);
 
   // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
   // Wake from deep sleep is effectively a chip reset, so no state needs to survive.
