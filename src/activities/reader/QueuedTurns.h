@@ -43,3 +43,26 @@ constexpr unsigned long kQueuedTurnsSectionWaitMs = 1000;
 constexpr bool queuedTurnsAwaitSection(const unsigned long msSinceTurn) {
   return msSinceTurn < kQueuedTurnsSectionWaitMs;
 }
+
+// What the reader's loop does after looking at the queue: go on to read this frame's presses, or
+// stop because the frame was spent on the queue.
+enum class QueuedTurnsPass { ReadInput, Done };
+
+// One look at the queue per loop frame. With the panel free and a chapter loaded, the queued turns
+// are handed to applyTurns, which returns the ones to carry to a later frame. With no chapter
+// loaded they wait for it, and the frame goes on to read input so a press can still add to them
+// or take one back; once the wait has run out they are dropped.
+template <typename ApplyTurns>
+QueuedTurnsPass drainQueuedTurns(int8_t& pending, const bool turnGuardActive, const bool sectionLoaded,
+                                 const unsigned long msSinceTurn, ApplyTurns&& applyTurns) {
+  if (pending == 0 || turnGuardActive) return QueuedTurnsPass::ReadInput;
+  if (sectionLoaded) {
+    const int8_t turns = pending;
+    pending = 0;
+    pending = applyTurns(turns);
+    return QueuedTurnsPass::Done;
+  }
+  if (queuedTurnsAwaitSection(msSinceTurn)) return QueuedTurnsPass::ReadInput;
+  pending = 0;
+  return QueuedTurnsPass::Done;
+}

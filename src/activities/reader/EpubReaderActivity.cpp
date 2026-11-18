@@ -1004,18 +1004,10 @@ void EpubReaderActivity::loop() {
 
   constexpr unsigned long kMinManualTurnGapMs = 200;
   const bool turnGuardActive = RenderLock::peek() || (millis() - lastPageTurnTime) < kMinManualTurnGapMs;
-  if (pendingManualTurn != 0 && !turnGuardActive) {
-    if (!section) {
-      // Turns carried across a chapter edge wait here until the render task picks up the load.
-      // Past that they are dropped, so a chapter that failed to load cannot leave them queued.
-      if (!queuedTurnsAwaitSection(millis() - lastPageTurnTime)) pendingManualTurn = 0;
-      return;
-    }
-    // Taps queued while the panel was busy collapse into one refresh that
-    // lands on the final page. A run pauses at a chapter edge: the next
-    // section has to load before it can be paged through.
-    const int pending = pendingManualTurn;
-    pendingManualTurn = 0;
+  // Taps queued while the panel was busy collapse into one refresh that
+  // lands on the final page. A run pauses at a chapter edge: the next
+  // section has to load before it can be paged through.
+  const auto applyQueuedTurns = [this](const int8_t pending) -> int8_t {
     const bool forward = pending > 0;
     int queued = forward ? pending : -pending;
     int held = 0;
@@ -1033,13 +1025,16 @@ void EpubReaderActivity::loop() {
       succeeded = true;
       --queued;
     }
-    // Held turns follow the render that finds where the chapter ends; a run
-    // that crossed into another chapter resumes once that chapter has loaded.
-    const int carried = queuedTurnsToCarry(queued, held, !section);
-    if (carried > 0) pendingManualTurn = static_cast<int8_t>(forward ? carried : -carried);
     if (succeeded && pendingManualTurnTouch) haptic_feedback::touchAction();
     pendingManualTurnTouch = false;
     requestUpdate();
+    // Held turns follow the render that finds where the chapter ends; a run
+    // that crossed into another chapter resumes once that chapter has loaded.
+    const int carried = queuedTurnsToCarry(queued, held, !section);
+    return static_cast<int8_t>(forward ? carried : -carried);
+  };
+  if (drainQueuedTurns(pendingManualTurn, turnGuardActive, section != nullptr, millis() - lastPageTurnTime,
+                       applyQueuedTurns) == QueuedTurnsPass::Done) {
     return;
   }
 
@@ -1082,6 +1077,13 @@ void EpubReaderActivity::loop() {
   }
 
   if (!section) {
+    if (pendingManualTurn != 0) {
+      // Turns carried over a chapter edge are waiting for the chapter to load: a press counts
+      // toward them, so one the other way takes a carried turn back.
+      pendingManualTurn = queueTurn(pendingManualTurn, !prevTriggered);
+      pendingManualTurnTouch = touch.prev || touch.next;
+      return;
+    }
     requestUpdate();
     return;
   }
