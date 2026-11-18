@@ -38,6 +38,7 @@ struct HalGPIO {
   bool wasReleased(uint8_t button) const { return releaseEdge && pressed == button; }
   bool isPressed(uint8_t button) const { return held && pressed == button; }
   bool isPowerButtonPhysicallyPressed() const { return isPressed(BTN_POWER); }
+  bool wasPinch(float&) const { return false; }
 };
 """
 
