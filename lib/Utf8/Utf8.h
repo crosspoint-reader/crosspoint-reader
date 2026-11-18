@@ -12,6 +12,32 @@ size_t utf8RemoveLastChar(std::string& str);
 // Truncate string by removing N UTF-8 codepoints from the end.
 void utf8TruncateChars(std::string& str, size_t numChars);
 
+// Simple (single-codepoint) case fold: returns a canonical case-insensitive
+// form of cp (per Unicode's case-folding data, not necessarily its display
+// lowercase — e.g. Greek final sigma U+03C2 folds to U+03C3), or cp unchanged
+// if it has no case or its fold isn't a single codepoint. Table-driven from
+// Unicode data rather than per-script logic, so it covers any script with a
+// simple case pairing (Latin, Greek, Cyrillic, Armenian, Cherokee, Deseret,
+// ...) without the caller special-casing a language. For comparison keys
+// only — not for display text.
+uint32_t utf8SimpleCaseFold(uint32_t cp);
+
+// Case-insensitive strcmp over UTF-8 strings: decodes both sides codepoint by
+// codepoint and compares their utf8SimpleCaseFold() values, so two codepoints
+// compare equal only when they share a simple, single-codepoint case fold —
+// per utf8SimpleCaseFold's own caveats, a codepoint with no case or whose fold
+// isn't a single codepoint compares by its own value instead. Use this (not
+// StringUtils::asciiCaseCmp, which only folds ASCII) wherever a stored
+// on-disk key may contain non-ASCII text and needs case-insensitive
+// comparison — e.g. dictionary index lookups.
+int utf8CaseInsensitiveCmp(const char* a, const char* b);
+
+// True if cp is a Letter, Number, or Mark (Unicode general category L*, N*,
+// or M*) — i.e. part of a word rather than incidental punctuation/symbols at
+// its edges. Table-driven from Unicode category data, so it works for any
+// script without a hand-picked list of punctuation ranges to keep up to date.
+bool utf8IsWordChar(uint32_t cp);
+
 // Canonical composition (NFC) for the Latin / Vietnamese range and Hangul:
 // precomposes a base letter followed by combining diacritical mark(s), and
 // conjoining Hangul jamo sequences (L+V[+T]), into single codepoints. Needed

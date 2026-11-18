@@ -525,7 +525,8 @@ int main() {
 
 dictionary_source = (ROOT / "src/util/Dictionary.cpp").read_text()
 lookup_methods = "\n".join(block(dictionary_source, name) for name in (
-    "std::string Dictionary::cleanWord", "void Dictionary::stemVariants", "bool Dictionary::lookup"
+    "std::string Dictionary::cleanWord", "std::string Dictionary::foldCase", "void Dictionary::stemVariants",
+    "bool DictEntryList::appendUnique", "void Dictionary::lookupKey", "bool Dictionary::lookup"
 ))
 lookup_harness = r'''
 #include <algorithm>
@@ -533,6 +534,9 @@ lookup_harness = r'''
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <new>
+#include <type_traits>
+#include <utility>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -548,10 +552,12 @@ struct HalMemory {
   static Heap getDefaultHeap() { return heap; }
 };
 bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
+int diskOrderCmp(const char* a, const char* b) { return std::strcmp(a, b); }
 struct EspStub {
   size_t getMaxAllocHeap() { return 1024 * 1024; }
 };
 EspStub ESP;
+template <typename T> std::unique_ptr<T> makeUniqueNoThrow(size_t n) { return std::unique_ptr<T>(new (std::nothrow) std::remove_extent_t<T>[n]); }
 struct TxtToHtml {
   static size_t escapedHtmlSize(std::string_view text) { return text.size(); }
   static void appendEscapedHtml(std::string& out, std::string_view text) { out.append(text); }
@@ -560,7 +566,8 @@ struct TxtToHtml {
 class Dictionary {
  public:
   enum class LookupResult { Found, NotFound, LowMemory, Decompress, ReadError };
-  struct LookupSession {};
+  struct LookupSession { uint32_t sampleCount = 1; };
+  using WordCmp = int (*)(const char*, const char*);
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
   bool hasSyn = false;
   bool htmlDefinitions = false;
@@ -569,18 +576,39 @@ class Dictionary {
   std::unique_ptr<DictEntryList> entryList = std::make_unique<DictEntryList>();
   bool isOpen() const { return true; }
   bool openSession(LookupSession&) { return true; }
-  void locateAll(LookupSession&, const char* word, DictEntryList&, bool* readError) {
+  std::vector<std::pair<std::string, std::string>> entries;  // stored headword, definition
+  void locateAll(LookupSession&, const char* word, WordCmp cmp, DictEntryList& group, bool* readError) {
     ++searches;
     searchedWord = word;
     if (readError) *readError = false;
+    for (size_t i = 0; i < entries.size(); ++i) {
+      if (cmp(entries[i].first.c_str(), word) != 0) continue;
+      DictLocation location;
+      location.offset = static_cast<uint32_t>(i);
+      location.size = static_cast<uint32_t>(entries[i].second.size());
+      location.found = true;
+      group.appendUnique(entries[i].first.c_str(), location);
+    }
   }
-  bool locateSynonyms(LookupSession&, const char*, DictEntryList&, bool*) {
+  bool locateSynonyms(LookupSession&, const char*, WordCmp, DictEntryList&, bool*) {
     ++searches;
     return false;
   }
-  bool readDefinition(DictLocation, std::string&, LookupResult*, bool = false, bool* = nullptr) { return false; }
+  bool readDefinition(DictLocation location, std::string& text, LookupResult* result, bool append = false,
+                      bool* = nullptr) {
+    if (location.offset >= entries.size()) {
+      if (result) *result = LookupResult::NotFound;
+      return false;
+    }
+    if (append) text += entries[location.offset].second;
+    else text = entries[location.offset].second;
+    if (result) *result = LookupResult::Found;
+    return true;
+  }
   static std::string cleanWord(const char*);
+  static std::string foldCase(const std::string&);
   static void stemVariants(const std::string&, std::vector<std::string>&);
+  void lookupKey(LookupSession&, const std::string&, WordCmp, DictEntryList&, std::string&, bool&, bool&);
   bool lookup(const char*, std::string&, std::string&, LookupResult*);
 };
 ''' + lookup_methods + r'''
@@ -596,7 +624,9 @@ int main() {
   assert(Dictionary::cleanWord("\u0591 !\u05B0").empty());
   assert(Dictionary::cleanWord("בְּרֵאשִׁ֖ית בָּרָ֣א") == "בראשית ברא");
   assert(Dictionary::cleanWord("שלום") == "שלום");
-  assert(Dictionary::cleanWord("שָׁלוֹם ABC café e\u0301 日本語 😀") == "שלום abc café e\u0301 日本語 😀");
+  // Case is preserved; the lookup itself falls back to foldCase on a miss.
+  assert(Dictionary::cleanWord("שָׁלוֹם ABC 😀 café e\u0301 日本語") == "שלום ABC 😀 café e\u0301 日本語");
+  assert(Dictionary::cleanWord("😀שָׁלוֹם😀") == "שלום");
   assert(Dictionary::cleanWord("א־ב׀ג׃ד׆ה׳ו״ז") == "א־ב׀ג׃ד׆ה׳ו״ז");
   assert(Dictionary::cleanWord("\u0591\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7\u05C8\u05C9\uFB1E").empty());
   assert(Dictionary::cleanWord("א\u05A2ב\u05BAג\u05C5ד\u05C7ה\u05C8ו\u05C9ז\uFB1E") == "אבגדהוז");
@@ -619,6 +649,13 @@ int main() {
   auto arabicResult = Dictionary::LookupResult::Found;
   assert(!dictionary.lookup("شَكَّلَ", definition, headword, &arabicResult));
   assert(arabicResult == Dictionary::LookupResult::NotFound && dictionary.searchedWord == "شكّل");
+  dictionary.entries = {{"Ήταν", "past tense of be"}};
+  auto greekResult = Dictionary::LookupResult::NotFound;
+  assert(dictionary.lookup("ήταν", definition, headword, &greekResult));
+  assert(greekResult == Dictionary::LookupResult::Found);
+  assert(headword == "Ήταν" && definition == "past tense of be");
+  dictionary.entries.clear();
+  definition = headword = "unchanged";
   for (const char* suffix : {"ing", "ed", "ies"}) {
     const std::string phrase = std::string(4096 - std::strlen(suffix), 'a') + suffix;
     auto result = Dictionary::LookupResult::Found;
