@@ -142,13 +142,6 @@ std::string KOReaderCredentialStore::getBasicAuthorization() const {
 
 bool KOReaderCredentialStore::hasCredentials() const { return !username.empty() && !password.empty(); }
 
-void KOReaderCredentialStore::clearCredentials() {
-  username.clear();
-  password.clear();
-  saveToFile();
-  LOG_DBG("KRS", "Cleared KOReader credentials");
-}
-
 void KOReaderCredentialStore::setServerUrl(const std::string& url) {
   serverUrl = url;
   LOG_DBG("KRS", "Set server URL: %s", url.empty() ? "(default)" : url.c_str());
