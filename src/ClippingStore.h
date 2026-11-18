@@ -117,7 +117,9 @@ inline bool clippingContainsWord(const Clipping& clipping, const uint16_t spineI
                                  const uint16_t pageCount, const uint32_t layoutSignature, const uint16_t wordIndex,
                                  const uint32_t sourceStart, const uint32_t sourceEnd) {
   if (clipping.spineIndex != spineIndex) return false;
-  if (clipping.startOffset != UINT32_MAX && clipping.endOffset != UINT32_MAX) {
+  // List markers have no source text, but a selection can include them by word index.
+  const bool emptyWordRange = sourceStart != UINT32_MAX && sourceStart == sourceEnd;
+  if (!emptyWordRange && clipping.startOffset != UINT32_MAX && clipping.endOffset != UINT32_MAX) {
     return sourceStart != UINT32_MAX && sourceEnd > clipping.startOffset && sourceStart < clipping.endOffset;
   }
   return clippingStoredRangeMatchesLayout(clipping, pageCount, layoutSignature) && page >= clipping.startPage &&

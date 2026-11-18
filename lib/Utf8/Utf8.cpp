@@ -91,8 +91,10 @@ std::string utf8ComposeNfc(const std::string& in, bool (*onAbsorbed)(uint32_t, v
   return out;
 }
 
-void utf8ComposeNfcInPlace(char* buffer) {
-  const auto* read = reinterpret_cast<const unsigned char*>(buffer);
+void utf8ComposeNfcInPlace(char* buffer, size_t* trackedByteOffset) {
+  const auto* const inputStart = reinterpret_cast<const unsigned char*>(buffer);
+  const auto* read = inputStart;
+  const size_t inputOffset = trackedByteOffset ? *trackedByteOffset : 0;
   char* write = buffer;
   char* baseStart = buffer;
   uint32_t base = 0;
@@ -121,6 +123,13 @@ void utf8ComposeNfcInPlace(char* buffer) {
       write += length;
       base = utf8IsCombiningMark(cp) ? 0 : cp;
     }
+    if (trackedByteOffset && inputOffset >= static_cast<size_t>(start - inputStart) &&
+        inputOffset < static_cast<size_t>(read - inputStart)) {
+      *trackedByteOffset = static_cast<size_t>(baseStart - buffer);
+    }
+  }
+  if (trackedByteOffset && inputOffset >= static_cast<size_t>(read - inputStart)) {
+    *trackedByteOffset = static_cast<size_t>(write - buffer);
   }
   *write = '\0';
 }

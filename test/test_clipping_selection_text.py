@@ -21,6 +21,9 @@ confirm_source = source.split("void ClipSelectionActivity::confirmSelection", 1)
 memory_guard = "  const auto heap = HalMemory::getDefaultHeap();" + confirm_source.split(
     "  const auto heap = HalMemory::getDefaultHeap();", 1
 )[1].split("  if (lowMemory ||", 1)[0]
+selection_offsets = "  result.startOffset = UINT32_MAX;" + confirm_source.split(
+    "  result.startOffset = UINT32_MAX;", 1
+)[1].split("  setResult(std::move(result));", 1)[0]
 
 def method(name, next_name, text=source):
     signature = text.index(name)
@@ -48,6 +51,7 @@ harness = r"""
 #include <set>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 #include <BidiUtils.h>
 #include <Memory.h>
@@ -322,6 +326,13 @@ struct ClipSelectionActivity {
   Rect actionRect() const { return {}; }
 };
 """ + build_text + extract_words + gap_draw + incremental_draw + selection_draw + r"""
+std::pair<uint32_t, uint32_t> selectionOffsets(const ClipSelectionActivity& activity, int first, int last) {
+  const auto& words = activity.words;
+  struct { uint32_t startOffset, endOffset; } result;
+""" + selection_offsets + r"""
+  return {result.startOffset, result.endOffset};
+}
+
 struct EpubReaderActivity {
   Renderer& renderer;
   explicit EpubReaderActivity(Renderer& renderer) : renderer(renderer) {}
@@ -527,6 +538,11 @@ int main() {
   assert(!selectionLowMemory(0, 0));
   assert(!selectionLowMemory(0, 239));
   ClipSelectionActivity activity;
+  activity.words[0].startOffset = activity.words[0].endOffset = 12;
+  activity.words[1].startOffset = 14;
+  activity.words[1].endOffset = 18;
+  assert((selectionOffsets(activity, 0, 0) == std::pair{UINT32_MAX, UINT32_MAX}));
+  assert((selectionOffsets(activity, 0, 1) == std::pair<uint32_t, uint32_t>{14, 18}));
   for (const int8_t tracking : {2, -2}) {
     auto page = std::make_unique<Page>();
     for (int i = 0; i < 2; ++i) {
