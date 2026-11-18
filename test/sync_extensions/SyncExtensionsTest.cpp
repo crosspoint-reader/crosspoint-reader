@@ -160,7 +160,7 @@ void bookmarksMerge() {
 void engineGatesEveryUpload() {
   fake::reset();
   assert(BookmarkFile::save(book, {bookmark("/local", false)}));
-  assert(readingSessionLog::append(document, 1700000000, 600, 0, 0));
+  assert(readingSessionLog::append(document, book, "A \"quoted\" title", 1700000000, 600, 0, 0));
   syncCredentials.enabled = false;  // Sync Clippings off
   progressFetches.clear();
 
@@ -228,10 +228,20 @@ void sessionsUploadOnce() {
     return json;
   };
 
-  assert(!readingSessionLog::append("not-a-document", 1700000000, 60, 0, 10));
-  assert(readingSessionLog::append(document, 1700000000, 600, 100, 250));
-  assert(readingSessionLog::append(document, fake::now + 3600, 600, 250, 300));  // wrong clock: kept, not uploaded
-  for (int i = 1; i <= 21; ++i) assert(readingSessionLog::append(document, 1700000000 + i * 1000, 30, 0, 0));
+  assert(!readingSessionLog::append("not-a-document", book, "Title", 1700000000, 60, 0, 10));
+  assert(readingSessionLog::append(document, book, "A \"quoted\" title", 1700000000, 600, 100, 250));
+  assert(readingSessionLog::append(document, book, "A \"quoted\" title", fake::now + 3600, 600, 250,
+                                   300));  // wrong clock: kept, not uploaded
+  for (int i = 1; i <= 21; ++i)
+    assert(readingSessionLog::append(document, book, "A \"quoted\" title", 1700000000 + i * 1000, 30, 0, 0));
+
+  // Path and title are stored escaped, and a path too long for one line is left out.
+  const auto& log = fake::files["/.crosspoint/reading_sessions.jsonl"]->bytes;
+  const std::string stored(log.begin(), log.end());
+  assert(stored.find("\"title\":\"A \\\"quoted\\\" title\",\"path\":\"/book.epub\"}\n") != std::string::npos);
+  assert(readingSessionLog::append(document, std::string(600, 'p'), "Long", 1700050000, 30, 0, 0));
+  const std::string grown(log.begin(), log.end());
+  assert(grown.find("\"title\":\"Long\"}\n") != std::string::npos && grown.find("ppp") == std::string::npos);
 
   SyncRequest sync;
   // A server that does not list the stored ids leaves everything queued.
@@ -247,16 +257,17 @@ void sessionsUploadOnce() {
   assert(first["device_id"] == "crosspoint-reader" && first["items"].size() == 20);
   assert(first["items"][0]["session_id"] == "1700000000-a0a1a2a3a4a5");
   assert(first["items"][0]["document"] == document);
+  assert(uploads[0].find("title") == std::string::npos && uploads[0].find("/book.epub") == std::string::npos);
   assert(first["items"][0]["started_at"] == 1700000000 && first["items"][0]["ended_at"] == 1700000600);
   assert(first["items"][0]["seconds"] == 600 && first["items"][0]["utc_offset_minutes"].is<int>());
-  assert(acceptedCount(uploads[1]) == 2);
+  assert(acceptedCount(uploads[1]) == 3);
 
   uploads.clear();
   assert(readingSessionLog::upload(sync));
   assert(uploads.empty());
 
   // Only sessions added since the last upload are sent.
-  assert(readingSessionLog::append(document, 1700100000, 45, 0, 0));
+  assert(readingSessionLog::append(document, book, "A \"quoted\" title", 1700100000, 45, 0, 0));
   assert(readingSessionLog::upload(sync));
   assert(uploads.size() == 1 && acceptedCount(uploads[0]) == 1);
 }

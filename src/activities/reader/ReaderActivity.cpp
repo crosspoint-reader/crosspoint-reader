@@ -141,9 +141,9 @@ void ReaderActivity::flushReaderSession() {
   const bool subscribed = pluginevents::anySubscriber(pluginevents::Event::ReaderSession);
   const bool binaryMatch = KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::BINARY;
   const std::string document = (subscribed || binaryMatch) ? KOReaderDocumentId::calculate(bookPath) : std::string();
-  readingSessionLog::append(binaryMatch ? document : KOReaderDocumentId::calculateFromFilename(bookPath),
-                            readerSession.startTime(), readerSession.durationSeconds(), readerSession.startProgressBp(),
-                            readerSession.endProgressBp());
+  readingSessionLog::append(binaryMatch ? document : KOReaderDocumentId::calculateFromFilename(bookPath), bookPath,
+                            getBookTitle(), readerSession.startTime(), readerSession.durationSeconds(),
+                            readerSession.startProgressBp(), readerSession.endProgressBp());
 
   const bool validDocument =
       document.size() == 32 && std::all_of(document.begin(), document.end(), [](const unsigned char c) {

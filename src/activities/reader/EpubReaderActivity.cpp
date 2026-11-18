@@ -203,6 +203,15 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     }
   }
 
+  // Bookmarks are stored under the book's path. Like the cache, a failed move
+  // is not fatal: the book is already in place.
+  const std::string oldBookmarkPath = BookmarkUtil::getBookmarkPath(srcPath);
+  const std::string newBookmarkPath = BookmarkUtil::getBookmarkPath(dstPath);
+  if (Storage.exists(oldBookmarkPath.c_str()) &&
+      (Storage.exists(newBookmarkPath.c_str()) || !Storage.rename(oldBookmarkPath.c_str(), newBookmarkPath.c_str()))) {
+    LOG_ERR("ERS", "Failed to move bookmarks %s -> %s (non-fatal)", oldBookmarkPath.c_str(), newBookmarkPath.c_str());
+  }
+
   RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, cacheMoved ? newCachePath : oldCachePath);
   if (APP_STATE.openEpubPath == srcPath) {
     APP_STATE.openEpubPath = dstPath;

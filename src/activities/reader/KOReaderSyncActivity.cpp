@@ -147,7 +147,7 @@ void KOReaderSyncActivity::performSync() {
   // One status line covers the whole exchange: rendering is locked on C3 while it runs.
   {
     RenderLock lock(*this);
-    statusMessage = tr(KOREADER_STORE.getSyncClippings() ? STR_SYNCING_CLIPPINGS : STR_FETCH_PROGRESS);
+    statusMessage = KOREADER_STORE.getSyncClippings() ? tr(STR_SYNCING_CLIPPINGS) : tr(STR_FETCH_PROGRESS);
   }
   requestUpdateAndWait();
 
@@ -164,7 +164,7 @@ void KOReaderSyncActivity::performSync() {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
-      statusMessage = tr(documentHash.empty() ? STR_HASH_FAILED : STR_CLIPPING_SYNC_FAILED);
+      statusMessage = documentHash.empty() ? tr(STR_HASH_FAILED) : tr(STR_CLIPPING_SYNC_FAILED);
     }
     requestUpdate(true);
     return;

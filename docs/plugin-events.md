@@ -94,7 +94,9 @@ The firmware also appends every emit-worthy summary to its own history,
 `/.crosspoint/reading_sessions.jsonl`, with or without a subscriber. That
 history is what **Sync Progress** uploads to a CrossPoint Sync server. Its
 `doc` field follows the KOSync document matching setting, so it can differ
-from the binary `document` that plugins receive.
+from the binary `document` that plugins receive. Each line also stores the
+book's SD path and title so the file can be read on its own; those two fields
+are never uploaded.
 
 `end_time` is deliberately not the wall-clock time of the last interaction.
 Idle gaps are removed, so it always equals `start_time + duration_seconds` and

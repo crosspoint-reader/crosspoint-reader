@@ -5,8 +5,10 @@
 #include <KOReaderCredentialStore.h>
 #include <KOReaderSyncClient.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <PersistableStore.h>
 #include <TrustedTime.h>
+#include <Utf8.h>
 #include <esp_mac.h>
 
 #include <algorithm>
@@ -24,7 +26,8 @@ constexpr char STATE_PATH[] = "/.crosspoint/reading_sessions_sync.json";
 constexpr size_t BATCH_SIZE = 20;  // server limit per request
 // Bounds one manual sync to 200 sessions when a long history is first uploaded.
 constexpr size_t MAX_BATCHES = 10;
-constexpr size_t MAX_LINE = 160;
+constexpr size_t MAX_LINE = 512;
+constexpr int MAX_TITLE_BYTES = 80;
 
 // Server limits; a session outside them would make the server reject its whole batch.
 constexpr int64_t MIN_START = 946684800;  // 2000-01-01
@@ -80,15 +83,29 @@ bool saveOffset(const std::string& account, const size_t offset) {
 }
 }  // namespace
 
-bool readingSessionLog::append(const std::string& document, const int64_t startTime, const uint32_t seconds,
-                               const uint16_t startProgressBp, const uint16_t endProgressBp) {
+bool readingSessionLog::append(const std::string& document, const std::string& bookPath, const std::string& title,
+                               const int64_t startTime, const uint32_t seconds, const uint16_t startProgressBp,
+                               const uint16_t endProgressBp) {
   if (!isDocumentId(document.c_str())) return false;
-  char line[MAX_LINE];
-  const int length =
-      snprintf(line, sizeof(line), "{\"doc\":\"%s\",\"start\":%lld,\"secs\":%lu,\"tz\":%d,\"from\":%u,\"to\":%u}\n",
-               document.c_str(), static_cast<long long>(startTime), static_cast<unsigned long>(seconds),
-               utcOffsetMinutes(static_cast<time_t>(startTime)), startProgressBp, endProgressBp);
-  if (length <= 0 || static_cast<size_t>(length) >= sizeof(line)) return false;
+  JsonDocument doc;
+  doc["doc"] = document;
+  doc["start"] = startTime;
+  doc["secs"] = seconds;
+  doc["tz"] = utcOffsetMinutes(static_cast<time_t>(startTime));
+  doc["from"] = startProgressBp;
+  doc["to"] = endProgressBp;
+  doc["title"] = title.substr(0, utf8SafeTruncateBuffer(title.data(), std::min<int>(title.size(), MAX_TITLE_BYTES)));
+  doc["path"] = bookPath;
+  std::string line;
+  serializeJson(doc, line);
+  if (line.size() >= MAX_LINE) {
+    // upload() skips lines longer than its buffer, so a very long path is left out.
+    doc.remove("path");
+    line.clear();
+    serializeJson(doc, line);
+  }
+  if (doc.overflowed() || line.size() >= MAX_LINE) return false;
+  line += '\n';
 
   Storage.mkdir("/.crosspoint");
   HalFile file = Storage.open(LOG_PATH, O_WRONLY | O_CREAT | O_APPEND);
@@ -96,7 +113,7 @@ bool readingSessionLog::append(const std::string& document, const int64_t startT
     LOG_ERR("RSL", "Failed to open the reading session log");
     return false;
   }
-  const bool written = file.write(line, static_cast<size_t>(length)) == static_cast<size_t>(length);
+  const bool written = file.write(line.data(), line.size()) == line.size();
   file.close();
   if (!written) LOG_ERR("RSL", "Failed to append a reading session");
   return written;
@@ -124,7 +141,10 @@ bool readingSessionLog::upload(SyncRequest& sync) {
   const std::string url = KOREADER_STORE.getBaseUrl() + "/api/v1/stats/sessions";
   bool ok = file.seek(offset);
   JsonDocument doc;
-  char line[MAX_LINE];
+  // On the heap: the loop task's stack is small and TLS runs below this frame.
+  const auto lineBuffer = makeUniqueNoThrow<char[]>(MAX_LINE);
+  if (!lineBuffer) return false;
+  char* const line = lineBuffer.get();
   char sessionId[40];
 
   for (size_t batch = 0; ok && batch < MAX_BATCHES; ++batch) {
@@ -135,7 +155,7 @@ bool readingSessionLog::upload(SyncRequest& sync) {
     size_t count = 0;
     bool endOfLog = false;
     while (count < BATCH_SIZE) {
-      if (!readLine(file, line, sizeof(line))) {
+      if (!readLine(file, line, MAX_LINE)) {
         endOfLog = true;
         break;
       }
