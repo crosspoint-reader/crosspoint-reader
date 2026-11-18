@@ -650,21 +650,25 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this, &currentPage] {
-    if (currentPage + 1 < content.totalPages) {
-      currentPage++;
-      content.selection.valid = false;
-      requestUpdate();
-    }
-  });
+  // Page buttons follow the side-button layout; front buttons use the reader's orientation mapping.
+  const auto frontButtons = ReaderUtils::getFrontPageTurnButtons(mappedInput);
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageForward, frontButtons.next},
+                                       [this, &currentPage] {
+                                         if (currentPage + 1 < content.totalPages) {
+                                           currentPage++;
+                                           content.selection.valid = false;
+                                           requestUpdate();
+                                         }
+                                       });
 
-  buttonNavigator.onPrevious([this, &currentPage] {
-    if (currentPage > 0) {
-      currentPage--;
-      content.selection.valid = false;
-      requestUpdate();
-    }
-  });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageBack, frontButtons.previous},
+                                       [this, &currentPage] {
+                                         if (currentPage > 0) {
+                                           currentPage--;
+                                           content.selection.valid = false;
+                                           requestUpdate();
+                                         }
+                                       });
 }
 
 // Draws the current page: a styled Page when the HTML layout succeeded,

@@ -108,6 +108,9 @@ void HalGPIO::begin() {
 #else
   _deviceType = DeviceType::X4;
 #endif
+  if (BoardConfig::ACTIVE.usbDetect >= 0 && !BoardConfig::ACTIVE.usbDetectActiveHigh) {
+    pinMode(BoardConfig::ACTIVE.usbDetect, INPUT_PULLUP);
+  }
   inputMgr.begin();
 #if FREEINK_DEVICE_LILYGO
   // T5S3 IO48 key sits behind the PCA9535 expander. Mirrors BoardT5S3::begin(), which also
@@ -245,7 +248,7 @@ bool HalGPIO::verifyPowerButtonWakeup() {
 
 bool HalGPIO::isUsbConnected() const {
   if (!deviceIsX3() && BoardConfig::ACTIVE.usbDetect >= 0) {
-    return digitalRead(BoardConfig::ACTIVE.usbDetect) == (BoardConfig::isOnePage() ? LOW : HIGH);
+    return digitalRead(BoardConfig::ACTIVE.usbDetect) == (BoardConfig::ACTIVE.usbDetectActiveHigh ? HIGH : LOW);
   }
   // X3 uses GPIO20 for I2C, not USB detection. Boards without a digital
   // USB-detect line (e.g. Sticky, whose PWR_IN_VOLT is an analog

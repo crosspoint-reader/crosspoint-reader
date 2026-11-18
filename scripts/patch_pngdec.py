@@ -18,7 +18,9 @@ Idempotent: if the guard is already present, the file is left untouched.
 """
 
 Import("env")  # noqa: F821 (SCons-injected global)
-import os
+from pathlib import Path
+from shutil import copymode
+from tempfile import NamedTemporaryFile
 
 RAW_INCLUDE = '#include "dsps_fft2r_platform.h"'
 GUARDED_INCLUDE = (
@@ -32,13 +34,12 @@ GUARDED_INCLUDE = (
 
 
 def patch_pngdec(env):
-    libdeps_dir = os.path.join(env["PROJECT_DIR"], ".pio", "libdeps")
-    if not os.path.isdir(libdeps_dir):
-        return
-    for env_dir in os.listdir(libdeps_dir):
-        s_file = os.path.join(libdeps_dir, env_dir, "PNGdec", "src", "s3_simd_rgb565.S")
-        if os.path.isfile(s_file):
-            _patch_one(s_file)
+    libdeps = Path(env.subst("$PROJECT_LIBDEPS_DIR")).resolve() / env["PIOENV"]
+    source = libdeps / "PNGdec" / "src" / "s3_simd_rgb565.S"
+    if source.is_file():
+        if libdeps not in source.resolve().parents:
+            raise RuntimeError(f"PNGdec source is outside the active dependency folder: {source}")
+        _patch_one(source)
 
 
 def _patch_one(path):
@@ -66,8 +67,16 @@ def _patch_one(path):
         # Fallback: append at EOF (still balances the guard).
         text = text.rstrip() + "\n#endif // __has_include dsps_fft2r_platform.h\n"
 
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
+    # Replace the file so interrupted writes and hard links cannot damage another copy.
+    temporary = NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, suffix=".tmp", delete=False)
+    temporary_path = Path(temporary.name)
+    try:
+        with temporary:
+            temporary.write(text)
+        copymode(path, temporary_path)
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
     print("Guarded PNGdec S3 SIMD include: %s" % path)
 
 

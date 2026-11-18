@@ -5,6 +5,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <LibraryBuilder.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
@@ -56,7 +57,7 @@ bool showOnDevice(const SettingInfo& setting) {
   if (setting.category == StrId::STR_CAT_READER && setting.inTextSettings) return false;
   if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
       SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
-      !(BoardConfig::isX4Pro() && SETTINGS.doublePwrBtn == CrossPointSettings::FOOTNOTES)) {
+      !(CrossPointSettings::hasPowerDoubleClick() && SETTINGS.doublePwrBtn == CrossPointSettings::FOOTNOTES)) {
     return false;
   }
   return true;
@@ -66,6 +67,7 @@ bool showOnDevice(const SettingInfo& setting) {
 // only group the web UI; their rows live on their own sub-screens.
 SettingsSection sectionFor(const SettingInfo& setting) {
   if (setting.valuePtr == &CrossPointSettings::libraryUseMetadata ||
+      setting.valuePtr == &CrossPointSettings::libraryRecentOpenedOnly ||
       setting.valuePtr == &CrossPointSettings::removeReadBooksFromRecents ||
       setting.valuePtr == &CrossPointSettings::moveFinishedToReadFolder) {
     return SettingsSection::Library;
@@ -188,6 +190,8 @@ void SettingsActivity::rebuildSettings() {
   }
   addAction(SettingsSection::Reader, StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar);
   addAction(SettingsSection::Reader, StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache);
+
+  addAction(SettingsSection::Library, StrId::STR_LIBRARY_REBUILD, SettingAction::RefreshLibrary);
 
   addAction(SettingsSection::Network, StrId::STR_WIFI_NETWORKS, SettingAction::Network);
   if (bleturner::status().compiledIn) {
@@ -448,6 +452,19 @@ void SettingsActivity::toggleSelectedSetting() {
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::RefreshLibrary: {
+        // Blocking, like the Library screen's own rebuild: the walk needs the
+        // card to itself, so the render task stays locked out.
+        RenderLock lock;
+        GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+        library::BuildStats stats;
+        const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
+        if (!ok) LOG_ERR("SET", "library index build failed");
+        GUI.drawPopup(renderer, ok ? tr(STR_LIBRARY_REBUILD_DONE) : tr(STR_LIBRARY_REBUILD_FAILED));
+        delay(1000);
+        requestUpdate();
+        break;
+      }
       case SettingAction::DisplayRefresh: {
         // Alternate full black and white refreshes to clear image retention.
         // Back stops after the next white pass, so the screen always ends white.

@@ -375,6 +375,9 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
+  // EEGO A4: after a gray reader page, a fast refresh leaves the page ghosting
+  // in Home's dithered areas.
+  if (BoardConfig::isEegoA4() && isReaderActivity()) cleanInitialRefresh = true;
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }

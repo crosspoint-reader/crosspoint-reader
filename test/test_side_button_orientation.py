@@ -18,7 +18,7 @@ panel = (ROOT / "src/activities/util/FrontlightPanelActivity.cpp").read_text()
 preview_setup = panel[panel.index("    static constexpr fui::Rotation rotations[]"):panel.index("    const fui::Rect row = screen.takeTop(kQuickControlSize)")]
 preview_draw = panel[panel.index("      screen.target().bitmap(iconRect"):panel.index("      // A tile whose function")]
 reader = (ROOT / "src/activities/reader/ReaderUtils.h").read_text()
-detect_turn = reader[reader.index("struct PageTurnResult"):reader.index("struct TouchPageTurn")]
+detect_turn = reader[reader.index("struct FrontPageTurnButtons"):reader.index("struct TouchPageTurn")]
 
 stub = r"""
 #pragma once
