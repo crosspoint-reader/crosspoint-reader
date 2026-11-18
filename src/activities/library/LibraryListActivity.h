@@ -9,6 +9,7 @@
 
 #include "RecentBooksStore.h"
 #include "activities/UiTabListActivity.h"
+#include "components/OptionPopup.h"
 
 // One Library screen: every indexed book on the card shown by recency, title,
 // or author. The Recent shelf orders by file modification time (when a book
@@ -41,6 +42,10 @@ class LibraryListActivity final : public UiTabListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onRowLongPress(int index) override;
+#if FREEINK_CAP_TOUCH
+  bool canSwipeDelete(int index) const override { return !groupsCollapsed && index >= 0 && index < listCount(); }
+  void swipeDelete(int index) override;
+#endif
   int tabCount() const override;
   int activeTab() const override;
   const char* tabLabel(int index) const override;
@@ -53,10 +58,15 @@ class LibraryListActivity final : public UiTabListActivity {
   // The FreeInkUI header owns both the title and search touch target.
   void drawChrome() override {}
   void drawFooter() override;
+  // OptionPopup is a self-contained modal: it owns rendering (and the button
+  // hints) whenever it is up.
+  void render(RenderLock&& lock) override;
 
  private:
   // The screen's own actions, after the base's ACTION_ROW / ACTION_TAB.
   static constexpr freeink::ui::ActionId ACTION_SEARCH = ACTION_TAB_USER;
+  static constexpr freeink::ui::ActionId ACTION_REBUILD = ACTION_SEARCH + 1;
+  static constexpr freeink::ui::ActionId ACTION_BACK = ACTION_REBUILD + 1;
 
   // Walk the card and write a fresh index. Blocking, with a popup: at ~70 books
   // it is well under a second, and it only runs when the index is missing or the
@@ -66,11 +76,19 @@ class LibraryListActivity final : public UiTabListActivity {
   // Input
   void openSelectedBook();
   void openSearch();
+  // Shared tail of row activation and the options menu's Open entry.
+  void openBookByPath(const std::string& path);
+  void promptRebuildIndex();
+  void resetAfterRebuild();
+  // Recent-row long-press menu: open / remove from recents / delete / rebuild.
+  void showRecentBookOptions(int entry);
   void promptRemoveRecentBook(const std::string& path, const std::string& title);
   // Long-press delete owns the gesture where grouping does not apply: the
   // Recent sort, degraded lists, and any active search result.
   bool deleteEligible() const;
+  // Resolves the row's path and title, then confirms via promptDeleteBookByPath.
   void promptDeleteBook(int entry);
+  void promptDeleteBookByPath(const std::string& path, const std::string& title);
   bool collapseGroups(int bookEntry);
   void expandGroup(int groupEntry);
   void restoreExpandedList();
@@ -79,7 +97,11 @@ class LibraryListActivity final : public UiTabListActivity {
   // Sub-screens act on button press, so a button still held when we resume must
   // not also act here. Records what to swallow on the next release.
   void swallowHeldReleases();
+  // Staged back-out shared by Button::Back and the header back arrow.
+  void handleBackAction();
   static void searchActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  static void rebuildActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  static void backActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
 
   // Data
   void applyFilter();
@@ -113,6 +135,9 @@ class LibraryListActivity final : public UiTabListActivity {
   // read order; the modification-time list follows with those books skipped.
   // Entries below pinnedCount() are store rows; the rest go through rowFor().
   int pinnedCount() const;
+  // Setting: the Recent tab lists opened books only.
+  bool openedOnly() const;
+  const RecentBook* storeBook(int entry) const;
   // Re-match the store against the index (chunked scan). Call whenever the
   // index or the store changes.
   void resolvePinned();
@@ -167,4 +192,8 @@ class LibraryListActivity final : public UiTabListActivity {
 
   bool lockNextConfirmRelease = false;
   bool lockNextBackRelease = false;
+
+  // Row options modal (Recent long-press menu); owned here so it outlives the
+  // touch event that opened it.
+  OptionPopup optionPopup;
 };

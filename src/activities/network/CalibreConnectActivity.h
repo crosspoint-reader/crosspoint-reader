@@ -26,13 +26,14 @@ class CalibreConnectActivity final : public Activity {
   std::string lastCompleteName;
   unsigned long lastCompleteAt = 0;
   unsigned long lastProcessedCompleteAt = 0;  // Track which server value we've already processed
+  unsigned long lastRepaintAt = 0;
+  bool repaintPending = false;
   bool exitRequested = false;
 
   void renderServerRunning() const;
 
   void onWifiSelectionComplete(bool connected);
   void startWebServer();
-  void stopWebServer();
 
  public:
   explicit CalibreConnectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

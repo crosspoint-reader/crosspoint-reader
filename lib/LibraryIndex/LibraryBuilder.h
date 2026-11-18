@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "LibraryFormat.h"
 
@@ -69,5 +70,14 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadat
 
 // Live index path, shared by the builder and activity.
 const char* libraryIndexPath();
+
+// A successful book transfer marks the retained index stale. The next Library
+// entry rebuilds it through the normal reconciliation path.
+bool markLibraryIndexDirty();
+bool isLibraryIndexDirty();
+
+// Whether `path` (a full path or a bare name) passes the walk's name filter: a
+// book extension, and no hidden or system folder or file name.
+bool isLibraryBookFile(std::string_view path);
 
 }  // namespace library

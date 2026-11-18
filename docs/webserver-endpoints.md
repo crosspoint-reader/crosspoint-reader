@@ -19,7 +19,14 @@ the IP address shown on the device screen.
 | `GET` | `/files` | File manager page |
 | `GET` | `/settings` | Web settings page |
 | `GET` | `/fonts` | SD-card font manager page |
+| `GET` | `/plugins` | Plugins page (web settings of SD-card plugins) |
 | `GET` | `/js/jszip.min.js` | JavaScript asset used by the file manager |
+| `GET` | `/js/epub-optimizer.js` | File manager EPUB optimizer, loaded with JSZip only when needed |
+| `GET` | `/js/plugin-host.js` | Browser plugin host shared by the Plugins, File Manager, and `/plugins-run` pages |
+
+HTML page responses, including `304 Not Modified`, set the cookie `cpPlugins=1` while
+plugins are enabled and `cpPlugins=0` otherwise. The page header uses it to hide the
+Plugins link.
 
 ## Device Status
 
@@ -34,6 +41,9 @@ Response:
 ```json
 {
   "version": "1.0.0",
+  "firmwareFamily": "crosspoint",
+  "pluginApi": 1,
+  "pluginCapabilities": "catalog.lists,catalog.notices,catalog.bundle_install,catalog.version_tracking,catalog.compatibility,catalog.item_details,catalog.encoded_item_fields,catalog.list_index_mapping",
   "ip": "192.168.1.100",
   "mode": "STA",
   "rssi": -45,
@@ -46,11 +56,15 @@ Response:
 | Field | Type | Description |
 |-------|------|-------------|
 | `version` | string | Firmware version |
+| `firmwareFamily` | string | Stable compatibility family; stock CrossPoint uses `crosspoint` |
+| `pluginApi` | number | Numeric plugin API level used for catalog compatibility |
+| `pluginCapabilities` | string | Comma-separated firmware capabilities used for catalog compatibility |
 | `ip` | string | Device IP address |
 | `mode` | string | `"STA"` for joined Wi-Fi or `"AP"` for hotspot mode |
 | `rssi` | number | Wi-Fi RSSI in dBm; `0` in AP mode |
 | `freeHeap` | number | Free heap in bytes |
 | `uptime` | number | Seconds since boot |
+| `deviceId` | string | With `?plugin=<name>`: 64 hex chars, stable per device and plugin (SHA-256 of an on-device NVS secret and the name); omitted if NVS is unavailable |
 | `device` | string | `"X3"` or `"X4"` hardware detection |
 
 ## File Management
@@ -81,6 +95,10 @@ Response:
 Hidden dotfiles are omitted unless the device setting `showHiddenFiles` is
 enabled. `System Volume Information` and `XTCache` are always hidden/protected.
 
+The saved-credential stores (`/.crosspoint/wifi.json`, `opds.json`,
+`koreader.json`) can never be downloaded, uploaded, renamed, moved, deleted or
+written by a plugin over the network, however the path is spelled.
+
 ### `GET /download`
 
 Downloads a file from the SD card.
@@ -95,8 +113,8 @@ Query parameters:
 |-----------|----------|-------------|
 | `path` | Yes | File path to download |
 
-Protected dotfiles, `System Volume Information`, and `XTCache` cannot be
-downloaded. EPUB files are served as `application/epub+zip`; other files use
+Protected dotfiles, `System Volume Information`, `XTCache`, and the credential
+stores cannot be downloaded. EPUB files are served as `application/epub+zip`; other files use
 `application/octet-stream`.
 
 ### `POST /upload`
@@ -112,6 +130,7 @@ Query parameters:
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `path` | No | `/` | Destination directory |
+| `overwrite` | No | off | `1` or `true` replaces a file with the same name |
 
 Successful response:
 
@@ -121,8 +140,18 @@ File uploaded successfully: mybook.epub
 
 Notes:
 
-- Existing files with the same name are overwritten.
+- Without `overwrite`, an existing file with the same name is kept and the
+  request fails with `400` "File already exists: <name>".
+- With `overwrite`, the upload is written to `<name>.part` and replaces the
+  existing file only when it is complete, so a failed upload keeps the old file.
+  The card needs free space for both copies while the upload runs. A file
+  already named `<name>.part` is replaced. If a folder has the name, the
+  request fails with `400` "A folder with this name already exists: <name>".
 - EPUB cache data for the uploaded path is cleared after a successful upload.
+- Uploading a book file (`.epub`, `.txt`, `.md`, `.xtc`), here or through the
+  WebSocket upload, marks the Library index stale, so the book appears the next
+  time the Library opens. Hidden files and folders (names that start with `.`)
+  don't mark it.
 - HTTP upload uses a 4 KB write buffer before flushing to the SD card.
 
 ### `POST /mkdir`
@@ -192,8 +221,9 @@ Form parameters:
 | `path` | Yes, unless `paths` is provided | Single path to delete |
 | `paths` | Yes, unless `path` is provided | JSON array of paths to delete |
 
-Protected items cannot be deleted. Non-empty folders are rejected. EPUB cache
-data for deleted files is cleared.
+`System Volume Information`, `XTCache` and the saved-credential stores cannot be
+deleted. Hidden items (names that start with `.`) can be deleted. Non-empty
+folders are rejected. EPUB cache data for deleted files is cleared.
 
 ## Settings API
 
@@ -204,6 +234,15 @@ fields plus type-specific fields.
 
 ```bash
 curl http://crosspoint.local/api/settings
+```
+
+`?keys=` takes a comma-separated list of setting keys, without spaces, and
+returns only those items in the same array format and in settings-list order.
+Unknown keys are ignored. A plugin that needs one or two settings should use it
+instead of reading the whole list.
+
+```bash
+curl 'http://crosspoint.local/api/settings?keys=koServerUrl,dictionaryName'
 ```
 
 Example item:
@@ -219,11 +258,11 @@ Example item:
 }
 ```
 
-`value` is always an index into `options`, never the option's text. `fontSize`
-is one of the settings whose `options` are built at request time — they are the
-point sizes the selected font family actually ships, so a family installed at
-10/12/14 offers three options. (`fontFamily` and `dictionaryName` vary the same
-way, from the SD card contents.)
+`value` is always an index into `options`, never the option's text. The
+`fontSize` options depend on the selected family. A `.cpfont` family installed
+at 10/12/14 pt offers those three sizes. TTF/OTF/TTC families offer the
+standard 12/14/16/18 pt sizes. The `fontFamily` and `dictionaryName` options
+also depend on the SD card contents.
 
 Types:
 
@@ -257,7 +296,9 @@ Applied 2 setting(s)
 
 ### `GET /api/fonts`
 
-Lists installed SD-card font families.
+Lists installed SD-card font families. On devices that load TTF/OTF/TTC files,
+these families appear with `sizes: [0]`. The `0` means that the font file has
+no fixed point size; the reader offers 12, 14, 16, and 18 pt.
 
 ```bash
 curl http://crosspoint.local/api/fonts
@@ -268,6 +309,7 @@ Response:
 ```json
 {
   "maxFamilies": 128,
+  "vectorFonts": false,
   "families": [
     {
       "name": "Literata",
@@ -282,7 +324,8 @@ Response:
 
 ### `POST /api/fonts/upload`
 
-Uploads one `.cpfont` file into a family folder.
+Uploads one font file into a family folder: `.cpfont`, or `.ttf`/`.otf` on devices
+with external RAM (`vectorFonts: true` in `GET /api/fonts`).
 
 ```bash
 curl -X POST \
@@ -291,8 +334,9 @@ curl -X POST \
   http://crosspoint.local/api/fonts/upload
 ```
 
-The handler validates the family name, `.cpfont` filename, and `CPFONT` magic
-bytes before accepting the file.
+The handler validates the family name, filename extension, and magic bytes
+(`CPFONT`, or a TrueType/OpenType header for `.ttf`/`.otf`) before accepting the
+file.
 
 Successful response:
 
@@ -303,6 +347,9 @@ Successful response:
 ### `POST /api/fonts/delete`
 
 Deletes an installed font family.
+
+This endpoint removes family subfolders. To remove a loose TTF/OTF/TTC file
+from a font root, delete the file from the SD card instead.
 
 ```bash
 curl -X POST \
@@ -453,8 +500,13 @@ Error messages include:
 | `ERROR:No upload in progress` | Binary data arrived without a matching START |
 | `ERROR:Upload overflow` | Client sent more bytes than declared |
 | `ERROR:Write failed - disk full?` | SD write failed |
+| `ERROR:File already exists: <name>` | A file with that name exists; WebSocket uploads never replace files |
 
 Incomplete WebSocket uploads are deleted on disconnect or error.
+
+The server accepts two WebSocket connections at a time and closes further ones
+without a reply. It closes a connection that sends nothing for two minutes, which
+also deletes an unfinished upload.
 
 ## WebDAV
 
@@ -499,8 +551,198 @@ The final field is the WebSocket upload port.
 - The device shows a Wi-Fi QR code and URL QR code.
 - The fallback IP is typically `192.168.4.1`.
 - `/api/status` returns `"mode": "AP"` and `"rssi": 0`.
+- The hotspot's DNS answers every name with the device's IP. A `GET` or `HEAD`
+  request whose `Host` is any other domain name (not an IP address, a `.local`
+  name or a single-label name such as `crosspoint`) gets
+  `302 Location: http://<AP IP>/`, so phones and computers can open the home
+  page as a captive portal. Other methods are not redirected.
 
 ### Calibre Wireless
 
 Calibre Wireless starts the same web server in STA mode and displays setup
 instructions plus WebSocket upload progress on the device screen.
+
+## Plugin API
+
+Device capabilities for browser-side SD plugins (`plugin.js`). Plugins normally
+reach these through the plugin host wrappers in `/js/plugin-host.js`
+(`api.relay`, `api.crypto`, `api.fetchToSd`, `api.writeFile`); the raw
+contracts are below. Outbound TLS is encrypted but the peer is not verified
+(the transport ships no CA bundle).
+
+### `GET /api/plugins`
+
+Installed plugins that ship a `plugin.js`:
+`[{"name":"<folder>","dir":"<root>/<folder>","title":"<title>","mount":"settings"}, ...]`.
+`dir` is where the plugin is installed (plugins keep their own files there);
+`title` and `mount` come from the plugin's `manifest.json` when present.
+Mount `settings` (the default) shows the card on the Plugins page (`/plugins`);
+mount `files` shows it in the File Manager.
+
+### `GET /plugin?name=<plugin>&file=<file>`
+
+Serves one file from the plugin's folder (first root holding that name). Both
+parameters must be single path components (no `/`, `\`, or `..`); 404 when
+the plugin, file, or a directory is requested; 500 when the file cannot be read.
+
+Successful responses carry an `ETag` (MD5 of the file contents) and
+`Cache-Control: no-cache`, so a browser keeps the file and checks it again on
+each load. A request whose `If-None-Match` matches gets `304` with no body.
+
+### `POST /api/relay`
+
+Makes an outbound HTTP(S) request for a plugin (any method; browsers can't, due
+to CORS). Body: `{"plugin":"<name>","method":"GET","url":"https://...","headers":{...},"body":"..."}`.
+
+- **Success:** `200` with the upstream body verbatim. The upstream status is
+  in the `X-Relay-Status` response header, and its headers in `X-Relay-Headers`
+  as JSON `[["name","value"], ...]` in receive order, duplicates kept (every
+  `Set-Cookie`). `api.relay()` resolves to `{status, headers, body}`.
+- **Redirects** are not followed: a 3xx comes back with its `location` header.
+- **Limits:** the upstream body is capped at 64KB. The device forwards the body
+  as it arrives and does not store it. Use `/api/fetch` for large files. A GET
+  that fails with 502 can be retried with `/api/fetch` (`api.relay()` throws an
+  error whose `status` is 502).
+- **Errors:** `400 {"error":"missing plugin/url"}`; `502 {"error":"relay failed; ..."}`
+  when the request fails before any of the body arrives, or the upstream
+  `Content-Length` is over the cap (the device log names which). If the `200`
+  has already started and the body is then cut short, or goes over the cap
+  without a `Content-Length`, the device closes the connection. `api.relay()`
+  reports that as the same 502 error.
+
+### `POST /api/crypto`
+
+Stateless wolfSSL primitives. Body `{"op":"<op>", ...}`; binary fields are
+base64 in both directions, each at most 64KB encoded. Replies are `200` with
+the result fields, or `200 {"error":"..."}`.
+
+| `op` | Request fields | Result |
+| --- | --- | --- |
+| `random` | `len` (default 16, max 4096) | `data` |
+| `sha1` | `data` | `data` (20 bytes) |
+| `sha256` | `data` | `data` (32 bytes) |
+| `aesenc` | `key`, `iv` (16 bytes each), `data` | `data`: AES-128-CBC with PKCS#7 padding |
+| `aesdec` | `key`, `iv`, `data` (block-aligned) | `data`: AES-128-CBC, padding left in place |
+| `keygen` | none | `public` (SPKI DER), `private` (PKCS#8 DER): RSA key pair |
+| `pubencrypt` | `cert` (X.509 DER), `data` | `data`: RSAES-PKCS1-v1_5 to the certificate's key |
+| `sign` | `private` (PKCS#8 DER), `hash` (20 bytes) | `data` (128 bytes): raw RSA signature |
+| `rsadec` | `private` (PKCS#8 DER), `data` (one modulus block) | `data`: raw RSA private-key result, padding left in place |
+| `pkcs12` | `data` (the bundle), `password` | `key`, `cert` (DER) |
+
+### `POST /api/book-key`
+
+Stores a protected book's content key for the reader. Body:
+`{"path":"/abs/book.epub","key":"<base64, 16 bytes>","expires":<epoch seconds, optional>}`.
+The device wraps the key with AES-256-GCM under a key derived from its NVS
+secret and writes `<path>.key`; the header (including `expires`) is
+authenticated, so the file only opens on this reader and its loan date cannot
+be edited. The reader enforces `expires` when the book opens.
+
+- **Success:** `200 {"ok":true}`.
+- **Errors:** `400 {"error":"bad path/key"}`; `500 {"error":"cannot store key"}`.
+
+### `POST /api/fetch`
+
+Downloads a URL straight to SD, so a large body never passes through the
+browser. Body: `{"plugin":"<name>","url":"...","dest":"/abs/path","headers":{...},"offset":0,"maxBytes":0}`,
+plus optional `"method"` (`GET`, `POST`, `PUT`, `PATCH`, or `DELETE`; default
+`GET`) and `"body"` (a string, at most 4KB).
+
+- A request with a method other than GET, or with a non-empty body, is sent once: it is
+  never replayed, and `offset`/`maxBytes` must be 0. A 3xx answer is not
+  followed; it fails with `error:"http status"`. Use it for APIs that answer a
+  POST with a large file. Such a request is not split into segments, so if the
+  browser connection drops on a very large answer, check whether `dest` was
+  installed.
+
+- `dest` must be absolute with no `..`; missing parent folders are created.
+- The transfer is staged in `<dest>.part` and replaces `dest` only when the
+  whole body has arrived, so a failed update keeps the previous file.
+- Installing a book file (`.epub`, `.txt`, `.md`, `.xtc`) marks the Library
+  index stale, so the book appears the next time the Library opens. Requests
+  that end with `complete:false`, failed transfers, other file types, and
+  hidden files or folders (names that start with `.`) don't mark it.
+- A GET without a body follows up to 5 redirects. `headers` (typically the plugin's
+  `Authorization`) are sent only while the target keeps the starting URL's
+  scheme, host, and port; a redirect elsewhere, including https→http, gets none.
+- For a GET without a body, an answer cut short mid-transfer resumes on its own
+  with a Range request.
+- **Segments:** `maxBytes` (at most 4MB) ends the request after that many
+  bytes with `complete:false`; send the next request with `offset` set to the
+  returned `bytes` to continue the same `.part`. `api.fetchToSd()` does this
+  loop, keeping each browser request short.
+- A long transfer answers early with `200` chunked and sends whitespace every
+  5s to keep the browser connection open; the JSON result follows at the end.
+- **Result:** `{"status":200,"bytes":N,"complete":true,"total":N}` (`total`
+  when the server reported a size). `status` is the upstream HTTP status, or
+  -1 when no answer arrived. `error` is set to `transport failure`,
+  `http status`, or `sd write failed` when the file was not installed. A failed
+  answer may include `body`, up to its first 512 bytes (never ending in a cut
+  UTF-8 character); currently only requests sent with a method other than GET
+  or a non-empty body include it.
+- **Errors:** `400 {"error":"bad url/dest"}`; `400 {"error":"unsupported method"}`;
+  `400 {"error":"method must be a string"}`;
+  `400 {"error":"body must be a string"}`; `400 {"error":"body over 4KB"}`;
+  `400 {"error":"offset and maxBytes need a GET without a body"}`;
+  `409 {"error":"offset mismatch","bytes":N}`
+  when `offset` does not match the `.part` size; `502 {"error":"sd write failed" |
+  "range unsupported" | "download truncated","bytes":N,"complete":false}`.
+
+### `POST /api/plugin-fs?plugin=<name>&path=<abs path>`
+
+Writes one small file to SD. The content is sent as a multipart file part
+(`api.writeFile()` builds it), so binary data, including NUL bytes, arrives
+intact. It streams to `<path>.tmp` and replaces `path` only after a complete,
+non-empty body. `path` must be absolute, without `..`, and not a credential
+store. A plugin keeps its own files in its install folder (`api.dir`). As with
+`/api/fetch`, writing a book file marks the Library index stale.
+
+- **Success:** `200 {"ok":true,"bytes":N}`.
+- **Errors:** `400` (`bad path`, `empty body`, `missing file part`,
+  `upload aborted`); `413 {"error":"too large"}` over 256KB; `500
+  {"error":"cannot write" | "sd write failed"}`. The previous file is kept on
+  every error.
+
+## Plugin Job Queue
+
+External systems trigger SD-plugin actions without the web UI. The firmware
+stores opaque `{plugin, action, args}` blobs (fixed 6-slot pool; args/result
+< 192 bytes JSON); an open page hosting the plugin executes them. See
+`docs/sd-plugins.md` for the full contract.
+
+### `POST /api/plugin-jobs`
+
+```bash
+curl -X POST http://crosspoint.local/api/plugin-jobs \
+  -d '{"plugin":"<name>","action":"<action>","args":{"path":"/Books/somefile"}}'
+# -> {"id":3}         (503 {"error":"job queue full"} when all slots busy,
+#                      or {"error":"out of memory"} if the queue cannot be allocated)
+```
+
+### `GET /api/plugin-jobs/claim?plugin=<name>`
+
+Executor-side (used by the plugin host page): returns the next pending job
+`{"id":3,"claim":7,"action":"<action>","args":{...}}` and marks it running, or `{"id":0}`.
+A running job whose lease expires returns to pending and gets a new `claim` when re-claimed.
+
+### `POST /api/plugin-jobs/complete`
+
+Executor-side: `{"id":3,"claim":7,"ok":true,"result":{...}}` -> `{"ok":true}`. The `claim`
+must match the one from the claim response; a stale claim (the lease expired and another
+executor re-claimed the job) gets `409 {"error":"stale claim"}` and changes nothing.
+
+### `GET /api/plugin-jobs/status?id=<n>`
+
+```bash
+curl "http://crosspoint.local/api/plugin-jobs/status?id=3"
+# -> {"id":3,"state":"done","result":{"title":"...","dest":"/Books/Book.epub"}}
+```
+
+States: `pending`, `running`, `done`, `error`, `unknown` (slot recycled —
+poll promptly after completion).
+
+### `GET /plugins-run`
+
+Headless executor page: loads every plugin with its UI hidden so registered
+actions run. Keep it open (browser tab or embedded webview) while jobs are
+queued; jobs enqueued with no page open stay pending until one opens.

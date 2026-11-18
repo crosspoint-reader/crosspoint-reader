@@ -1,0 +1,11 @@
+{
+  "title": "Event disclosure test",
+  "description": "Local layout fixture; no catalog or sign-in.",
+  "events": {
+    "reader.open": {"url": "https://example.invalid/event"},
+    "reader.exit": {"url": "https://example.invalid/event"},
+    "reader.session": {"url": "https://example.invalid/event"},
+    "book.downloaded": {"url": "https://example.invalid/event"},
+    "sleep.enter": {"url": "https://example.invalid/event"}
+  }
+}

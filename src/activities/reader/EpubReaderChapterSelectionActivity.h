@@ -8,7 +8,7 @@
 
 class EpubReaderChapterSelectionActivity final : public UiListActivity {
   std::shared_ptr<Epub> epub;
-  int currentSpineIndex = 0;
+  int currentTocIndex = 0;
 
   // Windowed row buffers: TOC entries are SD-backed (BookMetadataCache LUT
   // reads), so only the rows around the viewport are materialized. A
@@ -37,6 +37,6 @@ class EpubReaderChapterSelectionActivity final : public UiListActivity {
 
  public:
   explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                              const std::shared_ptr<Epub>& epub, int currentSpineIndex);
+                                              const std::shared_ptr<Epub>& epub, int currentTocIndex);
   void onEnter() override;
 };

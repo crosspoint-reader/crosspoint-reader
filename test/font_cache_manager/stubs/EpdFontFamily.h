@@ -8,7 +8,7 @@ struct EpdFontData {
 
 class EpdFontFamily {
  public:
-  enum Style : uint8_t { REGULAR = 0, BOLD = 1, ITALIC = 2, BOLD_ITALIC = 3 };
+  enum Style : uint8_t { REGULAR = 0, BOLD = 1, ITALIC = 2, BOLD_ITALIC = 3, SMALL_CAPS = 128 };
 
   EpdFontFamily() = default;
   EpdFontFamily(const EpdFontData* regular, const EpdFontData* bold, const EpdFontData* italic,

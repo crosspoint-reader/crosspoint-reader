@@ -1,8 +1,12 @@
 // From
 // https://github.com/vroland/epdiy/blob/c61e9e923ce2418150d54f88cea5d196cdc40c54/src/epd_internals.h
+// The EPDiy font layouts use LGPLv3. See licenses/borrowed-code.txt.
 
 #pragma once
 #include <cstdint>
+
+// fontconvert.py, fontconvert_sdcard.py and the vector loader rasterize point sizes at this DPI.
+constexpr uint16_t FONT_RASTER_DPI = 150;
 
 /// Font metrics use "fixed-point 4" (4 fractional bits, i.e. 1/16-pixel
 /// resolution).  Both the 12.4 glyph advances (uint16_t) and the 4.4 kern
@@ -22,6 +26,10 @@ constexpr int32_t HALF = 1 << (FRAC_BITS - 1);  // 8, added before shift for rou
 
 /// Convert an integer pixel value to 12.4 fixed-point.
 constexpr int32_t fromPixel(int px) { return static_cast<int32_t>(px) << FRAC_BITS; }
+
+/// Discard the two low bits of a 26.6 value, leaving four fractional bits.
+/// This is used to preserve the final pixel snap when combining advances with fp4 kerning.
+constexpr int32_t truncate26_6_to_4(int32_t fp) { return fp >> 2; }
 
 /// Snap a fixed-point value to the nearest integer pixel.
 constexpr int toPixel(int32_t fp) { return static_cast<int>((fp + HALF) >> FRAC_BITS); }
@@ -240,4 +248,26 @@ typedef struct {
   /// answer from RAM-resident data without storage I/O.  Shares glyphMissCtx.
   /// nullptr for fonts whose interval table is already complete (built-ins).
   bool (*coverageHandler)(void* ctx, uint32_t codepoint);
+
+  /// Vector-font bitmap accessor (FreeInkFont / TtfEpdFont). When non-null,
+  /// GfxRenderer::getGlyphBitmap() returns vectorBitmapHandler(glyphMissCtx, glyph)
+  /// instead of indexing ->bitmap or going through the SdCardFont overflow path.
+  /// This lets a runtime-rasterized TTF fault + cache glyphs on ANY draw path
+  /// (via glyphMissHandler) without pre-warming. nullptr for every other font,
+  /// so the SD/built-in bitmap paths are unaffected (all fonts zero-init this).
+  const uint8_t* (*vectorBitmapHandler)(void* ctx, const EpdGlyph* glyph);
+
+  /// Dynamic kerning for handler-backed fonts (TTF via FreeInkFont): returns
+  /// the 4.4 fixed-point pixel adjustment for the pair, 0 when none. Checked
+  /// by getKerning() before the static class tables (handler fonts carry
+  /// none). Shares glyphMissCtx. nullptr for built-in and SD fonts, whose
+  /// kerning is baked into the tables above (all fonts zero-init this).
+  int8_t (*kernHandler)(void* ctx, uint32_t leftCp, uint32_t rightCp);
 } EpdFontData;
+
+// Solid Unicode symbols can be drawn as rectangles when the font lacks them.
+namespace syntheticGlyph {
+constexpr uint32_t FULL_BLOCK = 0x2588;
+constexpr uint32_t BLACK_SQUARE = 0x25A0;
+constexpr bool isSolid(uint32_t cp) { return cp == FULL_BLOCK || cp == BLACK_SQUARE; }
+}  // namespace syntheticGlyph

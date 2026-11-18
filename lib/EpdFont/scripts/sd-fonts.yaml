@@ -1,4 +1,5 @@
 # SD Card Font Families for CrossPoint Reader
+# Font licenses and copyright notices: licenses/fonts.txt.
 #
 # This file is the single source of truth for which fonts are generated,
 # how they're sourced, and how they're presented in the download manifest.
@@ -48,6 +49,17 @@ scriptGroups:
 families:
   # ── Serif ──────────────────────────────────────────────────────────────
 
+  - name: Libron
+    description: "Serif optimized for digital reading and e-readers (Latin)"
+    scripts: [latin]
+    intervals: latin-ext
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-Regular.ttf"}
+      bold:       {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-Bold.ttf"}
+      italic:     {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-Italic.ttf"}
+      bolditalic: {url: "https://raw.githubusercontent.com/nicoverbruggen/ebook-fonts/main/fonts/core/Libron-BoldItalic.ttf"}
+
   - name: Literata
     description: "Screen-optimized serif (Latin, Greek, Cyrillic)"
     scripts: [latin, cyrillic, greek]
@@ -69,6 +81,17 @@ families:
       bold:       {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-Bold.ttf"}
       italic:     {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-It.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-BoldIt.ttf"}
+
+  - name: NotoSerif
+    description: "Former built-in serif (Latin, Cyrillic)"
+    scripts: [latin, cyrillic]
+    intervals: builtin,(0x018F-0x018F),(0x0259-0x0259)
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular:    {path: "builtinFonts/source/NotoSerif/NotoSerif-Regular.ttf"}
+      bold:       {path: "builtinFonts/source/NotoSerif/NotoSerif-Bold.ttf"}
+      italic:     {path: "builtinFonts/source/NotoSerif/NotoSerif-Italic.ttf"}
+      bolditalic: {path: "builtinFonts/source/NotoSerif/NotoSerif-BoldItalic.ttf"}
 
   - name: NotoSerifExtended
     description: "Serif (Latin, Greek, Cyrillic)"
@@ -401,3 +424,17 @@ families:
     styles:
       regular: {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-SemiBold.otf"}
       bold:    {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Bold.otf"}
+
+  # ── Japanese ───────────────────────────────────────────────────────────
+  # Subset Japanese fonts cover the kanji block with gaps, which splits it
+  # into more than the 4096 intervals SdCardFont accepts. Noto Sans CJK JP
+  # covers the whole block and converts to 107 per style.
+
+  - name: NotoSansCJKJP
+    description: "Japanese sans-serif with full kanji coverage (Kanji, Kana, Latin)"
+    scripts: [cjk]
+    intervals: cjk,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Sans/OTF/Japanese/NotoSansCJKjp-Bold.otf"}

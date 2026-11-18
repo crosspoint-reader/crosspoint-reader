@@ -24,12 +24,11 @@ class IntervalSelectionActivity final : public Activity, private UiAppHost {
   bool isReaderActivity() const override { return readerActivity; }
 
  private:
-  // The UiAppHost app hosts the shared slider dialog (drag slider, -/+ zones,
-  // touch Cancel/OK); the title stays on the legacy draw.
+  // The UiAppHost app hosts the shared slider dialog popup (capsule slider,
+  // [-] [+] [Confirm] buttons) drawn over the screen underneath.
   static void intervalScreen(UiScreen& screen, void* user);
   static void onSliderEvent(const freeink::ui::ActionEvent& event, void* user);
   static void onStepEvent(const freeink::ui::ActionEvent& event, void* user);
-  static void onCancelEvent(const freeink::ui::ActionEvent& event, void* user);
   static void onOkEvent(const freeink::ui::ActionEvent& event, void* user);
   void buildIntervalScreen(UiScreen& screen);
 

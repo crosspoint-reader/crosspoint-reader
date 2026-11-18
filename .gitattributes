@@ -1,0 +1,2 @@
+# Preserve the original whitespace in copied license texts.
+licenses/*.txt -whitespace

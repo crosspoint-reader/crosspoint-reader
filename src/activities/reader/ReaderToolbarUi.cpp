@@ -38,6 +38,8 @@ constexpr int kToolCount = 3;
 constexpr int kPanelHeightPercent = 62;
 // Cap the sheet may grow to when rounding the list area up to a whole row.
 constexpr int kPanelHeightMaxPercent = 72;
+// Landscape has less vertical room; leave a narrow page strip for tap-to-dismiss.
+constexpr int kLandscapePanelHeightPercent = 88;
 }  // namespace
 
 ReaderToolbarUi::ReaderToolbarUi(GfxRenderer& renderer) : UiAppHost(renderer) {}
@@ -229,18 +231,22 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   const int16_t titleH = screen.target().lineHeight(tokens.titleText.font);
   const int16_t rowH =
       model_.denseRows ? static_cast<int16_t>(UITheme::getInstance().getMetrics().listRowHeight) : tokens.rowHeight;
-  const int16_t rowStride = static_cast<int16_t>(rowH + tokens.listRowGap);
+  const int16_t rowGap = model_.denseRows ? tokens.listRowGap : std::max(tokens.listRowGap, tokens.listTouchRowGap);
+  const int16_t rowStride = static_cast<int16_t>(rowH + rowGap);
   const int16_t grabberBand =
       static_cast<int16_t>(sheetProps.grabberMargin + sheetProps.grabberHeight + sheetProps.grabberInset);
-  const int16_t chrome = static_cast<int16_t>(grabberBand + titleH + tokens.spaceMd + tokens.spaceSm +
-                                              std::max(0, model_.bottomReserve) + kToolRowH + tokens.spaceSm);
-  const int16_t target = static_cast<int16_t>((safe.height * kPanelHeightPercent) / 100);
-  const int16_t cap = static_cast<int16_t>((safe.height * kPanelHeightMaxPercent) / 100);
-  int sheetRows = (target - chrome + tokens.listRowGap) / rowStride;
-  if (static_cast<int16_t>(chrome + (sheetRows + 1) * rowStride - tokens.listRowGap) <= cap) ++sheetRows;
+  const int16_t chrome =
+      static_cast<int16_t>(grabberBand + titleH + tokens.spaceMd + tokens.spaceSm + kToolRowH + tokens.spaceSm);
+  const bool landscape = safe.width > safe.height;
+  const int16_t target =
+      static_cast<int16_t>((safe.height * (landscape ? kLandscapePanelHeightPercent : kPanelHeightPercent)) / 100);
+  const int16_t cap =
+      static_cast<int16_t>((safe.height * (landscape ? kLandscapePanelHeightPercent : kPanelHeightMaxPercent)) / 100);
+  int sheetRows = (target - chrome + rowGap) / rowStride;
+  if (static_cast<int16_t>(chrome + (sheetRows + 1) * rowStride - rowGap) <= cap) ++sheetRows;
   if (model_.itemCount > 0 && sheetRows > model_.itemCount) sheetRows = model_.itemCount;
   if (sheetRows < 1) sheetRows = 1;
-  screen.sheet(sheetProps, static_cast<int16_t>(chrome + sheetRows * rowStride - tokens.listRowGap));
+  screen.sheet(sheetProps, static_cast<int16_t>(chrome + sheetRows * rowStride - rowGap));
   // No blanket side inset: Screen::list() draws in the content band, and the
   // scroll track must reach the sheet's edge like a full-screen list's does.
   // The title insets itself; the rows inset via rowInset below.
@@ -256,9 +262,8 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
     pageIndicatorRect_ = line;
   }
 
-  // Switcher row along the sheet's bottom edge (above the button-hint row on
-  // button boards); the list takes what is left.
-  screen.spacer(static_cast<int16_t>(tokens.spaceSm + std::max(0, model_.bottomReserve)), fui::LayoutAnchor::Bottom);
+  // Switcher row along the sheet's bottom edge; the list takes what is left.
+  screen.spacer(tokens.spaceSm, fui::LayoutAnchor::Bottom);
   buildToolRow(screen, fui::LayoutAnchor::Bottom, tokens.spaceLg);  // full-width band
   screen.spacer(tokens.spaceSm, fui::LayoutAnchor::Bottom);
 
@@ -266,11 +271,13 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   listProps_.action = ACTION_ROW;
   listProps_.inputMask = fui::InputTouch;  // physical buttons stay with the reader
   listProps_.rowHeight = rowH;
-  // The label column starts flush with the panel title (no list-side padding
-  // on top of the sheet's own inset). Body-size text: small reads condensed
-  // and the taller row doubles as the tap target.
+  listProps_.rowGap = rowGap;
+  listProps_.toggleCheckbox = true;
+  listProps_.toggleWidth = 28;
+  listProps_.toggleHeight = 28;
+  // Keep labels and values inside the theme's selection shape.
   listProps_.labelText = tokens.bodyText;
-  listProps_.sidePadding = 0;
+  listProps_.sidePadding = tokens.listSidePadding;
   // The list band spans the sheet's full width -- the scroll track hugs the
   // panel edge (theme bezel inset included) exactly like a full-screen list.
   // rowInset pulls the rows back to the title's spaceLg alignment.
@@ -283,7 +290,7 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   nav_.selected = std::clamp(model_.selectedIndex, -1, count - 1);
   nav_.followOnBuild = nav_.selected >= 0;
   nav_.followPending = false;
-  nav_.syncToProps(listRect, listProps_.rowHeight, tokens.listRowGap, count, listProps_);
+  nav_.syncToProps(listRect, listProps_.rowHeight, rowGap, count, listProps_);
 
   // Materialise only the visible window of rows.
   const int windowCount = std::min({nav_.visibleRows, count - nav_.top, kMaxWindow});
@@ -294,6 +301,7 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
     fui::ListItem item;
     item.label = windowLabels_[i].c_str();
     item.value = windowValues_[i].empty() ? nullptr : windowValues_[i].c_str();
+    if (model_.rowCheckbox) model_.rowCheckbox(model_.rowCheckboxContext, index, item);
     item.actionValue = static_cast<int16_t>(index);
     windowItems_[i] = item;
   }
@@ -310,7 +318,11 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   const int totalPages = pageRows > 0 ? (count + pageRows - 1) / pageRows : 0;
   if (totalPages > 1) {
     char buf[16];
-    snprintf(buf, sizeof(buf), "%d/%d", nav_.top / pageRows + 1, totalPages);
+    // The viewport stops at count - pageRows so the last page stays full; a
+    // partly-advanced top is already the next page (7 rows, 5 per page: top 2
+    // is page 2/2, not 1/2).
+    const int page = std::min(totalPages, (nav_.top + pageRows - 1) / pageRows + 1);
+    snprintf(buf, sizeof(buf), "%d/%d", page, totalPages);
     fui::TextStyle pageStyle = tokens.smallText;
     pageStyle.align = fui::TextAlign::Right;
     screen.target().text(pageIndicatorRect_, buf, pageStyle);

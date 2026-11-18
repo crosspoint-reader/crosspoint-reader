@@ -4,13 +4,37 @@ import sys
 from pathlib import Path
 
 
+COMPONENT_OPTIONS = ("custom_component_add", "custom_component_remove")
+
+
 def cache_matches(requested, cached_request):
     return bool(requested.strip()) and requested.strip() == cached_request.strip()
+
+
+def build_cache_request(requested, memory_fingerprint, component_options):
+    # Component changes apply only while the core is rebuilt, so they are part of the key.
+    if not requested.strip():
+        return ""
+    # One entry per line, as pioarduino parses these options.
+    components = "".join(
+        f"\n{name}=" + ",".join(line.strip() for line in value.splitlines() if line.strip())
+        for name, value in component_options
+        if value.strip()
+    )
+    return requested.strip() + memory_fingerprint + components
 
 
 if "--self-test" in sys.argv:
     assert cache_matches("CONFIG_A=y\nCONFIG_B=n", "CONFIG_A=y\nCONFIG_B=n")
     assert not cache_matches("CONFIG_A=y", "CONFIG_A=y\nCONFIG_B=n")
+    def removing(value, requested="CONFIG_A=y"):
+        return build_cache_request(requested, "fp", [("custom_component_remove", value)])
+
+    assert removing("") == "CONFIG_A=yfp"
+    assert removing("a/b", requested="") == ""
+    assert removing("\n  a/b\n") == removing("a/b")
+    assert removing("a/b") != removing("a/b\nc/d")
+    assert removing("a/b\nc/d") != removing("a/b c/d")
     raise SystemExit(0)
 
 
@@ -47,7 +71,11 @@ components = importlib.util.module_from_spec(component_spec)
 component_spec.loader.exec_module(components)
 fingerprint_fn = getattr(components, "board_memory_fingerprint", None)
 memory_fingerprint = fingerprint_fn(env, board) if fingerprint_fn else ""
-cache_request = requested.strip() + memory_fingerprint if requested.strip() else ""
+cache_request = build_cache_request(
+    requested,
+    memory_fingerprint,
+    [(name, env.GetProjectOption(name, "")) for name in COMPONENT_OPTIONS],
+)
 framework_libs = Path(platform.get_package_dir("framework-arduinoespressif32-libs"))
 target_sdkconfig = framework_libs / chip_variant / "sdkconfig"
 original_sdkconfig = framework_libs / chip_variant / "sdkconfig.orig"

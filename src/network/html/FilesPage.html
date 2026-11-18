@@ -4,55 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Files - CrossPoint Reader</title>
-  <script src="/js/jszip.min.js"></script>
   <style>
-    :root {
-      --font-color: #333;
-      --bg: #f5f5f5;
-      --title-color: #2c3e50;
-      --card-bg: #FFF;
-      --label-color: #7f8c8d;
-      --border-color: #eee;
-      --accent-color: rgb(110, 154, 130);
-      --accent-color-10: rgba(110, 154, 130, 0.1);
-      --accent-hover-color: #5a8c73;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --font-color: #f5f5f5;
-        --bg: #333;
-        --title-color: #ecf0f1;
-        --card-bg: #444;
-        --label-color: #bdc3c7;
-        --border-color: #555;
-        color-scheme: dark;
-      }
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-      Oxygen, Ubuntu, sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: var(--bg);
-      color: var(--font-color);
-    }
-    h1 {
-      color: var(--title-color);
-      border-bottom: 2px solid var(--accent-color);
-      padding-bottom: 10px;
-    }
-    h2 {
-      color: var(--title-color);
-      margin: 0;
-    }
-    .card {
-      background: var(--card-bg);
-      border-radius: 8px;
-      padding: 20px;
-      margin: 15px 0;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
     .page-header {
       display: flex;
       justify-content: space-between;
@@ -67,9 +19,15 @@
       gap: 12px;
       flex-wrap: wrap;
     }
+    .web-ui .page-header-left h2,
+    .web-ui .contents-header h2 {
+      margin: 0;
+    }
     .breadcrumb-inline {
       color: var(--label-color);
-      font-size: 1.1em;
+      font-size: 1em;
+      font-family: Georgia, serif;
+      font-weight: 400;
     }
     .breadcrumb-inline a {
       color: var(--accent-color);
@@ -84,93 +42,43 @@
     }
     .breadcrumb-inline .current {
       color: var(--title-color);
-      font-weight: 600;
-    }
-    .nav-links {
-      margin: 20px 0;
-      display: flex;
-      gap: 10px;
-    }
-    .nav-links a {
-      padding: 10px 20px;
-      color: var(--font-color);
-      text-decoration: none;
-      border-radius: 4px;
-    }
-    .nav-links a.active {
-      background-color: var(--accent-color);
-      color: white;
-    }
-    .nav-links a:not(.active):hover {
-      background-color: var(--accent-hover-color);
-      color: white;
     }
     /* Action buttons */
     .action-buttons {
       display: flex;
       gap: 10px;
     }
-    .action-btn {
-      color: white;
-      padding: 10px 16px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.95em;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .upload-action-btn {
-      background-color: #27ae60;
-    }
-    .upload-action-btn:hover {
-      background-color: #219a52;
-    }
-    .folder-action-btn {
-      background-color: #f39c12;
-    }
-    .folder-action-btn:hover {
-      background-color: #d68910;
-    }
-    .delete-action-btn {
-      background-color: #e74c3c;
-    }
-    .delete-action-btn:hover {
-      background-color: #c0392b;
-    }
     /* Upload modal */
     .modal-overlay {
-      display: none;
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 200;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
+      margin: auto;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      overflow: visible;
       justify-content: center;
       align-items: center;
     }
-    .modal-overlay.open {
+    .modal-overlay[open] {
       display: flex;
     }
     .modal {
-      background: var(--card-bg);
-      border-radius: 8px;
-      padding: 25px;
       max-width: 450px;
-      width: 90%;
-      max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      width: min(450px, calc(100vw - 24px));
     }
     .modal.picker-mode {
       max-width: 920px;
+      width: min(920px, calc(100vw - 24px));
     }
     .modal.image-preview-mode {
       max-width: 640px;
+      width: min(640px, calc(100vw - 24px));
     }
     .image-preview-stage {
       display: flex;
@@ -187,7 +95,6 @@
     }
     #imagePreviewDownload {
       display: inline-block;
-      width: auto;
       text-decoration: none;
     }
     .picker-columns.picker-active {
@@ -220,28 +127,11 @@
         max-height: 40vh;
       }
     }
-    .modal h3 {
-      margin: 0 0 15px 0;
-      color: var(--title-color);
-    }
-    .modal-close {
-      float: right;
-      background: none;
-      border: none;
-      font-size: 1.5em;
-      cursor: pointer;
-      color: var(--label-color);
-      line-height: 1;
-      transition: opacity 0.15s;
-    }
-    .modal-close:hover {
-      color: var(--title-color);
-    }
     .modal-close.disabled {
       opacity: 0.3;
       cursor: not-allowed;
     }
-    .modal-close.disabled:hover {
+    .web-ui .modal-close.disabled:hover {
       color: var(--label-color);
     }
     .file-table {
@@ -254,28 +144,8 @@
       text-align: left;
       border-bottom: 1px solid var(--border-color);
     }
-    .file-table th {
-      font-weight: 600;
-      color: var(--label-color);
-    }
     .file-table tr:hover {
       background-color: var(--accent-color-10);
-    }
-    .epub-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      background-color: #27ae60;
-      color: white;
-      border-radius: 10px;
-      font-size: 0.75em;
-    }
-    .folder-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      background-color: #f39c12;
-      color: white;
-      border-radius: 10px;
-      font-size: 0.75em;
     }
     .file-icon {
       margin-right: 8px;
@@ -292,25 +162,12 @@
       color: var(--accent-hover-color);
       text-decoration: underline;
     }
-    .upload-form {
-      margin-bottom: 10px;
-    }
     .upload-form input[type="file"] {
       margin: 10px 0;
       width: 100%;
     }
     .upload-form input[type="file"]::file-selector-button {
-      background-color: #27ae60;
-      color: white;
-      border: none;
-      padding: 6px 14px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.9em;
       margin-right: 8px;
-    }
-    .upload-form input[type="file"].has-files::file-selector-button {
-      background-color: #95a5a6;
     }
     .drop-zone {
       border: 2px dashed var(--border-color);
@@ -333,30 +190,6 @@
     .drop-zone.dragover .drop-zone-hint {
       color: var(--accent-color);
     }
-    .upload-btn {
-      background-color: #27ae60;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-      margin-top: 12px;
-    }
-    .upload-btn:hover {
-      background-color: #219a52;
-    }
-    .upload-btn.optimize {
-      background-color: #9b59b6;
-    }
-    .upload-btn.optimize:hover {
-      background-color: #8e44ad;
-    }
-    .upload-btn:disabled {
-      background-color: #95a5a6;
-      cursor: not-allowed;
-    }
     /* Convert options */
     .convert-options {
       margin-bottom: 10px;
@@ -377,36 +210,19 @@
       cursor: pointer;
       outline: none;
     }
-    .convert-checkbox input[type="checkbox"]:focus {
-      outline: none;
-      box-shadow: none;
-    }
     .convert-warning {
       font-size: 0.85em;
-      color: #d68910;
-      background-color: rgba(214, 137, 16, 0.1);
-      border: 1px solid #d68910;
-      border-radius: 4px;
       padding: 8px 12px;
       margin-top: 8px;
       margin-bottom: 12px;
       line-height: 1.4;
       text-align: center;
     }
-    .convert-info {
-      font-size: 0.85em;
-      color: var(--label-color);
-      margin-top: 8px;
-      line-height: 1.4;
-    }
     .convert-settings {
       font-size: 0.8em;
       color: var(--label-color);
       margin-top: 6px;
       padding-left: 26px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
     }
     .convert-settings span {
       display: inline-block;
@@ -417,9 +233,6 @@
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-    }
-    .convert-separator {
-      display: none; /* Hidden, using space-between instead */
     }
     .advanced-options-toggle {
       display: flex;
@@ -434,10 +247,9 @@
     .advanced-options-toggle:hover {
       color: var(--accent-color);
     }
-    /* Disable hover when disabled (opacity < 1) */
-    .advanced-options-toggle[style*="opacity: 0.3"]:hover,
-    .advanced-options-toggle[style*="opacity: 0.5"]:hover {
-      color: var(--label-color);
+    .advanced-options-toggle.disabled {
+      opacity: 0.5;
+      pointer-events: none;
     }
     .advanced-options-text {
       font-weight: 500;
@@ -485,127 +297,42 @@
       align-items: flex-end;
       gap: 8px;
     }
-    .setting-row-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
     .setting-title {
       font-size: 0.85em;
       color: var(--title-color);
       font-weight: 500;
     }
-    .setting-value {
-      font-size: 0.8em;
-      color: var(--accent-color);
-      font-weight: 600;
-    }
     /* Quality Slider */
-    .quality-slider-container {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    .quality-slider {
-      flex: 1;
-      height: 6px;
-      border-radius: 3px;
-      background: var(--border-color);
-      -webkit-appearance: none;
-      appearance: none;
-      cursor: pointer;
-    }
-    .quality-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: var(--accent-color);
-      cursor: pointer;
-    }
-    .quality-slider::-moz-range-thumb {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: var(--accent-color);
-      border: none;
-      cursor: pointer;
-    }
-    .quality-input-wrapper {
-      display: flex;
-      align-items: center;
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      padding: 4px 8px;
-    }
-    .quality-input {
-      width: 40px;
-      border: none;
-      background: transparent;
-      text-align: center;
-      font-size: 0.85em;
-      color: var(--title-color);
-      font-weight: 600;
-    }
-    .quality-input:focus {
-      outline: none;
-    }
-    .quality-unit {
-      font-size: 0.75em;
-      color: var(--label-color);
-    }
-    .quality-slider-container-inline {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex: 1;
-      max-width: 180px;
-      min-width: 0;
-    }
-    .quality-slider-container-inline .quality-slider {
-      flex: 1;
-      min-width: 50px;
-    }
-    .quality-slider-container-inline .quality-input-wrapper {
-      padding: 2px 4px;
-      flex-shrink: 0;
-    }
-    .quality-slider-container-inline .quality-input {
-      width: 32px;
-      font-size: 0.8em;
-    }
     /* Quality Presets - Compact Single Row */
-    .quality-presets {
+    .quality-presets,
+    .rotation-buttons,
+    .overlap-selector {
       display: flex;
       gap: 0;
       background: var(--border-color);
       border-radius: 6px;
       padding: 3px;
+    }
+    .quality-presets {
       width: fit-content;
     }
-    .quality-preset {
-      padding: 6px 14px;
+    .quality-preset,
+    .rotation-btn,
+    .overlap-btn {
       background: transparent;
-      border: none;
-      border-radius: 4px;
-      font-size: 0.75em;
-      font-weight: 500;
       color: var(--label-color);
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
     }
-    .quality-preset:hover {
+    .quality-preset:hover,
+    .rotation-btn:hover,
+    .overlap-btn:hover {
       background: var(--accent-color-10);
       color: var(--accent-color);
     }
-    .quality-preset.active {
+    .quality-preset.active,
+    .rotation-btn.active,
+    .overlap-btn.active {
       background: var(--accent-color);
-      color: white;
+      color: var(--button-text);
       box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
     /* Toggle Switch */
@@ -614,42 +341,6 @@
       align-items: center;
       justify-content: space-between;
     }
-    .toggle-switch {
-      position: relative;
-      width: 44px;
-      height: 24px;
-      flex-shrink: 0;
-    }
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-    .toggle-slider {
-      position: absolute;
-      cursor: pointer;
-      inset: 0;
-      background: var(--border-color);
-      border-radius: 24px;
-      transition: 0.2s;
-    }
-    .toggle-slider:before {
-      position: absolute;
-      content: "";
-      height: 18px;
-      width: 18px;
-      left: 3px;
-      bottom: 3px;
-      background: white;
-      border-radius: 50%;
-      transition: 0.2s;
-    }
-    .toggle-switch input:checked + .toggle-slider {
-      background: var(--accent-color);
-    }
-    .toggle-switch input:checked + .toggle-slider:before {
-      transform: translateX(20px);
-    }
     .setting-desc {
       font-size: 0.75em;
       color: var(--label-color);
@@ -657,69 +348,10 @@
       line-height: 1.3;
     }
     /* Rotation Buttons */
-    .rotation-buttons {
-      display: flex;
-      gap: 0;
-      background: var(--border-color);
-      border-radius: 6px;
-      padding: 3px;
-    }
-    .rotation-btn {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 6px 14px;
-      background: transparent;
-      border: none;
-      border-radius: 4px;
-      font-size: 0.75em;
-      font-weight: 500;
-      color: var(--label-color);
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-    .rotation-btn:hover {
-      background: var(--accent-color-10);
-      color: var(--accent-color);
-    }
-    .rotation-btn.active {
-      background: var(--accent-color);
-      color: white;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
     .rotation-btn .rot-icon {
       font-size: 1.1em;
     }
     /* Overlap Selector */
-    .overlap-selector {
-      display: flex;
-      gap: 0;
-      background: var(--border-color);
-      border-radius: 6px;
-      padding: 3px;
-    }
-    .overlap-btn {
-      padding: 6px 14px;
-      background: transparent;
-      border: none;
-      border-radius: 4px;
-      font-size: 0.75em;
-      font-weight: 500;
-      color: var(--label-color);
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-    .overlap-btn:hover {
-      background: var(--accent-color-10);
-      color: var(--accent-color);
-    }
-    .overlap-btn.active {
-      background: var(--accent-color);
-      color: white;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
     /* Image Picker Grid Styles */
     .image-picker-section {
       margin-top: 15px;
@@ -729,7 +361,9 @@
       max-height: 350px;
       overflow-y: auto;
     }
-    .image-picker-header {
+    .image-picker-header,
+    .failed-uploads-header,
+    .log-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -751,61 +385,44 @@
     }
     .image-item {
       position: relative;
-      border: 2px solid var(--border-color);
+      /* Set by the state classes below; also colours the badge. */
+      --state-color: var(--border-color);
+      border: 2px solid var(--state-color);
       border-radius: 6px;
       overflow: hidden;
       cursor: pointer;
       transition: all 0.2s;
-      background: var(--card-bg);
+      background: color-mix(in srgb, var(--state-color) 10%, var(--card-bg));
     }
     .image-item:hover {
-      border-color: var(--accent-color);
       transform: scale(1.02);
     }
-    .image-item.state-0 {
-      border-color: var(--border-color);
-    }
     .image-item.state-1 {
-      border-color: #3498db;
-      background: rgba(52, 152, 219, 0.1);
+      --state-color: var(--info-color);
     }
     .image-item.state-2 {
-      border-color: #e74c3c;
-      background: rgba(231, 76, 60, 0.1);
+      --state-color: var(--danger-color);
     }
     .image-item.state-3 {
-      border-color: #9b59b6;
-      background: rgba(155, 89, 182, 0.1);
+      --state-color: var(--secondary-color);
     }
     .image-item.crop-preview {
-      border-color: #16a085;
-      background: rgba(22, 160, 133, 0.1);
+      --state-color: var(--accent-hover-color);
     }
     .image-item.cover-locked {
-      border-color: #e67e22;
-      background: rgba(230, 126, 34, 0.1);
-      cursor: default;
-      opacity: 0.85;
-    }
-    .image-item.cover-locked:hover {
-      transform: none;
-      border-color: #e67e22;
-    }
-    .image-item.cover-locked .image-state-badge {
-      background: #e67e22;
+      --state-color: var(--warning-color);
     }
     .image-item.separator-locked {
-      border-color: #1abc9c;
-      background: rgba(26, 188, 156, 0.1);
+      --state-color: var(--accent-color);
+    }
+    .image-item.cover-locked,
+    .image-item.separator-locked {
       cursor: default;
       opacity: 0.85;
     }
+    .image-item.cover-locked:hover,
     .image-item.separator-locked:hover {
       transform: none;
-      border-color: #1abc9c;
-    }
-    .image-item.separator-locked .image-state-badge {
-      background: #1abc9c;
     }
     .image-item img {
       width: 100%;
@@ -813,6 +430,7 @@
       object-fit: contain;
       display: block;
       background: #fff;
+      transition: transform 0.2s ease;
     }
     .image-state-badge {
       position: absolute;
@@ -822,22 +440,11 @@
       border-radius: 4px;
       font-size: 0.65em;
       font-weight: 600;
-      color: white;
+      color: var(--button-text);
+      background: var(--state-color);
     }
     .state-0 .image-state-badge {
       background: var(--label-color);
-    }
-    .state-1 .image-state-badge {
-      background: #3498db;
-    }
-    .state-2 .image-state-badge {
-      background: #e74c3c;
-    }
-    .state-3 .image-state-badge {
-      background: #9b59b6;
-    }
-    .crop-preview .image-state-badge {
-      background: #16a085;
     }
     /* Preview Overlay (shown on hover) */
     .image-preview-overlay {
@@ -874,24 +481,19 @@
       border-radius: 2px;
     }
     .split-line.split-h {
-      background: linear-gradient(180deg, #3498db 0%, #2980b9 100%);
-      box-shadow: 0 0 6px rgba(0, 0, 0, 0.5), 0 0 2px rgba(52, 152, 219, 0.8);
+      background: linear-gradient(180deg, var(--info-color) 0%, var(--accent-hover-color) 100%);
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.5), 0 0 2px var(--info-color);
     }
     .split-line.split-v {
-      background: linear-gradient(180deg, #e74c3c 0%, #c0392b 100%);
-      box-shadow: 0 0 6px rgba(0, 0, 0, 0.5), 0 0 2px rgba(231, 76, 60, 0.8);
+      background: linear-gradient(180deg, var(--danger-color) 0%, var(--danger-hover) 100%);
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.5), 0 0 2px var(--danger-color);
     }
     /* Rotate image on hover for rotation states */
     .image-item.rotate-cw:hover img {
       transform: rotate(90deg) scale(0.75);
-      transition: transform 0.2s ease;
     }
     .image-item.rotate-ccw:hover img {
       transform: rotate(-90deg) scale(0.75);
-      transition: transform 0.2s ease;
-    }
-    .image-item img {
-      transition: transform 0.2s ease;
     }
     .image-name {
       font-size: 0.65em;
@@ -909,11 +511,12 @@
       margin: 10px 0;
       flex-wrap: wrap;
       padding: 8px 12px;
-      background: rgba(0,0,0,0.02);
+      background: var(--bg);
       border-radius: 6px;
       align-items: center;
     }
-    .legend-item {
+    .legend-item,
+    .legend-btn {
       display: flex;
       align-items: center;
       gap: 5px;
@@ -923,23 +526,16 @@
       opacity: 0.7;
     }
     .legend-btn {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      white-space: nowrap;
       padding: 4px 10px;
       border: 1px solid var(--btn-color);
       border-radius: 4px;
       background: transparent;
-      color: var(--text-color);
-      cursor: pointer;
-      transition: all 0.15s;
+      color: var(--font-color);
       font-size: inherit;
-      font-family: inherit;
     }
     .legend-btn:hover {
       background: var(--btn-color);
-      color: white;
+      color: var(--button-text);
     }
     .legend-btn .legend-color {
       background: var(--btn-color);
@@ -954,26 +550,20 @@
       font-size: 0.85em;
       margin: 8px 0;
     }
-    .no-files {
-      text-align: center;
-      color: #95a5a6;
-      padding: 40px;
-      font-style: italic;
-    }
     .message {
       padding: 15px;
       border-radius: 4px;
       margin: 15px 0;
     }
     .message.success {
-      background-color: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
+      background-color: var(--accent-color-10);
+      color: var(--accent-color);
+      border: 1px solid var(--border-color);
     }
     .message.error {
-      background-color: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
+      background-color: var(--danger-bg);
+      color: var(--danger-color);
+      border: 1px solid var(--danger-border);
     }
     .contents-header {
       display: flex;
@@ -992,18 +582,18 @@
     #progress-bar {
       width: 100%;
       height: 20px;
-      background-color: #e0e0e0;
+      background-color: var(--border-color);
       border-radius: 10px;
       overflow: hidden;
     }
     #progress-fill {
       height: 100%;
-      background-color: #27ae60;
+      background-color: var(--success-color);
       width: 0%;
       transition: width 0.3s;
     }
     #progress-fill.no-transition {
-      transition: none !important;
+      transition: none;
     }
     #progress-text {
       text-align: center;
@@ -1016,60 +606,21 @@
     }
     .folder-input {
       width: 100%;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 1em;
       margin-bottom: 10px;
-      box-sizing: border-box;
     }
-    .folder-btn {
-      background-color: #f39c12;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .folder-btn:hover {
-      background-color: #d68910;
-    }
-    .folder-btn:disabled {
-      background-color: #bdc3c7;
-      cursor: not-allowed;
+    .modal-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+      justify-content: flex-end;
     }
     /* Action button styles */
     .delete-btn,
     .rename-btn,
     .move-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
       font-size: 1.1em;
       padding: 4px 8px;
-      border-radius: 4px;
-      transition: all 0.15s;
-    }
-    .delete-btn {
-      color: #95a5a6;
-    }
-    .delete-btn:hover {
-      background-color: #fee;
-      color: #e74c3c;
-    }
-    .rename-btn {
-      color: #2980b9;
-    }
-    .rename-btn:hover {
-      background-color: #e8f4fd;
-    }
-    .move-btn {
-      color: #16a085;
-    }
-    .move-btn:hover {
-      background-color: #e6f7f4;
     }
     .actions-col {
       width: 140px;
@@ -1082,10 +633,14 @@
       gap: 6px;
     }
     /* Failed uploads banner */
-    .failed-uploads-banner {
-      background-color: #fff3cd;
-      border: 1px solid #ffc107;
+    .failed-uploads-banner,
+    .convert-warning {
+      background-color: var(--warning-bg);
+      border: 1px solid var(--warning-color);
       border-radius: 4px;
+      color: var(--warning-text);
+    }
+    .failed-uploads-banner {
       padding: 15px;
       margin-bottom: 15px;
       display: none;
@@ -1093,35 +648,24 @@
     .failed-uploads-banner.show {
       display: block;
     }
-    .failed-uploads-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-    }
     .failed-uploads-title {
       font-weight: 600;
-      color: #856404;
       margin: 0;
     }
     .dismiss-btn {
       background: none;
       border: none;
       font-size: 1.2em;
-      cursor: pointer;
-      color: #856404;
+      color: var(--warning-text);
       padding: 0;
       line-height: 1;
-    }
-    .dismiss-btn:hover {
-      color: #533f03;
     }
     .failed-file-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 8px 0;
-      border-bottom: 1px solid #ffe69c;
+      border-bottom: 1px solid var(--warning-border);
     }
     .failed-file-item:last-child {
       border-bottom: none;
@@ -1131,138 +675,24 @@
     }
     .failed-file-name {
       font-weight: 500;
-      color: #856404;
     }
     .failed-file-error {
       font-size: 0.85em;
-      color: #856404;
       opacity: 0.8;
     }
-    .retry-btn {
-      background-color: #ffc107;
-      color: #533f03;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.9em;
-      font-weight: 600;
-    }
-    .retry-btn:hover {
-      background-color: #e0a800;
-    }
     .retry-all-btn {
-      background-color: #ffc107;
-      color: #533f03;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.95em;
-      font-weight: 600;
       margin-top: 10px;
-    }
-    .retry-all-btn:hover {
-      background-color: #e0a800;
     }
     /* Delete modal */
     .delete-warning {
-      color: #e74c3c;
+      color: var(--danger-color);
       font-weight: 600;
       margin: 10px 0;
     }
-    .delete-item-name {
-      font-weight: 600;
-      color: var(--title-color);
-      word-break: break-all;
-    }
-    .delete-btn-confirm {
-      background-color: #e74c3c;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .delete-btn-confirm:hover {
-      background-color: #c0392b;
-    }
-    .delete-btn-cancel {
-      background-color: #95a5a6;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-      margin-top: 10px;
-    }
-    .delete-btn-cancel:hover {
-      background-color: var(--label-color);
-    }
-    .rename-btn-confirm {
-      background-color: #3498db;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .rename-btn-confirm:hover {
-      background-color: #2e86c1;
-    }
-    .move-btn-confirm {
-      background-color: #16a085;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 1em;
-      width: 100%;
-    }
-    .move-btn-confirm:hover {
-      background-color: #138d75;
-    }
-    .loader-container {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 20px 0;
-    }
-    .loader {
-      width: 48px;
-      height: 48px;
-      border: 5px solid #AAA;
-      border-bottom-color: transparent;
-      border-radius: 50%;
-      display: inline-block;
-      box-sizing: border-box;
-      animation: rotation 1s linear infinite;
-    }
-    @keyframes rotation {
-      from {
-        transform: rotate(0deg);
-      }
-      to {
-        transform: rotate(360deg);
-      }
-    }
     /* Mobile responsive styles */
-    @media (max-width: 600px) {
-      body {
-        padding: 10px;
-        font-size: 14px;
-      }
+    @media (max-width: 640px) {
       .card {
         line-break: anywhere;
-        padding: 12px;
-        margin: 10px 0;
       }
       .page-header {
         gap: 10px;
@@ -1272,39 +702,20 @@
       .page-header-left {
         gap: 8px;
       }
-      h1 {
-        font-size: 1.3em;
-      }
       .breadcrumb-inline {
         font-size: 0.95em;
       }
-      .nav-links a {
-        padding: 8px 12px;
-        margin-right: 6px;
-        font-size: 0.9em;
+      .modal-actions {
+        flex-direction: column-reverse;
       }
       .action-buttons {
         gap: 6px;
       }
-      .action-btn {
-        padding: 8px 10px;
-        font-size: 0.85em;
-      }
-      .file-table th,
       .file-table td {
-        padding: 8px 6px;
         font-size: 0.9em;
-      }
-      .file-table th {
-        font-size: 0.85em;
       }
       .file-icon {
         margin-right: 4px;
-      }
-      .epub-badge,
-      .folder-badge {
-        padding: 2px 5px;
-        font-size: 0.65em;
       }
       .contents-header {
         margin-bottom: 8px;
@@ -1313,15 +724,6 @@
       }
       .summary-inline {
         font-size: 0.8em;
-      }
-      .modal {
-        padding: 15px;
-      }
-      .modal h3 {
-        font-size: 1.1em;
-      }
-      .actions-col {
-        width: 120px;
       }
       .delete-btn,
       .rename-btn,
@@ -1332,27 +734,6 @@
       .action-icon-group {
         gap: 4px;
       }
-      .no-files {
-        padding: 20px;
-        font-size: 0.9em;
-      }
-      .handedness-btn {
-        padding: 6px 10px;
-      }
-      .handedness-buttons {
-        width: 100%;
-        justify-content: center;
-      }
-      .quality-slider-container-inline {
-        max-width: 215px;
-        gap: 4px;
-      }
-      .quality-slider-container-inline .quality-slider {
-        min-width: 40px;
-      }
-      .quality-slider-container-inline .quality-input {
-        width: 28px;
-      }
     }
     /* Enhanced Logging System Styles */
     .log-section {
@@ -1361,12 +742,6 @@
     }
     .log-section.visible {
       display: block;
-    }
-    .log-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
     }
     .log-title {
       font-weight: 600;
@@ -1395,13 +770,13 @@
       color: var(--accent-color);
     }
     .log-entry.error {
-      color: #e74c3c;
+      color: var(--danger-color);
     }
     .log-entry.warning {
-      color: #f39c12;
+      color: var(--warning-color);
     }
     .log-entry.info {
-      color: #3498db;
+      color: var(--accent-color);
     }
     .log-timestamp {
       color: var(--label-color);
@@ -1417,34 +792,24 @@
       text-transform: uppercase;
       min-width: 56px;
       text-align: center;
+      background: color-mix(in srgb, currentColor 15%, transparent);
     }
-    .log-tag.convert {
-      background: rgba(110, 154, 130, 0.15);
+    .log-tag.convert,
+    .log-tag.info {
       color: var(--accent-color);
     }
     .log-tag.split {
-      background: rgba(243, 156, 18, 0.15);
-      color: #f39c12;
+      color: var(--warning-color);
     }
-    .log-tag.fix {
-      background: rgba(39, 174, 96, 0.15);
-      color: #27ae60;
+    .log-tag.fix,
+    .log-tag.done {
+      color: var(--success-color);
     }
     .log-tag.skip {
-      background: rgba(127, 140, 141, 0.15);
-      color: #7f8c8d;
-    }
-    .log-tag.info {
-      background: rgba(52, 152, 219, 0.15);
-      color: #3498db;
+      color: var(--label-color);
     }
     .log-tag.error {
-      background: rgba(231, 76, 60, 0.15);
-      color: #e74c3c;
-    }
-    .log-tag.done {
-      background: rgba(39, 174, 96, 0.15);
-      color: #27ae60;
+      color: var(--danger-color);
     }
     .log-message {
       flex: 1;
@@ -1455,14 +820,14 @@
       font-size: 0.9em;
     }
     .log-summary {
-      background: rgba(110, 154, 130, 0.08);
+      background: color-mix(in srgb, var(--accent-color) 8%, transparent);
       border: 1px solid var(--border-color);
       border-radius: 6px;
       margin-top: 12px;
       overflow: hidden;
     }
     .log-summary-title {
-      background: rgba(110, 154, 130, 0.15);
+      background: color-mix(in srgb, var(--accent-color) 15%, transparent);
       padding: 8px 12px;
       font-weight: 600;
       font-size: 0.85em;
@@ -1493,39 +858,36 @@
       color: var(--accent-color);
     }
     .log-summary-table .saved {
-      color: #27ae60;
+      color: var(--success-color);
     }
     .log-summary-table .increased {
-      color: #f39c12;
+      color: var(--warning-color);
     }
   </style>
+  <link rel="stylesheet" href="/assets/web.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/crosspoint-icon.svg" />
 </head>
-<body>
-<h1>📚 CrossPoint Reader</h1>
+<body class="web-ui">
+<!--#include file="shared/Header.html.inc" -->
+<main class="page-content">
 
-<div class="nav-links">
-  <a href="/">Home</a>
-  <a href="/files" class="active">File Manager</a>
-  <a href="/settings">Settings</a>
-  <a href="/fonts">Fonts</a>
-</div>
 
 <div class="page-header">
   <div class="page-header-left">
-    <h2>📁 File Manager</h2>
+    <h2>File Manager</h2>
   </div>
 
   <div class="action-buttons">
-    <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
-    <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
-    <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
+    <button class="action-btn upload-action-btn" onclick="openUploadModal()"><svg class="icon"><use href="/assets/icons.svg#upload"></use></svg> Upload</button>
+    <button class="action-btn folder-action-btn" onclick="openFolderModal()"><svg class="icon"><use href="/assets/icons.svg#folder"></use></svg> New Folder</button>
+    <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()"><svg class="icon"><use href="/assets/icons.svg#trash"></use></svg> Delete Selected</button>
   </div>
 </div>
 
 <!-- Failed Uploads Banner -->
 <div class="failed-uploads-banner" id="failedUploadsBanner">
   <div class="failed-uploads-header">
-    <h3 class="failed-uploads-title">⚠️ Some files failed to upload</h3>
+    <h3 class="failed-uploads-title"><svg class="icon"><use href="/assets/icons.svg#warning"></use></svg> Some files failed to upload</h3>
     <button class="dismiss-btn" onclick="dismissFailedUploads()" title="Dismiss">&times;</button>
   </div>
   <div id="failedFilesList"></div>
@@ -1534,7 +896,7 @@
 
 <div class="card">
   <div class="contents-header">
-    <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
+    <h2 class="breadcrumb-inline" id="directory-breadcrumbs"></h2>
     <span class="summary-inline" id="folder-summary"></span>
   </div>
 
@@ -1545,17 +907,16 @@
   </div>
 </div>
 
-<div class="card">
-  <p style="text-align: center; color: #95a5a6; margin: 0;">
-    CrossPoint E-Reader • Open Source
-  </p>
-</div>
+<div id="plugin-container"></div>
+
+</main>
+<!--#include file="shared/Footer.html.inc" -->
 
 <!-- Upload Modal -->
-<div class="modal-overlay" id="uploadModal">
+<dialog class="modal-overlay" id="uploadModal" aria-labelledby="uploadModalTitle">
   <div class="modal">
-    <button class="modal-close" id="uploadModalClose" onclick="closeUploadModal()">&times;</button>
-    <h3>📤 Upload file</h3>
+    <button class="modal-close" aria-label="Close upload dialog" id="uploadModalClose" onclick="closeUploadModal()">&times;</button>
+    <h3 id="uploadModalTitle"><svg class="icon"><use href="/assets/icons.svg#upload"></use></svg> Upload file</h3>
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
       <div class="drop-zone" id="dropZone">
@@ -1569,7 +930,6 @@
               <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
               <span>Optimize EPUB</span>
             </label>
-            <span class="convert-separator">—</span>
             <span class="advanced-options-toggle" id="advancedOptionsToggle" onclick="toggleAdvancedOptions()">
               <span class="advanced-options-arrow" id="advancedOptionsArrow">▶</span>
               <span class="advanced-options-text">Advanced Mode</span>
@@ -1594,15 +954,15 @@
 
           <div class="convert-settings" id="convertSettings" style="display:block;">
             <span>⚫ True-Grayscale</span>
-          <span id="convertSizeSummary">📏 Max 480×800px</span>
-          <span>📦 85% JPEG</span>
-          <span>🔧 Fix SVG</span>
+          <span id="convertSizeSummary">Max 480×800px</span>
+          <span>85% JPEG</span>
+          <span>Fix SVG</span>
         </div>
         <!-- Advanced Settings Content -->
         <div class="advanced-settings-content" id="advancedSettingsContent">
           <!-- JPEG Quality -->
           <div class="advanced-setting-row quality-row">
-            <div class="setting-title">📦 JPEG Quality</div>
+            <div class="setting-title">JPEG Quality</div>
             <div class="quality-presets">
               <button class="quality-preset" data-value="30" onclick="setQualityPreset(30)" title="Minimum quality">30%</button>
               <button class="quality-preset" data-value="45" onclick="setQualityPreset(45)" title="Low quality">45%</button>
@@ -1644,7 +1004,7 @@
           </div>
           <!-- Target Device -->
           <div class="advanced-setting-row" id="deviceSettingRow">
-            <div class="setting-title">📱 Target Device</div>
+            <div class="setting-title">Target Device</div>
             <div class="setting-controls">
               <div class="rotation-buttons">
                 <button class="rotation-btn device-btn active" data-value="auto" onclick="setDeviceTarget('auto')">
@@ -1671,7 +1031,7 @@
           </div>
           <!-- Overlap Settings -->
           <div class="advanced-setting-row" id="overlapSettingRow">
-            <div class="setting-title">📐 Min Overlap</div>
+            <div class="setting-title">Min Overlap</div>
             <div class="setting-controls">
               <div class="overlap-selector">
                 <button class="overlap-btn active" data-value="5" onclick="setOverlap(5)">5%</button>
@@ -1683,7 +1043,7 @@
           <!-- Conversion Log Export -->
           <div class="advanced-setting-row">
             <div class="setting-label">
-              <div class="setting-title">📥 Auto-download Log</div>
+              <div class="setting-title">Auto-download Log</div>
               <div class="setting-desc">Export detailed log with statistics</div>
             </div>
             <div class="setting-controls">
@@ -1710,31 +1070,31 @@
       <!-- Image Picker Section - in picker-columns for two-column layout -->
       <div class="image-picker-section" id="imagePickerSection" style="display:none;">
         <div class="image-picker-header">
-          <span class="image-picker-title">🖼️ Image Processing Options</span>
+          <span class="image-picker-title">Image Processing Options</span>
           <span class="image-picker-count" id="imagePickerCount">0 images</span>
         </div>
         <div class="state-legend">
           <div class="legend-item locked">
-            <span>🔒</span>
+            <svg class="icon"><use href="/assets/icons.svg#lock"></use></svg>
             <span>Cover</span>
           </div>
           <div class="legend-item locked">
-            <span style="color:#1abc9c">✦</span>
+            <span style="color:var(--accent-color)">✦</span>
             <span>Separator</span>
           </div>
           <button class="legend-btn" style="--btn-color:var(--label-color)" onclick="applyStateToAll(0)">
             <div class="legend-color"></div>
             <span>Normal</span>
           </button>
-          <button class="legend-btn" style="--btn-color:#3498db" onclick="applyStateToAll(1)">
+          <button class="legend-btn" style="--btn-color:var(--info-color)" onclick="applyStateToAll(1)">
             <div class="legend-color"></div>
             <span>H-Split</span>
           </button>
-          <button class="legend-btn" style="--btn-color:#e74c3c" onclick="applyStateToAll(2)">
+          <button class="legend-btn" style="--btn-color:var(--danger-color)" onclick="applyStateToAll(2)">
             <div class="legend-color"></div>
             <span>V-Split</span>
           </button>
-          <button class="legend-btn" style="--btn-color:#9b59b6" onclick="applyStateToAll(3)">
+          <button class="legend-btn" style="--btn-color:var(--secondary-color)" onclick="applyStateToAll(3)">
             <div class="legend-color"></div>
             <span>Rotate</span>
           </button>
@@ -1748,88 +1108,98 @@
         Please back up or disable sync before proceeding.
       </div>
       <!-- Optimize & Upload button - shown when picker is visible, replaces Upload -->
-      <button id="startConversionBtn" class="upload-btn optimize" style="display:none;" onclick="startConversionWithImageStates()">Optimize & Upload</button>
-      <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
-      <button class="delete-btn-cancel" onclick="handleCancelUploadModal()">Cancel</button>
+      <div class="modal-actions">
+        <button class="delete-btn-cancel" onclick="handleCancelUploadModal()">Cancel</button>
+        <button id="uploadBtn" class="upload-btn" onclick="uploadFile()" disabled>Upload</button>
+        <button id="startConversionBtn" class="upload-btn optimize" style="display:none;" onclick="startConversionWithImageStates()">Optimize & Upload</button>
+      </div>
       <div id="progress-container">
         <div id="progress-bar"><div id="progress-fill"></div></div>
         <div id="progress-text"></div>
       </div>
       <div class="log-section" id="log-section">
         <div class="log-header">
-          <div class="log-title">📋 Conversion Log</div>
+          <div class="log-title">Conversion Log</div>
         </div>
         <div class="log-container" id="log-container"></div>
       </div>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- New Folder Modal -->
-<div class="modal-overlay" id="folderModal">
+<dialog class="modal-overlay" id="folderModal" aria-labelledby="folderModalTitle">
   <div class="modal">
-    <button class="modal-close" onclick="closeFolderModal()">&times;</button>
-    <h3>📁 New Folder</h3>
+    <button class="modal-close" aria-label="Close folder dialog" onclick="closeFolderModal()">&times;</button>
+    <h3 id="folderModalTitle"><svg class="icon"><use href="/assets/icons.svg#folder"></use></svg> New Folder</h3>
     <div class="folder-form">
       <p class="file-info">Create a new folder in <strong id="folderPathDisplay"></strong></p>
       <input type="text" id="folderName" class="folder-input" placeholder="Folder name..." oninput="document.getElementById('createFolderBtn').disabled = !this.value.trim();">
-      <button class="folder-btn" id="createFolderBtn" onclick="createFolder()" disabled>Create Folder</button>
-      <button class="delete-btn-cancel" onclick="closeFolderModal()">Cancel</button>
+      <div class="modal-actions">
+        <button class="delete-btn-cancel" onclick="closeFolderModal()">Cancel</button>
+        <button class="folder-btn" id="createFolderBtn" onclick="createFolder()" disabled>Create Folder</button>
+      </div>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- Delete Confirmation Modal -->
-<div class="modal-overlay" id="deleteModal">
+<dialog class="modal-overlay" id="deleteModal" aria-labelledby="deleteModalTitle">
   <div class="modal">
-    <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
-    <h3>🗑️ Delete Item(s)</h3>
+    <button class="modal-close" aria-label="Close delete dialog" onclick="closeDeleteModal()">&times;</button>
+    <h3 id="deleteModalTitle"><svg class="icon"><use href="/assets/icons.svg#trash"></use></svg> Delete Item(s)</h3>
     <div class="folder-form">
-      <p class="delete-warning">⚠️ This action cannot be undone!</p>
+      <p class="delete-warning"><svg class="icon"><use href="/assets/icons.svg#warning"></use></svg> This action cannot be undone!</p>
       <p class="file-info">Are you sure you want to delete the following item(s)?</p>
       <div id="deleteItemList" style="max-height:240px; overflow:auto; margin-bottom:10px;"></div>
-      <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
-      <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+      <div class="modal-actions">
+        <button class="delete-btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+        <button class="delete-btn-confirm" onclick="confirmDelete()">Delete</button>
+      </div>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- Rename Modal -->
-<div class="modal-overlay" id="renameModal">
+<dialog class="modal-overlay" id="renameModal" aria-labelledby="renameModalTitle">
   <div class="modal">
-    <button class="modal-close" onclick="closeRenameModal()">&times;</button>
-    <h3>✏️ Rename File</h3>
+    <button class="modal-close" aria-label="Close rename dialog" onclick="closeRenameModal()">&times;</button>
+    <h3 id="renameModalTitle"><svg class="icon"><use href="/assets/icons.svg#edit"></use></svg> Rename File</h3>
     <div class="folder-form">
       <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
       <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
       <input type="hidden" id="renameItemPath">
-      <button class="rename-btn-confirm" onclick="confirmRename()">Rename</button>
-      <button class="delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
+      <div class="modal-actions">
+        <button class="delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
+        <button class="rename-btn-confirm" onclick="confirmRename()">Rename</button>
+      </div>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- Move Modal -->
-<div class="modal-overlay" id="moveModal">
+<dialog class="modal-overlay" id="moveModal" aria-labelledby="moveModalTitle">
   <div class="modal">
-    <button class="modal-close" onclick="closeMoveModal()">&times;</button>
-    <h3>📂 Move File</h3>
+    <button class="modal-close" aria-label="Close move dialog" onclick="closeMoveModal()">&times;</button>
+    <h3 id="moveModalTitle"><svg class="icon"><use href="/assets/icons.svg#move"></use></svg> Move File</h3>
     <div class="folder-form">
       <p class="file-info">Moving <strong id="moveItemName"></strong></p>
       <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
       <datalist id="moveFolderOptions"></datalist>
       <input type="hidden" id="moveItemPath">
-      <button class="move-btn-confirm" onclick="confirmMove()">Move</button>
-      <button class="delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
+      <div class="modal-actions">
+        <button class="delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
+        <button class="move-btn-confirm" onclick="confirmMove()">Move</button>
+      </div>
     </div>
   </div>
-</div>
+</dialog>
 
 <!-- Image Preview Modal -->
-<div class="modal-overlay" id="imagePreviewModal">
+<dialog class="modal-overlay" id="imagePreviewModal" aria-labelledby="imagePreviewModalTitle">
   <div class="modal image-preview-mode">
-    <button class="modal-close" onclick="closeImagePreview()">&times;</button>
-    <h3>🖼️ Preview</h3>
+    <button class="modal-close" aria-label="Close image preview dialog" onclick="closeImagePreview()">&times;</button>
+    <h3 id="imagePreviewModalTitle">Preview</h3>
     <div class="folder-form">
       <p class="file-info"><strong id="imagePreviewName"></strong></p>
       <div class="image-preview-stage">
@@ -1838,8 +1208,9 @@
       <a id="imagePreviewDownload" class="move-btn-confirm" rel="noopener noreferrer" target="_blank" href="#">Download</a>
     </div>
   </div>
-</div>
+</dialog>
 
+<script src="/js/plugin-host.js"></script>
 <script>
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
@@ -1899,12 +1270,15 @@
       document.body.appendChild(notification);
     }
 
+    clearTimeout(notification.hideTimer);
+    clearTimeout(notification.removeTimer);
+
     // Set styles based on type
     const styles = {
-      'success': 'background-color: #27ae60;',
-      'error': 'background-color: #e74c3c;',
-      'warning': 'background-color: #f39c12;',
-      'info': 'background-color: #3498db;'
+      'success': 'background-color: var(--button-bg); color: var(--button-text);',
+      'error': 'background-color: var(--danger-bg); color: var(--danger-color);',
+      'warning': 'background-color: var(--warning-bg); color: var(--warning-text);',
+      'info': 'background-color: var(--accent-color-10); color: var(--accent-color);'
     };
     notification.style.cssText += styles[type] || styles['info'];
     notification.textContent = message;
@@ -1914,15 +1288,19 @@
     notification.style.transform = 'translateX(0)';
 
     // Auto-hide after 5 seconds
-    setTimeout(() => {
+    notification.hideTimer = setTimeout(() => {
       notification.style.opacity = '0';
       notification.style.transform = 'translateX(100%)';
-      setTimeout(() => {
+      notification.removeTimer = setTimeout(() => {
         if (notification.parentNode) {
           notification.parentNode.removeChild(notification);
         }
       }, 300);
     }, 5000);
+  }
+
+  function fileIcon(name) {
+    return `<svg class="icon"><use href="/assets/icons.svg#${name}"></use></svg>`;
   }
 
   function formatFileSize(bytes) {
@@ -1937,19 +1315,27 @@
     // Fetch CrossPoint version
     fetchVersion();
 
-    // Close modals when clicking overlay - call proper cleanup functions
-    document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
-      overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) {
-          // Call the appropriate close function for each modal to ensure cleanup
-          if (overlay.id === 'uploadModal') return closeUploadModal();
-          if (overlay.id === 'folderModal') return closeFolderModal();
-          if (overlay.id === 'deleteModal') return closeDeleteModal();
-          if (overlay.id === 'renameModal') return closeRenameModal();
-          if (overlay.id === 'moveModal') return closeMoveModal();
-          if (overlay.id === 'imagePreviewModal') return closeImagePreview();
-          overlay.classList.remove('open');
-        }
+    // Load any SD-hosted plugins that mount on the File Manager page.
+    // File Manager plugins may use the page's JSZip (docs/sd-plugins.md).
+    // The host is a separate request; if it failed, the file list still loads.
+    if (typeof loadPlugins === 'function') loadPlugins('files', ensureJszip);
+
+    // Keep upload cleanup rules when a dialog is cancelled or its backdrop is clicked.
+    const closeModal = {
+      uploadModal: closeUploadModal,
+      folderModal: closeFolderModal,
+      deleteModal: closeDeleteModal,
+      renameModal: closeRenameModal,
+      moveModal: closeMoveModal,
+      imagePreviewModal: closeImagePreview
+    };
+    document.querySelectorAll('dialog.modal-overlay').forEach(function(modal) {
+      modal.addEventListener('cancel', function(event) {
+        event.preventDefault();
+        closeModal[modal.id]();
+      });
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) closeModal[modal.id]();
       });
     });
 
@@ -1981,9 +1367,9 @@
     };
 
     if (segments.length === 0) {
-      appendCurrent('🏠 Home');
+      appendCurrent('Home');
     } else {
-      appendLink('🏠 Home', '/files');
+      appendLink('Home', '/files');
       segments.forEach(function(segment, index) {
         appendSep();
         if (index === segments.length - 1) {
@@ -2004,7 +1390,7 @@
       files = await response.json();
     } catch (e) {
       console.error(e);
-      fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
+      fileTable.innerHTML = '<div class="empty-state">An error occurred while loading the files</div>';
       return;
     }
 
@@ -2018,15 +1404,18 @@
     const fileCount = files.length - folderCount;
     const folderLabel = folderCount === 1 ? 'folder' : 'folders';
     const fileLabel = fileCount === 1 ? 'file' : 'files';
-    document.getElementById('folder-summary').innerHTML = `${folderCount} ${folderLabel}, ${fileCount} ${fileLabel}, ${formatFileSize(totalSize)}`;
+    const summary = [];
+    if (folderCount) summary.push(`${folderCount} ${folderLabel}`);
+    if (fileCount) summary.push(`${fileCount} ${fileLabel}`, formatFileSize(totalSize));
+    document.getElementById('folder-summary').textContent = summary.join(', ');
 
     if (files.length === 0) {
-      fileTable.innerHTML = '<div class="no-files">This folder is empty</div>';
+      fileTable.innerHTML = '<div class="empty-state">This folder is empty</div>';
     } else {
-      let fileTableContent = '<table class="file-table">';
+      let fileTableContent = '<table class="file-table"><thead>';
 
 				// Add select-all checkbox column
-      fileTableContent += '<tr><th style="width:40px"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr>';
+      fileTableContent += '<tr><th style="width:40px"><label><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"><span class="select-all-label"> Select all</span></label></th><th>Name</th><th>Type</th><th>Size</th><th class="actions-col">Actions</th></tr></thead><tbody>';
 
 
       const sortedFiles = files.sort((a, b) => {
@@ -2047,10 +1436,10 @@
          // Checkbox cell + folder row
           fileTableContent += `<tr class="folder-row">`;
           fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(folderPath)}" data-name="${escapeHtml(file.name)}" data-type="folder"></td>`;
-          fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a></td>`;
-          fileTableContent += '<td><span class="folder-badge">FOLDER</span></td>';
+          fileTableContent += `<td><span class="file-icon"><svg class="icon"><use href="/assets/icons.svg#folder"></use></svg></span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a></td>`;
+          fileTableContent += '<td>FOLDER</td>';
           fileTableContent += '<td>-</td>';
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(folderPath)}" data-folder="true" title="Delete folder">🗑️</button></div></td>`;
+          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(folderPath)}" data-folder="true" title="Delete folder" aria-label="Delete folder"><svg class="icon"><use href="/assets/icons.svg#trash"></use></svg></button></div></td>`;
           fileTableContent += '</tr>';
         } else {
           let filePath = currentPath;
@@ -2061,25 +1450,25 @@
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
           fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
           const fileIsImage = isImageFile(file.name);
-          fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : (fileIsImage ? '🖼️' : '📄')}</span>`;
+          fileTableContent += `<td><span class="file-icon">${fileIcon(file.isEpub ? 'book' : (fileIsImage ? 'image' : 'file'))}</span>`;
           if (fileIsImage) {
             fileTableContent += `<a href="${downloadUrl(filePath)}" class="file-link image-preview-link">${escapeHtml(file.name)}</a>`;
           } else {
             fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="${downloadUrl(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
           }
           fileTableContent += '</td>';
-          fileTableContent += file.isEpub ? '<td><span class="epub-badge">EPUB</span></td>' : `<td>${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
+          fileTableContent += file.isEpub ? '<td>EPUB</td>' : `<td>${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
           fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
-          fileTableContent += `<button class="move-btn" data-action="move" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" title="Move file">📂</button>`;
-          fileTableContent += `<button class="rename-btn" data-action="rename" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" title="Rename file">✏️</button>`;
-          fileTableContent += `<button class="delete-btn" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" data-folder="false" title="Delete file">🗑️</button>`;
+          fileTableContent += `<button class="move-btn" data-action="move" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" title="Move file" aria-label="Move file"><svg class="icon"><use href="/assets/icons.svg#move"></use></svg></button>`;
+          fileTableContent += `<button class="rename-btn" data-action="rename" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" title="Rename file" aria-label="Rename file"><svg class="icon"><use href="/assets/icons.svg#edit"></use></svg></button>`;
+          fileTableContent += `<button class="delete-btn" data-action="delete" data-name="${escapeHtml(file.name)}" data-path="${escapeHtml(filePath)}" data-folder="false" title="Delete file" aria-label="Delete file"><svg class="icon"><use href="/assets/icons.svg#trash"></use></svg></button>`;
           fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
         }
       });
 
-      fileTableContent += '</table>';
+      fileTableContent += '</tbody></table>';
       fileTable.innerHTML = fileTableContent;
     }
   }
@@ -2093,17 +1482,27 @@
     return `/download?path=${encodeURIComponent(filePath)}`;
   }
 
+  function openWebModal(id) {
+    const modal = document.getElementById(id);
+    if (!modal.open) modal.showModal();
+  }
+
+  function closeWebModal(id) {
+    const modal = document.getElementById(id);
+    if (modal.open) modal.close();
+  }
+
   function openImagePreview(url, name) {
     const img = document.getElementById('imagePreviewImg');
     document.getElementById('imagePreviewName').textContent = name;
     img.src = url;
     img.alt = name;
     document.getElementById('imagePreviewDownload').href = url;
-    document.getElementById('imagePreviewModal').classList.add('open');
+    openWebModal('imagePreviewModal');
   }
 
   function closeImagePreview() {
-    document.getElementById('imagePreviewModal').classList.remove('open');
+    closeWebModal('imagePreviewModal');
     // Clear src to free the decoded image and avoid showing the stale one on reopen.
     document.getElementById('imagePreviewImg').src = '';
   }
@@ -2125,8 +1524,8 @@
     const logContainer = document.getElementById('log-container');
     if (logContainer) logContainer.innerHTML = '';
 
-    document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
-    document.getElementById('uploadModal').classList.add('open');
+    document.getElementById('uploadPathDisplay').textContent = currentPath;
+    openWebModal('uploadModal');
   }
 
   function handleCancelUploadModal() {
@@ -2150,8 +1549,8 @@
     const progressFill = document.getElementById('progress-fill');
     const progressText = document.getElementById('progress-text');
     progressFill.style.width = '0%';
-    progressFill.style.backgroundColor = '#e74c3c';
-    progressText.style.color = '#e74c3c';
+    progressFill.style.backgroundColor = 'var(--danger-color)';
+    progressText.style.color = 'var(--danger-color)';
     progressText.textContent = 'Upload cancelled by User!';
     // Re-enable the action button (uploadBtn is always visible at this point;
     // its text is already "Upload" or "Optimize & Upload" depending on checkbox state)
@@ -2163,7 +1562,7 @@
     if (isUploadInProgress) {
       return;
     }
-    document.getElementById('uploadModal').classList.remove('open');
+    closeWebModal('uploadModal');
     const fileInput = document.getElementById('fileInput');
     fileInput.value = '';
     fileInput.classList.remove('has-files');
@@ -2198,8 +1597,7 @@
     document.getElementById('advancedOptionsArrow').classList.remove('expanded');
     const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
     if (advancedOptionsToggle) {
-      advancedOptionsToggle.style.opacity = '0.5';
-      advancedOptionsToggle.style.pointerEvents = 'none';
+      advancedOptionsToggle.classList.add('disabled');
     }
     applyUploadSettings();
   }
@@ -2235,8 +1633,7 @@
     // Disable/enable advanced mode toggle
     const advancedOptionsToggle = document.getElementById('advancedOptionsToggle');
     if (advancedOptionsToggle) {
-      advancedOptionsToggle.style.opacity = checked ? '1' : '0.5';
-      advancedOptionsToggle.style.pointerEvents = checked ? 'auto' : 'none';
+      advancedOptionsToggle.classList.toggle('disabled', !checked);
     }
     updateUploadSettingsPersistence();
   }
@@ -2289,7 +1686,7 @@
     // Update displays (if element exists)
     const qualityDisplay = document.getElementById('qualityDisplaySimple');
     if (qualityDisplay) {
-      qualityDisplay.textContent = '📦 ' + quality + '% JPEG';
+      qualityDisplay.textContent = quality + '% JPEG';
     }
 
     // Update converter variables (used by processImage and applyGrayscale)
@@ -2714,11 +2111,13 @@
    * Show image picker after EPUB file selection
    */
   async function showImagePicker(file) {
-    // Check if JSZip is available
-    if (typeof JSZip === 'undefined') {
-      console.error('JSZip not loaded');
-      alert('JSZip library not available. Conversion will proceed without image picker.');
-      startConversionWithImageStates();
+    try {
+      await ensureEpubTools();
+    } catch (e) {
+      // Nothing has started yet, so leave the normal upload button.
+      console.error('EPUB tools not loaded:', e);
+      showWebAlert('Image picker unavailable. Use the upload button to continue without it.');
+      clearImagePicker();
       return;
     }
 
@@ -2775,7 +2174,7 @@
 
     } catch (error) {
       console.error('Failed to extract images:', error);
-      alert('Failed to preview images: ' + error.message + '\n\nConversion will proceed normally.');
+      showWebAlert('Failed to preview images: ' + error.message + '\n\nConversion will proceed normally.');
       // Fallback: start conversion directly
       startConversionWithImageStates();
     }
@@ -2804,7 +2203,7 @@
         item.className = 'image-item cover-locked';
         item.title = `${img.width}×${img.height} - Cover image (locked)`;
         item.innerHTML = `
-          <span class="image-state-badge cover-badge">🔒</span>
+          <span class="image-state-badge cover-badge">${fileIcon('lock')}</span>
           <img src="${img.dataUrl}" alt="${img.name}" loading="lazy">
           <div class="image-name">${img.name}</div>
         `;
@@ -2968,6 +2367,11 @@
 
   // Initialize quality settings handlers
   document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('file-table').addEventListener('change', function(event) {
+      if (event.target.matches('.select-item')) {
+        event.target.closest('tr').classList.toggle('selected', event.target.checked);
+      }
+    });
     // Delegated so it survives file-table re-renders. Names and paths are
     // user-controlled text, so they travel as data attributes rather than
     // being interpolated into inline onclick strings.
@@ -2999,8 +2403,7 @@
     const advancedToggle = document.getElementById('advancedOptionsToggle');
     if (convertCheckbox && advancedToggle) {
       const isOptimizeEnabled = convertCheckbox.checked;
-      advancedToggle.style.opacity = isOptimizeEnabled ? '1' : '0.5';
-      advancedToggle.style.pointerEvents = isOptimizeEnabled ? 'auto' : 'none';
+      advancedToggle.classList.toggle('disabled', !isOptimizeEnabled);
     }
 
     if (qualitySlider && qualityInput) {
@@ -3038,15 +2441,15 @@
   });
 
   function openFolderModal() {
-    document.getElementById('folderPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
-    document.getElementById('folderModal').classList.add('open');
+    document.getElementById('folderPathDisplay').textContent = currentPath;
+    openWebModal('folderModal');
     document.getElementById('folderName').value = '';
     setTimeout(() => document.getElementById('folderName').focus(), 50);
     document.getElementById('folderName').onkeydown = (e) => { if (e.key === 'Enter' && e.target.value.trim()) createFolder(); };
   }
 
   function closeFolderModal() {
-    document.getElementById('folderModal').classList.remove('open');
+    closeWebModal('folderModal');
   }
 
   // Toggle select-all checkbox
@@ -3054,6 +2457,7 @@
     const checked = master.checked;
     document.querySelectorAll('.select-item').forEach(cb => {
       cb.checked = checked;
+      cb.closest('tr').classList.toggle('selected', checked);
     });
   }
 
@@ -3073,7 +2477,7 @@
   function openDeleteSelectedModal() {
     const items = getSelectedItems();
     if (items.length === 0) {
-      alert('Please select at least one item to delete.');
+      showWebAlert('Please select at least one item to delete.');
       return;
     }
     openDeleteModalForItems(items);
@@ -3093,14 +2497,14 @@
     items.forEach(it => {
       const div = document.createElement('div');
       div.style.marginBottom = '6px';
-      div.textContent = (it.isFolder ? '📁 ' : '📄 ') + it.path;
+      div.textContent = it.path;
       listEl.appendChild(div);
     });
-    document.getElementById('deleteModal').classList.add('open');
+    openWebModal('deleteModal');
   }
 
   function closeDeleteModal() {
-    document.getElementById('deleteModal').classList.remove('open');
+    closeWebModal('deleteModal');
   }
 
   function confirmDelete() {
@@ -3126,11 +2530,11 @@
         window.location.reload();
       } else {
         const text = await res.text();
-        alert('Failed to delete: ' + text);
+        showWebAlert('Failed to delete: ' + text);
         closeDeleteModal();
       }
     }).catch(() => {
-      alert('Failed to delete - network error');
+      showWebAlert('Failed to delete - network error');
       closeDeleteModal();
     });
   }
@@ -3313,14 +2717,6 @@ const DEFAULT_JPEG_QUALITY = 85;
 const DEFAULT_ENABLE_GRAYSCALE = true;
 const DEFAULT_ENABLE_AUTO_CROP = false;
 // Auto-crop is opt-in because sparse title/logo pages can be zoomed aggressively.
-const CROP_WHITE_THRESHOLD = 245;
-const CROP_BACKGROUND_TOLERANCE = 28;
-const CROP_BACKGROUND_MAX_SPREAD = 24;
-const CROP_EDGE_SAMPLE_SIZE = 12;
-const CROP_PADDING_PX = 8;
-const MIN_CROP_SAVINGS_RATIO = 0.08;
-const MIN_COLOR_CROP_SAVINGS_RATIO = 0.20;
-const MIN_CROP_DIMENSION = 240;
 // Note: Overlap is now always centered distribution (min 5%)
 
 // Dynamic conversion settings (updated by UI)
@@ -3453,7 +2849,7 @@ function applyDeviceTarget() {
 
   const summary = document.getElementById('convertSizeSummary');
   if (summary) {
-    summary.textContent = `📏 Max ${profile.width}×${profile.height}px`;
+    summary.textContent = `Max ${profile.width}×${profile.height}px`;
   }
   document.querySelectorAll('.device-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.value === DEVICE_TARGET);
@@ -3545,7 +2941,7 @@ function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize,
 
   // Get state label and color
   const stateLabels = ['', 'H-Split', 'V-Split', 'Rotate'];
-  const stateColors = ['', '#3498db', '#e74c3c', '#9b59b6'];
+  const stateColors = ['', 'var(--info-color)', 'var(--danger-color)', 'var(--secondary-color)'];
   const stateLabel = stateLabels[imageState] || '';
   const stateColor = stateColors[imageState] || '';
 
@@ -3560,7 +2956,7 @@ function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize,
         `${baseName}${p.suffix}.jpg (${p.width}×${p.height}, ${formatBytes(p.size)})`
       ).join(', ');
     }
-    const savedInfo = saved > 0 ? `, <span style="color:#27ae60">-${savedPct}%</span>` : '';
+    const savedInfo = saved > 0 ? `, <span style="color:var(--success-color)">-${savedPct}%</span>` : '';
     const stateIndicator = imageState > 0 ? ` <span style="color:${stateColor};font-weight:600;">[${stateLabel}]</span>` : '';
     log(`<strong>${escapeHtml(name)}</strong>${stateIndicator} <span class="log-detail">(${dims} ${origFormat.toUpperCase()}, ${formatBytes(origSize)}) → ${splitCount} parts${savedInfo}</span>`, '', 'SPLIT');
     if (partsDetail) {
@@ -3570,7 +2966,7 @@ function logImage(name, origW, origH, origFormat, origSize, newW, newH, newSize,
     conversionStats.images++;
     const stateIndicator = imageState > 0 ? ` <span style="color:${stateColor};font-weight:600;">[${stateLabel}]</span>` : '';
     const detail = saved > 0
-      ? `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(origSize)} → ${formatBytes(newSize)}, <span style="color:#27ae60">-${savedPct}%</span>)</span>`
+      ? `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(origSize)} → ${formatBytes(newSize)}, <span style="color:var(--success-color)">-${savedPct}%</span>)</span>`
       : `<span class="log-detail">(${dims} → ${newDims}, ${formatBytes(newSize)})</span>`;
     log(`<strong>${escapeHtml(name)}</strong>${stateIndicator} ${detail}`, '', 'CONVERT');
   }
@@ -3600,15 +2996,22 @@ function logSummary(originalSize, newSize, timeElapsed) {
   const savedPct = ((saved / originalSize) * 100).toFixed(1);
   const totalImages = conversionStats.images + conversionStats.splits;
   const totalOutput = conversionStats.images + conversionStats.splitParts;
+  // Inner parts are plain strings: rjsmin cannot minify nested template literals.
+  const splitNote = conversionStats.splitParts > conversionStats.splits
+    ? ' (+' + (conversionStats.splitParts - conversionStats.splits) + ' from splits)'
+    : '';
+  const errorRow = conversionStats.errors > 0
+    ? '<tr><td>Errors</td><td style="color:var(--danger-color)">' + conversionStats.errors + '</td></tr>'
+    : '';
 
   const summaryHtml = `
     <div class="log-summary">
-      <div class="log-summary-title">📊 Conversion Summary</div>
+      <div class="log-summary-title">Conversion Summary</div>
       <table class="log-summary-table">
         <tr><td>Images found</td><td class="highlight">${totalImages}</td></tr>
-        <tr><td>Images processed</td><td>${totalOutput}${conversionStats.splitParts > conversionStats.splits ? ` (+${conversionStats.splitParts - conversionStats.splits} from splits)` : ''}</td></tr>
+        <tr><td>Images processed</td><td>${totalOutput}${splitNote}</td></tr>
         <tr><td>EPUB repairs</td><td>${conversionStats.fixes > 0 ? conversionStats.fixes + ' fixes applied' : 'None needed'}</td></tr>
-        ${conversionStats.errors > 0 ? `<tr><td>Errors</td><td style="color:#e74c3c">${conversionStats.errors}</td></tr>` : ''}
+        ${errorRow}
         <tr><td>Original size</td><td>${formatBytes(originalSize)}</td></tr>
         <tr><td>Optimized size</td><td>${formatBytes(newSize)}</td></tr>
         <tr><td>Saved</td><td class="${saved > 0 ? 'saved' : 'increased'}">${saved > 0 ? formatBytes(saved) + ' (' + savedPct + '%)' : '+' + formatBytes(-saved)}</td></tr>
@@ -3688,7 +3091,7 @@ function finalizeBatchLog() {
     fileHeader.style.marginTop = index > 0 ? '15px' : '5px';
     fileHeader.style.borderTop = index > 0 ? '1px solid var(--border-color)' : 'none';
     fileHeader.style.paddingTop = index > 0 ? '10px' : '0';
-    fileHeader.innerHTML = `<span class="log-timestamp"></span><span class="log-message"><strong>${escapeHtml(fileLog.fileName)}</strong> — ${fileLog.succeeded ? '<span style="color:#27ae60">✓ Success</span>' : '<span style="color:#e74c3c">✗ Failed</span>'}</span>`;
+    fileHeader.innerHTML = `<span class="log-timestamp"></span><span class="log-message"><strong>${escapeHtml(fileLog.fileName)}</strong> — ${fileLog.succeeded ? '<span style="color:var(--success-color)">✓ Success</span>' : '<span style="color:var(--danger-color)">✗ Failed</span>'}</span>`;
     logContainer.appendChild(fileHeader);
 
     fileLog.entries.forEach(entry => {
@@ -3704,27 +3107,30 @@ function finalizeBatchLog() {
   const totalSavedPct = batchStats.totalOriginalSize > 0
     ? ((totalSaved / batchStats.totalOriginalSize) * 100).toFixed(1)
     : '0.0';
+  // Inner parts are plain strings: rjsmin cannot minify nested template literals.
+  const totalSavedText = totalSaved > 0
+    ? formatBytes(totalSaved) + ' (' + totalSavedPct + '%)'
+    : '+' + formatBytes(-totalSaved);
+  const totalErrorsRow = batchStats.totalErrors > 0
+    ? '<tr><td>Total errors</td><td style="color:var(--danger-color)">' + batchStats.totalErrors + '</td></tr>'
+    : '';
   const sizeRowsHtml = batchStats.totalOriginalSize > 0 ? `
         <tr><td>Total original</td><td>${formatBytes(batchStats.totalOriginalSize)}</td></tr>
         <tr><td>Total optimised</td><td>${formatBytes(batchStats.totalNewSize)}</td></tr>
-        <tr><td>Total saved</td><td class="${totalSaved > 0 ? 'saved' : 'increased'}">${
-          totalSaved > 0
-            ? `${formatBytes(totalSaved)} (${totalSavedPct}%)`
-            : `+${formatBytes(-totalSaved)}`
-        }</td></tr>` : '';
+        <tr><td>Total saved</td><td class="${totalSaved > 0 ? 'saved' : 'increased'}">${totalSavedText}</td></tr>` : '';
 
   // Add batch summary
   const batchSummaryHtml = `
     <div class="log-summary">
-      <div class="log-summary-title">📊 Batch Conversion Summary</div>
+      <div class="log-summary-title">Batch Conversion Summary</div>
       <table class="log-summary-table">
         <tr><td>Files processed</td><td class="highlight">${batchStats.filesProcessed}</td></tr>
-        <tr><td>Successful</td><td style="color:#27ae60">${batchStats.filesSucceeded}</td></tr>
+        <tr><td>Successful</td><td style="color:var(--success-color)">${batchStats.filesSucceeded}</td></tr>
         <tr><td>Failed</td><td style="${batchStats.filesFailed > 0 ? '#e74c3c' : '#7f8c8d'}">${batchStats.filesFailed}</td></tr>
         <tr><td>Total images processed</td><td>${batchStats.totalImages}</td></tr>
         <tr><td>Total splits</td><td>${batchStats.totalSplits}</td></tr>
         <tr><td>Total fixes applied</td><td>${batchStats.totalFixes}</td></tr>
-        ${batchStats.totalErrors > 0 ? `<tr><td>Total errors</td><td style="color:#e74c3c">${batchStats.totalErrors}</td></tr>` : ''}${sizeRowsHtml}
+        ${totalErrorsRow}${sizeRowsHtml}
         <tr><td>Total time</td><td>${batchTime.toFixed(1)}s</td></tr>
       </table>
     </div>
@@ -3815,125 +3221,50 @@ function exportLogToFile(filename = null, isBatch = false) {
   URL.revokeObjectURL(url);
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// EPUB Utilities — ported from EPUB Optimizer Pro
-// ═══════════════════════════════════════════════════════════════════
+// JSZip and the EPUB optimizer load on first use; most visits only browse files.
+const SCRIPT_LOAD_TIMEOUT_MS = 20000;
+let jszipPromise = null;
+let epubToolsPromise = null;
 
-/** Defensive CSS injected into every XHTML <head> — prevents e-ink overflow. */
-const DEFENSIVE_STYLE = '<style type="text/css">img,svg{max-width:100%;height:auto}body{overflow-wrap:break-word}table{max-width:100%;table-layout:fixed}pre,code{white-space:pre-wrap;word-wrap:break-word}*{box-sizing:border-box}</style>';
-
-/** Escape a string for safe insertion into XML attribute values / text content. */
-function xmlEscape(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    const fail = (message) => {
+      clearTimeout(timer);
+      s.remove();
+      reject(new Error(message));
+    };
+    // A stalled request would otherwise block uploads and Cancel indefinitely.
+    const timer = setTimeout(() => fail('Timed out loading ' + src), SCRIPT_LOAD_TIMEOUT_MS);
+    s.onload = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    s.onerror = () => fail('Failed to load ' + src);
+    s.src = src;
+    document.head.appendChild(s);
+  });
 }
 
-function escapeRegex(str) { return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-
-/**
- * Decode a URI-encoded href (e.g., "my%20image.jpg" → "my image.jpg").
- * Handles double-encoding gracefully.
- */
-function decodeHref(href) {
-  try { return decodeURIComponent(href); }
-  catch (e) { return href; }
-}
-
-/**
- * Safely read a text file from the zip, handling BOM and encoding.
- * Strips UTF-8 BOM. Detects encoding from XML declaration or meta tag.
- */
-async function safeReadText(fileObj) {
-  const raw = await fileObj.async('uint8array');
-
-  // Detect and strip UTF-8 BOM (EF BB BF)
-  let offset = 0;
-  if (raw.length >= 3 && raw[0] === 0xEF && raw[1] === 0xBB && raw[2] === 0xBF) {
-    offset = 3;
+// Shared by the EPUB tools and File Manager plugins so JSZip downloads once.
+function ensureJszip() {
+  if (typeof JSZip !== 'undefined') return Promise.resolve();
+  if (!jszipPromise) {
+    jszipPromise = loadScript('/js/jszip.min.js');
+    jszipPromise.catch(() => { jszipPromise = null; });  // let a later use retry
   }
+  return jszipPromise;
+}
 
-  // Try UTF-8 first (vast majority of EPUBs)
-  const utf8 = new TextDecoder('utf-8', { fatal: true });
-  try {
-    return utf8.decode(raw.subarray(offset));
-  } catch (e) { /* not valid UTF-8 */ }
-
-  // Peek at XML declaration or meta charset for encoding hint
-  const ascii = new TextDecoder('ascii', { fatal: false }).decode(raw.subarray(offset, offset + 512));
-  const encodingMatch = ascii.match(/encoding=["']([^"']+)["']/i) ||
-                        ascii.match(/charset=["']?([^"'\s;]+)/i);
-  const encoding = encodingMatch ? encodingMatch[1].toLowerCase() : 'windows-1252';
-
-  try {
-    return new TextDecoder(encoding, { fatal: false }).decode(raw.subarray(offset));
-  } catch (e) {
-    // Last resort: lossy latin1
-    return new TextDecoder('iso-8859-1', { fatal: false }).decode(raw.subarray(offset));
+function ensureEpubTools() {
+  if (!epubToolsPromise) {
+    // One at a time: the device serves one connection at a time. An earlier
+    // timed-out attempt may already have loaded the optimizer.
+    epubToolsPromise = ensureJszip()
+      .then(() => (typeof convertEpubFile === 'function' ? undefined : loadScript('/js/epub-optimizer.js')));
+    epubToolsPromise.catch(() => { epubToolsPromise = null; });  // let a later use retry
   }
-}
-
-/**
- * Find the canonical OPF path by parsing META-INF/container.xml.
- * Falls back to scanning for any .opf file.
- */
-async function findOPFPath(zip) {
-  try {
-    const containerPath = Object.keys(zip.files).find(p => p.toLowerCase() === 'meta-inf/container.xml');
-    if (containerPath) {
-      const containerXml = await zip.files[containerPath].async('string');
-      const match = containerXml.match(/<rootfile[^>]+full-path=["']([^"']+)["']/i);
-      if (match && zip.files[match[1]]) return match[1];
-    }
-  } catch (e) { /* fall through */ }
-  let fallback = null;
-  zip.forEach(p => { if (!fallback && p.toLowerCase().endsWith('.opf')) fallback = p; });
-  return fallback;
-}
-
-function sanitizeMetadataFilenamePart(value) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
-  return (text.normalize ? text.normalize('NFC') : text)
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/^[. ]+/g, '')
-    .replace(/[. ]+$/g, '')
-    .trim();
-}
-
-function buildMetadataFilename(title, author) {
-  title = sanitizeMetadataFilenamePart(title);
-  author = sanitizeMetadataFilenamePart(author);
-  if (!title) return '';
-  let base = author ? `${title} - ${author}` : title;
-  if (base.length > 180) base = base.substring(0, 180).replace(/\s+\S*$/g, '').trim() || base.substring(0, 180).trim();
-  return `${base}.epub`;
-}
-
-async function getMetadataFilenameForEpub(file) {
-  if (typeof JSZip === 'undefined') return '';
-  const zip = await JSZip.loadAsync(file);
-  const opfPath = await findOPFPath(zip);
-  if (!opfPath || !zip.files[opfPath]) return '';
-
-  const doc = new DOMParser().parseFromString(await safeReadText(zip.files[opfPath]), 'application/xml');
-  if (doc.querySelector('parsererror')) return '';
-
-  const title = doc.getElementsByTagNameNS('*', 'title')[0]?.textContent || '';
-  const creators = Array.from(doc.getElementsByTagNameNS('*', 'creator'));
-  const getCreatorRole = el => (
-    el.getAttribute('role') ||
-    el.getAttribute('opf:role') ||
-    el.getAttributeNS('http://www.idpf.org/2007/opf', 'role') ||
-    ''
-  ).toLowerCase();
-  const authorEl = creators.find(el => getCreatorRole(el) === 'aut') ||
-                   creators.find(el => !getCreatorRole(el));
-  const authorText = authorEl?.textContent?.trim();
-  const author = authorText ||
-                 authorEl?.getAttribute('file-as') ||
-                 authorEl?.getAttribute('opf:file-as') ||
-                 authorEl?.getAttributeNS('http://www.idpf.org/2007/opf', 'file-as') ||
-                 '';
-  return buildMetadataFilename(title, author);
+  return epubToolsPromise;
 }
 
 async function maybeRenameEbookFile(file) {
@@ -3943,6 +3274,7 @@ async function maybeRenameEbookFile(file) {
   }
 
   try {
+    await ensureEpubTools();
     const metadataName = await getMetadataFilenameForEpub(file);
     if (!metadataName || metadataName === file.name) return file;
     return new File([file], metadataName, {
@@ -3956,7 +3288,13 @@ async function maybeRenameEbookFile(file) {
 }
 
 function reserveAvailableUploadFilename(fileName, usedFileNames) {
-  const normalize = name => name.toLowerCase();
+  // Use NFC filenames for cross-platform SD card compatibility.
+  const normalizedName = fileName.normalize('NFC');
+  if (normalizedName !== fileName) {
+    console.log(`[Upload] Normalized filename to NFC: ${fileName} -> ${normalizedName}`);
+    fileName = normalizedName;
+  }
+  const normalize = name => name.normalize('NFC').toLowerCase();
   if (!usedFileNames.has(normalize(fileName))) {
     usedFileNames.add(normalize(fileName));
     return fileName;
@@ -3975,6 +3313,7 @@ function reserveAvailableUploadFilename(fileName, usedFileNames) {
   } while (usedFileNames.has(normalize(candidateName)));
 
   usedFileNames.add(normalize(candidateName));
+  console.log(`[Upload] Renamed to avoid collision: ${fileName} -> ${candidateName}`);
   return candidateName;
 }
 
@@ -3984,1480 +3323,7 @@ async function fetchExistingUploadNames() {
     throw new Error(response.status + ' ' + response.statusText);
   }
   const entries = await response.json();
-  return new Set(entries.map(entry => entry.name.toLowerCase()));
-}
-
-/**
- * Resolve a relative href against a base file path.
- * Handles multiple ../, ./, absolute /, and bare relative paths.
- */
-function resolvePath(basePath, href) {
-  if (href.startsWith('/')) return href.substring(1);
-  href = href.replace(/^\.\//, '');
-  const baseDir = basePath.includes('/') ? basePath.substring(0, basePath.lastIndexOf('/')) : '';
-  const baseParts = baseDir ? baseDir.split('/') : [];
-  const hrefParts = href.split('/');
-  while (hrefParts.length > 0 && hrefParts[0] === '..') {
-    hrefParts.shift();
-    if (baseParts.length > 0) baseParts.pop();
-  }
-  const resolved = [...baseParts, ...hrefParts].join('/');
-  return resolved.replace(/\/+/g, '/');
-}
-
-/** Remove XML comments from XHTML source text. Returns {text, count, bytes}. */
-function stripComments(xml) {
-  const SKIPPED = [
-    { open: '<![CDATA[', close: ']]>' },
-    { open: '<?', close: '?>' },
-  ];
-
-  const encoder = new TextEncoder();
-  const out = [];
-  let i = 0;
-  let count = 0;
-  let bytes = 0;
-
-  const doctypeEnd = (from) => {
-    const gt = xml.indexOf('>', from);
-    const subset = xml.indexOf('[', from);
-    if (subset < 0 || (gt >= 0 && subset > gt)) return gt < 0 ? xml.length : gt + 1;
-    const close = xml.indexOf(']>', subset);
-    return close < 0 ? xml.length : close + 2;
-  };
-
-  while (i < xml.length) {
-    const next = xml.indexOf('<', i);
-    if (next < 0) { out.push(xml.slice(i)); break; }
-    if (next > i) out.push(xml.slice(i, next));
-
-    if (xml.startsWith('<!--', next)) {
-      const close = xml.indexOf('-->', next + 4);
-      const end = close < 0 ? xml.length : close + 3;
-      count++;
-      bytes += encoder.encode(xml.slice(next, end)).length;
-      i = end;
-      continue;
-    }
-
-    if (xml.startsWith('<!DOCTYPE', next)) {
-      const end = doctypeEnd(next + 9);
-      out.push(xml.slice(next, end));
-      i = end;
-      continue;
-    }
-
-    const skipped = SKIPPED.find(s => xml.startsWith(s.open, next));
-    if (skipped) {
-      const close = xml.indexOf(skipped.close, next + skipped.open.length);
-      const end = close < 0 ? xml.length : close + skipped.close.length;
-      out.push(xml.slice(next, end));
-      i = end;
-      continue;
-    }
-
-    out.push('<');
-    i = next + 1;
-  }
-
-  return { text: out.join(''), count, bytes };
-}
-
-/**
- * Serialize an XML doc back to string, preserving the original <?xml?> declaration
- * and cleaning up XMLSerializer namespace prefix noise (xmlns:ns0 etc).
- */
-function safeSerialize(doc, originalContent) {
-  let result = new XMLSerializer().serializeToString(doc);
-
-  // Restore <?xml?> declaration if original had one
-  if (originalContent && /^\s*<\?xml\b/.test(originalContent) && !/^\s*<\?xml\b/.test(result)) {
-    const declMatch = originalContent.match(/^\s*(<\?xml[^?]*\?>)/);
-    if (declMatch) result = declMatch[1] + '\n' + result;
-  }
-
-  // Clean up XMLSerializer namespace prefix noise (xmlns:ns0="..." ns0:attr="...")
-  result = result.replace(/ xmlns:ns\d+="[^"]*"/g, '');
-  result = result.replace(/ ns\d+:/g, ' ');
-
-  return result;
-}
-
-/**
- * Extract main identifier from OPF for NCX sync. DOMParser with regex fallback.
- */
-function extractIdentifier(opfContent) {
-  let mainIdentifier = null;
-  try {
-    const doc = new DOMParser().parseFromString(opfContent, 'application/xml');
-    if (!doc.querySelector('parsererror')) {
-      const pkg = doc.getElementsByTagNameNS('*', 'package')[0];
-      const uid = pkg ? pkg.getAttribute('unique-identifier') : null;
-      if (uid) {
-        const el = [...doc.getElementsByTagNameNS('*', 'identifier')].find(e => e.getAttribute('id') === uid);
-        if (el) mainIdentifier = (el.textContent || '').trim();
-      }
-      if (!mainIdentifier) {
-        const el = doc.getElementsByTagNameNS('*', 'identifier')[0];
-        if (el) mainIdentifier = (el.textContent || '').trim();
-      }
-    }
-  } catch (e) { /* fall through to regex */ }
-  if (!mainIdentifier) {
-    const uniqueIdMatch = opfContent.match(/<(?:\w+:)?package[^>]*unique-identifier=["']([^"']+)["']/i);
-    if (uniqueIdMatch) {
-      const idRegex = new RegExp(`<dc:identifier[^>]*id=["']${uniqueIdMatch[1]}["'][^>]*>([^<]+)</dc:identifier>`, 'i');
-      const idMatch = opfContent.match(idRegex);
-      if (idMatch) mainIdentifier = idMatch[1].trim();
-    }
-    if (!mainIdentifier) {
-      const firstIdMatch = opfContent.match(/<dc:identifier[^>]*>([^<]+)</i);
-      if (firstIdMatch) mainIdentifier = firstIdMatch[1].trim();
-    }
-  }
-  return mainIdentifier;
-}
-
-/**
- * Sync NCX dtb:uid with the given identifier. DOMParser with regex fallback.
- */
-function syncNCXIdentifier(ncxText, mainIdentifier) {
-  if (!mainIdentifier) return ncxText;
-  let t = ncxText;
-  try {
-    const doc = new DOMParser().parseFromString(t, 'application/xml');
-    if (!doc.querySelector('parsererror')) {
-      const meta = [...doc.getElementsByTagNameNS('*', 'meta')].find(m => m.getAttribute('name') === 'dtb:uid');
-      if (meta) {
-        meta.setAttribute('content', mainIdentifier);
-        t = safeSerialize(doc, ncxText);
-      }
-    }
-  } catch (e) {
-    t = t.replace(/<meta\s+name=["']dtb:uid["']\s+content=["'][^"']*["']\s*\/?>/gi, `<meta name="dtb:uid" content="${xmlEscape(mainIdentifier)}"/>`);
-  }
-  return t;
-}
-
-// ===== Embedded font removal =====
-// CrossPoint renders with built-in / SD-card fonts and never loads fonts
-// embedded in an EPUB, so they are dead weight (often 100KB-2MB per book).
-const FONT_EXT_REGEX = /\.(ttf|otf|woff2?|eot)$/;
-const FONT_MEDIA_TYPE_REGEX = /^(font\/|application\/font-|application\/x-font-|application\/vnd\.ms-(opentype|fontobject)$)/i;
-
-// Returns a Set of zip-root-relative paths of embedded font files, detected by
-// file extension and by OPF manifest media-type (catches odd extensions).
-function collectFontPaths(zip, opfContent, opfPath) {
-  const fontPaths = new Set();
-  zip.forEach(p => { if (FONT_EXT_REGEX.test(p.toLowerCase())) fontPaths.add(p); });
-
-  if (opfContent && opfPath) {
-    try {
-      const doc = new DOMParser().parseFromString(opfContent, 'application/xml');
-      if (!doc.querySelector('parsererror')) {
-        for (const item of [...doc.getElementsByTagNameNS('*', 'item')]) {
-          const type = item.getAttribute('media-type') || '';
-          const href = item.getAttribute('href') || '';
-          if (href && FONT_MEDIA_TYPE_REGEX.test(type)) {
-            const resolved = resolvePath(opfPath, decodeHref(href));
-            if (zip.files[resolved]) fontPaths.add(resolved);
-          }
-        }
-      }
-    } catch (e) {
-      // Extension-based detection already covers the common cases
-    }
-  }
-  return fontPaths;
-}
-
-// Strips all @font-face rules from CSS. Rules can also embed fonts directly as
-// multi-hundred-KB data: URIs, so this is a size win even without font files.
-function stripFontFaceRules(css) {
-  let count = 0;
-  const stripped = css.replace(/@font-face(?:\s|\/\*[\s\S]*?\*\/)*\{[^{}]*\}/gi, () => { count++; return ''; });
-  return { css: stripped, count };
-}
-
-// Removes font-obfuscation <EncryptedData> entries from META-INF/encryption.xml.
-// Returns { dropFile: true } when nothing meaningful remains, { modified, xml }
-// when some entries were removed, or { modified: false } to keep the file as-is.
-function stripFontEncryptionEntries(xmlText, fontPaths) {
-  try {
-    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
-    if (doc.querySelector('parsererror')) return { modified: false };
-    const entries = [...doc.getElementsByTagNameNS('*', 'EncryptedData')];
-    let removed = 0;
-    for (const entry of entries) {
-      const ref = entry.getElementsByTagNameNS('*', 'CipherReference')[0];
-      const uri = ref ? decodeHref(ref.getAttribute('URI') || '') : '';
-      if (fontPaths.has(uri.replace(/^\//, ''))) {
-        entry.parentNode.removeChild(entry);
-        removed++;
-      }
-    }
-    if (!removed) return { modified: false };
-    const remaining = doc.getElementsByTagNameNS('*', 'EncryptedData').length +
-                      doc.getElementsByTagNameNS('*', 'EncryptedKey').length;
-    if (remaining === 0) return { dropFile: true };
-    return { modified: true, xml: safeSerialize(doc, xmlText) };
-  } catch (e) {
-    return { modified: false };
-  }
-}
-
-/**
- * Fix OPF content: fix media-types, strip svg properties,
- * update split image manifest entries, remove stripped font
- * entries, ensure cover meta. DOMParser with regex fallback.
- */
-function fixOPF(opfText, opfOriginal, opfDir, splitImages = {}, fontPaths = null) {
-  let t = opfText;
-
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(t, 'application/xml');
-    if (doc.querySelector('parsererror')) throw new Error('OPF parse failed');
-
-    const items = [...doc.getElementsByTagNameNS('*', 'item')];
-    const manifestEl = doc.getElementsByTagNameNS('*', 'manifest')[0];
-
-    // Fix media-types for converted images
-    for (const item of items) {
-      const href = item.getAttribute('href') || '';
-      const type = item.getAttribute('media-type') || '';
-      if (href.endsWith('.jpg') && type.match(/^image\/(png|gif|webp|bmp)$/)) {
-        item.setAttribute('media-type', 'image/jpeg');
-      }
-    }
-
-    // Remove 'svg' from properties
-    for (const item of items) {
-      const props = item.getAttribute('properties') || '';
-      if (props.includes('svg')) {
-        const newProps = props.split(/\s+/).filter(p => p !== 'svg').join(' ').trim();
-        if (newProps) item.setAttribute('properties', newProps);
-        else item.removeAttribute('properties');
-      }
-    }
-
-    // Remove manifest entries for stripped embedded fonts
-    if (fontPaths && fontPaths.size) {
-      for (const item of items) {
-        const href = decodeHref(item.getAttribute('href') || '');
-        const full = resolvePath((opfDir ? opfDir + '/' : '') + 'x', href);
-        if (fontPaths.has(full)) item.parentNode.removeChild(item);
-      }
-    }
-
-    // Update split image hrefs and add manifest entries for parts
-    for (const [splitKey, splitInfo] of Object.entries(splitImages)) {
-      const parts = splitInfo.parts || splitInfo;
-      let origHref = opfDir && splitKey.startsWith(opfDir + '/') ? splitKey.substring(opfDir.length + 1) : splitKey;
-      const origHrefJpg = origHref.replace(/\.(png|gif|webp|bmp|jpeg)$/i, '.jpg');
-      const part1Href = origHrefJpg.replace(/\.jpg$/i, '_part1.jpg');
-
-      for (const item of items) {
-        const h = item.getAttribute('href') || '';
-        if (h === origHref || h === origHrefJpg || decodeHref(h) === origHref || decodeHref(h) === origHrefJpg) {
-          item.setAttribute('href', part1Href);
-          break;
-        }
-      }
-
-      if (manifestEl) {
-        const ns = manifestEl.namespaceURI || 'http://www.idpf.org/2007/opf';
-        for (let j = 1; j < parts.length; j++) {
-          const p = parts[j];
-          const href = opfDir && p.path.startsWith(opfDir + '/') ? p.path.substring(opfDir.length + 1) : p.path;
-          const newItem = doc.createElementNS(ns, 'item');
-          newItem.setAttribute('id', `img-${p.id}`);
-          newItem.setAttribute('href', href);
-          newItem.setAttribute('media-type', 'image/jpeg');
-          manifestEl.appendChild(newItem);
-        }
-      }
-    }
-
-    t = safeSerialize(doc, opfOriginal);
-  } catch (e) {
-    // Regex fallback
-    t = t.replace(/(<(?:\w+:)?item\b[^>]*href="[^"]+\.jpg"[^>]*)media-type="image\/(png|gif|webp|bmp)"/g, '$1media-type="image/jpeg"');
-    t = t.replace(/(<(?:\w+:)?item\b[^>]*)media-type="image\/(png|gif|webp|bmp)"([^>]*href="[^"]+\.jpg")/g, '$1media-type="image/jpeg"$3');
-    t = t.replace(/\s+svg(?=["'\s>])/g, '');
-    if (fontPaths && fontPaths.size) {
-      for (const p of fontPaths) {
-        const href = opfDir && p.startsWith(opfDir + '/') ? p.substring(opfDir.length + 1) : p;
-        const itemRegex = new RegExp(`<(?:\\w+:)?item\\b[^>]*href=["']${escapeRegex(href)}["'][^>]*\\/?>\\s*`, 'gi');
-        t = t.replace(itemRegex, '');
-      }
-    }
-    for (const [splitKey, splitInfo] of Object.entries(splitImages)) {
-      const parts = splitInfo.parts || splitInfo;
-      let origHref = opfDir && splitKey.startsWith(opfDir + '/') ? splitKey.substring(opfDir.length + 1) : splitKey;
-      const origHrefJpg = origHref.replace(/\.(png|gif|webp|bmp|jpeg)$/i, '.jpg');
-      const part1Href = origHrefJpg.replace(/\.jpg$/i, '_part1.jpg');
-      const origImgRegex = new RegExp(`(href=["'])(${escapeRegex(origHref)}|${escapeRegex(origHrefJpg)})(["'])`, 'gi');
-      t = t.replace(origImgRegex, `$1${part1Href}$3`);
-      let adds = '';
-      for (let j = 1; j < parts.length; j++) {
-        const p = parts[j];
-        const href = opfDir && p.path.startsWith(opfDir + '/') ? p.path.substring(opfDir.length + 1) : p.path;
-        adds += `<item id="img-${xmlEscape(p.id)}" href="${xmlEscape(href)}" media-type="image/jpeg"/>\n`;
-      }
-      if (adds && t.includes('</manifest>')) t = t.replace('</manifest>', adds + '</manifest>');
-    }
-  }
-
-  // Ensure cover meta
-  const cm = ensureCoverMeta(t);
-  if (cm.fixed) t = cm.o;
-
-  return t;
-}
-
-// Fix SVG cover - converts SVG-wrapped covers to plain HTML img tags
-function fixSvgCover(content) {
-  const hasSvg = content.includes('<svg') || content.includes('<svg:');
-  if (!hasSvg || !content.includes('xlink:href')) return { c: content, fixed: false, count: 0 };
-  if (!content.includes('calibre:cover') && !content.includes('name="cover"') && !content.includes('<title>Cover</title>')) return { c: content, fixed: false, count: 0 };
-
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(content, 'application/xhtml+xml');
-
-    if (doc.querySelector('parsererror')) {
-      // Fallback to regex
-      const m = content.match(/xlink:href=["']([^"']+)["']/);
-      if (!m) return { c: content, fixed: false, count: 0 };
-      return { c: `<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en" xml:lang="en">
-<head><meta content="text/html; charset=UTF-8" http-equiv="default-style"/><title>Cover</title></head>
-<body><section epub:type="cover"><img style="max-width:100%;height:auto" alt="Cover" src="${m[1]}"/></section></body>
-</html>`, fixed: true, count: 1 };
-    }
-
-    // Find SVG elements - check both standard and namespaced variants
-    let imgHref = null;
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const xlinkNS = 'http://www.w3.org/1999/xlink';
-
-    // Try to find all SVG elements
-    const svgs = [
-      ...doc.getElementsByTagName('svg'),
-      ...doc.getElementsByTagNameNS(svgNS, 'svg'),
-      ...doc.getElementsByTagName('svg:svg')
-    ];
-
-    for (const svg of svgs) {
-      // Find image element inside - try all variants
-      const imageEl = svg.getElementsByTagName('image')[0] ||
-                      svg.getElementsByTagNameNS(svgNS, 'image')[0] ||
-                      svg.getElementsByTagName('svg:image')[0];
-
-      if (imageEl) {
-        imgHref = imageEl.getAttributeNS(xlinkNS, 'href') ||
-                  imageEl.getAttribute('xlink:href') ||
-                  imageEl.getAttribute('href');
-        if (imgHref) break;
-      }
-    }
-
-    if (!imgHref) {
-      // Fallback to regex
-      const m = content.match(/xlink:href=["']([^"']+)["']/);
-      if (!m) return { c: content, fixed: false, count: 0 };
-      imgHref = m[1];
-    }
-
-    return {
-      c: `<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en" xml:lang="en">
-<head><meta content="text/html; charset=UTF-8" http-equiv="default-style"/><title>Cover</title></head>
-<body><section epub:type="cover"><img style="max-width:100%;height:auto" alt="Cover" src="${imgHref}"/></section></body>
-</html>`,
-      fixed: true,
-      count: 1
-    };
-  } catch (e) {
-    // Fallback to regex
-    const m = content.match(/xlink:href=["']([^"']+)["']/);
-    if (!m) return { c: content, fixed: false, count: 0 };
-    return { c: `<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en" xml:lang="en">
-<head><meta content="text/html; charset=UTF-8" http-equiv="default-style"/><title>Cover</title></head>
-<body><section epub:type="cover"><img style="max-width:100%;height:auto" alt="Cover" src="${m[1]}"/></section></body>
-</html>`, fixed: true, count: 1 };
-  }
-}
-
-// Fix SVG-wrapped images - unwrap SVG and replace with plain img
-function fixSvgWrappedImages(content) {
-  const hasSvg = content.includes('<svg') || content.includes('<svg:');
-  if (!hasSvg || !content.includes('xlink:href')) return { c: content, fixed: false, count: 0 };
-
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(content, 'application/xhtml+xml');
-
-    if (doc.querySelector('parsererror')) {
-      // Fallback to regex
-      let fixedCount = 0;
-      const svgImageRegex = /<(?:svg:)?svg\b[^>]*>[\s\S]*?<(?:svg:)?image\b[^>]*xlink:href=["']([^"']+)["'][^>]*\/?>\s*<\/(?:svg:)?svg>/gi;
-      const newContent = content.replace(svgImageRegex, (match, href) => { fixedCount++; return `<img style="max-width:100%;height:auto" src="${href}" alt="" />`; });
-      return { c: newContent, fixed: fixedCount > 0, count: fixedCount };
-    }
-
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const xlinkNS = 'http://www.w3.org/1999/xlink';
-
-    const svgElements = [...doc.querySelectorAll('svg'), ...doc.getElementsByTagNameNS(svgNS, 'svg')];
-    const uniqueSvgs = [...new Set(svgElements)];
-    let fixedCount = 0;
-
-    for (const svg of uniqueSvgs) {
-      const imageEl = svg.querySelector('image[*|href]') || svg.getElementsByTagNameNS(svgNS, 'image')[0] || svg.getElementsByTagNameNS('*', 'image')[0];
-      if (!imageEl) continue;
-      const href = imageEl.getAttributeNS(xlinkNS, 'href') || imageEl.getAttribute('xlink:href') || imageEl.getAttribute('href');
-      if (!href) continue;
-      const width = imageEl.getAttribute('width') || svg.getAttribute('width');
-      const height = imageEl.getAttribute('height') || svg.getAttribute('height');
-      const img = doc.createElementNS('http://www.w3.org/1999/xhtml', 'img');
-      img.setAttribute('src', href);
-      img.setAttribute('alt', '');
-      img.setAttribute('style', 'max-width:100%;height:auto');
-      if (width) img.setAttribute('width', width);
-      if (height) img.setAttribute('height', height);
-      svg.parentNode.replaceChild(img, svg);
-      fixedCount++;
-    }
-
-    if (fixedCount === 0) return { c: content, fixed: false, count: 0 };
-    return { c: safeSerialize(doc, content), fixed: true, count: fixedCount };
-
-  } catch (e) {
-    // Fallback to regex
-    let fixedCount = 0;
-    const svgImageRegex = /<(?:svg:)?svg\b[^>]*>[\s\S]*?<(?:svg:)?image\b[^>]*xlink:href=["']([^"']+)["'][^>]*\/?>\s*<\/(?:svg:)?svg>/gi;
-    const newContent = content.replace(svgImageRegex, (match, href) => { fixedCount++; return `<img style="max-width:100%;height:auto" src="${href}" alt="" />`; });
-    return { c: newContent, fixed: fixedCount > 0, count: fixedCount };
-  }
-}
-
-// Ensure cover meta tag exists in OPF — DOMParser with regex fallback
-function ensureCoverMeta(opfString) {
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(opfString, 'application/xml');
-    if (doc.querySelector('parsererror')) throw new Error('Parse failed');
-
-    // Find cover image id: properties="cover-image", or id/href containing "cover"
-    let coverId = null;
-    const items = [...doc.getElementsByTagNameNS('*', 'item')];
-    for (const item of items) {
-      const props = item.getAttribute('properties') || '';
-      const id = item.getAttribute('id') || '';
-      const type = item.getAttribute('media-type') || '';
-      if (!type.startsWith('image/')) continue;
-      if (props.includes('cover-image')) { coverId = id; break; }
-    }
-    if (!coverId) {
-      for (const item of items) {
-        const id = item.getAttribute('id') || '';
-        const href = item.getAttribute('href') || '';
-        const type = item.getAttribute('media-type') || '';
-        if (!type.startsWith('image/')) continue;
-        if (id.toLowerCase().includes('cover') || href.toLowerCase().includes('cover')) { coverId = id; break; }
-      }
-    }
-    if (!coverId) return { o: opfString, fixed: false };
-
-    // Find or create <meta name="cover" content="..."/>
-    const metas = [...doc.getElementsByTagNameNS('*', 'meta')];
-    const coverMeta = metas.find(m => m.getAttribute('name') === 'cover');
-    if (coverMeta) {
-      if (coverMeta.getAttribute('content') === coverId) return { o: opfString, fixed: false };
-      coverMeta.setAttribute('content', coverId);
-    } else {
-      const metadata = doc.getElementsByTagNameNS('*', 'metadata')[0];
-      if (!metadata) return { o: opfString, fixed: false };
-      const ns = metadata.namespaceURI || 'http://www.idpf.org/2007/opf';
-      const newMeta = doc.createElementNS(ns, 'meta');
-      newMeta.setAttribute('name', 'cover');
-      newMeta.setAttribute('content', coverId);
-      metadata.appendChild(newMeta);
-    }
-    return { o: safeSerialize(doc, opfString), fixed: true };
-  } catch (e) {
-    // Regex fallback
-    return ensureCoverMetaRegex(opfString);
-  }
-}
-
-function ensureCoverMetaRegex(o) {
-  let coverId = null, m;
-  if (!coverId && (m = o.match(/<\w+:?item[^>]+id="([^"]+)"[^>]+properties="[^"]*cover-image[^"]*"/i))) coverId = m[1];
-  if (!coverId && (m = o.match(/<\w+:?item[^>]+properties="[^"]*cover-image[^"]*"[^>]+id="([^"]+)"/i))) coverId = m[1];
-  if (!coverId && (m = o.match(/<\w+:?item[^>]*id="([^"]+)"[^>]*href="[^"]*cover[^"]*"[^>]*media-type="image\//i))) coverId = m[1];
-  if (!coverId && (m = o.match(/<\w+:?item[^>]*href="[^"]*cover[^"]*"[^>]*id="([^"]+)"[^>]*media-type="image\//i))) coverId = m[1];
-  if (!coverId && (m = o.match(/<\w+:?item[^>]*id="([^"]*cover[^"]*)"[^>]*media-type="image\//i))) coverId = m[1];
-  if (!coverId && (m = o.match(/<\w+:?item[^>]*media-type="image\/[^"]*"[^>]*id="([^"]*cover[^"]*)"/i))) coverId = m[1];
-  if (!coverId) return { o, fixed: false };
-  const metaMatch = o.match(/<\w+:?meta\s+name=["']cover["']\s+content=["']([^"']+)["']/i) || o.match(/<\w+:?meta\s+content=["']([^"']+)["']\s+name=["']cover["']/i);
-  if (metaMatch) {
-    if (metaMatch[1] === coverId && !metaMatch[1].includes('/')) return { o, fixed: false };
-    const esc = xmlEscape(coverId);
-    o = o.replace(/<\w+:?meta\s+name=["']cover["']\s+content=["'][^"']+["']\s*\/?>/gi, `<meta name="cover" content="${esc}" />`);
-    o = o.replace(/<\w+:?meta\s+content=["'][^"']+["']\s+name=["']cover["']\s*\/?>/gi, `<meta name="cover" content="${esc}" />`);
-    return { o, fixed: true };
-  }
-  const idx = o.indexOf('</metadata>');
-  if (idx !== -1) return { o: o.substring(0, idx) + `    <meta name="cover" content="${xmlEscape(coverId)}"/>\n  </metadata>` + o.substring(idx + 11), fixed: true };
-  return { o, fixed: false };
-}
-
-// Apply grayscale to canvas image data
-function applyGrayscale(ctx, width, height) {
-  if (!ENABLE_GRAYSCALE) return;
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    // Alpha-blend against white background before grayscaling (handles transparent PNGs)
-    const a = data[i + 3] / 255;
-    const blendedR = data[i] * a + 255 * (1 - a);
-    const blendedG = data[i + 1] * a + 255 * (1 - a);
-    const blendedB = data[i + 2] * a + 255 * (1 - a);
-    const gray = Math.round(blendedR * 0.299 + blendedG * 0.587 + blendedB * 0.114);
-    data[i] = gray; data[i + 1] = gray; data[i + 2] = gray; data[i + 3] = 255;
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
-function shouldSkipAutoCrop(imagePath, width, height, ignoreToggle = false) {
-  if (!ignoreToggle && !ENABLE_AUTO_CROP) return true;
-  if (autoCropProtectedPaths.has(imagePath)) return true;
-  if (width < MIN_CROP_DIMENSION || height < MIN_CROP_DIMENSION) return true;
-  return /(^|\/)(cover|thumbnail|thumb|icon)[^/]*\.(jpe?g|png|gif|webp|bmp)$/i.test(imagePath || '');
-}
-
-function blendedPixel(data, i) {
-  const alpha = data[i + 3] / 255;
-  return {
-    r: data[i] * alpha + 255 * (1 - alpha),
-    g: data[i + 1] * alpha + 255 * (1 - alpha),
-    b: data[i + 2] * alpha + 255 * (1 - alpha)
-  };
-}
-
-function estimateCropBackground(data, width, height) {
-  const sampleSize = Math.min(CROP_EDGE_SAMPLE_SIZE, Math.floor(width / 8), Math.floor(height / 8));
-  if (sampleSize < 2) return null;
-
-  // Use corners plus edge midpoints so colored margins work without trimming full-bleed art.
-  const samples = [];
-  const points = [
-    [0, 0],
-    [width - sampleSize, 0],
-    [0, height - sampleSize],
-    [width - sampleSize, height - sampleSize],
-    [Math.floor((width - sampleSize) / 2), 0],
-    [Math.floor((width - sampleSize) / 2), height - sampleSize],
-    [0, Math.floor((height - sampleSize) / 2)],
-    [width - sampleSize, Math.floor((height - sampleSize) / 2)]
-  ];
-
-  for (const [startX, startY] of points) {
-    let r = 0, g = 0, b = 0, count = 0;
-    for (let y = startY; y < startY + sampleSize; y++) {
-      const row = y * width * 4;
-      for (let x = startX; x < startX + sampleSize; x++) {
-        const px = blendedPixel(data, row + x * 4);
-        r += px.r; g += px.g; b += px.b; count++;
-      }
-    }
-    samples.push({ r: r / count, g: g / count, b: b / count });
-  }
-
-  const avg = samples.reduce((sum, px) => ({
-    r: sum.r + px.r,
-    g: sum.g + px.g,
-    b: sum.b + px.b
-  }), { r: 0, g: 0, b: 0 });
-  avg.r /= samples.length;
-  avg.g /= samples.length;
-  avg.b /= samples.length;
-
-  const maxSpread = samples.reduce((spread, px) => Math.max(
-    spread,
-    Math.abs(px.r - avg.r),
-    Math.abs(px.g - avg.g),
-    Math.abs(px.b - avg.b)
-  ), 0);
-
-  if (maxSpread > CROP_BACKGROUND_MAX_SPREAD) return null;
-  return avg;
-}
-
-function isCropContentPixel(px, background) {
-  if (background) {
-    return Math.abs(px.r - background.r) > CROP_BACKGROUND_TOLERANCE ||
-           Math.abs(px.g - background.g) > CROP_BACKGROUND_TOLERANCE ||
-           Math.abs(px.b - background.b) > CROP_BACKGROUND_TOLERANCE;
-  }
-  return px.r < CROP_WHITE_THRESHOLD || px.g < CROP_WHITE_THRESHOLD || px.b < CROP_WHITE_THRESHOLD;
-}
-
-function isNearWhiteBackground(background) {
-  return background &&
-         background.r >= CROP_WHITE_THRESHOLD &&
-         background.g >= CROP_WHITE_THRESHOLD &&
-         background.b >= CROP_WHITE_THRESHOLD;
-}
-
-function findNonWhiteBounds(ctx, width, height) {
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-  const background = estimateCropBackground(data, width, height);
-  let left = width, top = height, right = -1, bottom = -1;
-
-  for (let y = 0; y < height; y++) {
-    const row = y * width * 4;
-    for (let x = 0; x < width; x++) {
-      const i = row + x * 4;
-      const px = blendedPixel(data, i);
-
-      if (isCropContentPixel(px, background)) {
-        if (x < left) left = x;
-        if (x > right) right = x;
-        if (y < top) top = y;
-        if (y > bottom) bottom = y;
-      }
-    }
-  }
-
-  if (right < left || bottom < top) return null;
-
-  left = Math.max(0, left - CROP_PADDING_PX);
-  top = Math.max(0, top - CROP_PADDING_PX);
-  right = Math.min(width - 1, right + CROP_PADDING_PX);
-  bottom = Math.min(height - 1, bottom + CROP_PADDING_PX);
-
-  const cropW = right - left + 1;
-  const cropH = bottom - top + 1;
-  const savedRatio = 1 - ((cropW * cropH) / (width * height));
-  // Colored-background crops need a bigger win to avoid shaving illustrated pages.
-  const minSavedRatio = background && !isNearWhiteBackground(background)
-    ? MIN_COLOR_CROP_SAVINGS_RATIO
-    : MIN_CROP_SAVINGS_RATIO;
-  if (savedRatio < minSavedRatio) return null;
-
-  return { x: left, y: top, width: cropW, height: cropH };
-}
-
-function createAutoCroppedCanvas(img, imagePath, width, height, ignoreToggle = false) {
-  // Build a white-backed source canvas, detect the uniform page/background color
-  // from its edges, crop to pixels that differ from that background, then let the
-  // normal resize/rotate/split pipeline fit that cropped content to the device.
-  // If the image is a cover/icon/small asset, the edges are not uniform, or the
-  // crop would save too little, return the original canvas unchanged.
-  const sourceCanvas = document.createElement('canvas');
-  sourceCanvas.width = width;
-  sourceCanvas.height = height;
-  const sourceCtx = sourceCanvas.getContext('2d');
-  sourceCtx.fillStyle = '#FFF';
-  sourceCtx.fillRect(0, 0, width, height);
-  sourceCtx.drawImage(img, 0, 0);
-
-  if (shouldSkipAutoCrop(imagePath, width, height, ignoreToggle)) {
-    return { canvas: sourceCanvas, width, height };
-  }
-
-  const crop = findNonWhiteBounds(sourceCtx, width, height);
-  if (!crop) {
-    return { canvas: sourceCanvas, width, height };
-  }
-
-  const croppedCanvas = document.createElement('canvas');
-  croppedCanvas.width = crop.width;
-  croppedCanvas.height = crop.height;
-  const croppedCtx = croppedCanvas.getContext('2d');
-  croppedCtx.fillStyle = '#FFF';
-  croppedCtx.fillRect(0, 0, crop.width, crop.height);
-  croppedCtx.drawImage(sourceCanvas, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
-
-  return { canvas: croppedCanvas, width: crop.width, height: crop.height, crop };
-}
-
-// Process single image - returns array of {data, suffix} objects
-const IMAGE_LOAD_TIMEOUT_MS = 30000; // 30 second timeout for image loading
-async function processImage(data, imageState = 0, imagePath = '') {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(new Blob([data]));
-    const img = new Image();
-    const origSize = data.byteLength;
-    // Set up timeout to handle cases where image never loads
-    const timeoutId = setTimeout(() => {
-      URL.revokeObjectURL(url);
-      reject(new Error('Image load timeout'));
-    }, IMAGE_LOAD_TIMEOUT_MS);
-
-    img.onload = async () => {
-      clearTimeout(timeoutId);
-      URL.revokeObjectURL(url);
-      const origW = img.width, origH = img.height;
-      const source = createAutoCroppedCanvas(img, imagePath, origW, origH);
-      const sourceCanvas = source.canvas;
-      const sourceW = source.width;
-      const sourceH = source.height;
-      const sourceWasCropped = !!source.crop;
-
-      // imageState: 0=Normal, 1=H-Split (CW/CCW), 2=V-Split, 3=Rotate & Fit
-      // ========================================================================
-      // STATE 1: H-Split (Rotate + Split) - EXACT COPY FROM index.html
-      // Step 1: Scale WIDTH to 800px (keep aspect ratio)
-      // Step 2: Rotate 90° CW or CCW based on HANDEDNESS
-      // Step 3: If WIDTH > 480, split vertically with overlap
-      // ========================================================================
-      if (imageState === 1) {
-        // Step 1: Scale WIDTH to 800 (this is the key difference!)
-        const scale = MAX_HEIGHT / sourceW;  // 800 / sourceW
-        const scaledW = MAX_HEIGHT;  // 800
-        const scaledH = Math.round(sourceH * scale);
-
-        const scaledCanvas = document.createElement('canvas');
-        scaledCanvas.width = scaledW;
-        scaledCanvas.height = scaledH;
-        const scaledCtx = scaledCanvas.getContext('2d');
-        scaledCtx.imageSmoothingEnabled = true;
-        scaledCtx.imageSmoothingQuality = 'high';
-        scaledCtx.fillStyle = '#FFF';
-        scaledCtx.fillRect(0, 0, scaledW, scaledH);
-        scaledCtx.drawImage(sourceCanvas, 0, 0, sourceW, sourceH, 0, 0, scaledW, scaledH);
-
-        // Step 2: Rotate 90° CW or CCW
-        const rotW = scaledH;
-        const rotH = scaledW;  // 800
-
-        const rotCanvas = document.createElement('canvas');
-        rotCanvas.width = rotW;
-        rotCanvas.height = rotH;
-        const rotCtx = rotCanvas.getContext('2d');
-        rotCtx.fillStyle = '#FFF';
-        rotCtx.fillRect(0, 0, rotW, rotH);
-
-        const isClockwise = HANDEDNESS === 'right';
-        if (isClockwise) {
-          // Rotate 90° CW
-          rotCtx.translate(rotW, 0);
-          rotCtx.rotate(Math.PI / 2);
-        } else {
-          // Rotate 90° CCW
-          rotCtx.translate(0, rotH);
-          rotCtx.rotate(-Math.PI / 2);
-        }
-        rotCtx.drawImage(scaledCanvas, 0, 0);
-        rotCtx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
-        applyGrayscale(rotCtx, rotW, rotH);
-
-        // Step 3: If WIDTH > 480, split vertically
-        if (rotW <= MAX_WIDTH) {
-          const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-          const arrBuf = await blob.arrayBuffer();
-          resolve({
-            parts: [{ data: arrBuf, suffix: '', width: rotW, height: rotH, size: arrBuf.byteLength }],
-            meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength, imageState: 1 }
-          });
-        } else {
-          // Split by WIDTH (vertical cuts) - from RIGHT to LEFT for CW, LEFT to RIGHT for CCW
-          const parts = [];
-          const maxW = MAX_WIDTH;  // 480
-          
-          // Centered distribution: calculate numParts first, then distribute evenly
-          let overlapPx, step, numParts;
-          const minOverlapPx = Math.round(maxW * (OVERLAP_PERCENT / 100));  // Configurable overlap
-          const maxStep = maxW - minOverlapPx;
-          numParts = Math.ceil((rotW - minOverlapPx) / maxStep);
-          if (numParts < 2) numParts = 2;
-          // Now calculate step to distribute evenly
-          step = Math.round((rotW - maxW) / (numParts - 1));
-          overlapPx = maxW - step;
-          // Ensure minimum overlap
-          if (overlapPx < minOverlapPx) {
-            overlapPx = minOverlapPx;
-            step = maxW - overlapPx;
-          }
-
-          // Calculate all x positions first to ensure consistency
-          const positions = [];
-          for (let i = 0; i < numParts; i++) {
-            let x;
-            if (isClockwise) {
-              // CW: right to left - start from right edge
-              x = rotW - maxW - (i * step);
-            } else {
-              // CCW: left to right - start from left edge
-              x = i * step;
-            }
-            // Clamp to valid range
-            x = Math.max(0, Math.min(x, rotW - maxW));
-            positions.push(x);
-          }
-
-          // Ensure first and last positions are at edges
-          if (isClockwise) {
-            positions[0] = rotW - maxW; // First part at right edge
-            positions[numParts - 1] = 0; // Last part at left edge
-          } else {
-            positions[0] = 0; // First part at left edge
-            positions[numParts - 1] = rotW - maxW; // Last part at right edge
-          }
-
-          for (let i = 0; i < numParts; i++) {
-            const x = positions[i];
-            const partW = maxW; // Always full width for consistency
-
-            const partCanvas = document.createElement('canvas');
-            partCanvas.width = partW;
-            partCanvas.height = rotH;
-            const partCtx = partCanvas.getContext('2d');
-            // Clear canvas first
-            partCtx.fillStyle = '#FFFFFF';
-            partCtx.fillRect(0, 0, partW, rotH);
-            // Draw the slice
-            partCtx.drawImage(rotCanvas, x, 0, partW, rotH, 0, 0, partW, rotH);
-
-            const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-            const arrBuf = await blob.arrayBuffer();
-            parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: rotH, size: arrBuf.byteLength });
-          }
-
-          const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
-          resolve({
-            parts,
-            meta: { origW, origH, origSize, wasSplit: true, splitCount: numParts, rotated: true, finalW: parts[0].width, finalH: parts[0].height, finalSize: totalSize, imageState: 1 }
-          });
-        }
-      }
-      // ========================================================================
-      // STATE 2: V-Split (Vertical Split, no rotation)
-      // Step 1: Scale HEIGHT to 800px (up or down)
-      // Step 2: If WIDTH > 480, split vertically with overlap
-      // ========================================================================
-      else if (imageState === 2) {
-        // ALWAYS scale height to 800 (up or down)
-        const scale = MAX_HEIGHT / sourceH;  // 800 / sourceH
-        const scaledW = Math.round(sourceW * scale);
-        const scaledH = MAX_HEIGHT;  // Always 800
-
-        const scaledCanvas = document.createElement('canvas');
-        scaledCanvas.width = scaledW;
-        scaledCanvas.height = scaledH;
-        const scaledCtx = scaledCanvas.getContext('2d');
-        scaledCtx.imageSmoothingEnabled = true;
-        scaledCtx.imageSmoothingQuality = 'high';
-        scaledCtx.fillStyle = '#FFF';
-        scaledCtx.fillRect(0, 0, scaledW, scaledH);
-        scaledCtx.drawImage(sourceCanvas, 0, 0, sourceW, sourceH, 0, 0, scaledW, scaledH);
-        applyGrayscale(scaledCtx, scaledW, scaledH);
-
-        // Check if split needed
-        if (scaledW <= MAX_WIDTH) {
-          const blob = await new Promise(res => scaledCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-          const arrBuf = await blob.arrayBuffer();
-          resolve({
-            parts: [{ data: arrBuf, suffix: '', width: scaledW, height: scaledH, size: arrBuf.byteLength }],
-            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: scaledW, finalH: scaledH, finalSize: arrBuf.byteLength, imageState: 2 }
-          });
-        } else {
-          // Split by WIDTH (vertical cuts) - LEFT to RIGHT (natural reading order)
-          const parts = [];
-          const maxW = MAX_WIDTH;
-          
-          // Centered distribution: calculate numParts first, then distribute evenly
-          let overlapPx, step, numParts;
-          const minOverlapPx = Math.round(maxW * (OVERLAP_PERCENT / 100));  // Configurable overlap
-          const maxStep = maxW - minOverlapPx;
-          numParts = Math.ceil((scaledW - minOverlapPx) / maxStep);
-          if (numParts < 2) numParts = 2;
-          // Now calculate step to distribute evenly
-          step = Math.round((scaledW - maxW) / (numParts - 1));
-          overlapPx = maxW - step;
-          // Ensure minimum overlap
-          if (overlapPx < minOverlapPx) {
-            overlapPx = minOverlapPx;
-            step = maxW - overlapPx;
-          }
-
-          // Calculate all x positions first to ensure consistency
-          const positions = [];
-          for (let i = 0; i < numParts; i++) {
-            let x = i * step;
-            // Clamp to valid range
-            x = Math.max(0, Math.min(x, scaledW - maxW));
-            positions.push(x);
-          }
-          // Ensure last position is at right edge
-          positions[0] = 0;
-          positions[numParts - 1] = scaledW - maxW;
-
-          for (let i = 0; i < numParts; i++) {
-            const x = positions[i];
-            const partW = maxW; // Always full width for consistency
-
-            const partCanvas = document.createElement('canvas');
-            partCanvas.width = partW;
-            partCanvas.height = scaledH;
-            const partCtx = partCanvas.getContext('2d');
-            // Clear canvas first
-            partCtx.fillStyle = '#FFFFFF';
-            partCtx.fillRect(0, 0, partW, scaledH);
-            // Draw the slice
-            partCtx.drawImage(scaledCanvas, x, 0, partW, scaledH, 0, 0, partW, scaledH);
-
-            const blob = await new Promise(res => partCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-            const arrBuf = await blob.arrayBuffer();
-            parts.push({ data: arrBuf, suffix: `_part${i + 1}`, width: partW, height: scaledH, size: arrBuf.byteLength });
-          }
-
-          const totalSize = parts.reduce((sum, p) => sum + p.size, 0);
-          resolve({
-            parts,
-            meta: { origW, origH, origSize, wasSplit: true, splitCount: numParts, rotated: false, finalW: parts[0].width, finalH: parts[0].height, finalSize: totalSize, imageState: 2 }
-          });
-        }
-      }
-      // ========================================================================
-      // STATE 3: Rotate & Fit (Rotate 90°, then scale to fit 480x800, no split)
-      // ========================================================================
-      else if (imageState === 3) {
-        // Step 1: Rotate 90° based on handedness
-        const rotW = sourceH;
-        const rotH = sourceW;
-
-        const rotCanvas = document.createElement('canvas');
-        rotCanvas.width = rotW;
-        rotCanvas.height = rotH;
-        const rotCtx = rotCanvas.getContext('2d');
-        rotCtx.fillStyle = '#FFF';
-        rotCtx.fillRect(0, 0, rotW, rotH);
-
-        const isClockwise = HANDEDNESS === 'right';
-        if (isClockwise) {
-          rotCtx.translate(rotW, 0);
-          rotCtx.rotate(Math.PI / 2);
-        } else {
-          rotCtx.translate(0, rotH);
-          rotCtx.rotate(-Math.PI / 2);
-        }
-        rotCtx.drawImage(sourceCanvas, 0, 0);
-        rotCtx.setTransform(1, 0, 0, 1, 0, 0);
-
-        // Step 2: Scale to fit 480x800 (if needed)
-        const fitsInScreen = rotW <= MAX_WIDTH && rotH <= MAX_HEIGHT;
-        
-        if (fitsInScreen && !sourceWasCropped) {
-          // Already fits after rotation - just apply grayscale
-          applyGrayscale(rotCtx, rotW, rotH);
-          const blob = await new Promise(res => rotCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-          const arrBuf = await blob.arrayBuffer();
-          resolve({
-            parts: [{ data: arrBuf, suffix: '', width: rotW, height: rotH, size: arrBuf.byteLength }],
-            meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: rotW, finalH: rotH, finalSize: arrBuf.byteLength, imageState: 3 }
-          });
-        } else {
-          // Scale to fit 480x800
-          const scale = Math.min(MAX_WIDTH / rotW, MAX_HEIGHT / rotH);
-          const newW = Math.round(rotW * scale);
-          const newH = Math.round(rotH * scale);
-
-          const scaledCanvas = document.createElement('canvas');
-          scaledCanvas.width = newW;
-          scaledCanvas.height = newH;
-          const scaledCtx = scaledCanvas.getContext('2d');
-          scaledCtx.imageSmoothingEnabled = true;
-          scaledCtx.imageSmoothingQuality = 'high';
-          scaledCtx.fillStyle = '#FFF';
-          scaledCtx.fillRect(0, 0, newW, newH);
-          scaledCtx.drawImage(rotCanvas, 0, 0, newW, newH);
-          applyGrayscale(scaledCtx, newW, newH);
-
-          const blob = await new Promise(res => scaledCanvas.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-          const arrBuf = await blob.arrayBuffer();
-          resolve({
-            parts: [{ data: arrBuf, suffix: '', width: newW, height: newH, size: arrBuf.byteLength }],
-            meta: { origW, origH, origSize, wasSplit: false, rotated: true, finalW: newW, finalH: newH, finalSize: arrBuf.byteLength, imageState: 3 }
-          });
-        }
-      }
-      // ========================================================================
-      // STATE 0: Normal processing (scale to fit, no split/rotation)
-      // ========================================================================
-      else {
-        // Normal processing: check if scaling is needed
-        const fitsInScreen = sourceW <= MAX_WIDTH && sourceH <= MAX_HEIGHT;
-
-        if (fitsInScreen && !sourceWasCropped) {
-          // Image already fits - just convert to JPEG with grayscale
-          const c = document.createElement('canvas');
-          c.width = sourceW;
-          c.height = sourceH;
-          const ctx = c.getContext('2d');
-          ctx.fillStyle = '#FFF';
-          ctx.fillRect(0, 0, sourceW, sourceH);
-          ctx.drawImage(sourceCanvas, 0, 0);
-          applyGrayscale(ctx, sourceW, sourceH);
-
-          const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-          const arrBuf = await blob.arrayBuffer();
-          resolve({
-            parts: [{ data: arrBuf, suffix: '', width: sourceW, height: sourceH, size: arrBuf.byteLength }],
-            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: sourceW, finalH: sourceH, finalSize: arrBuf.byteLength, imageState: 0 }
-          });
-        } else {
-          // Scale to fit 480x800
-          const scale = Math.min(MAX_WIDTH / sourceW, MAX_HEIGHT / sourceH);
-          const newW = Math.round(sourceW * scale);
-          const newH = Math.round(sourceH * scale);
-
-          const c = document.createElement('canvas');
-          c.width = newW;
-          c.height = newH;
-          const ctx = c.getContext('2d');
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
-          ctx.fillStyle = '#FFF';
-          ctx.fillRect(0, 0, newW, newH);
-          ctx.drawImage(sourceCanvas, 0, 0, newW, newH);
-          applyGrayscale(ctx, newW, newH);
-
-          const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', JPEG_QUALITY / 100));
-          const arrBuf = await blob.arrayBuffer();
-          resolve({
-            parts: [{ data: arrBuf, suffix: '', width: newW, height: newH, size: arrBuf.byteLength }],
-            meta: { origW, origH, origSize, wasSplit: false, rotated: false, finalW: newW, finalH: newH, finalSize: arrBuf.byteLength, imageState: 0 }
-          });
-        }
-      }
-    };
-    img.onerror = () => {
-      clearTimeout(timeoutId);
-      URL.revokeObjectURL(url);
-      reject(new Error('Image load failed'));
-    };
-    img.src = url;
-  });
-}
-
-// Convert EPUB file - returns converted blob
-async function convertEpubFile(file, progressCallback) {
-  const startTime = Date.now();
-  const originalSize = file.size;
-
-  // Initialize logging
-  clearLog();
-  showLog();
-  log(`<strong>${file.name}</strong> <span class="log-detail">(${formatBytes(originalSize)})</span>`, '', 'INFO');
-  log(`Quality: ${JPEG_QUALITY}% | Overlap: ${OVERLAP_PERCENT}% | Rotation: ${HANDEDNESS === 'right' ? 'CW' : 'CCW'} | Grayscale: ${ENABLE_GRAYSCALE ? 'ON' : 'OFF'} | Auto-crop: ${ENABLE_AUTO_CROP ? 'ON' : 'OFF'}`, '', 'INFO');
-
-  const zip = await JSZip.loadAsync(file);
-  const renamed = {};
-  zip.forEach(p => {
-    const l = p.toLowerCase();
-    if (l.match(/\.(png|gif|webp|bmp|jpeg)$/)) {
-      renamed[p] = p.replace(/\.(png|gif|webp|bmp|jpeg)$/i, '.jpg');
-    }
-  });
-
-  const out = new JSZip();
-  const entries = Object.entries(zip.files);
-  const splitImages = {};
-  const xhtmlFiles = {};
-  let opfPath = null, opfContent = null;
-  let mainIdentifier = null;
-
-  // Write mimetype FIRST per EPUB OCF spec
-  if (zip.files['mimetype']) {
-    const mimetypeData = await zip.files['mimetype'].async('arraybuffer');
-    out.file('mimetype', mimetypeData, { compression: 'STORE', createFolders: false });
-  }
-
-  // First pass: process images
-  for (let i = 0; i < entries.length; i++) {
-    if (operationCancelled) throw new Error('Cancelled by user');
-    const [path, fileObj] = entries[i];
-    if (fileObj.dir || path === 'mimetype') continue;
-    const low = path.toLowerCase();
-
-    if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg)$/)) {
-      const data = await fileObj.async('arraybuffer');
-      const imageState = getImageState(path);
-
-      let result;
-      try {
-        result = await processImage(data, imageState, path);
-      } catch (imageError) {
-        // Log error but continue with original image
-        console.error(`Failed to process image ${path}:`, imageError);
-        log(`Warning: Failed to process ${path.split('/').pop()}, using original`, 'warning', 'IMG-ERR');
-
-        // Use original image data as fallback
-        result = {
-          parts: [{
-            data: data,
-            suffix: '',
-            width: 0,
-            height: 0,
-            size: data.byteLength
-          }],
-          meta: {
-            origW: 0,
-            origH: 0,
-            origSize: data.byteLength,
-            wasSplit: false,
-            rotated: false,
-            finalW: 0,
-            finalH: 0,
-            finalSize: data.byteLength,
-            imageState: imageState,
-            processingError: true
-          }
-        };
-      }
-
-      const parts = result.parts;
-      const meta = result.meta;
-
-      const baseName = path.replace(/\.[^.]+$/, '');
-      const newExt = '.jpg';
-
-      // Log image processing
-      const imgName = path.split('/').pop();
-      const origFormat = path.split('.').pop();
-      logImage(imgName, meta.origW, meta.origH, origFormat, meta.origSize, meta.finalW, meta.finalH, meta.finalSize, meta.wasSplit, meta.splitCount || 0, parts, meta.imageState || 0);
-
-      if (parts.length === 1 && parts[0].suffix === '') {
-        const newPath = renamed[path] || path.replace(/\.[^.]+$/, newExt);
-        out.file(newPath, parts[0].data, { compression: 'STORE', createFolders: false });
-      } else {
-        // Store with full path for collision prevention, but also keep original filename
-        const origName = path.split('/').pop();
-        const origDir = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '';
-
-        // Key by full path to avoid collisions
-        splitImages[path] = {
-          origName: origName,
-          origDir: origDir,
-          parts: []
-        };
-
-        for (const part of parts) {
-          const partName = baseName.split('/').pop() + part.suffix + newExt;
-          const partPath = (path.includes('/') ? path.substring(0, path.lastIndexOf('/') + 1) : '') + partName;
-          out.file(partPath, part.data, { compression: 'STORE', createFolders: false });
-          // Store metadata for XHTML/OPF updates
-          splitImages[path].parts.push({
-            path: partPath,
-            imgName: partName,
-            id: baseName.split('/').pop() + part.suffix,
-            suffix: part.suffix
-          });
-        }
-      }
-    } else if (low.match(/\.(xhtml|html|htm)$/)) {
-      xhtmlFiles[path] = await safeReadText(fileObj);
-    } else if (low.endsWith('.opf')) {
-      opfPath = path;
-      opfContent = await safeReadText(fileObj);
-    }
-
-    if (progressCallback) progressCallback((i / entries.length) * 60);
-  }
-
-  // Embedded fonts are dropped entirely — CrossPoint never renders with them.
-  // Counters cover font files, @font-face rules (incl. data: URI fonts), and
-  // encryption.xml shrinkage; they count uncompressed content bytes removed
-  // (the final archive-size delta is reported separately by logSummary).
-  const fontPaths = collectFontPaths(zip, opfContent, opfPath);
-  let removedFontCount = 0;
-  let removedFontBytes = 0;
-  let removedFontFaceRules = 0;
-
-  // Second pass: update XHTML using DOMParser
-  for (const [xhtmlPath, content] of Object.entries(xhtmlFiles)) {
-    if (operationCancelled) throw new Error('Cancelled by user');
-    let t = content;
-
-    const stripped = stripComments(t);
-    if (stripped.count) {
-      t = stripped.text;
-      logFix(`Comments (${stripped.count}, ${formatBytes(stripped.bytes)})`, xhtmlPath.split('/').pop());
-    }
-
-    const r = fixSvgCover(t);
-    if (r.fixed) { t = r.c; logFix('SVG cover', xhtmlPath.split('/').pop()); }
-
-    const r2 = fixSvgWrappedImages(t);
-    if (r2.fixed) { t = r2.c; logFix(`SVG images (${r2.count})`, xhtmlPath.split('/').pop()); }
-
-    // Use DOMParser for all img modifications: remove width/height and handle split images
-    try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(t, 'application/xhtml+xml');
-      const parseError = doc.querySelector('parsererror');
-
-      if (!parseError) {
-        let modified = false;
-
-        // Remove width/height attributes from ALL img tags (dimensions may have changed)
-        // This prevents CrossPoint and other readers from using wrong dimensions
-        const allImgElements = doc.querySelectorAll('img');
-        for (const img of allImgElements) {
-          if (img.hasAttribute('width')) { img.removeAttribute('width'); modified = true; }
-          if (img.hasAttribute('height')) { img.removeAttribute('height'); modified = true; }
-
-          const src = img.getAttribute('src');
-          if (src) {
-            const decodedSrc = decodeHref(src);
-            const resolvedSrc = resolvePath(xhtmlPath, decodedSrc);
-
-            const match = Object.entries(renamed).find(([oldPath]) => resolvedSrc === oldPath);
-
-            if (match) {
-              const [oldPath, newPath] = match;
-              img.setAttribute('src', decodedSrc.replace(oldPath.split('/').pop(), newPath.split('/').pop()));
-              modified = true;
-            }
-          }
-        }
-
-        // Handle split images with path collision prevention
-        if (Object.keys(splitImages).length > 0) {
-          // Get XHTML directory for resolving relative paths
-          const xhtmlDir = xhtmlPath.includes('/') ? xhtmlPath.substring(0, xhtmlPath.lastIndexOf('/')) : '';
-          const rootFolders = ['ops', 'oebps', 'epub', 'content'];
-
-          for (const [fullPath, splitInfo] of Object.entries(splitImages)) {
-            const origName = splitInfo.origName;
-            const origDir = splitInfo.origDir;
-            const parts = splitInfo.parts;
-            const newName = origName.replace(/\.(png|gif|webp|bmp|jpeg)$/i, '.jpg');
-
-            // Extract immediate parent directory for collision prevention
-            const splitDirParts = origDir.split('/').filter(p => p);
-            const lastDir = splitDirParts.length > 0 ? splitDirParts[splitDirParts.length - 1].toLowerCase() : null;
-            const immediateParent = (lastDir && !rootFolders.includes(lastDir)) ? splitDirParts[splitDirParts.length - 1] : null;
-
-            // Get XHTML's parent directory parts for relative path resolution
-            const xhtmlDirParts = xhtmlDir.split('/').filter(p => p);
-
-            // Find all img elements
-            const allImgs = doc.querySelectorAll('img');
-            const matchingImgs = [];
-
-            for (const img of allImgs) {
-              const src = img.getAttribute('src') || '';
-              const srcParts = src.split('/').filter(p => p && p !== '..' && p !== '.');
-              const srcName = srcParts.pop() || '';
-
-              // Check filename match
-              if (srcName !== origName && srcName !== newName) continue;
-
-              // Path collision prevention with root folder handling
-              if (immediateParent) {
-                // Image is in a specific subfolder (not root like OPS/OEBPS)
-                if (srcParts.length === 0) {
-                  // src has no path - check if XHTML is in same folder as image
-                  const xhtmlLastDir = xhtmlDirParts.length > 0 ? xhtmlDirParts[xhtmlDirParts.length - 1] : null;
-                  if (xhtmlLastDir !== immediateParent) continue;
-                } else {
-                  // src has path - verify parent directory matches
-                  if (srcParts[srcParts.length - 1] !== immediateParent) continue;
-                }
-              } else {
-                // Image is in root folder (like OEBPS/cover.jpg)
-                // Only match if src has NO subfolder path OR points to root folder
-                if (srcParts.length > 0) {
-                  const srcLastDir = srcParts[srcParts.length - 1].toLowerCase();
-                  if (!rootFolders.includes(srcLastDir)) continue;
-                }
-              }
-
-              matchingImgs.push(img);
-            }
-
-            // Process each matching img — Pro's strip+inject approach
-            for (const img of matchingImgs) {
-              const src = img.getAttribute('src') || '';
-
-              // Part 1: update src in-place, strip original sizing
-              img.setAttribute('src', src.replace(origName, parts[0].imgName).replace(newName, parts[0].imgName));
-
-              if (parts.length > 1) {
-                // Strip original width/height/class that were sized for the unsplit image
-                img.removeAttribute('width');
-                img.removeAttribute('height');
-                img.removeAttribute('class');
-                img.setAttribute('style', 'max-width:100%;height:auto');
-
-                // Neutralize container height constraints that were sized for the original
-                let container = img.parentElement;
-                const safeContainers = ['div', 'p', 'figure', 'aside', 'section', 'body'];
-                while (container && !safeContainers.includes(container.tagName.toLowerCase())) container = container.parentElement;
-                const insertTarget = container || img.parentElement;
-                // Strip constraining classes/styles from container — they were for the unsplit image
-                if (insertTarget && insertTarget.tagName.toLowerCase() !== 'body') {
-                  insertTarget.removeAttribute('class');
-                  insertTarget.removeAttribute('style');
-                }
-                const insertParent = insertTarget.parentElement;
-                const insertRef = insertTarget.nextSibling;
-                const ns = doc.documentElement.namespaceURI || 'http://www.w3.org/1999/xhtml';
-
-                // Insert new minimal wrappers for parts 2+ in reading order
-                for (let pi = 1; pi < parts.length; pi++) {
-                  const wrapper = doc.createElementNS(ns, 'div');
-                  const newImg = doc.createElementNS(ns, 'img');
-                  const partSrc = src.replace(origName, parts[pi].imgName).replace(newName, parts[pi].imgName);
-                  newImg.setAttribute('src', partSrc);
-                  newImg.setAttribute('alt', '');
-                  newImg.setAttribute('style', 'max-width:100%;height:auto');
-                  wrapper.appendChild(newImg);
-                  if (insertRef) insertParent.insertBefore(wrapper, insertRef);
-                  else insertParent.appendChild(wrapper);
-                }
-              }
-              modified = true;
-            }
-          }
-        }
-
-        // Only serialize if we made changes
-        if (modified) {
-          t = safeSerialize(doc, content);
-        }
-      }
-    } catch (e) {
-      console.warn('DOMParser error for', xhtmlPath, e.message);
-    }
-
-    // Strip @font-face rules from inline <style> blocks — embedded font files
-    // are removed, so leftover rules would reference missing resources
-    t = t.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (m, open, css, close) => {
-      const ff = stripFontFaceRules(css);
-      if (!ff.count) return m;
-      removedFontFaceRules += ff.count;
-      removedFontBytes += new TextEncoder().encode(css).length - new TextEncoder().encode(ff.css).length;
-      logFix('@font-face', `${ff.count} rule(s) removed from ${escapeHtml(xhtmlPath.split('/').pop())}`);
-      return open + ff.css + close;
-    });
-
-    // Inject universal image constraint — prevents overflow on e-ink displays
-    if (t.includes('</head>')) {
-      t = t.replace('</head>', DEFENSIVE_STYLE + '</head>');
-    }
-
-    out.file(xhtmlPath, t, { compression: 'DEFLATE', compressionOptions: { level: 8 }, createFolders: false });
-  }
-
-  // Extract main identifier from OPF using DOMParser with regex fallback
-  if (opfContent) {
-    mainIdentifier = extractIdentifier(opfContent);
-  }
-
-  // Third pass: update OPF using fixOPF (DOMParser with regex fallback)
-  if (opfContent) {
-    let t = opfContent;
-    for (const [o, n] of Object.entries(renamed)) {
-      t = t.split(o.split('/').pop()).join(n.split('/').pop());
-    }
-    const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/')) : '';
-    t = fixOPF(t, opfContent, opfDir, splitImages, fontPaths);
-    if (t !== opfContent) logFix('OPF', 'manifest updated');
-    out.file(opfPath, t, { compression: 'DEFLATE', compressionOptions: { level: 8 }, createFolders: false });
-  }
-
-  // Copy remaining files
-  for (const [path, fileObj] of entries) {
-    if (operationCancelled) throw new Error('Cancelled by user');
-    if (fileObj.dir || path === 'mimetype') continue;
-    const low = path.toLowerCase();
-    if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg)$/) || low.match(/\.(xhtml|html|htm)$/) || low.endsWith('.opf')) continue;
-
-    if (fontPaths.has(path)) {
-      const fontData = await fileObj.async('arraybuffer');
-      removedFontCount++;
-      removedFontBytes += fontData.byteLength;
-      log(`${escapeHtml(path.split('/').pop())} <span class="log-detail">(${formatBytes(fontData.byteLength)})</span>`, 'success', 'REMOVE');
-      continue;
-    }
-
-    let data = await fileObj.async('arraybuffer');
-    if (low.endsWith('.css')) {
-      let t = await safeReadText(fileObj);
-      for (const [o, n] of Object.entries(renamed)) {
-        t = t.split(o.split('/').pop()).join(n.split('/').pop());
-      }
-      const ff = stripFontFaceRules(t);
-      if (ff.count) {
-        removedFontFaceRules += ff.count;
-        removedFontBytes += new TextEncoder().encode(t).length - new TextEncoder().encode(ff.css).length;
-        t = ff.css;
-        logFix('@font-face', `${ff.count} rule(s) removed from ${escapeHtml(path.split('/').pop())}`);
-      }
-      data = new TextEncoder().encode(t);
-    } else if (path === 'META-INF/encryption.xml' && fontPaths.size) {
-      const t = await safeReadText(fileObj);
-      const enc = stripFontEncryptionEntries(t, fontPaths);
-      if (enc.dropFile) {
-        removedFontBytes += data.byteLength;
-        logFix('encryption.xml', 'removed (contained only font obfuscation entries)');
-        continue;
-      }
-      if (enc.modified) {
-        const encoded = new TextEncoder().encode(enc.xml);
-        removedFontBytes += Math.max(0, data.byteLength - encoded.length);
-        data = encoded;
-        logFix('encryption.xml', 'font obfuscation entries removed');
-      }
-    } else if (low.endsWith('.ncx')) {
-      let t = await safeReadText(fileObj);
-      for (const [o, n] of Object.entries(renamed)) {
-        t = t.split(o.split('/').pop()).join(n.split('/').pop());
-      }
-      const oldT = t;
-      t = syncNCXIdentifier(t, mainIdentifier);
-      if (t !== oldT) logFix('NCX identifier', 'Synced with OPF');
-      data = new TextEncoder().encode(t);
-    }
-    out.file(path, data, { compression: 'DEFLATE', compressionOptions: { level: 8 }, createFolders: false });
-  }
-
-  if (removedFontCount > 0 || removedFontFaceRules > 0) {
-    log(`Removed ${removedFontCount} embedded font(s) and ${removedFontFaceRules} @font-face rule(s), ${formatBytes(removedFontBytes)} of font data`, '', 'INFO');
-  }
-
-  if (progressCallback) progressCallback(100);
-
-  // Generate final blob
-  const newBlob = await out.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
-  const newSize = newBlob.size;
-  const timeElapsed = (Date.now() - startTime) / 1000;
-
-  // Log completion
-  log('Conversion complete!', 'success', 'DONE');
-  logSummary(originalSize, newSize, timeElapsed);
-
-  // Auto-export only if NOT in batch mode (batch mode exports at the end)
-  if (!isBatchMode && exportLogCheckbox && exportLogCheckbox.checked) {
-    setTimeout(() => {
-      exportLogToFile(null, false); // isBatch = false for single file
-    }, 100);
-  }
-
-  return newBlob;
+  return new Set(entries.map(entry => entry.name.normalize('NFC').toLowerCase()));
 }
 
 // Get WebSocket URL based on current page location
@@ -5627,7 +3493,7 @@ async function uploadFile() {
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;
 
   if (files.length === 0) {
-    alert('Please select at least one file!');
+    showWebAlert('Please select at least one file!');
     return;
   }
 
@@ -5637,7 +3503,7 @@ async function uploadFile() {
     usedFileNames = await fetchExistingUploadNames();
   } catch (error) {
     isUploadInProgress = false;
-    alert('Failed to check existing files: ' + error.message);
+    showWebAlert('Failed to check existing files: ' + error.message);
     return;
   }
 
@@ -5673,7 +3539,7 @@ async function uploadFile() {
     if (currentIndex >= files.length) {
       // All files processed - show summary
       if (failedFiles.length === 0) {
-        progressFill.style.backgroundColor = '#4caf50';
+        progressFill.style.backgroundColor = 'var(--success-color)';
         progressText.textContent = 'All uploads complete!';
 
         // Finalize batch log if in batch mode
@@ -5688,7 +3554,7 @@ async function uploadFile() {
           }, 1000);
         }
       } else {
-        progressFill.style.backgroundColor = '#e74c3c';
+        progressFill.style.backgroundColor = 'var(--danger-color)';
         const failedList = failedFiles.map(f => f.name).join(', ');
         progressText.textContent = `${files.length - failedFiles.length}/${files.length} uploaded. Failed: ${failedList}`;
 
@@ -5720,7 +3586,7 @@ async function uploadFile() {
     // Reset progress bar instantly without transition when starting a new file
     progressFill.classList.add('no-transition');
     progressFill.style.width = '0%';
-    progressFill.style.backgroundColor = '#27ae60';
+    progressFill.style.backgroundColor = 'var(--success-color)';
     // Re-enable transition after a brief delay
     setTimeout(() => progressFill.classList.remove('no-transition'), 50);
 
@@ -5744,7 +3610,6 @@ async function uploadFile() {
 
     const availableName = reserveAvailableUploadFilename(file.name, usedFileNames);
     if (availableName !== file.name) {
-      console.log(`[Upload] Renamed to avoid collision: ${file.name} -> ${availableName}`);
       file = new File([file], availableName, {
         type: file.type,
         lastModified: file.lastModified
@@ -5819,7 +3684,7 @@ async function uploadFile() {
     try {
       // Convert EPUB if needed
       if (needsConversion) {
-        progressFill.style.backgroundColor = '#9b59b6'; // Purple for conversion
+        progressFill.style.backgroundColor = 'var(--secondary-color)'; // Purple for conversion
         progressText.textContent = `Converting ${file.name} (${currentIndex + 1}/${files.length})...`;
 
         // Clear log for single file mode, or just add separator for batch mode
@@ -5833,6 +3698,7 @@ async function uploadFile() {
         const origFileSize = file.size;
 
         try {
+          await ensureEpubTools();
           const convertedBlob = await convertEpubFile(file, (percent) => {
             // Pass current quality setting to converter
             progressFill.style.width = (percent * 0.5) + '%'; // Conversion takes first 50%
@@ -5840,7 +3706,7 @@ async function uploadFile() {
 
           // Create new File from converted blob
           file = new File([convertedBlob], file.name, { type: 'application/epub+zip' });
-          progressFill.style.backgroundColor = '#27ae60'; // Back to green for upload
+          progressFill.style.backgroundColor = 'var(--success-color)'; // Back to green for upload
           conversionSucceeded = true;
           convOriginalSize = origFileSize;
           convNewSize = convertedBlob.size;
@@ -5861,7 +3727,7 @@ async function uploadFile() {
 
           // If conversion fails, try uploading original file
           progressText.textContent = `Conversion failed, uploading original ${file.name}...`;
-          progressFill.style.backgroundColor = '#e67e22'; // Orange for fallback
+          progressFill.style.backgroundColor = 'var(--warning-color)'; // Orange for fallback
           // Reset progress bar to 0% for original file upload
           progressFill.style.width = '0%';
         }
@@ -5915,7 +3781,7 @@ function showFailedUploadsBanner() {
     item.className = 'failed-file-item';
     item.innerHTML = `
       <div class="failed-file-info">
-        <div class="failed-file-name">📄 ${escapeHtml(failedFile.name)}</div>
+        <div class="failed-file-name">${fileIcon('file')} ${escapeHtml(failedFile.name)}</div>
         <div class="failed-file-error">Error: ${escapeHtml(failedFile.error)}</div>
       </div>
       <button class="retry-btn" onclick="retrySingleUpload(${index})">Retry</button>
@@ -5985,14 +3851,14 @@ function retryAllFailedUploads() {
     const folderName = document.getElementById('folderName').value.trim();
 
     if (!folderName) {
-      alert('Please enter a folder name!');
+      showWebAlert('Please enter a folder name!');
       return;
     }
 
     // Validate folder name
     const validName = /^(?!\.{1,2}$)[^"*:<>?\/\\|]+$/.test(folderName);
     if (!validName) {
-      alert('Folder name cannot contain \" * : < > ? / \\ | and must not be . or ..');
+      showWebAlert('Folder name cannot contain \" * : < > ? / \\ | and must not be . or ..');
       return;
     }
 
@@ -6007,12 +3873,12 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to create folder: ' + xhr.responseText);
+        showWebAlert('Failed to create folder: ' + xhr.responseText);
       }
     };
 
     xhr.onerror = function() {
-      alert('Failed to create folder - network error');
+      showWebAlert('Failed to create folder - network error');
     };
 
     xhr.send(formData);
@@ -6020,10 +3886,10 @@ function retryAllFailedUploads() {
 
   // Rename functions
   function openRenameModal(name, path) {
-    document.getElementById('renameItemName').textContent = '📄 ' + name;
+    document.getElementById('renameItemName').textContent = name;
     document.getElementById('renameItemPath').value = path;
     document.getElementById('renameNewName').value = name;
-    document.getElementById('renameModal').classList.add('open');
+    openWebModal('renameModal');
     setTimeout(() => {
       const input = document.getElementById('renameNewName');
       input.focus();
@@ -6032,7 +3898,7 @@ function retryAllFailedUploads() {
   }
 
   function closeRenameModal() {
-    document.getElementById('renameModal').classList.remove('open');
+    closeWebModal('renameModal');
   }
 
   function confirmRename() {
@@ -6040,11 +3906,11 @@ function retryAllFailedUploads() {
     const newName = document.getElementById('renameNewName').value.trim();
 
     if (!newName) {
-      alert('Please enter a new name.');
+      showWebAlert('Please enter a new name.');
       return;
     }
     if (newName.includes('/') || newName.includes('\\')) {
-      alert('File name cannot include slashes.');
+      showWebAlert('File name cannot include slashes.');
       return;
     }
 
@@ -6059,13 +3925,13 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to rename: ' + xhr.responseText);
+        showWebAlert('Failed to rename: ' + xhr.responseText);
       }
       closeRenameModal();
     };
 
     xhr.onerror = function() {
-      alert('Failed to rename - network error');
+      showWebAlert('Failed to rename - network error');
       closeRenameModal();
     };
 
@@ -6135,10 +4001,10 @@ function retryAllFailedUploads() {
   }
 
   function openMoveModal(name, path) {
-    document.getElementById('moveItemName').textContent = '📄 ' + name;
+    document.getElementById('moveItemName').textContent = name;
     document.getElementById('moveItemPath').value = path;
     document.getElementById('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
-    document.getElementById('moveModal').classList.add('open');
+    openWebModal('moveModal');
     loadMoveFolderOptions();
     setTimeout(() => {
       document.getElementById('moveDestPath').focus();
@@ -6146,7 +4012,7 @@ function retryAllFailedUploads() {
   }
 
   function closeMoveModal() {
-    document.getElementById('moveModal').classList.remove('open');
+    closeWebModal('moveModal');
   }
 
   function confirmMove() {
@@ -6154,7 +4020,7 @@ function retryAllFailedUploads() {
     const destPath = normalizePath(document.getElementById('moveDestPath').value);
 
     if (!destPath) {
-      alert('Please enter a destination folder.');
+      showWebAlert('Please enter a destination folder.');
       return;
     }
 
@@ -6169,13 +4035,13 @@ function retryAllFailedUploads() {
       if (xhr.status === 200) {
         window.location.reload();
       } else {
-        alert('Failed to move: ' + xhr.responseText);
+        showWebAlert('Failed to move: ' + xhr.responseText);
       }
       closeMoveModal();
     };
 
     xhr.onerror = function() {
-      alert('Failed to move - network error');
+      showWebAlert('Failed to move - network error');
       closeMoveModal();
     };
 

@@ -1,11 +1,12 @@
 #pragma once
 
+#include <ArduinoJson.h>
 #include <HalStorage.h>
-#include <NetworkUdp.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
 
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -37,15 +38,16 @@ class CrossPointWebServer {
     size_t size = 0;
     bool success = false;
     String error = "";
+    // Overwriting an existing file: data goes to "<file>.part", which replaces
+    // the file only after the whole upload is written.
+    bool staged = false;
 
     // Upload write buffer - batches small writes into larger SD card operations
     // 4KB is a good balance: large enough to reduce syscall overhead, small enough
     // to keep individual write times short and avoid watchdog issues
     static constexpr size_t UPLOAD_BUFFER_SIZE = 4096;  // 4KB buffer
-    std::vector<uint8_t> buffer;
+    std::unique_ptr<uint8_t[]> buffer;
     size_t bufferPos = 0;
-
-    UploadState() { buffer.resize(UPLOAD_BUFFER_SIZE); }
   } upload;
 
   CrossPointWebServer();
@@ -65,6 +67,10 @@ class CrossPointWebServer {
 
   WsUploadStatus getWsUploadStatus() const;
 
+  // An HTTP upload holds handleClient() until its body is read, so this is polled on each chunk.
+  // Returning true drops the client: the upload aborts and its partial file is removed.
+  void setUploadCancelCheck(std::function<bool()> check) { uploadCancelCheck = std::move(check); }
+
   // Get the port number
   uint16_t getPort() const { return port; }
 
@@ -74,9 +80,13 @@ class CrossPointWebServer {
   bool running = false;
   bool apMode = false;  // true when running in AP mode, false for STA mode
   uint16_t port = 80;
-  uint16_t wsPort = 81;  // WebSocket port
-  NetworkUDP udp;
-  bool udpActive = false;
+  uint16_t wsPort = 81;      // WebSocket port
+  int discoverySocket = -1;  // UDP discovery, -1 when closed
+  void openDiscoverySocket();
+  void closeDiscoverySocket();
+  void answerDiscovery() const;
+  std::function<bool()> uploadCancelCheck;
+  bool dropUploadIfCancelled() const;
 
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
@@ -88,6 +98,9 @@ class CrossPointWebServer {
   String formatFileSize(size_t bytes) const;
   bool isEpubFile(const String& filename) const;
 
+  // Dispatches every route from one table, defined in the .cpp file.
+  class RouteHandler;
+
   // Request handlers
   void handleRoot() const;
   void handleJszip() const;
@@ -96,6 +109,11 @@ class CrossPointWebServer {
   void handleFileList() const;
   void handleFileListData() const;
   void handleDownload() const;
+  // Streams an already-open file to the client in 4KB chunks, feeding the
+  // watchdog per write and aborting cleanly (rather than looping past a dead
+  // connection) if a write stalls. Caller sets headers/content-length and
+  // closes the file.
+  void streamFileToClient(HalFile& file) const;
   void handleUpload(UploadState& state) const;
   void handleUploadPost(UploadState& state) const;
   void handleCreateFolder() const;
@@ -122,12 +140,11 @@ class CrossPointWebServer {
     std::string filePath;
     bool valid = false;
     bool magicChecked = false;
+    bool isVector = false;  // .ttf/.otf upload (PSRAM boards only) vs .cpfont
     size_t bytesWritten = 0;
     static constexpr size_t BUFFER_SIZE = 4096;
-    std::vector<uint8_t> buffer;
+    std::unique_ptr<uint8_t[]> buffer;
     size_t bufferPos = 0;
-
-    FontUploadState() { buffer.resize(BUFFER_SIZE); }
   } fontUpload;
 
   // OPDS server handlers
@@ -139,4 +156,71 @@ class CrossPointWebServer {
   void handleGetWifiNetworks() const;
   void handlePostWifiNetwork();
   void handleDeleteWifiNetwork();
+
+  // Missing or malformed JSON sends a 400 response and returns false.
+  bool readJsonBody(JsonDocument& out) const;
+  void sendJson(const JsonDocument& doc) const;
+  bool rejectIfPluginsDisabled() const;
+  void handlePluginList() const;  // GET  /api/plugins   -> discovered plugins
+  void handlePluginFile() const;  // GET  /plugin?name&file -> serve SD file
+  void handleRelay();             // POST /api/relay     -> device makes an HTTP(S) call
+  void handleCrypto();            // POST /api/crypto    -> generic crypto primitive (base64 I/O)
+  void handleFetch();             // POST /api/fetch     -> device downloads a URL to SD
+  void handleBookKey();           // POST /api/book-key  -> store a protected book's wrapped content key
+  void handlePluginFs();          // POST /api/plugin-fs -> plugin writes a small file to SD
+  void handlePluginFsUpload();    // its multipart file part, streamed to <path>.tmp
+
+  // One /api/plugin-fs write in flight: chunks land in `tmp`, which replaces
+  // `path` only after a complete, non-empty body.
+  struct PluginFsUploadState {
+    HalFile file;
+    std::string path, tmp;
+    size_t bytes = 0;
+    bool started = false;
+    int errorStatus = 0;  // non-zero: HTTP status to answer with
+    const char* error = nullptr;
+  } pluginFsUpload;
+
+  // SD-plugin job queue. External systems (a companion app, a script) enqueue
+  // {plugin, action, args}; any open page hosting the plugin (File Manager,
+  // Plugins, or the headless /plugins-run page) claims and executes it, then
+  // posts the result. The firmware only stores small JSON blobs — plugin logic
+  // never runs on-device. A fixed pool, allocated by the first job and kept for the
+  // web session: no allocation per job, oldest finished slot recycled.
+  struct PluginJob {
+    uint32_t id = 0;         // 0 = empty slot
+    uint32_t claim = 0;      // current claim; a completion must echo it
+    uint32_t updatedAt = 0;  // millis() of last state change
+    uint8_t state = 0;
+    char plugin[24] = {0};
+    char action[24] = {0};
+    char args[192] = {0};    // Serialized JSON value
+    char result[192] = {0};  // Serialized JSON value from the executor
+  };
+  static constexpr uint8_t JOB_EMPTY = 0;
+  static constexpr uint8_t JOB_PENDING = 1;
+  static constexpr uint8_t JOB_RUNNING = 2;
+  static constexpr uint8_t JOB_DONE = 3;
+  static constexpr uint8_t JOB_ERROR = 4;
+  static constexpr size_t MAX_PLUGIN_JOBS = 6;
+  static constexpr uint32_t PLUGIN_JOB_LEASE_MS = 10UL * 60 * 1000;
+  // Allocated by the first job submit: most sessions never use plugin jobs.
+  std::unique_ptr<PluginJob[]> pluginJobs;
+  std::span<PluginJob> pluginJobSlots() { return {pluginJobs.get(), pluginJobs ? MAX_PLUGIN_JOBS : 0}; }
+  uint32_t nextPluginJobId = 1;
+  uint32_t nextPluginJobClaim = 1;
+  PluginJob* allocPluginJob();
+  void handlePluginsPage() const;       // GET /plugins     -> plugin settings page
+  void handlePluginRunnerPage() const;  // GET /plugins-run -> headless executor page
+  void handlePluginJobSubmit();         // POST /api/plugin-jobs          -> {id}
+  void handlePluginJobClaim();          // GET  /api/plugin-jobs/claim    -> next pending job for a plugin
+  void handlePluginJobComplete();       // POST /api/plugin-jobs/complete -> executor posts the outcome
+  void handlePluginJobStatus();         // GET  /api/plugin-jobs/status   -> external caller polls
+
+  // An outbound transfer blocks the serving task for its whole duration, so
+  // the WebSocket server and discovery UDP cannot answer anyone until it
+  // finishes; their buffers are worth more as TLS headroom (4.4KB heap floor
+  // measured with them resident during a large transfer).
+  void suspendTransferServices();
+  void resumeTransferServices();
 };
