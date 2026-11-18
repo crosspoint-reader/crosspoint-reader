@@ -249,8 +249,8 @@ class ChapterHtmlSlimParser {
   // captured speculatively and replayed as normal content if it turns out to be
   // more than a page-number label. Fixed-size, no heap allocation: this element
   // should almost always be empty or hold a couple of digits.
-  static constexpr int PAGEBREAK_LABEL_SIZE = 16;
   static constexpr int PAGEBREAK_CAPTURE_SIZE = 32;
+  static constexpr int PAGEBREAK_LABEL_SIZE = PAGEBREAK_CAPTURE_SIZE;
   bool pagebreakCapturing = false;
   int pagebreakCaptureDepth = -1;                  // depth (pre-increment) recorded at the marker's startElement
   char pagebreakLabel[PAGEBREAK_LABEL_SIZE] = {};  // aria-label/title, truncated silently
