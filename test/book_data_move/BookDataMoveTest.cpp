@@ -31,6 +31,14 @@ TEST(BookDataMove, FolderOrNonBookRenameLeavesOtherBooksAlone) {
   EXPECT_TRUE(Storage.exists(cacheDir("/Done.epub").c_str()));
 }
 
+TEST(BookDataMove, XtcDestinationLeavesEpubBookmarksAlone) {
+  fake::files = {{bookmarks("/B.epub"), "marks"}};
+  moveBookData("/A.xtc", "/B.xtc");
+  EXPECT_TRUE(Storage.exists(bookmarks("/B.epub").c_str()));
+  clearBookData("/B.xtc", "/A.epub");
+  EXPECT_TRUE(Storage.exists(bookmarks("/B.epub").c_str()));
+}
+
 TEST(BookDataMove, MoveDropsRenderedPagesButKeepsPosition) {
   const std::string oldCache = cacheDir("/A.epub");
   fake::files = {{oldCache, ""},

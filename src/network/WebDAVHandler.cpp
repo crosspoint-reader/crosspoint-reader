@@ -665,7 +665,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   dstFile.close();
 
   if (copyOk) {
-    // Unconditional: stale data can exist here even when dstExists was false (book deleted from a PC).
+    // Even without dstExists: a book deleted from a PC leaves its data behind.
     clearBookData(dstPath.c_str(), srcPath.c_str());
     if (library::isLibraryBookFile(dstPath.c_str())) library::markLibraryIndexDirty();
     s.send(dstExists ? 204 : 201);
