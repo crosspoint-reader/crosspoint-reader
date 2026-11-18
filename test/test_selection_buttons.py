@@ -109,6 +109,7 @@ popup_buttons = "  bool handleButtons(" + popup_source.split("  bool handleButto
 )[0]
 popup_harness = r"""
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <functional>
@@ -120,12 +121,12 @@ struct Input { bool touch = false, back = false, confirm = false, outsideTap = f
 struct Popup {
   static constexpr int MAX_OPTIONS = 16;
   bool active = true;
-  int selectedIndex = 0;
+  std::atomic<int> selectedIndex{0};
+  int pendingScroll = 0;
+  bool followSelection = false;
   std::vector<int> ownedStrings{0};
   std::function<void(int)> onSelectCallback;
   bool isActive() const { return active; }
-  // Viewport following is covered by test_option_popup.py.
-  void followSelection() {}
 """ + popup_buttons + r"""
   // Model an outside release after the shared touch router finds no dialog hit.
   bool handleInput(const Input& input, const std::function<void()>& update) {

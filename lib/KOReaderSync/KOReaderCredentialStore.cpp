@@ -3,6 +3,7 @@
 #include <Logging.h>
 #include <MD5Builder.h>
 #include <ObfuscationUtils.h>
+#include <base64.h>
 
 namespace {
 // Default sync server URL. crosspoint-sync speaks the full KOSync protocol, so
@@ -132,6 +133,11 @@ std::string KOReaderCredentialStore::getMd5Password() const {
   md5.calculate();
 
   return md5.toString().c_str();
+}
+
+std::string KOReaderCredentialStore::getBasicAuthorization() const {
+  const std::string credentials = username + ":" + password;
+  return std::string("Basic ") + base64::encode(credentials.c_str()).c_str();
 }
 
 bool KOReaderCredentialStore::hasCredentials() const { return !username.empty() && !password.empty(); }

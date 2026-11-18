@@ -195,6 +195,37 @@ bool isHiddenOrSidecar(const std::string_view name) {
   return false;
 }
 
+std::string_view normalizeLibraryRootAliases(std::string_view path) {
+  // Ignore leading separators and "." components, but leave named components intact.
+  while (!path.empty()) {
+    const size_t slash = path.find('/');
+    const std::string_view name = path.substr(0, slash);
+    if (!name.empty() && name != ".") break;
+    if (slash == std::string_view::npos) return {};
+    path.remove_prefix(slash + 1);
+  }
+  return path;
+}
+
+// ASCII case-insensitive match against an already lower-case name (FAT names
+// are case-insensitive).
+bool equalsLowerAscii(const std::string_view name, const std::string_view lower) {
+  return std::equal(name.begin(), name.end(), lower.begin(), lower.end(), [](const char a, const char b) {
+    return (a >= 'A' && a <= 'Z' ? static_cast<char>(a + ('a' - 'A')) : a) == b;
+  });
+}
+
+bool isLibrarySkipped(const std::string_view path, bool isNormalizedPath = false) {
+  // Library-only exclusions: these directories must remain accessible in file managers.
+  constexpr std::string_view ROOTS[] = {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"};
+  const std::string_view relativePath = isNormalizedPath ? path : normalizeLibraryRootAliases(path);
+  const std::string_view name = relativePath.substr(0, relativePath.find('/'));
+  for (const auto root : ROOTS) {
+    if (equalsLowerAscii(name, root)) return true;
+  }
+  return false;
+}
+
 std::string stemOf(const std::string& name) {
   const size_t dot = name.find_last_of('.');
   return (dot == std::string::npos || dot == 0) ? name : name.substr(0, dot);
@@ -440,6 +471,7 @@ struct DedupFrame {
 
 void walk(WalkState& st, const std::string& path, const int depth) {
   if (st.failed || depth > LIBRARY_MAX_DEPTH || st.books >= CLIX_MAX_RECORDS) return;
+  if (isLibrarySkipped(path)) return;
 
   const uint16_t dedupBase = st.activeDedupCount;
   const DedupFrame dedupFrame{st, dedupBase};
@@ -1059,12 +1091,19 @@ const char* libraryIndexPath() { return INDEX_PATH; }
 
 bool isLibraryBookFile(const std::string_view path) {
   // Match the walk's exclusions in every path component. A lone "." names the folder itself.
+  const std::string_view relativePath = normalizeLibraryRootAliases(path);
+  if (isLibrarySkipped(relativePath, true)) return false;
   size_t start = 0;
-  while (start < path.size()) {
-    const size_t slash = path.find('/', start);
-    const std::string_view name = path.substr(start, slash - start);
+  while (start < relativePath.size()) {
+    const size_t slash = relativePath.find('/', start);
+    const std::string_view name = relativePath.substr(start, slash - start);
     if (name != "." && isHiddenOrSidecar(name)) return false;
-    if (slash == std::string_view::npos) break;
+    if (slash == std::string_view::npos) {
+      // Firmware-written text files are not books. They stay reachable from
+      // the file browser.
+      if (equalsLowerAscii(name, "my clippings.txt") || equalsLowerAscii(name, "crash_report.txt")) return false;
+      break;
+    }
     start = slash + 1;
   }
   return FsHelpers::checkFileExtension(path, ".epub") || FsHelpers::checkFileExtension(path, ".txt") ||
@@ -1093,6 +1132,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   const uint32_t startMs = millis();
   uint32_t serviceUnits = 0;
   stats = BuildStats{};
+  if (rootPath[0] != '\0' && normalizeLibraryRootAliases(rootPath).empty()) rootPath = "/";
 
   Storage.mkdir(CACHE_DIR);
   if (!recoverInterruptedInstall()) return false;

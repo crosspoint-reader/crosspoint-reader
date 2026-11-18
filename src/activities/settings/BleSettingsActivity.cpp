@@ -55,6 +55,10 @@ void BleSettingsActivity::loop() {
   if (SETTINGS.ble.enabled && bleturner::service()) SETTINGS.saveToFile();
   if (learnAction != bleturner::Action::None) stepLearning();
   if (signature() == shownSignature) return;  // an e-ink repaint only when something changed
+  // A scan finds devices one at a time, and each fast repaint drives the
+  // screen's black pixels again; status repaints come at most every 5 s.
+  if (millis() - lastStatusRepaintMs < 5000) return;
+  lastStatusRepaintMs = millis();
   refresh();
   requestUpdate();
 }

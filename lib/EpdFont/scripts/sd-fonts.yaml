@@ -424,3 +424,17 @@ families:
     styles:
       regular: {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-SemiBold.otf"}
       bold:    {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Bold.otf"}
+
+  # ── Japanese ───────────────────────────────────────────────────────────
+  # Subset Japanese fonts cover the kanji block with gaps, which splits it
+  # into more than the 4096 intervals SdCardFont accepts. Noto Sans CJK JP
+  # covers the whole block and converts to 107 per style.
+
+  - name: NotoSansCJKJP
+    description: "Japanese sans-serif with full kanji coverage (Kanji, Kana, Latin)"
+    scripts: [cjk]
+    intervals: cjk,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Sans/OTF/Japanese/NotoSansCJKjp-Bold.otf"}

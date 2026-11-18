@@ -2,17 +2,41 @@
 
 #include <Epub/htmlEntities.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
 
-namespace {
-
-bool isTagStart(const std::string& input, size_t pos) {
+bool htmlTagStart(const std::string& input, size_t pos) {
   if (pos + 1 >= input.size()) return false;
   const unsigned char next = input[pos + 1];
   return next == '/' || next == '!' || next == '?' || std::isalpha(next);
 }
+
+size_t htmlTagEnd(const std::string& input, size_t pos, size_t limit) {
+  if (!htmlTagStart(input, pos)) return std::string::npos;
+  if (input.compare(pos, 4, "<!--") == 0) {
+    const size_t end = std::min(limit, input.size());
+    for (size_t i = pos + 4; i + 2 < end; ++i) {
+      if (input[i] == '-' && input[i + 1] == '-' && input[i + 2] == '>') return i + 2;
+    }
+    return std::string::npos;
+  }
+  char quote = 0;
+  for (size_t i = pos + 1; i < limit && i < input.size(); ++i) {
+    const char c = input[i];
+    if (quote) {
+      if (c == quote) quote = 0;
+    } else if (c == '"' || c == '\'') {
+      quote = c;
+    } else if (c == '>') {
+      return i;
+    }
+  }
+  return std::string::npos;
+}
+
+namespace {
 
 enum class TagBreak : uint8_t { None, Line, Paragraph, HeadingOpen, HeadingClose };
 
@@ -115,8 +139,8 @@ std::string htmlToPlainText(std::string html, const char headingMarker) {
   size_t written = 0;
 
   for (size_t i = 0; i < html.size();) {
-    if (html[i] == '<' && isTagStart(html, i)) {
-      const size_t close = html.find('>', i + 1);
+    if (html[i] == '<' && htmlTagStart(html, i)) {
+      const size_t close = htmlTagEnd(html, i, html.size());
       if (close == std::string::npos) {
         html[written++] = html[i++];
         continue;

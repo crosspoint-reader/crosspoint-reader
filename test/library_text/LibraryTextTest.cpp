@@ -1,3 +1,4 @@
+#include <Utf8.h>
 #include <gtest/gtest.h>
 
 #include <string>
@@ -93,6 +94,47 @@ TEST(LibraryFold, PreservesHebrewLettersAndDropsNiqqud) {
   EXPECT_EQ(fold("\u05E9\u05B8\u05C1\u05DC\u05D5\u05B9\u05DD"), "\u05E9\u05DC\u05D5\u05DD");
   EXPECT_TRUE(library::matchesQuery(fold("\u05E9\u05DC\u05D5\u05DD \u05E2\u05D5\u05DC\u05DD"), fold("\u05E9\u05DC")));
   EXPECT_FALSE(authorKey("\u05E2\u05DE\u05D5\u05E1 \u05E2\u05D5\u05D6").empty());
+}
+
+TEST(LibraryFold, RecognizesAndDropsAllHebrewMarks) {
+  // Hebrew Mn characters from Unicode 18.0 DerivedGeneralCategory.txt.
+  const uint32_t marks[] = {
+      0x0591, 0x0592, 0x0593, 0x0594, 0x0595, 0x0596, 0x0597, 0x0598, 0x0599, 0x059A, 0x059B, 0x059C, 0x059D, 0x059E,
+      0x059F, 0x05A0, 0x05A1, 0x05A2, 0x05A3, 0x05A4, 0x05A5, 0x05A6, 0x05A7, 0x05A8, 0x05A9, 0x05AA, 0x05AB, 0x05AC,
+      0x05AD, 0x05AE, 0x05AF, 0x05B0, 0x05B1, 0x05B2, 0x05B3, 0x05B4, 0x05B5, 0x05B6, 0x05B7, 0x05B8, 0x05B9, 0x05BA,
+      0x05BB, 0x05BC, 0x05BD, 0x05BF, 0x05C1, 0x05C2, 0x05C4, 0x05C5, 0x05C7, 0x05C8, 0x05C9, 0xFB1E,
+  };
+  size_t nextMark = 0;
+  for (uint32_t cp = 0; cp <= 0x10FFFF; ++cp) {
+    const bool expected = nextMark < std::size(marks) && cp == marks[nextMark];
+    ASSERT_EQ(isHebrewMark(cp), expected) << "codepoint " << cp;
+    if (expected) ++nextMark;
+  }
+  for (const uint32_t cp : marks) {
+    std::string pointed = "א";
+    utf8AppendCodepoint(cp, pointed);
+    pointed += "ב";
+    EXPECT_EQ(fold(pointed), "אב") << "codepoint " << cp;
+  }
+}
+
+TEST(LibraryFold, ArabicVowelMarksExcludeShaddahHamzaAndMaddah) {
+  const uint32_t marks[] = {0x064B, 0x064C, 0x064D, 0x064E, 0x064F, 0x0650, 0x0652, 0x0670};
+  size_t nextMark = 0;
+  for (uint32_t cp = 0; cp <= 0x10FFFF; ++cp) {
+    const bool expected = nextMark < std::size(marks) && cp == marks[nextMark];
+    ASSERT_EQ(isArabicVowelMark(cp), expected) << "codepoint " << cp;
+    if (expected) ++nextMark;
+  }
+  // Library search still folds all Arabic marks, including shaddah.
+  for (uint32_t cp = 0x064B; cp <= 0x065F; ++cp) {
+    std::string pointed = "ش";
+    utf8AppendCodepoint(cp, pointed);
+    pointed += "كل";
+    EXPECT_EQ(fold(pointed), "شكل") << "codepoint " << cp;
+  }
+  EXPECT_EQ(fold("شَكَّلَ"), "شكل");
+  EXPECT_EQ(fold("ش\u0670كل"), "شكل");
 }
 
 TEST(LibraryFold, GroupInitialUsesUnicodeLettersAndBucketsNumbers) {

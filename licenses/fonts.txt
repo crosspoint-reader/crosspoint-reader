@@ -625,6 +625,20 @@ The owner terms include Reserved Font Name MaruBuri.
 Full terms: see the shared OFL 1.1 section at the end of this file.
 
 ========================================================================
+NotoSansCJKJP
+Source: https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/LICENSE
+========================================================================
+
+© 2014-2021 Adobe (http://www.adobe.com/).
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+Full terms: see the shared OFL 1.1 section at the end of this file.
+
+========================================================================
 Domitian
 Source: https://tug.ctan.org/fonts/domitian/doc/domitian-doc.pdf
 ========================================================================

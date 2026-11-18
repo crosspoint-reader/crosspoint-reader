@@ -1,6 +1,12 @@
 #include "HalSystem.h"
 
+#include <BoardConfig.h>
+
 #include <string>
+
+#if FREEINK_DEVICE_EEGO_A4
+#include <esp_mac.h>
+#endif
 
 #include "Arduino.h"
 #include "HalStorage.h"
@@ -87,6 +93,20 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
 }
 
 namespace HalSystem {
+
+bool getEegoUid(uint32_t& uid) {
+#if FREEINK_DEVICE_EEGO_A4
+  uint8_t mac[6] = {};
+  if (esp_efuse_mac_get_default(mac) != ESP_OK) {
+    LOG_ERR("SYS", "Failed to read EEGO factory UID");
+    return false;
+  }
+  uid = static_cast<uint32_t>(mac[3]) << 16 | static_cast<uint32_t>(mac[4]) << 8 | mac[5];
+  return true;
+#else
+  return false;
+#endif
+}
 
 void begin() {
   // On a panic reboot, preserve diagnostics until checkPanic() has tried to write them to the SD card.

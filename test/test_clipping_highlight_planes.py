@@ -36,7 +36,8 @@ int main() {
       renderer.mode = mode;
       renderer.dots = renderer.ditherRects = 0;
       fillHighlight(1, 1, 4, 4);
-      assert(renderer.dots == (a4 && mode != GfxRenderer::BW ? 4u : 0u));
+      // A4 highlights are light gray: dots go in the MSB plane only.
+      assert(renderer.dots == (a4 && mode == GfxRenderer::GRAYSCALE_MSB ? 4u : 0u));
       assert(renderer.ditherRects == (a4 && mode != GfxRenderer::BW ? 0u : 1u));
     }
   }

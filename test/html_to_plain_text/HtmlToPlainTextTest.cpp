@@ -26,6 +26,28 @@ TEST(HtmlToPlainText, StripsTagsAndKeepsText) {
   EXPECT_EQ(htmlToPlainText("", '\x01'), "");
 }
 
+TEST(HtmlToPlainText, QuotedAttributesCanContainGreaterThan) {
+  EXPECT_EQ(htmlToPlainText("<span title=\"a > b\">word</span>", '\x01'), "word");
+  EXPECT_EQ(htmlToPlainText("<span title='a > b'>word</span>", '\x01'), "word");
+  EXPECT_EQ(htmlToPlainText("<div data-test=\"a > b\">first</div><p>second</p>", '\x01'), "first\n\nsecond");
+
+  const std::string html = "<span title=\"a > b\">word</span>";
+  const size_t end = htmlTagEnd(html, 0, html.size());
+  EXPECT_EQ(end, html.find(">word"));
+  EXPECT_EQ(htmlTagEnd(html, 0, end), std::string::npos);
+}
+
+TEST(HtmlToPlainText, CommentsPreserveFollowingVisibleVocabularyText) {
+  const std::string html = "<!-- don't -->kept it's</p>";
+  EXPECT_EQ(htmlToPlainText(html, '\x01'), "kept it's");
+  EXPECT_EQ(htmlTagEnd(html, 0, html.size()), html.find("-->") + 2);
+  EXPECT_EQ(htmlTagEnd(html, 0, html.find("-->") + 2), std::string::npos);
+
+  EXPECT_EQ(htmlToPlainText("<!-- 'quoted > text' -->kept", '\x01'), "kept");
+  // Non-comment declarations still respect quoted '>' characters.
+  EXPECT_EQ(htmlToPlainText("<!DOCTYPE html PUBLIC 'part > value'>kept", '\x01'), "kept");
+}
+
 TEST(HtmlToPlainText, BlockElementsBecomeBreaks) {
   EXPECT_EQ(htmlToPlainText("a<br>b", '\x01'), "a\nb");
   EXPECT_EQ(htmlToPlainText("<div>a</div><div>b</div>", '\x01'), "a\nb");

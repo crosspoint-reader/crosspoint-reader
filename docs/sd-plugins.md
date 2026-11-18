@@ -307,7 +307,9 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
           "title": "Community content",        // defaults to the list title
           "message": "Review this notice before continuing.",
           "confirm": "Continue",               // defaults to translated Confirm
-          "cancel": "Go Back"                  // defaults to translated Cancel
+          "cancel": "Go Back",                 // defaults to translated Cancel
+          "id": "content-guidance",           // stable ID shared by related lists
+          "once": true                       // remember Continue across restarts
         } }
     ],                                      // omitted keys fall back to browse's
                                             // an "id" fills {list_id} and {list_id_enc},
@@ -420,6 +422,15 @@ JSON catalogs may also map `description`, `detail_author`, and `repository` for 
   defaults to the list title, and omitted button labels use the firmware's
   translated Cancel/Confirm defaults. Back from the book list returns to the
   picker.
+- **Named-list notices (`notice`)**: optionally include `once: true` (boolean) and
+  a stable `id` of 1–64 ASCII letters, digits, hyphens, underscores, or dots.
+  The firmware remembers **Continue** per plugin installation directory and
+  notice ID on the SD card, across reboots and plugin updates. Lists sharing
+  the same ID within a plugin share the acknowledgement; uninstalling the
+  plugin clears its acknowledgements. **Go Back** never acknowledges. Missing,
+  invalid, or mistyped `id`/`once` fields keep the normal per-visit notice.
+  If the SD write fails, Continue still opens the list, but the notice returns
+  on a later visit.
 - **Dynamic lists** (json): `browse.lists_url` is fetched with a GET once per
   catalog visit. The request carries `lists_headers` and no other headers, so
   a token reaches the lists server only when the manifest says so. The answer

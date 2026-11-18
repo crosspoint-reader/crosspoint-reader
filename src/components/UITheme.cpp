@@ -184,6 +184,12 @@ int UITheme::getProgressBarHeight() {
   return sb.showsProgressBar() ? (sb.progressBarHeightPx + metrics.progressBarMarginTop) : 0;
 }
 
+// Height the reader's status bar takes above the bottom inset. The EEGO A4 draws
+// its progress bar inside the inset (BaseTheme::drawStatusBar), so the bar takes none.
+int UITheme::getReaderStatusBarHeight() {
+  return getStatusBarHeight() - (BoardConfig::isEegoA4() ? getProgressBarHeight() : 0);
+}
+
 // Centered text implementation that takes the safe area into account
 void UITheme::drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
                                bool black, EpdFontFamily::Style style) {

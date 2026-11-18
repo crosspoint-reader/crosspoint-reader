@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <utility>
 
 #include "lib/EpdFont/EpdFont.h"
 #include "lib/EpdFont/EpdFontData.h"
@@ -127,6 +128,46 @@ TEST(Fp4Math, RoundingBoundaries) {
   EXPECT_EQ(fp4::toPixel(137 + (-9)), 8);  // 128 = 8.0 exact
   EXPECT_EQ(fp4::toPixel(137 + (-5)), 8);  // 132 = 8.25
   EXPECT_EQ(fp4::toPixel(137 + (-1)), 9);  // 136 = 8.5 (half rounds up)
+}
+
+TEST(Fp4Math, TtfAdvancesDoNotRoundUpBeforePixelSnapping) {
+  // SDK 26.6 advances for Caecilia LT i/l (16pt), x (13pt), & (14pt), K/X (16pt), taken directly from the TTF
+  for (const auto [advance26_6, pixels] : {std::pair{670, 10}, {1054, 16}, {1438, 22}, {1502, 23}}) {
+    EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(advance26_6)), pixels);
+    EXPECT_EQ(fp4::toPixel((advance26_6 + 2) >> 2), pixels + 1);
+  }
+}
+
+TEST(Fp4Math, TtfConversionPreservesPixelAndHalfPixelBoundaries) {
+  for (int pixels = 0; pixels < 256; ++pixels) {
+    EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(pixels * 64 + 31)), pixels);
+    EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(pixels * 64 + 32)), pixels + 1);
+    EXPECT_EQ(fp4::truncate26_6_to_4(pixels * 64), fp4::fromPixel(pixels));
+  }
+}
+
+TEST(Fp4Math, TtfConversionMatchesSingleSnapWithEveryFp4Kern) {
+  // Test [0, 64) pixels at 64 fixed-point steps per pixel; 64px is a chosen range, not a font limit.
+  for (int advance26_6 = 0; advance26_6 < 64 * 64; ++advance26_6) {
+    for (int kern = -128; kern <= 127; ++kern) {
+      const int singleSnap = (advance26_6 + kern * 4 + 32) >> 6;
+      EXPECT_EQ(fp4::toPixel(fp4::truncate26_6_to_4(advance26_6) + kern), singleSnap)
+          << "advance26_6=" << advance26_6 << " kern=" << kern;
+    }
+  }
+}
+
+TEST(EpdFont, TtfConvertedAdvancesDriveTextBounds) {
+  const uint16_t advance = static_cast<uint16_t>(fp4::truncate26_6_to_4(670));
+  const EpdGlyph glyphs[] = {{7, 8, advance, 0, 8, 0, 0}, {7, 8, advance, 0, 8, 0, 0}};
+  const EpdUnicodeInterval intervals[] = {{'i', 'i', 0}, {'l', 'l', 1}};
+  const EpdFontData data = {.glyph = glyphs, .intervals = intervals, .intervalCount = 2};
+  const EpdFont font(&data);
+  int width = 0, height = 0;
+  font.getTextDimensions("il", &width, &height);
+  EXPECT_EQ(width, 17);  // second glyph starts at 10, not 11
+  font.getTextDimensions("illi", &width, &height);
+  EXPECT_EQ(width, 37);
 }
 
 TEST(Fp4Math, OldApproachInconsistency) {

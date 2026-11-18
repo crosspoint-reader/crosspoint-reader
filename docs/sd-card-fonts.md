@@ -7,7 +7,7 @@ If CrossPoint enables external RAM on your device, you can load `.ttf`, `.otf`,
 and `.ttc` files directly. Otherwise, convert them to `.cpfont` files first.
 All devices can use `.cpfont` files.
 
-In the reader’s Text panel, the font-size popup shows up to five sizes at a time.
+In the reader’s Text panel, the font-size popup shows as many sizes as fit on screen.
 Swipe up or down to scroll, then tap a size. Navigation buttons move the selection
 and scroll it into view; Select applies it.
 
@@ -201,7 +201,7 @@ To make `.cpfont` files for any device, convert your TrueType/OpenType fonts:
 |--------|----------|
 | `ascii` | U+0020–U+007E (Basic Latin) |
 | `latin1` | U+0080–U+00FF (Latin-1 Supplement) |
-| `latin-ext` | European languages (Latin + Extended-A/B + punctuation + currency + letterlike symbols such as ™ and № + minus sign + ligatures) |
+| `latin-ext` | European languages (Latin + Extended-A/B + combining diacritical marks + punctuation + currency + letterlike symbols such as ™ and № + minus sign + ligatures) |
 | `greek` | Greek + Extended Greek |
 | `cyrillic` | Cyrillic + Supplement |
 | `hebrew` | Hebrew + Alphabetic Presentation Forms |
