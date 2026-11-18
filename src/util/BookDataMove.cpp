@@ -24,9 +24,10 @@ std::string bookCachePathFor(const std::string& path) {
 
 }  // namespace
 
-void clearBookData(const std::string& path) {
+void clearBookData(const std::string& path, const std::string& sourcePath) {
   clearBookCache(path);
   const std::string bookmarkPath = BookmarkUtil::getBookmarkPath(path);
+  if (bookmarkPath == BookmarkUtil::getBookmarkPath(sourcePath)) return;
   if (Storage.exists(bookmarkPath.c_str()) && !Storage.remove(bookmarkPath.c_str())) {
     LOG_ERR("BDM", "Failed to remove bookmarks file %s (non-fatal)", bookmarkPath.c_str());
   }
@@ -41,11 +42,7 @@ void moveBookData(const std::string& oldPath, const std::string& newPath) {
   // the same bookmarks file, which must then be neither removed nor renamed onto itself.
   const bool bookmarkPathsCollide = oldBookmarkPath == newBookmarkPath;
 
-  if (bookmarkPathsCollide) {
-    clearBookCache(newPath);
-  } else {
-    clearBookData(newPath);
-  }
+  clearBookData(newPath, oldPath);
 
   if (!oldCachePath.empty() && !newCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
     if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
