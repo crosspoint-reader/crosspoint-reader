@@ -34,9 +34,12 @@ bool syncExtensions(const std::string& bookPath, const std::string& documentHash
 
   // Probe first: a server that does not offer the extensions must never receive this data.
   const std::string bookmarksUrl = KOREADER_STORE.getBaseUrl() + "/api/v1/bookmarks/" + documentHash;
-  if (extensions && sync.supportsDeltaSync(bookmarksUrl + "?cursor=0&limit=1")) {
+  const bool offered = extensions && sync.supportsDeltaSync(bookmarksUrl + "?cursor=0&limit=1");
+  LOG_INF("SYNC", "Extensions: clippings=%d offered=%d", clippingsSynced, offered);
+  if (offered) {
     if (!bookmarkSync::run(sync, bookPath, documentHash)) LOG_ERR("SYNC", "Bookmark sync failed");
     if (!readingSessionLog::upload(sync)) LOG_ERR("SYNC", "Reading session upload failed");
+    LOG_INF("SYNC", "Bookmarks and reading sessions done");
   }
   return clippingsSynced;
 }

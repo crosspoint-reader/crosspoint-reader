@@ -50,10 +50,15 @@ KOReaderProgress localProgress(const std::string& documentHash, const std::strin
 void noteSleepBook(const std::string& bookPath, const CrossPointPosition& position);
 bool sleepSyncPending();
 
+// Maps the recorded position into the upload. The chapter mapper borrows the
+// framebuffer: the caller holds a FrameBufferLoan with rendering locked, and
+// nothing may be drawn from the framebuffer afterwards. False: nothing to sync.
+bool prepareSleepSync();
+
 // Syncs the recorded book without asking anything: extensions first, then the
 // local position is uploaded unless the server is further ahead, which is left
-// for a manual sync. The caller has WiFi up and holds a FrameBufferLoan with
-// rendering locked; nothing may be drawn from the framebuffer afterwards.
+// for a manual sync. The caller has WiFi up; C3 callers also hold a
+// FrameBufferLoan with rendering locked, as for pull().
 void syncOnSleep();
 
 }  // namespace syncEngine

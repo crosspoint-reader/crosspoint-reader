@@ -15,6 +15,7 @@ namespace {
 struct SleepBook {
   std::string path;
   CrossPointPosition position;
+  KOReaderProgress progress;  // filled by prepareSleepSync()
 };
 // Lives only between the reader's pre-sleep hook and syncOnSleep().
 std::optional<SleepBook> sleepBook;
@@ -76,27 +77,33 @@ KOReaderProgress syncEngine::localProgress(const std::string& documentHash, cons
 }
 
 void syncEngine::noteSleepBook(const std::string& bookPath, const CrossPointPosition& position) {
-  sleepBook = SleepBook{bookPath, position};
+  sleepBook = SleepBook{bookPath, position, {}};
 }
 
 bool syncEngine::sleepSyncPending() { return sleepBook.has_value(); }
+
+bool syncEngine::prepareSleepSync() {
+  if (!sleepBook) return false;
+  // Metadata only, as the manual sync does: no CSS, and no cache rebuild when it is missing.
+  auto epub = std::make_shared<Epub>(sleepBook->path, "/.crosspoint");
+  epub->setupCacheDir();
+  if (!epub->load(false, true)) {
+    LOG_ERR("SYNC", "Sync on sleep: could not load the book");
+    sleepBook.reset();
+    return false;
+  }
+  sleepBook->progress = localProgress("", sleepBook->path, epub.get(), sleepBook->position,
+                                      ProgressMapper::toSavedProgress(epub, sleepBook->position));
+  return true;
+}
 
 void syncEngine::syncOnSleep() {
   if (!sleepBook) return;
   const SleepBook book = std::move(*sleepBook);
   sleepBook.reset();
+  KOReaderProgress progress = book.progress;
 
-  // Metadata only, as the manual sync does: no CSS, and no cache rebuild when it is missing.
-  auto epub = std::make_shared<Epub>(book.path, "/.crosspoint");
-  epub->setupCacheDir();
-  if (!epub->load(false, true)) {
-    LOG_ERR("SYNC", "Sync on sleep: could not load the book");
-    return;
-  }
-  KOReaderProgress progress =
-      localProgress("", book.path, epub.get(), book.position, ProgressMapper::toSavedProgress(epub, book.position));
-  epub.reset();  // free the heap for TLS
-
+  LOG_INF("SYNC", "Sync on sleep: contacting the server");
   const Pull remote = pull(book.path, false);
   if (remote.documentHash.empty() || !remote.extensionsSynced) {
     LOG_ERR("SYNC", "Sync on sleep: stopped before progress");

@@ -355,8 +355,11 @@ static bool loadSleepFrameBuffer() {
 // for not connecting is logged, because sleep itself never reports a failure.
 static bool joinWifiForSleep(const bool showPopup) {
   if (WiFi.status() == WL_CONNECTED) return true;
-  const uint16_t battery = powerManager.getBatteryPercentage();
-  if (battery < 20) {
+  // A failed reading is not a low battery: only a known low level skips the join.
+  uint16_t battery = 0;
+  if (!powerManager.readBatteryPercentage(battery)) {
+    LOG_INF("SLP", "Battery level unreadable; joining WiFi anyway");
+  } else if (battery < 20) {
     LOG_INF("SLP", "Sleep WiFi join skipped: battery %u%% is below 20%%", battery);
     return false;
   }
@@ -379,6 +382,8 @@ static bool joinWifiForSleep(const bool showPopup) {
     LOG_INF("SLP", "Sleep WiFi join timed out");
     return false;
   }
+  // Modem sleep can stall requests for seconds; the radio is torn down right after this work.
+  WiFi.setSleep(false);
   trustedtime::startSync();  // snap the clock floor while the network is up
   return true;
 }
@@ -449,8 +454,16 @@ static void syncBookOnSleep(const bool allowNetwork) {
   }
 #endif
   if (!joinWifiForSleep(false)) return;
+  {
+    RenderLock lock;
+    GfxRenderer::FrameBufferLoan loan(renderer);
+    if (!syncEngine::prepareSleepSync()) return;
+  }
+  // Other boards run the network without the render lock, as the manual sync does.
+#if defined(CONFIG_IDF_TARGET_ESP32C3) && CONFIG_IDF_TARGET_ESP32C3
   RenderLock lock;
   GfxRenderer::FrameBufferLoan loan(renderer);
+#endif
   syncEngine::syncOnSleep();
 }
 

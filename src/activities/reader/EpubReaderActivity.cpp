@@ -3439,7 +3439,7 @@ void EpubReaderActivity::prepareForSleep() {
   ReaderActivity::prepareForSleep();
   if (!epub || !KOREADER_STORE.getSyncOnSleep() || !KOREADER_STORE.hasCredentials()) return;
   // Sync On Sleep runs after this activity is gone, so hand over the position now.
-  RenderLock lock;
+  // ActivityManager already holds the render lock here; taking it again would deadlock.
   syncEngine::noteSleepBook(epub->getPath(), getCurrentPosition());
 }
 
