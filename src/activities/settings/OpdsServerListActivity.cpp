@@ -191,7 +191,7 @@ void OpdsServerListActivity::handleSelection() {
 
   // "Sync on startup": plain on/off, same popup shape as the format picker.
   if (nav.selected == serverCount + 3) {
-    static const StrId toggleLabels[] = {StrId::STR_STATE_OFF, StrId::STR_STATE_ON};
+    static constexpr StrId toggleLabels[] = {StrId::STR_STATE_OFF, StrId::STR_STATE_ON};
     optionPopup.show(StrId::STR_OPDS_SYNC_ON_STARTUP, toggleLabels, 2, SETTINGS.opdsSyncOnStartup ? 1 : 0,
                      [this](int idx) {
                        SETTINGS.opdsSyncOnStartup = static_cast<uint8_t>(idx);

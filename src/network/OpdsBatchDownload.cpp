@@ -14,8 +14,7 @@
 #include "util/UrlUtils.h"
 
 namespace {
-// A page carries at most OpdsLimits::MAX_ENTRIES entries, so this bounds the
-// walk well above MAX_ENTRIES while still stopping a `next` link cycle.
+// Bounds the walk, skipped books included, and stops a `next` link cycle.
 constexpr int MAX_PAGES = 8;
 
 // The fields a transfer needs, copied out of the page so the parsed feed can
@@ -68,7 +67,7 @@ Result run(freeink::opds::OpdsClient& client, const std::string& feedUrl, const 
   const auto notify = [&hooks, &status] { return hooks.progress ? hooks.progress(hooks.ctx, status) : true; };
 
   std::string pageUrl = feedUrl;
-  for (int page = 0; page < MAX_PAGES && status.examined < MAX_ENTRIES; page++) {
+  for (int page = 0; page < MAX_PAGES; page++) {
     LOG_DBG("OPDS", "Batch page %d: %s", page, pageUrl.c_str());
 
     std::string nextHref;
@@ -86,7 +85,7 @@ Result run(freeink::opds::OpdsClient& client, const std::string& feedUrl, const 
     }
 
     for (const auto& book : books) {
-      if (status.examined >= MAX_ENTRIES) break;
+      if (status.downloaded + status.failed >= MAX_ENTRIES) return Result::LIMIT_REACHED;
       status.examined++;
 
       const std::string filename = destPath(book.author, book.title);
@@ -131,11 +130,11 @@ Result run(freeink::opds::OpdsClient& client, const std::string& feedUrl, const 
       if (!notify()) return Result::CANCELLED;
     }
 
-    if (nextHref.empty()) break;
+    if (nextHref.empty()) return Result::COMPLETED;
     pageUrl = UrlUtils::buildUrl(pageUrl, nextHref);
   }
 
-  return Result::COMPLETED;
+  return Result::LIMIT_REACHED;
 }
 
 }  // namespace OpdsBatchDownload

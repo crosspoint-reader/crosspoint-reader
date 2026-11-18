@@ -138,6 +138,7 @@ void OpdsStartupSyncActivity::runSync() {
     tokens.refreshUrl = opdsClient.refreshUrl();
     if (!OPDS_TOKENS.put(tokenKey, tokens)) LOG_ERR("OPDS", "Failed to persist OPDS tokens for %s", server.url.c_str());
   }
+  if (result == OpdsBatchDownload::Result::LIMIT_REACHED) LOG_INF("OPDS", "Startup sync stopped at its limit");
   LOG_INF("OPDS", "Startup sync: %d new, %d skipped, %d failed of %d (result %d)", status.downloaded, status.skipped,
           status.failed, status.examined, static_cast<int>(result));
 }

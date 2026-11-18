@@ -16,9 +16,10 @@
 namespace OpdsBatchDownload {
 
 enum class Result {
-  COMPLETED,  // Whole catalog walked (individual books may still have failed)
-  CANCELLED,  // Caller asked to stop
-  FAILED,     // A feed page could not be fetched or parsed
+  COMPLETED,      // Whole catalog walked (individual books may still have failed)
+  LIMIT_REACHED,  // Stopped at MAX_ENTRIES or the page cap with books left
+  CANCELLED,      // Caller asked to stop
+  FAILED,         // A feed page could not be fetched or parsed
 };
 
 // Live counters, passed to the caller on every progress tick.
@@ -42,8 +43,8 @@ struct Hooks {
                                             const freeink::opds::HttpAuth& auth) = nullptr;
 };
 
-// Hard ceiling on acquisition entries examined in one run, so a large or
-// self-referential catalog cannot walk forever on a battery-powered device.
+// Hard ceiling on transfers attempted in one run (skips excluded), so a large
+// catalog cannot keep a battery-powered device busy forever.
 constexpr int MAX_ENTRIES = 200;
 
 // Destination path for `book` on the SD card, resolved against

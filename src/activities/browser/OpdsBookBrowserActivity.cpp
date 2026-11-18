@@ -648,6 +648,18 @@ void OpdsBookBrowserActivity::downloadAllNew() {
     fail(StrId::STR_DOWNLOAD_FAILED);
     return;
   }
+  if (result == OpdsBatchDownload::Result::LIMIT_REACHED) LOG_INF("OPDS", "Batch stopped at its limit");
+  if (result != OpdsBatchDownload::Result::CANCELLED && batchStatus.failed > 0) {
+    char counts[24];
+    snprintf(counts, sizeof(counts), " (%d / %d)", batchStatus.failed, batchStatus.downloaded + batchStatus.failed);
+    fail(StrId::STR_DOWNLOAD_FAILED);
+    {
+      RenderLock lock;
+      errorMessage += counts;
+    }
+    requestUpdate();
+    return;
+  }
   finishDownload(result == OpdsBatchDownload::Result::CANCELLED ? HttpDownloader::ABORTED : HttpDownloader::OK);
 }
 
