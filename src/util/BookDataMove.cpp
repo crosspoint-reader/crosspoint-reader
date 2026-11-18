@@ -5,6 +5,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Xtc.h>
+#include <strings.h>
 
 #include "BookCacheUtils.h"
 #include "BookmarkUtil.h"
@@ -22,46 +23,51 @@ std::string bookCachePathFor(const std::string& path) {
   return "";
 }
 
+// FAT names compare case-insensitively, so e.g. /Books_A.epub and /books/A.epub share one bookmarks file.
+bool shareBookmarks(const std::string& a, const std::string& b) {
+  return strcasecmp(BookmarkUtil::getBookmarkPath(a).c_str(), BookmarkUtil::getBookmarkPath(b).c_str()) == 0;
+}
+
 }  // namespace
 
 void clearBookData(const std::string& path, const std::string& sourcePath) {
+  if (bookCachePathFor(path).empty()) return;
   clearBookCache(path);
+  if (shareBookmarks(path, sourcePath)) return;
   const std::string bookmarkPath = BookmarkUtil::getBookmarkPath(path);
-  if (bookmarkPath == BookmarkUtil::getBookmarkPath(sourcePath)) return;
   if (Storage.exists(bookmarkPath.c_str()) && !Storage.remove(bookmarkPath.c_str())) {
     LOG_ERR("BDM", "Failed to remove bookmarks file %s (non-fatal)", bookmarkPath.c_str());
   }
 }
 
 void moveBookData(const std::string& oldPath, const std::string& newPath) {
-  const std::string oldCachePath = bookCachePathFor(oldPath);
-  const std::string newCachePath = bookCachePathFor(newPath);
-  const std::string oldBookmarkPath = BookmarkUtil::getBookmarkPath(oldPath);
-  const std::string newBookmarkPath = BookmarkUtil::getBookmarkPath(newPath);
-  // getBookmarkPath() flattens the path, so e.g. an extension-only rename maps both paths to
-  // the same bookmarks file, which must then be neither removed nor renamed onto itself.
-  const bool bookmarkPathsCollide = oldBookmarkPath == newBookmarkPath;
-
   clearBookData(newPath, oldPath);
+  const std::string oldCachePath = bookCachePathFor(oldPath);
+  if (oldCachePath.empty()) return;
+  const std::string newCachePath = bookCachePathFor(newPath);
+  if (newCachePath.empty()) {
+    clearBookCache(oldPath);
+    RECENT_BOOKS.removeByPath(oldPath);
+    return;
+  }
 
-  if (!oldCachePath.empty() && !newCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
-    if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
+  if (Storage.exists(oldCachePath.c_str())) {
+    if (Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
+      // Rendered pages store absolute image paths under the old cache dir; they rebuild from progress.bin.
+      Storage.removeDir((newCachePath + "/sections").c_str());
+    } else {
       LOG_ERR("BDM", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
     }
   }
 
-  if (!bookmarkPathsCollide && Storage.exists(oldBookmarkPath.c_str())) {
+  const std::string oldBookmarkPath = BookmarkUtil::getBookmarkPath(oldPath);
+  const std::string newBookmarkPath = BookmarkUtil::getBookmarkPath(newPath);
+  if (!shareBookmarks(oldPath, newPath) && Storage.exists(oldBookmarkPath.c_str())) {
     if (!Storage.rename(oldBookmarkPath.c_str(), newBookmarkPath.c_str())) {
       LOG_ERR("BDM", "Failed to rename bookmarks file %s -> %s (non-fatal)", oldBookmarkPath.c_str(),
               newBookmarkPath.c_str());
     }
   }
 
-  // An unsupported destination type has no cache path; updatePath() would store a broken
-  // coverBmpPath, so drop the entry instead.
-  if (newCachePath.empty()) {
-    RECENT_BOOKS.removeByPath(oldPath);
-  } else {
-    RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);
-  }
+  RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);
 }

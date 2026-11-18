@@ -1,0 +1,50 @@
+#include <Epub.h>
+#include <HalStorage.h>
+#include <gtest/gtest.h>
+
+#include "util/BookDataMove.h"
+#include "util/BookmarkUtil.h"
+
+namespace {
+std::string bookmarks(const std::string& bookPath) { return BookmarkUtil::getBookmarkPath(bookPath); }
+std::string cacheDir(const std::string& bookPath) { return Epub(bookPath, "/.crosspoint").getCachePath(); }
+}  // namespace
+
+TEST(BookDataMove, CaseOnlyBookmarkCollisionKeepsBookmarksOnMove) {
+  fake::files = {{bookmarks("/Books_A.epub"), "marks"}};
+  moveBookData("/Books_A.epub", "/books/A.epub");
+  ASSERT_TRUE(Storage.exists(bookmarks("/books/A.epub").c_str()));
+  EXPECT_EQ(fake::files.at(bookmarks("/books/A.epub")), "marks");
+}
+
+TEST(BookDataMove, CaseOnlyBookmarkCollisionKeepsBookmarksOnCopy) {
+  fake::files = {{bookmarks("/Books_A.epub"), "marks"}};
+  clearBookData("/books/A.epub", "/Books_A.epub");
+  EXPECT_TRUE(Storage.exists(bookmarks("/Books_A.epub").c_str()));
+}
+
+TEST(BookDataMove, FolderOrNonBookRenameLeavesOtherBooksAlone) {
+  fake::files = {{bookmarks("/Done.epub"), "marks"}, {cacheDir("/Done.epub"), ""}};
+  moveBookData("/Reading", "/Done");
+  moveBookData("/cover.png", "/Done.png");
+  EXPECT_TRUE(Storage.exists(bookmarks("/Done.epub").c_str()));
+  EXPECT_TRUE(Storage.exists(cacheDir("/Done.epub").c_str()));
+}
+
+TEST(BookDataMove, MoveDropsRenderedPagesButKeepsPosition) {
+  const std::string oldCache = cacheDir("/A.epub");
+  fake::files = {{oldCache, ""},
+                 {oldCache + "/progress.bin", "position"},
+                 {oldCache + "/book.bin", "metadata"},
+                 {oldCache + "/img_0_0.jpg", "image"},
+                 {oldCache + "/sections", ""},
+                 {oldCache + "/sections/0.bin", oldCache + "/img_0_0.jpg"}};
+  moveBookData("/A.epub", "/Read/A.epub");
+  const std::string newCache = cacheDir("/Read/A.epub");
+  EXPECT_FALSE(Storage.exists(oldCache.c_str()));
+  EXPECT_FALSE(Storage.exists((newCache + "/sections").c_str()));
+  EXPECT_FALSE(Storage.exists((newCache + "/sections/0.bin").c_str()));
+  EXPECT_EQ(fake::files.at(newCache + "/progress.bin"), "position");
+  EXPECT_TRUE(Storage.exists((newCache + "/book.bin").c_str()));
+  EXPECT_TRUE(Storage.exists((newCache + "/img_0_0.jpg").c_str()));
+}
