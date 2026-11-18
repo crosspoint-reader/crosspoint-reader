@@ -41,7 +41,7 @@ add_library(bleturner_arduinojson INTERFACE)
 target_include_directories(bleturner_arduinojson SYSTEM INTERFACE ${arduinojson_SOURCE_DIR}/src)
 
 # The rules, pure.
-add_executable(BlePageTurnerPolicyTest RadioVerdictTest.cpp RadioVerdictS3Test.cpp HeapRestartTest.cpp KeyBindingTest.cpp)
+add_executable(BlePageTurnerPolicyTest RadioVerdictTest.cpp RadioVerdictS3Test.cpp RadioVerdictS31Test.cpp HeapRestartTest.cpp KeyBindingTest.cpp)
 target_link_libraries(BlePageTurnerPolicyTest PRIVATE bleturner_test_flags GTest::gtest_main)
 gtest_discover_tests(BlePageTurnerPolicyTest)
 

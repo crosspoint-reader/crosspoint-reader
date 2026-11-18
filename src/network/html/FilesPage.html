@@ -2832,6 +2832,11 @@ async function fetchVersion() {
       if (data.device === 'X3' || data.device === 'X4') {
         DETECTED_DEVICE = data.device;
         applyDeviceTarget();
+      } else if (data.device && data.screenWidth > 0 && data.screenHeight > 0) {
+        // No built-in profile: size images for the screen the device reports.
+        DEVICE_PROFILES[data.device] = { width: data.screenWidth, height: data.screenHeight, label: data.device };
+        DETECTED_DEVICE = data.device;
+        applyDeviceTarget();
       }
     }
   } catch (e) {

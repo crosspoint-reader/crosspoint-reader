@@ -43,7 +43,7 @@ jobs:
 
       - name: Install PlatformIO Core
         run: |
-          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.2.0.zip
           # platform-espressif32's builder/main.py imports these unconditionally; its own
           # penv bootstrap (builder/penv_setup.py) is supposed to install them automatically
           # but isn't picking them up reliably in this runner image, so pin them explicitly.
@@ -66,7 +66,7 @@ jobs:
           # ~/.platformio/penv. Keep that core on the same version as the outer core.
           # See https://github.com/pioarduino/platform-espressif32/issues/529
           pio pkg install -e ${{ matrix.pio_env }}
-          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.2.0"
           ~/.platformio/penv/bin/pio --version
 
       - name: Extract env

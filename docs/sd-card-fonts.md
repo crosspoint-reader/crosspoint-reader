@@ -7,6 +7,10 @@ If CrossPoint enables external RAM on your device, you can load `.ttf`, `.otf`,
 and `.ttc` files directly. Otherwise, convert them to `.cpfont` files first.
 All devices can use `.cpfont` files.
 
+In the reader’s Text panel, the font-size popup shows as many sizes as fit on screen.
+Swipe up or down to scroll, then tap a size. Navigation buttons move the selection
+and scroll it into view; Select applies it.
+
 The font releases include a `LICENSE` file with the original font notices.
 If you distribute font copies, keep the applicable notices with those copies.
 The source notices are in [licenses/fonts.txt](../licenses/fonts.txt).

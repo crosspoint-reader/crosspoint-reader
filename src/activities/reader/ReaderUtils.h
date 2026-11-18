@@ -99,6 +99,14 @@ struct TouchPageTurn {
   unsigned long heldMs;
 };
 
+// Centered reader-menu tap target: the middle third in each direction, or the
+// middle half of the height on screens at least 7:4 tall (the 960x540 and
+// 1216x684 panels), where a third leaves the menu target hard to hit.
+inline bool isInMenuTapZone(const int width, const int height, const int x, const int y) {
+  const int zoneHeight = height * 4 >= width * 7 ? height / 4 : height / 3;
+  return x >= width / 3 && x < width - width / 3 && y >= zoneHeight && y < height - zoneHeight;
+}
+
 inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const MappedInputManager& input,
                                          const bool rtlBook = false, const bool reserveReaderMenuTap = true) {
   TouchPageTurn result{false, false, 0};
@@ -130,9 +138,10 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
 
   const int width = renderer.getScreenWidth();
   const int height = renderer.getScreenHeight();
-  // Reserve the centered reader-menu tap target when this view has a menu.
-  if (reserveReaderMenuTap && SETTINGS.showReaderMenu == CrossPointSettings::READER_MENU_TAP && x >= width / 3 &&
-      x < width - width / 3 && y >= height / 3 && y < height - height / 3) {
+  // Reserve the centered reader-menu tap target (isTouchMenuTap below) when
+  // this view has a menu.
+  if (reserveReaderMenuTap && SETTINGS.showReaderMenu == CrossPointSettings::READER_MENU_TAP &&
+      isInMenuTapZone(width, height, x, y)) {
     return result;
   }
 
@@ -148,8 +157,8 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   return result;
 }
 
-// Tap in the center third of the screen: the tap path into the reader menu on
-// every touch board. Reader pages reserve this rectangle for the menu,
+// Tap in the center of the screen (isInMenuTapZone): the tap path into the reader
+// menu on every touch board. Reader pages reserve this rectangle for the menu,
 // so it stays free in tap mode. The Off/Swipe Up
 // alternatives are only surfaced on home-key boards (SettingsList), where the
 // menu stays reachable through the key's long-press function.
@@ -159,14 +168,10 @@ inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager
   int x = 0;
   int y = 0;
   if (!input.wasScreenTapped(x, y)) return false;
-  const int width = renderer.getScreenWidth();
-  const int height = renderer.getScreenHeight();
-  const int zoneWidth = width / 3;
-  const int zoneHeight = height / 3;
-  return x >= zoneWidth && x < width - zoneWidth && y >= zoneHeight && y < height - zoneHeight;
+  return isInMenuTapZone(renderer.getScreenWidth(), renderer.getScreenHeight(), x, y);
 }
 
-// Reader menu opens on the menu edge-swipe or a center-third tap. Home-key
+// Reader menu opens on the menu edge-swipe or a center tap. Home-key
 // actions are configured separately from screen gestures.
 // Menu gestures honor showReaderMenu independently of touchReaderControls,
 // which only gates page-turn touch zones in detectTouchPageTurn().

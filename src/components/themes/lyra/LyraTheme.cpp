@@ -66,26 +66,6 @@ const uint8_t* iconForName(UIIcon icon) {
 }
 }  // namespace
 
-void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const {
-  const bool charging = gpio.isUsbConnected();
-
-  if (charging) {
-    // Solid fill when charging so lightning bolt is visible
-    renderer.fillRect(rect.x + 2, rect.y + 2, rect.width - 5, rect.height - 4);
-    drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2);
-  } else {
-    if (percentage > 10) {
-      renderer.fillRect(rect.x + 2, rect.y + 2, 3, rect.height - 4);
-    }
-    if (percentage > 40) {
-      renderer.fillRect(rect.x + 6, rect.y + 2, 3, rect.height - 4);
-    }
-    if (percentage > 70) {
-      renderer.fillRect(rect.x + 10, rect.y + 2, 3, rect.height - 4);
-    }
-  }
-}
-
 void LyraTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {
   const int contentWidth = std::max(0, rect.width - LyraMetrics::values.contentSidePadding * 2);
 
@@ -235,7 +215,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
           Bitmap bitmap(file);
           if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-            coverWidth = bitmap.getWidth();
+            coverWidth = renderer.bitmapWidth(bitmap);
             // Narrow covers come out taller than the slot; fill 1:1 and crop
             // vertically instead of rescaling the dither.
             drawCoverThumbFill(renderer, bitmap,

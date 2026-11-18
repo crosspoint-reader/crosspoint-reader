@@ -14,6 +14,14 @@
 
 namespace fui = freeink::ui;
 
+void MappedInputManager::discardBufferedTouch() const {
+#if FREEINK_DEVICE_METALIO_EINK4 || FREEINK_DEVICE_METALIO_EINK4_PLUS
+  gpio.discardBufferedTouch();
+  resetHomeButtonInput();
+  touchHeldOverrideValid = false;
+#endif
+}
+
 void MappedInputManager::update(const bool deferHomeButtonAction) const {
   remoteInput.reset();
   gpio.update();
@@ -31,7 +39,7 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
   HalHaptics::feedback(SETTINGS.vibration != CrossPointSettings::VIBRATION_OFF, pagePressed, SETTINGS.hapticIntensity);
   homeAction = HomeButtonAction::Ignore;
   if (gpio.hasHomeKey()) {
-    homeAction = homeButtonInput.update(millis(), gpio.wasHomeKeyTapped(), gpio.wasHomeKeyLongPressed(),
+    homeAction = homeButtonInput.update(gpio.touchFrameTime(), gpio.wasHomeKeyTapped(), gpio.wasHomeKeyLongPressed(),
                                         wasSwipe() != SwipeDir::None, gpio.wasHomeKeyPressed(),
                                         static_cast<HomeButtonAction>(SETTINGS.homeButtonTapAction),
                                         static_cast<HomeButtonAction>(SETTINGS.homeButtonDoubleTapAction),

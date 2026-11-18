@@ -31,6 +31,15 @@ TEST(ChapterBuildGate, RefusedWhileTheRadioHoldsOrTakesTheHeap) {
   EXPECT_FALSE(chapterBuildMayRun(starting));
 }
 
+// The S31: the heap holds the build next to the running stack, so the radio stays up.
+TEST(ChapterBuildGate, RunsBesideARadioWhoseHeapHoldsTheBuild) {
+  auto up = radio();
+  up.running = true;
+  up.connected = true;
+  up.buildFitsBeside = true;
+  EXPECT_TRUE(chapterBuildMayRun(up));
+}
+
 namespace {
 // A clock that only moves when the wait sleeps.
 struct FakeClock {

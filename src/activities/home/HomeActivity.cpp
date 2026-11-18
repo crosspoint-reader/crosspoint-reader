@@ -131,13 +131,13 @@ void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoad
       return;
     }
     book.coverBmpPath = epub->getThumbBmpPath();
-    if (Storage.exists(epub->getThumbBmpPath(height).c_str())) return;
+    if (Storage.exists(epub->getThumbBmpPath(UITheme::coverThumbPixels(height)).c_str())) return;
     if (!showingLoading) {
       showingLoading = true;
       popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
       GUI.fillPopupProgress(renderer, popupRect, 0);
     }
-    if (epub->generateThumbBmpFromSource(height)) {
+    if (epub->generateThumbBmpFromSource(UITheme::coverThumbPixels(height))) {
       return;
     }
   } else if (FsHelpers::hasXtcExtension(book.path)) {
@@ -147,13 +147,13 @@ void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoad
       return;
     }
     book.coverBmpPath = xtc->getThumbBmpPath();
-    if (Storage.exists(xtc->getThumbBmpPath(height).c_str())) return;
+    if (Storage.exists(xtc->getThumbBmpPath(UITheme::coverThumbPixels(height)).c_str())) return;
     if (!showingLoading) {
       showingLoading = true;
       popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
       GUI.fillPopupProgress(renderer, popupRect, 0);
     }
-    if (xtc->load() && xtc->generateThumbBmp(height)) {
+    if (xtc->load() && xtc->generateThumbBmp(UITheme::coverThumbPixels(height))) {
       return;
     }
   }
@@ -193,8 +193,8 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
           // Without a book cache (e.g. after "Delete Book Cache") there is no cached metadata,
           // so read the cover location straight from the EPUB.
-          bool success =
-              cacheLoaded ? epub.generateThumbBmp(thumbHeight) : epub.generateThumbBmpFromSource(thumbHeight);
+          bool success = cacheLoaded ? epub.generateThumbBmp(UITheme::coverThumbPixels(thumbHeight))
+                                     : epub.generateThumbBmpFromSource(UITheme::coverThumbPixels(thumbHeight));
           if (!success) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
             book.coverBmpPath = "";
@@ -211,7 +211,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-            bool success = xtc.generateThumbBmp(thumbHeight);
+            bool success = xtc.generateThumbBmp(UITheme::coverThumbPixels(thumbHeight));
             if (!success) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
               book.coverBmpPath = "";

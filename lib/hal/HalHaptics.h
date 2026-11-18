@@ -15,6 +15,15 @@ class HalHaptics {
   // Metalio's motor did not respond to short pulses at 50% in device testing.
   // Use approximately 60%, 75%, and 88%; validate the new floor on hardware.
   static constexpr uint8_t gain(uint8_t level) { return level == 0 ? 153 : level == 1 ? 191 : 224; }
+  // The Metalio E-Ink4-Plus motor is on/off behind an I/O expander, so its
+  // strength is pulse length instead, as the vendor's 35/50/70 ms levels.
+  static uint32_t pulseMs(uint8_t level) {
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+    if (BoardConfig::ACTIVE.haptic.viaExpander) return level == 0 ? 35 : level == 1 ? 50 : 70;
+#endif
+    (void)level;
+    return 35;  // HapticManager::kDefaultPulseMs
+  }
 
  public:
   static void longPress(bool enabled, uint8_t intensity) {
@@ -40,7 +49,7 @@ class HalHaptics {
     // Initialize lazily: Off does not allocate a timer or attach PWM.
     if (enabled && pressed && motor.begin()) {
       motor.setIntensity(gain(intensity));
-      motor.pulse();
+      motor.pulse(pulseMs(intensity));
     }
 #else
     (void)enabled;
