@@ -333,7 +333,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
         fail(StrId::STR_SET_CREDENTIALS_FIRST);
         break;
       case freeink::opds::OpdsClient::FetchStatus::AuthFailed:
-        fail(StrId::STR_OPDS_AUTH_FAILED);
+        fail(HttpDownloader::lastAnswerRedirected() ? StrId::STR_FEED_REDIRECTED : StrId::STR_OPDS_AUTH_FAILED);
         break;
       case freeink::opds::OpdsClient::FetchStatus::ParseFailed:
         fail(StrId::STR_PARSE_FEED_FAILED);

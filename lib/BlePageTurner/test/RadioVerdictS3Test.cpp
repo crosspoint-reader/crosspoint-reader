@@ -213,5 +213,19 @@ TEST(RadioVerdictS3Test, TheC61KeepsTheStackTheS3ProfileRolledBack) {
   EXPECT_EQ(radioVerdict(in, kC61Profile), Why::NotReading) << "no start at Home";
 }
 
+TEST(RadioVerdictS3Test, TheC61CountsRefusalsWithEnoughTotalMemoryTowardARestart) {
+  RadioInputs in{};
+  in.phase = Phase::BeforeStart;
+  in.where = Where::Reader;
+  in.heap = {kC61Profile.startFreeBytes - 1, kC61Profile.minimumLargest - 1};
+  EXPECT_EQ(radioVerdict(in, kC61Profile), Why::HeapLow);
+  ++in.heap.freeBytes;
+  const auto refusal = radioVerdict(in, kC61Profile);
+  EXPECT_EQ(refusal, Why::HeapInPieces);
+  EXPECT_TRUE(shouldRestart(refusal, kRefusalsBeforeRestart, false));
+  ++in.heap.largestBlock;
+  EXPECT_EQ(radioVerdict(in, kC61Profile), Why::Ok);
+}
+
 }  // namespace
 }  // namespace bleturner

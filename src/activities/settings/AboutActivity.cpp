@@ -5,6 +5,7 @@
 #include <HalClock.h>
 #include <HalFrontlight.h>
 #include <HalStorage.h>
+#include <HalSystem.h>
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <esp_mac.h>
@@ -27,13 +28,21 @@ enum MenuItem {
   ITEM_SD_USED,
   ITEM_SD_FREE,
   ITEM_DISPLAY,
+#if FREEINK_DEVICE_PICCO
+  ITEM_PANEL,
+#endif
   ITEM_RESOLUTION,
   ITEM_TOUCH,
   ITEM_FRONTLIGHT,
   ITEM_RTC,
   ITEM_IMU,
   ITEM_MAC,
+#if FREEINK_DEVICE_EEGO_A4
+  ITEM_UID,
+#endif
+  ITEM_ENUM_COUNT,
 };
+static_assert(ITEM_ENUM_COUNT == AboutActivity::ITEM_COUNT, "About rows and ITEM_COUNT differ");
 
 // Deliberately hardcoded English, exempt from the tr() rule: support reads
 // these screenshots across every device language, so the labels must be
@@ -47,12 +56,18 @@ const char* const menuNames[AboutActivity::ITEM_COUNT] = {
     "SD Used",
     "SD Free",
     "Display Controller",
+#if FREEINK_DEVICE_PICCO
+    "Display Panel",
+#endif
     "Resolution",
     "Touch",
     "Frontlight",
     "RTC",
     "Tilt Sensor (IMU)",
     "MAC Address",
+#if FREEINK_DEVICE_EEGO_A4
+    "UID",
+#endif
 };
 
 // "14.5 GB" / "35 MB": GiB with one decimal, MiB below 1 GiB.
@@ -133,6 +148,15 @@ void AboutActivity::onEnter() {
   // profile and applyXteinkDisplayController() may have promoted the display
   // controller to the panel actually found on the bus.
   rowValues_[ITEM_DEVICE] = BoardConfig::ACTIVE.name;
+#if FREEINK_DEVICE_EEGO_A4
+  uint32_t uid = 0;
+  if (HalSystem::getEegoUid(uid)) {
+    snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(uid));
+    rowValues_[ITEM_UID] = buf;
+  } else {
+    rowValues_[ITEM_UID] = "Error.";
+  }
+#endif
   rowValues_[ITEM_FIRMWARE] = CROSSPOINT_VERSION;
   snprintf(buf, sizeof(buf), "%s rev %u", ESP.getChipModel(), static_cast<unsigned>(ESP.getChipRevision()));
   rowValues_[ITEM_CHIP] = buf;
@@ -143,6 +167,10 @@ void AboutActivity::onEnter() {
   const char* liveController = display.controllerName();
   rowValues_[ITEM_DISPLAY] =
       liveController ? liveController : displayControllerName(BoardConfig::ACTIVE.displayController);
+#if FREEINK_DEVICE_PICCO
+  const char* panel = display.panelName();
+  rowValues_[ITEM_PANEL] = panel ? panel : "Unknown";
+#endif
   snprintf(buf, sizeof(buf), "%ux%u", static_cast<unsigned>(BoardConfig::ACTIVE.displayWidth),
            static_cast<unsigned>(BoardConfig::ACTIVE.displayHeight));
   rowValues_[ITEM_RESOLUTION] = buf;

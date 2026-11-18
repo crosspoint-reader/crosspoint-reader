@@ -160,11 +160,7 @@ bool HalGPIO::rawInputActive() {
   for (const int8_t pin : pins) {
     if (pin >= 0 && digitalRead(pin) == LOW) return true;
   }
-  InputManager::ButtonAdcSample g1{}, g2{};
-  inputMgr.readButtonAdc(g1, g2);
-  // The Xteink ladder idles at the ADC full-scale rail (~4095); every button band sits below 3900.
-  constexpr int kIdleRailMin = 4000;
-  return (g1.raw >= 0 && g1.raw < kIdleRailMin) || (g2.raw >= 0 && g2.raw < kIdleRailMin);
+  return inputMgr.isAdcLadderPhysicallyPressed();
 }
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }

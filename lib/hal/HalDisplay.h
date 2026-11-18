@@ -16,8 +16,12 @@ class HalDisplay {
   GrayscaleCapabilities grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const;
   // Controller of the driver chosen at boot (null if the driver does not say).
   const char* controllerName() const { return einkDisplay.getControllerName(); }
+  // Part number of the panel the boot probe identified (null if unknown).
+  const char* panelName() const { return einkDisplay.getPanelName(); }
   // True while book pages are presented; panels with a reading waveform use it.
   void setReaderRefresh(bool reading) { einkDisplay.setReaderRefresh(reading); }
+  // True asks text-overlay gray passes for every gray level (image pages).
+  void setOverlayFullTone(bool fullTone) { einkDisplay.setOverlayFullTone(fullTone); }
   bool displayRetainedGrayscaleOverlay(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool restore) {
     return einkDisplay.displayRetainedGrayscaleOverlay(x, y, w, h, restore);
   }

@@ -121,7 +121,7 @@ constexpr Why radioVerdict(const RadioInputs& in, const Profile& profile = activ
       // A book still building its index needs the heap the radio would take; its keys work.
       if (in.bookIndexing) return Why::Indexing;
       return Why::Ok;
-    case Phase::BeforeStart:
+    case Phase::BeforeStart: {
       if (in.storageBusy) return Why::StorageBusy;
       // A start at Home needs the block the reader will want after the stack; a refusal there is HeapLow, which
       // never asks for a restart into the book (there is none to restart into).
@@ -133,7 +133,10 @@ constexpr Why radioVerdict(const RadioInputs& in, const Profile& profile = activ
       // block beside the stack: the same verdict the rollback right after the start gave before
       // 07/10/2026, so the restart comes as it did. A heap short in total is not this: a restart
       // cannot give back bytes the book really uses.
-      return in.heap.freeBytes >= kMinimumFreeBytes ? Why::HeapInPieces : Why::HeapLow;
+      const size_t restartFloor =
+          profile.startFreeBytes < kMinimumFreeBytes ? profile.startFreeBytes : kMinimumFreeBytes;
+      return in.heap.freeBytes >= restartFloor ? Why::HeapInPieces : Why::HeapLow;
+    }
     case Phase::JustStarted:
       if (in.storageBusy) return Why::StorageBusy;
       // The stack may come up and take the reader's last large block. The check before the start
