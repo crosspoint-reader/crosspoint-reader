@@ -63,7 +63,8 @@ std::string destPath(const std::string& author, const std::string& title) {
   return path;
 }
 
-bool authRetryAllowed(const HttpDownloader::DownloadError result, const std::string& url, const std::string& serverUrl) {
+bool authRetryAllowed(const HttpDownloader::DownloadError result, const std::string& url,
+                      const std::string& serverUrl) {
   return result == HttpDownloader::UNAUTHORIZED && HttpDownloader::lastStatus() == 401 &&
          !HttpDownloader::lastAnswerRedirected() && freeink::fetchOrigin(url) == freeink::fetchOrigin(serverUrl);
 }

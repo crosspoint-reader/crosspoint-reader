@@ -45,7 +45,8 @@ class OpdsStartupSyncActivity final : public Activity, private UiAppHost {
 
   std::string statusMessage;
   OpdsBatchDownload::Status status;
-  OpdsBatchDownload::Status shown;  // Copy of status for the render task
+  // Copy of status for the render task.
+  OpdsBatchDownload::Status shown;
   size_t bytes = 0;       // Bytes of the current transfer
   size_t bytesTotal = 0;  // Content-Length of the current transfer, 0 if unknown
   // Same client setup as the OPDS browser (credentials, custom headers, saved
