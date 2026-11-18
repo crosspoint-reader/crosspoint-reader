@@ -10,6 +10,8 @@
 #include "BookmarkUtil.h"
 
 namespace {
+constexpr size_t MAX_FILE_BYTES = 50000;  // SDCardManager::readFile limit
+
 void readSyncState(const JsonDocument& doc, BookmarkFile::SyncState& state) {
   state.account = doc["acct"] | "";
   for (JsonVariantConst item : doc["del"].as<JsonArrayConst>()) {
@@ -128,6 +130,13 @@ bool write(const std::string& bookPath, const std::vector<BookmarkEntry>& bookma
       BookmarkUtil::formatSyncId(id, hex);
       del.add(static_cast<const char*>(hex));  // const char* makes ArduinoJson copy the text
     }
+  }
+
+  // An incomplete or oversized document must not replace the file: the storage
+  // layer cannot read back more than 50,000 bytes.
+  if (doc.overflowed() || measureJson(doc) > MAX_FILE_BYTES) {
+    LOG_ERR("BKM", "Bookmark file too large or out of memory; not saved");
+    return false;
   }
 
   // writeDocToFile ensures /.crosspoint; the bookmarks subdirectory is ours.

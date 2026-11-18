@@ -113,7 +113,10 @@ bool readingSessionLog::append(const std::string& document, const std::string& b
     LOG_ERR("RSL", "Failed to open the reading session log");
     return false;
   }
+  const size_t sizeBefore = file.size();
   const bool written = file.write(line.data(), line.size()) == line.size();
+  // A partial line would swallow the next session appended after it.
+  if (!written) file.truncate(sizeBefore);
   file.close();
   if (!written) LOG_ERR("RSL", "Failed to append a reading session");
   return written;

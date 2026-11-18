@@ -1,6 +1,7 @@
 #include "BookmarkSync.h"
 
 #include <ArduinoJson.h>
+#include <HalStorage.h>
 #include <KOReaderCredentialStore.h>
 #include <Logging.h>
 
@@ -136,7 +137,10 @@ void applyRemote(JsonObjectConst item, std::vector<BookmarkEntry>& bookmarks, st
 
   const char* xpath = item["xpath"] | "";
   // An item whose id does not come from its XPath could never be deleted from this device.
-  if (!item["percentage"].is<float>() || strlen(xpath) > MAX_XPATH_LENGTH || BookmarkUtil::syncId(xpath) != id) return;
+  if (!item["percentage"].is<float>() || !xpath[0] || strlen(xpath) > MAX_XPATH_LENGTH ||
+      BookmarkUtil::syncId(xpath) != id) {
+    return;
+  }
   size_t listBytes = 0;
   for (const BookmarkEntry& bookmark : bookmarks) listBytes += storedBytes(bookmark);
   if (bookmarks.size() >= MAX_BOOKMARKS || listBytes + strlen(xpath) + 400 > MAX_LIST_BYTES) {
@@ -165,22 +169,32 @@ void applyRemote(JsonObjectConst item, std::vector<BookmarkEntry>& bookmarks, st
 
 bool bookmarkSync::run(SyncRequest& sync, const std::string& bookPath, const std::string& documentHash) {
   const std::string url = KOREADER_STORE.getBaseUrl() + "/api/v1/bookmarks/" + documentHash;
-  const std::string account = SyncRequest::account();
+  // The document id is part of the scope: changing the match method points the book at another server document.
+  const std::string account = SyncRequest::account() + "#" + documentHash;
   JsonDocument doc;
 
   std::vector<BookmarkEntry> bookmarks;
   BookmarkFile::SyncState state;
-  BookmarkFile::load(bookPath, bookmarks, &state);
+  if (!BookmarkFile::load(bookPath, bookmarks, &state) &&
+      Storage.exists(BookmarkUtil::getBookmarkPath(bookPath).c_str())) {
+    // An unreadable file is not an empty list: saving the server's list over it would drop local bookmarks.
+    LOG_ERR("BKS", "Bookmark file unreadable; sync skipped");
+    return false;
+  }
   bool changed = !state.deleted.empty();
   if (state.account != account) {
-    // The flags describe another account: this one must receive every bookmark and none of the deletions.
+    // The flags describe another account or document: this one must receive every bookmark and none of the deletions.
     for (BookmarkEntry& bookmark : bookmarks) bookmark.synced = false;
     state.deleted.clear();
     changed = !bookmarks.empty();
   }
 
   // Deletions go first so a bookmark removed and added again ends up present.
-  if (!pushDeletions(sync, url, doc, state.deleted) || !pushNew(sync, url, doc, bookmarks, changed)) return false;
+  if (!pushDeletions(sync, url, doc, state.deleted)) return false;
+  // Saved now so a failed upload below does not send acknowledged deletions again.
+  if (changed && !BookmarkFile::saveSynced(bookPath, bookmarks, account)) return false;
+  changed = false;
+  if (!pushNew(sync, url, doc, bookmarks, changed)) return false;
   if (changed && !BookmarkFile::saveSynced(bookPath, bookmarks, account)) return false;
   changed = false;
 

@@ -84,7 +84,7 @@ void localDeletionIsRemembered() {
 void bookmarksMerge() {
   fake::reset();
   uploads.clear();
-  const std::string account = SyncRequest::account();
+  const std::string account = SyncRequest::account() + "#" + document;
   BookmarkEntry renamed = bookmark("/renamed-there", true);
   renamed.name = "old name";
   assert(

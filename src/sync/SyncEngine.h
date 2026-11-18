@@ -48,6 +48,8 @@ KOReaderProgress localProgress(const std::string& documentHash, const std::strin
 // Sync On Sleep. The reader records its book and position before sleep starts;
 // syncOnSleep() runs after the reader has closed, when its memory is free.
 void noteSleepBook(const std::string& bookPath, const CrossPointPosition& position);
+// The reader may move a finished book while it closes; the recorded path follows it.
+void sleepBookMoved(const std::string& from, const std::string& to);
 bool sleepSyncPending();
 
 // Maps the recorded position into the upload. The chapter mapper borrows the

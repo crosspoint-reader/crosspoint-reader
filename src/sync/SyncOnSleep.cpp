@@ -80,6 +80,10 @@ void syncEngine::noteSleepBook(const std::string& bookPath, const CrossPointPosi
   sleepBook = SleepBook{bookPath, position, {}};
 }
 
+void syncEngine::sleepBookMoved(const std::string& from, const std::string& to) {
+  if (sleepBook && sleepBook->path == from) sleepBook->path = to;
+}
+
 bool syncEngine::sleepSyncPending() { return sleepBook.has_value(); }
 
 bool syncEngine::prepareSleepSync() {
