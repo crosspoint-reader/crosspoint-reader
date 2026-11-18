@@ -834,11 +834,8 @@ void setup() {
   }
 
   if (resume == BootResume::Silent) {
-    // Block until the first paint physically completes. refreshDisplay()
-    // waits on the panel BUSY pin so when this returns the user can see the
-    // new activity. Without the wait, an edge captured by gpio.update()
-    // during boot dispatches against an invisible Home and the default
-    // selectorIndex=0 opens the most-recent book.
+    // Wait for the first paint before dispatching input. A boot-time
+    // confirm edge could otherwise open the most recent book before Home is visible.
     activityManager.requestUpdateAndWait();
     // Absorb any button held at this point into currentState as a non-edge:
     // two gpio.update() calls separated by > InputManager's 5ms debounce

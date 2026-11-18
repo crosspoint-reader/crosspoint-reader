@@ -67,7 +67,6 @@ class GfxRenderer {
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
   // fontCacheManager_ below.
   mutable std::map<int, SdCardFont*> sdCardFonts_;
-  mutable std::map<int, uint16_t> sdCardFontScales_;  // fontId -> 8.8 fixed point scale (256=1.0x)
   // TTF (vector) fonts: rebuilt per page by ensureSdCardFontReady(). Mutable for
   // the same reason as sdCardFonts_ (const layout path triggers a rebuild).
   mutable std::map<int, TtfEpdFont*> ttfFonts_;
@@ -154,7 +153,6 @@ class GfxRenderer {
   void removeFont(int fontId) {
     fontMap.erase(fontId);
     sdCardFonts_.erase(fontId);
-    sdCardFontScales_.erase(fontId);
   }
   void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
@@ -172,21 +170,10 @@ class GfxRenderer {
   using TextGetter = const char* (*)(const void* ctx, uint32_t index);
   void prewarmFallbackText(int fontId, TextGetter getter, const void* ctx, uint32_t textCount,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
-  void prewarmFallbackText(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   bool isFontCacheScanning() const;
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }
-  void unregisterSdCardFont(int fontId) { removeFont(fontId); }
-  void clearSdCardFonts() {
-    sdCardFonts_.clear();
-    sdCardFontScales_.clear();
-  }
-  void registerSdCardFontScale(int fontId, uint16_t scale) { sdCardFontScales_[fontId] = scale; }
-  void clearSdCardFontScales() { sdCardFontScales_.clear(); }
-  uint16_t getSdCardFontScale(int fontId) const {
-    auto it = sdCardFontScales_.find(fontId);
-    return (it != sdCardFontScales_.end()) ? it->second : 256;
-  }
+  void clearSdCardFonts() { sdCardFonts_.clear(); }
   const std::map<int, SdCardFont*>& getSdCardFonts() const { return sdCardFonts_; }
   bool isSdCardFont(int fontId) const { return sdCardFonts_.count(fontId) > 0; }
   // TTF (vector) fonts rendered via TtfEpdFont/FreeInkFont. Registered like an
@@ -255,12 +242,9 @@ class GfxRenderer {
   // fadingFix isn't forcing the blocking path. Callers can skip overlap
   // scaffolding (e.g. whole-plane grayscale buffers) when false.
   bool supportsAsyncRefresh() const;
-  // True when the display can overlap an ordinary B/W refresh with grayscale
-  // composition without bypassing a required grayscale base waveform.
+  // When checking stripUploads, pass the grayscale mode used for the planes.
   HalDisplay::GrayscaleCapabilities grayscaleCapabilities(
       HalDisplay::GrayscaleMode mode = HalDisplay::GrayscaleMode::Overlay) const;
-  // Compatibility queries for Overlay mode.
-  bool supportsAsyncGrayscaleBase() const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   // Repaint a B/W rectangle over retained gray pixels; false means the caller must use its normal paint.
   bool displayRetainedGrayscaleOverlay(int x, int y, int width, int height, bool restore = false) const;
@@ -390,12 +374,9 @@ class GfxRenderer {
   // Grayscale functions
   void setRenderMode(RenderMode mode);
   RenderMode getRenderMode() const { return renderMode; }
-  // Grayscale preconditioning settle pass (no-op on X4). The rect overload
-  // takes the gray region in LOGICAL screen coordinates and rotates it to the
-  // panel; the no-arg overload settles the full frame. Call after the BW base
-  // frame is displayed and before the grayscale planes are written.
+  // Settle the full frame after displaying the B/W base and before writing
+  // the grayscale planes (no-op on X4).
   void preconditionGrayscale() const;
-  void preconditionGrayscale(int x, int y, int w, int h) const;
   // Display the framebuffer as the base frame for a grayscale overlay that
   // follows (X3: OEM differential base waveform; others: plain display with
   // `fallback`).
@@ -415,12 +396,9 @@ class GfxRenderer {
 
   // Tiled grayscale (X4): stream one band of a plane straight to controller RAM
   // from `scratch` (panelWidthBytes * numRows, physical rows [yStart, yStart+
-  // numRows)), bypassing the framebuffer. supportsStripGrayscale() gates use.
+  // numRows)), bypassing the framebuffer. Check grayscaleCapabilities(mode).stripUploads
+  // with the same grayscale mode used for the planes.
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const;
-  bool supportsStripGrayscale() const;
-  // Paper Mono: the base activation is deferred so base + gray planes go out
-  // as one waveform. Route the base through displayGrayscaleBase() when true.
-  bool combinesGrayscaleBase() const;
   bool storeBwBuffer();  // Returns true if buffer was stored successfully
   // Restore and free the stored buffer. resyncPanelBaseline rewrites the
   // controller's differential baseline to the restored frame — correct after

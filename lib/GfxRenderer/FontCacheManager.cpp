@@ -96,13 +96,6 @@ int FontCacheManager::getIdleLookaheadPages(const int fontId) const {
 #endif
 }
 
-void FontCacheManager::logStats(const char* label) {
-  if (fontDecompressor_) fontDecompressor_->logStats(label);
-  for (auto& [id, font] : sdCardFonts_) {
-    font->logStats(label);
-  }
-}
-
 void FontCacheManager::resetStats() {
   if (fontDecompressor_) fontDecompressor_->resetStats();
   for (auto& [id, font] : sdCardFonts_) {

@@ -216,10 +216,3 @@ size_t utf8RemoveLastChar(std::string& str) {
   str.resize(pos);
   return pos;
 }
-
-// Truncate string by removing N UTF-8 characters from the end
-void utf8TruncateChars(std::string& str, const size_t numChars) {
-  for (size_t i = 0; i < numChars && !str.empty(); ++i) {
-    utf8RemoveLastChar(str);
-  }
-}

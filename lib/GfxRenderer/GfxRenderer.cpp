@@ -337,16 +337,6 @@ void GfxRenderer::prewarmFallbackText(const int fontId, const TextGetter getter,
                         /*loadKernLig=*/false);
 }
 
-void GfxRenderer::prewarmFallbackText(const int fontId, const char* text, const EpdFontFamily::Style style) const {
-  if (text == nullptr || *text == '\0') {
-    return;
-  }
-  const int resolvedFontId = resolveTextFontId(fontId, text, style);
-  if (resolvedFontId != fontId) {
-    ensureSdGlyphsResident(resolvedFontId, text, style, false);
-  }
-}
-
 void GfxRenderer::ensureSdGlyphsResident(const int fontId, const char* text, const EpdFontFamily::Style style,
                                          const bool metadataOnly) const {
   const auto sdIt = sdCardFonts_.find(fontId);
@@ -466,11 +456,9 @@ enum class TextRotation { None, Rotated90CW };
 //
 // drawText() scales the advance width by the same factor so layout reserves exactly
 // the right horizontal space for the scaled glyph.
-static void renderCharScaled(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
-                             const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
-                             const bool pixelState, const EpdFontFamily::Style style, const int scaleNum,
-                             const int scaleDen) {
-  if (renderer.grayPlanesAreAbsolute()) renderMode = GfxRenderer::BW;
+static void renderCharScaled(const GfxRenderer& renderer, const EpdFontFamily& fontFamily, const uint32_t cp,
+                             int cursorX, int cursorY, const bool pixelState, const EpdFontFamily::Style style,
+                             const int scaleNum, const int scaleDen) {
   EpdGlyph solidFallback;
   const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, solidFallback, style);
   if (!glyph) return;
@@ -801,10 +789,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
     if (isSupSub) {
       // yPos already carries the vertical offset applied by TextBlock::render().
-      renderCharScaled(*this, renderMode, font, cp, lastBaseX, yPos, black, style, 1, 2);
+      renderCharScaled(*this, font, cp, lastBaseX, yPos, black, style, 1, 2);
     } else if (isSmallCap) {
-      renderCharScaled(*this, renderMode, font, cp, lastBaseX, yPos, black, style, SMALL_CAPS_SCALE_NUM,
-                       SMALL_CAPS_SCALE_DEN);
+      renderCharScaled(*this, font, cp, lastBaseX, yPos, black, style, SMALL_CAPS_SCALE_NUM, SMALL_CAPS_SCALE_DEN);
     } else {
       renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
     }
@@ -1015,21 +1002,6 @@ void GfxRenderer::fillRect(const int x, const int y, const int width, const int 
 
 // NOTE: Those are in critical path, and need to be templated to avoid runtime checks for every pixel.
 // Any branching must be done outside the loops to avoid performance degradation.
-template <>
-void GfxRenderer::drawPixelDither<Color::Clear>(const int x, const int y) const {
-  // Do nothing
-}
-
-template <>
-void GfxRenderer::drawPixelDither<Color::Black>(const int x, const int y) const {
-  drawPixel(x, y, true);
-}
-
-template <>
-void GfxRenderer::drawPixelDither<Color::White>(const int x, const int y) const {
-  drawPixel(x, y, false);
-}
-
 template <>
 void GfxRenderer::drawPixelDither<Color::LightGray>(const int x, const int y) const {
   drawPixel(x, y, x % 2 == 0 && y % 2 == 0);
@@ -1804,8 +1776,6 @@ HalDisplay::GrayscaleCapabilities GfxRenderer::grayscaleCapabilities(HalDisplay:
   return caps;
 }
 
-bool GfxRenderer::supportsAsyncGrayscaleBase() const { return grayscaleCapabilities().asyncBase; }
-
 size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const {
   if (dst == nullptr || w <= 0 || h <= 0) return 0;
 
@@ -2453,24 +2423,6 @@ bool GfxRenderer::displayRetainedGrayscaleOverlay(int x, int y, int width, int h
 
 void GfxRenderer::preconditionGrayscale() const { display.preconditionGrayscale(); }
 
-void GfxRenderer::preconditionGrayscale(int x, int y, int w, int h) const {
-  if (w <= 0 || h <= 0) return;
-  // Rotate the logical rect's opposite corners to physical panel coords; the
-  // physical bbox stays axis-aligned for all four orientations.
-  int ax, ay, bx, by;
-  rotateCoordinates(orientation, x, y, &ax, &ay, panelWidth, panelHeight);
-  rotateCoordinates(orientation, x + w - 1, y + h - 1, &bx, &by, panelWidth, panelHeight);
-  int x0 = ax < bx ? ax : bx, x1 = ax > bx ? ax : bx;
-  int y0 = ay < by ? ay : by, y1 = ay > by ? ay : by;
-  if (x0 < 0) x0 = 0;
-  if (y0 < 0) y0 = 0;
-  if (x1 >= panelWidth) x1 = panelWidth - 1;
-  if (y1 >= panelHeight) y1 = panelHeight - 1;
-  if (x1 < x0 || y1 < y0) return;
-  display.preconditionGrayscale(static_cast<uint16_t>(x0), static_cast<uint16_t>(y0),
-                                static_cast<uint16_t>(x1 - x0 + 1), static_cast<uint16_t>(y1 - y0 + 1));
-}
-
 void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuffers(frameBuffer); }
 
 void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(frameBuffer); }
@@ -2492,12 +2444,6 @@ void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch
   // Guard the uint16_t casts below: a negative would wrap to a huge length.
   assert(yStart >= 0 && numRows > 0 && yStart <= static_cast<int>(panelHeight) - numRows);
   display.writeGrayscalePlaneStrip(lsbPlane, scratch, static_cast<uint16_t>(yStart), static_cast<uint16_t>(numRows));
-}
-
-bool GfxRenderer::supportsStripGrayscale() const { return grayscaleCapabilities().stripUploads; }
-
-bool GfxRenderer::combinesGrayscaleBase() const {
-  return grayscaleCapabilities().base == HalDisplay::GrayscaleBase::Combined;
 }
 
 void GfxRenderer::freeBwBufferChunks() {
