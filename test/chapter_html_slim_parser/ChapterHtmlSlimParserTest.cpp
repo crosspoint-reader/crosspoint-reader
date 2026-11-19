@@ -762,102 +762,29 @@ TEST_F(ChapterBlockDecorationTest, LeadingBreakDoesNotAddBlankSpace) {
   EXPECT_EQ(lines[0]->yPos, 0);
 }
 
-// Calibre wraps the rest of a sentence split by a print page inside the marker.
-TEST_F(ChapterHtmlSlimParserTest, PagebreakMarkerAfterBreakKeepsItsProse) {
-  const std::string text = parseToParagraphText(
-      "<p>the sentence stops<br/><span epub:type=\"pagebreak\" aria-label=\"136\" id=\"page136\" "
-      "title=\"136\">and its continuation sits inside.</span></p>");
-  EXPECT_NE(text.find("the sentence stops"), std::string::npos) << text;
-  EXPECT_NE(text.find("and its continuation sits inside."), std::string::npos) << text;
-}
-
-// Replayed words keep their own source offsets, so a clipping keeps their spaces.
-TEST_F(ChapterHtmlSlimParserTest, ShortProseInPagebreakMarkerKeepsItsWordGaps) {
-  EXPECT_EQ(parseToParagraphText("<p>It went <span role=\"doc-pagebreak\" title=\"7\"> on and on</span> here.</p>"),
-            "It went on and on here.");
-  EXPECT_EQ(parseToParagraphText("<p>It went <span role=\"doc-pagebreak\">on and <em>on</em></span> here.</p>"),
-            "It went on and on here.");
-}
-
-TEST_F(ChapterHtmlSlimParserTest, EmptyAndLabelPagebreakMarkersRenderNothing) {
-  EXPECT_EQ(parseToParagraphText("<p>one <span epub:type=\"pagebreak\" title=\"12\">12</span>two "
-                                 "<span epub:type=\"pagebreak\" id=\"p13\"/>three "
-                                 "<span role=\"doc-pagebreak\">xiv</span>four "
-                                 "<span epub:type=\"pagebreak\"><br/></span>five</p>"),
-            "one two three four five");
-}
-
-TEST_F(ChapterHtmlSlimParserTest, LabelInNestedWrapperInPagebreakMarkerRendersNothing) {
-  EXPECT_EQ(
-      parseToParagraphText("<p>one <span epub:type=\"pagebreak\" aria-label=\"136\"><span>136</span></span>two "
-                           "<span role=\"doc-pagebreak\" title=\"p. 12\"><a id=\"p12\">p. 12</a></span>three</p>"),
-      "one two three");
-}
-
-TEST_F(ChapterHtmlSlimParserTest, ProseInNestedWrapperInPagebreakMarkerIsKept) {
-  EXPECT_EQ(parseToParagraphText(
-                "<p>It went <span epub:type=\"pagebreak\" title=\"7\"><span>real words here</span></span> on.</p>"),
-            "It went real words here on.");
-  // Longer than the capture buffer: replayed early, from inside the wrapper.
-  EXPECT_EQ(parseToParagraphText("<p>It went <span epub:type=\"pagebreak\" title=\"7\"><span>on with a sentence too "
-                                 "long for any page label</span></span> here.</p><p>next</p>"),
-            "It went on with a sentence too long for any page label here.\nnext");
-}
-
-// A styled or linking child is not a bare wrapper: it replays at once and keeps its formatting.
-TEST_F(ChapterHtmlSlimParserTest, StyledOrLinkingChildInPagebreakMarkerKeepsItsFormatting) {
-  const XML_Char* marker[] = {"epub:type", "pagebreak", "title", "7", nullptr};
-  const XML_Char* bold[] = {"style", "font-weight: bold", nullptr};
-  const XML_Char* link[] = {"href", "#note", nullptr};
-  parser.beginParse();
-  ChapterHtmlSlimParser::startElement(&parser, "p", nullptr);
-  ChapterHtmlSlimParser::characterData(&parser, "Plain ", 6);
-  ChapterHtmlSlimParser::startElement(&parser, "span", marker);
-  ChapterHtmlSlimParser::startElement(&parser, "span", bold);
-  ChapterHtmlSlimParser::characterData(&parser, "strong", 6);
-  ChapterHtmlSlimParser::endElement(&parser, "span");
-  ChapterHtmlSlimParser::endElement(&parser, "span");
-  ChapterHtmlSlimParser::characterData(&parser, " ", 1);
-  ChapterHtmlSlimParser::startElement(&parser, "span", marker);
-  ChapterHtmlSlimParser::startElement(&parser, "a", link);
-  const uint8_t linkId = parser.currentFootnoteLinkId;
-  ChapterHtmlSlimParser::characterData(&parser, "noted", 5);
-  ChapterHtmlSlimParser::endElement(&parser, "a");
-  ChapterHtmlSlimParser::endElement(&parser, "span");
-  ChapterHtmlSlimParser::characterData(&parser, " end", 4);
-  parser.flushPartWordBuffer();
-
-  ASSERT_EQ(parser.currentTextBlock->size(), 4u);
-  EXPECT_EQ(parser.currentTextBlock->wordAt(1), "strong");
-  EXPECT_NE(static_cast<uint8_t>(parser.currentTextBlock->getWordStyleAt(1)) & EpdFontFamily::BOLD, 0u);
-  EXPECT_EQ(static_cast<uint8_t>(parser.currentTextBlock->getWordStyleAt(0)) & EpdFontFamily::BOLD, 0u);
-  EXPECT_EQ(parser.currentTextBlock->wordAt(2), "noted");
-  ASSERT_NE(linkId, 0u);
-  EXPECT_TRUE(parser.currentTextBlock->linkTargetMatches(linkId, "#note"));
-  EXPECT_EQ(static_cast<uint8_t>(parser.currentTextBlock->getWordStyleAt(3)) & EpdFontFamily::BOLD, 0u);
-  parser.abortParse();
-}
-
-TEST_F(ChapterHtmlSlimParserTest, PagebreakAttributeOnParagraphKeepsItsText) {
+// Some publishers put the pagebreak attribute on the block that starts the print page
+// (#3116): a text-bearing block renders normally.
+TEST_F(ChapterHtmlSlimParserTest, PagebreakAttributeOnTextBlockKeepsItsText) {
   EXPECT_EQ(parseToParagraphText("<p>before</p><p epub:type=\"pagebreak\" title=\"5\">Real paragraph</p>"),
             "before\nReal paragraph");
+  EXPECT_EQ(parseToParagraphText("<h2 role=\"doc-pagebreak\" title=\"9\">Part Two</h2><p>body</p>"), "Part Two\nbody");
+  EXPECT_EQ(parseToParagraphText("<blockquote epub:type=\"pagebreak\" title=\"3\">Quoted</blockquote>"
+                                 "<ul><li role=\"doc-pagebreak\" title=\"4\">Item</li></ul>"),
+            "Quoted\n\xE2\x80\xA2Item");  // the list item keeps its bullet
 }
 
-// The prose inside the marker does not prove the <br> before it is an artifact, so the
-// break stays a line break, as for any other inline content.
-TEST_F(ChapterBlockDecorationTest, BreakBeforeProsePagebreakMarkerStillBreaksLine) {
-  const XML_Char* marker[] = {"epub:type", "pagebreak", "title", "136", nullptr};
-  open("p", nullptr);
-  text("First");
-  open("br", nullptr);
-  close("br");
-  ChapterHtmlSlimParser::startElement(&parser, "span", marker);
-  text("continues here");
-  close("span");
-  close("p");
-  const auto lines = elementsWithTag(TAG_PageLine);
-  ASSERT_EQ(lines.size(), 2u);
-  EXPECT_EQ(lines[1]->yPos - lines[0]->yPos, renderer.getLineHeight(0));
+// Inline and other markers keep develop's behavior: the whole subtree is skipped,
+// labels and any prose inside alike (prose recovery is out of scope here).
+TEST_F(ChapterHtmlSlimParserTest, InlinePagebreakMarkersRenderNothing) {
+  EXPECT_EQ(parseToParagraphText("<p>one <span epub:type=\"pagebreak\" id=\"p11\"/>two "
+                                 "<span epub:type=\"pagebreak\" title=\"12\">12</span>three</p>"),
+            "one two three");
+  EXPECT_EQ(parseToParagraphText("<p>before <span role=\"doc-pagebreak\" aria-label=\"136\">"
+                                 "<span class=\"page-number\">136</span></span> after</p>"),
+            "before after");
+  EXPECT_EQ(parseToParagraphText("<p>It went <span epub:type=\"pagebreak\" title=\"7\">on and on</span> here.</p>"
+                                 "<div epub:type=\"pagebreak\" title=\"8\">8</div><p>next</p>"),
+            "It went here.\nnext");
 }
 
 TEST_F(ChapterBlockDecorationTest, PagebreakMarkerHoldingOnlyBreakAddsNoLine) {

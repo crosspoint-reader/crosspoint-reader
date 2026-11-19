@@ -121,24 +121,6 @@ uint16_t parseTableSpan(const char* value) {
   return span == 0 ? UINT16_MAX : static_cast<uint16_t>(span);
 }
 
-// True for an element that will start speculative pagebreak-marker capture: a
-// non-text-bearing element (span, a, div, hr, ...) carrying role="doc-pagebreak" or
-// epub:type="pagebreak". Text-bearing block elements (p, headings, li, blockquote)
-// bypass capture entirely (see the pagebreak comment in startElement).
-bool isPagebreakMarkerCandidate(const char* name, const XML_Char** atts) {
-  if (atts == nullptr) return false;
-  const bool textBearingBlock = strcmp(name, "p") == 0 || strcmp(name, "blockquote") == 0 || strcmp(name, "li") == 0 ||
-                                (name[0] == 'h' && name[1] >= '1' && name[1] <= '6' && name[2] == '\0');
-  if (textBearingBlock) return false;
-  for (int i = 0; atts[i]; i += 2) {
-    if ((strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0) ||
-        (strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // Returns true if the HTML element is a purely inline, non-navigable wrapper.
 // IDs on these elements are never meaningful navigation targets in epub content.
 // Reading-system converters (Kobo KePub, Calibre, etc.) frequently inject thousands
@@ -1383,35 +1365,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Inside a pagebreak marker, a <br> (Calibre emits
-  // <span epub:type="pagebreak" ...><br class="calibre1"/></span>) or a bare span/a
-  // wrapper around the label (<span aria-label="136"><span>136</span></span>) is not
-  // proof of real content: swallow the tag and keep capturing, so a label still renders
-  // nothing. A bare wrapper (no class, style or href) has no styling or link to lose if
-  // its text is replayed later. endElement swallows the matching close tag.
-  if (self->pagebreakCapturing) {
-    const bool bareWrapper = (strcmp(name, "span") == 0 || strcmp(name, "a") == 0) && !getAttribute(atts, "class") &&
-                             !getAttribute(atts, "style") && !getAttribute(atts, "href");
-    if (strcmp(name, "br") == 0 || bareWrapper) {
-      self->depth += 1;
-      return;
-    }
-  }
-
-  // Any other child element appearing while capturing a pagebreak marker's text
-  // proves it's real content. Replay what was
-  // captured so far as normal text, forget the capture, and let this element fall
-  // through to its normal handling below.
-  if (self->pagebreakCapturing) {
-    self->pagebreakCapturing = false;
-    if (self->pagebreakCaptureLen > 0) {
-      const uint32_t savedOffset = self->visibleTextOffset;
-      self->visibleTextOffset = self->pagebreakCaptureStartOffset;
-      self->characterData(userData, self->pagebreakCaptureBuffer, self->pagebreakCaptureLen);
-      self->visibleTextOffset = savedOffset;
-    }
-  }
-
   if (strcmp(name, "p") == 0) {
     self->xpathParagraphIndex++;
   }
@@ -2050,33 +2003,20 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Blocks with role="doc-pagebreak" / epub:type="pagebreak" mark print-page-number
-  // markers, which should render nothing. But real books misuse the attribute two ways:
-  // some converters (Calibre) wrap the continuation of the paragraph inside the marker
-  // span, and some publishers (InDesign exports) put the attribute directly on the <p>
-  // or heading that starts the print page (#3116). So: a text-bearing block element
-  // carrying the attribute renders completely normally (its content and block style
-  // matter more than hiding a label that, in that idiom, lives in the title attribute
-  // anyway), while marker-ish elements (span, a, div, hr...) capture their text
-  // speculatively; endElement (or an overflow/child-element check along the way)
-  // decides whether it's a droppable page label or real content.
-  if (isPagebreakMarkerCandidate(name, atts)) {
-    self->pagebreakCapturing = true;
-    self->pagebreakCaptureDepth = self->depth;
-    self->pagebreakCaptureLen = 0;
-    self->pagebreakCaptureBuffer[0] = '\0';
-    self->pagebreakLabel[0] = '\0';
-    self->pagebreakCaptureStartOffset = self->visibleTextOffset;
-    const char* label = getAttribute(atts, "aria-label");
-    if (!label || label[0] == '\0') {
-      label = getAttribute(atts, "title");
+  // Skip blocks with role="doc-pagebreak" and epub:type="pagebreak". Some publishers put
+  // the attribute on the paragraph or heading that starts the print page (#3116), so
+  // text-bearing blocks render normally.
+  const bool textBearingBlock = strcmp(name, "p") == 0 || strcmp(name, "blockquote") == 0 || strcmp(name, "li") == 0 ||
+                                (name[0] == 'h' && name[1] >= '1' && name[1] <= '6' && name[2] == '\0');
+  if (atts != nullptr && !textBearingBlock) {
+    for (int i = 0; atts[i]; i += 2) {
+      if (strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0 ||
+          strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0) {
+        self->skipUntilDepth = self->depth;
+        self->depth += 1;
+        return;
+      }
     }
-    if (label) {
-      strncpy(self->pagebreakLabel, label, sizeof(self->pagebreakLabel) - 1);
-      self->pagebreakLabel[sizeof(self->pagebreakLabel) - 1] = '\0';
-    }
-    self->depth += 1;
-    return;
   }
 
   // Detect internal <a href="..."> links (footnotes, cross-references)
@@ -2402,29 +2342,6 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     return;
   }
 
-  // Capturing a pagebreak marker's text: buffer it instead of processing normally.
-  // A page-number label is a handful of bytes, so an overflow alone proves this is
-  // real prose that leaked into the marker. Replay everything captured so far,
-  // forget the capture, and let the current chunk fall through to
-  // the normal path below.
-  if (self->pagebreakCapturing) {
-    const int spaceLeft = static_cast<int>(sizeof(self->pagebreakCaptureBuffer)) - 1 - self->pagebreakCaptureLen;
-    if (len <= spaceLeft) {
-      memcpy(self->pagebreakCaptureBuffer + self->pagebreakCaptureLen, s, len);
-      self->pagebreakCaptureLen += len;
-      self->pagebreakCaptureBuffer[self->pagebreakCaptureLen] = '\0';
-      return;
-    }
-    self->pagebreakCapturing = false;
-    if (self->pagebreakCaptureLen > 0) {
-      const uint32_t savedOffset = self->visibleTextOffset;
-      self->visibleTextOffset = self->pagebreakCaptureStartOffset;
-      self->characterData(userData, self->pagebreakCaptureBuffer, self->pagebreakCaptureLen);
-      self->visibleTextOffset = savedOffset;
-    }
-    // fall through: the current chunk (s, len) is processed normally below
-  }
-
   // Collect ruby text instead of normal word processing.
   if (self->collectingRubyText) {
     self->rubyTextBuffer.append(s, len);
@@ -2696,60 +2613,6 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   if (self->stopRequested) return;
   if (self->nonVisibleTextDepth > 0) {
     self->nonVisibleTextDepth--;
-  }
-
-  // Closing a child startElement swallowed while capturing: it had no effects to undo.
-  if (self->pagebreakCapturing && self->depth - 1 > self->pagebreakCaptureDepth) {
-    self->depth -= 1;
-    return;
-  }
-
-  // Closing the pagebreak-marker element itself while still capturing (no other nested
-  // element and no overflow forced a replay along the way). Trim ASCII whitespace
-  // and decide: drop the text if it's empty, matches the marker's own aria-label/
-  // title, or is a short arabic/roman page number; otherwise it's real content that
-  // leaked into the marker, so replay it.
-  if (self->pagebreakCapturing && self->depth - 1 == self->pagebreakCaptureDepth) {
-    self->pagebreakCapturing = false;
-
-    int start = 0;
-    int end = self->pagebreakCaptureLen;  // one past the last captured byte
-    while (start < end && isWhitespace(self->pagebreakCaptureBuffer[start])) {
-      start++;
-    }
-    while (end > start && isWhitespace(self->pagebreakCaptureBuffer[end - 1])) {
-      end--;
-    }
-    const char* trimmed = self->pagebreakCaptureBuffer + start;
-    const int trimmedLen = end - start;
-
-    bool dropIt = trimmedLen == 0;
-    if (!dropIt && self->pagebreakLabel[0] != '\0') {
-      const int labelLen = static_cast<int>(strlen(self->pagebreakLabel));
-      dropIt = labelLen == trimmedLen && memcmp(trimmed, self->pagebreakLabel, trimmedLen) == 0;
-    }
-    if (!dropIt && trimmedLen <= 8) {
-      bool allPageNumberChars = true;
-      for (int i = 0; i < trimmedLen; i++) {
-        const char c = trimmed[i];
-        if (!((c >= '0' && c <= '9') || strchr("ivxlcdmIVXLCDM", c) != nullptr)) {
-          allPageNumberChars = false;
-          break;
-        }
-      }
-      dropIt = allPageNumberChars;
-    }
-
-    if (!dropIt) {
-      const uint32_t savedOffset = self->visibleTextOffset;
-      self->visibleTextOffset = self->pagebreakCaptureStartOffset + start;  // trimmed whitespace is ASCII
-      self->characterData(userData, trimmed, trimmedLen);
-      self->visibleTextOffset = savedOffset;
-    }
-
-    self->pagebreakCaptureLen = 0;
-    self->depth -= 1;
-    return;
   }
 
   // Ruby text: </rt> distributes ruby to base words, </ruby> resets ruby state
