@@ -26,6 +26,9 @@ struct PluginRef {
   std::string description;   // one-line summary, if provided
   std::string manifestPath;  // device.json path, "" for a web-only plugin
   std::string readmePath;    // README.md path when present
+#if CROSSPOINT_DESSEN_APPS
+  std::string appPath;  // app.bin path when the plugin ships an on-device app
+#endif
   PluginLocations::DeviceKind deviceKind = PluginLocations::DeviceKind::None;
 };
 
