@@ -12,7 +12,6 @@
 #include <sdk/dessen_abi.h>
 #include <time.h>
 #include <wolfssl/wolfcrypt/aes.h>
-#include <wolfssl/wolfcrypt/sha256.h>
 
 #include <cstring>
 
@@ -62,7 +61,7 @@ int CrosspointServices::deviceId(char* out, uint32_t cap) {
   memcpy(input, secret, 32);
   memcpy(input + 32, appName_.data(), nameLen);
   uint8_t hash[32];
-  if (wc_Sha256Hash(input, 32 + nameLen, hash) != 0) return DSN_ERR_IO;
+  crypto_->sha256(input, 32 + nameLen, hash);
   if (65 > cap) return DSN_ERR_TOO_BIG;
   for (size_t i = 0; i < 32; i++) snprintf(out + 2 * i, 3, "%02x", hash[i]);
   return 64;
@@ -232,7 +231,8 @@ bool CrosspointServices::deviceKek(uint8_t out[32]) const {
   const size_t nameLen = appName_.size() > 64 ? 64 : appName_.size();
   memcpy(input, secret, 32);
   memcpy(input + 32, appName_.data(), nameLen);
-  return wc_Sha256Hash(input, 32 + nameLen, out) == 0;
+  crypto_->sha256(input, 32 + nameLen, out);
+  return true;
 }
 
 int CrosspointServices::secureWrap(const uint8_t* data, uint32_t n, uint8_t* out, uint32_t cap) {
