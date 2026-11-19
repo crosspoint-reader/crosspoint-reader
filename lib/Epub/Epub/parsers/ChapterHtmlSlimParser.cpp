@@ -1403,9 +1403,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->pagebreakCaptureLen > 0) {
       const uint32_t savedOffset = self->visibleTextOffset;
       self->visibleTextOffset = self->pagebreakCaptureStartOffset;
-      self->syntheticCharacterData = true;
       self->characterData(userData, self->pagebreakCaptureBuffer, self->pagebreakCaptureLen);
-      self->syntheticCharacterData = false;
       self->visibleTextOffset = savedOffset;
     }
   }
@@ -2402,8 +2400,8 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
   // Capturing a pagebreak marker's text: buffer it instead of processing normally.
   // A page-number label is a handful of bytes, so an overflow alone proves this is
-  // real prose that leaked into the marker. Replay everything captured so far as
-  // synthetic text, forget the capture, and let the current chunk fall through to
+  // real prose that leaked into the marker. Replay everything captured so far,
+  // forget the capture, and let the current chunk fall through to
   // the normal path below.
   if (self->pagebreakCapturing) {
     const int spaceLeft = static_cast<int>(sizeof(self->pagebreakCaptureBuffer)) - 1 - self->pagebreakCaptureLen;
@@ -2417,9 +2415,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     if (self->pagebreakCaptureLen > 0) {
       const uint32_t savedOffset = self->visibleTextOffset;
       self->visibleTextOffset = self->pagebreakCaptureStartOffset;
-      self->syntheticCharacterData = true;
       self->characterData(userData, self->pagebreakCaptureBuffer, self->pagebreakCaptureLen);
-      self->syntheticCharacterData = false;
       self->visibleTextOffset = savedOffset;
     }
     // fall through: the current chunk (s, len) is processed normally below
@@ -2702,7 +2698,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // element and no overflow forced a replay along the way). Trim ASCII whitespace
   // and decide: drop the text if it's empty, matches the marker's own aria-label/
   // title, or is a short arabic/roman page number; otherwise it's real content that
-  // leaked into the marker, so replay it as synthetic text.
+  // leaked into the marker, so replay it.
   if (self->pagebreakCapturing && self->depth - 1 == self->pagebreakCaptureDepth) {
     self->pagebreakCapturing = false;
 
@@ -2736,10 +2732,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
     if (!dropIt) {
       const uint32_t savedOffset = self->visibleTextOffset;
-      self->visibleTextOffset = self->pagebreakCaptureStartOffset;
-      self->syntheticCharacterData = true;
+      self->visibleTextOffset = self->pagebreakCaptureStartOffset + start;  // trimmed whitespace is ASCII
       self->characterData(userData, trimmed, trimmedLen);
-      self->syntheticCharacterData = false;
       self->visibleTextOffset = savedOffset;
     }
 

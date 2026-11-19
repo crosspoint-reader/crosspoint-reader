@@ -251,7 +251,7 @@ class ChapterHtmlSlimParser {
   // visibleTextOffset at the moment capture began. characterData() counts visible
   // codepoints unconditionally, ahead of the keep/drop decision, so by replay time
   // the running counter has already moved past the captured text; replays rewind to
-  // this value first so replayed words get the marker's start offset, not its end.
+  // this value and count again so replayed words keep their own source offsets.
   uint32_t pagebreakCaptureStartOffset = 0;
 
   // Resumable parse state. The one-shot parseAndBuildPages() drives these

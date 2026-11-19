@@ -771,6 +771,14 @@ TEST_F(ChapterHtmlSlimParserTest, PagebreakMarkerAfterBreakKeepsItsProse) {
   EXPECT_NE(text.find("and its continuation sits inside."), std::string::npos) << text;
 }
 
+// Replayed words keep their own source offsets, so a clipping keeps their spaces.
+TEST_F(ChapterHtmlSlimParserTest, ShortProseInPagebreakMarkerKeepsItsWordGaps) {
+  EXPECT_EQ(parseToParagraphText("<p>It went <span role=\"doc-pagebreak\" title=\"7\"> on and on</span> here.</p>"),
+            "It went on and on here.");
+  EXPECT_EQ(parseToParagraphText("<p>It went <span role=\"doc-pagebreak\">on and <em>on</em></span> here.</p>"),
+            "It went on and on here.");
+}
+
 TEST_F(ChapterHtmlSlimParserTest, EmptyAndLabelPagebreakMarkersRenderNothing) {
   EXPECT_EQ(parseToParagraphText("<p>one <span epub:type=\"pagebreak\" title=\"12\">12</span>two "
                                  "<span epub:type=\"pagebreak\" id=\"p13\"/>three "
