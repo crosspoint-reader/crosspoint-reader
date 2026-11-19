@@ -762,6 +762,58 @@ TEST_F(ChapterBlockDecorationTest, LeadingBreakDoesNotAddBlankSpace) {
   EXPECT_EQ(lines[0]->yPos, 0);
 }
 
+// Calibre wraps the rest of a sentence split by a print page inside the marker.
+TEST_F(ChapterHtmlSlimParserTest, PagebreakMarkerAfterBreakKeepsItsProse) {
+  const std::string text = parseToParagraphText(
+      "<p>the sentence stops<br/><span epub:type=\"pagebreak\" aria-label=\"136\" id=\"page136\" "
+      "title=\"136\">and its continuation sits inside.</span></p>");
+  EXPECT_NE(text.find("the sentence stops"), std::string::npos) << text;
+  EXPECT_NE(text.find("and its continuation sits inside."), std::string::npos) << text;
+}
+
+TEST_F(ChapterHtmlSlimParserTest, EmptyAndLabelPagebreakMarkersRenderNothing) {
+  EXPECT_EQ(parseToParagraphText("<p>one <span epub:type=\"pagebreak\" title=\"12\">12</span>two "
+                                 "<span epub:type=\"pagebreak\" id=\"p13\"/>three "
+                                 "<span role=\"doc-pagebreak\">xiv</span>four "
+                                 "<span epub:type=\"pagebreak\"><br/></span>five</p>"),
+            "one two three four five");
+}
+
+TEST_F(ChapterHtmlSlimParserTest, PagebreakAttributeOnParagraphKeepsItsText) {
+  EXPECT_EQ(parseToParagraphText("<p>before</p><p epub:type=\"pagebreak\" title=\"5\">Real paragraph</p>"),
+            "before\nReal paragraph");
+}
+
+// The prose inside the marker does not prove the <br> before it is an artifact, so the
+// break stays a line break, as for any other inline content.
+TEST_F(ChapterBlockDecorationTest, BreakBeforeProsePagebreakMarkerStillBreaksLine) {
+  const XML_Char* marker[] = {"epub:type", "pagebreak", "title", "136", nullptr};
+  open("p", nullptr);
+  text("First");
+  open("br", nullptr);
+  close("br");
+  ChapterHtmlSlimParser::startElement(&parser, "span", marker);
+  text("continues here");
+  close("span");
+  close("p");
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(lines[1]->yPos - lines[0]->yPos, renderer.getLineHeight(0));
+}
+
+TEST_F(ChapterBlockDecorationTest, PagebreakMarkerHoldingOnlyBreakAddsNoLine) {
+  const XML_Char* marker[] = {"epub:type", "pagebreak", nullptr};
+  open("p", nullptr);
+  text("First ");
+  ChapterHtmlSlimParser::startElement(&parser, "span", marker);
+  open("br", nullptr);
+  close("br");
+  close("span");
+  text("Second");
+  close("p");
+  EXPECT_EQ(elementsWithTag(TAG_PageLine).size(), 1u);
+}
+
 TEST_F(ChapterBlockDecorationTest, BreakAfterHeadingAddsOneLine) {
   open("h2", nullptr);
   text("Heading");

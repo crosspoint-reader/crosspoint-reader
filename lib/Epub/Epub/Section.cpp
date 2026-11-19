@@ -85,7 +85,8 @@ namespace {
 // v75: Headings are not hyphenated.
 // v76: Render pagebreak marker content unless it is just the page label.
 // v77: A <br> immediately before a pagebreak marker with replayed content no longer breaks the line.
-constexpr uint8_t SECTION_FILE_VERSION = 77;
+// v78: A <br> before a pagebreak marker breaks the line again (v77 reverted).
+constexpr uint8_t SECTION_FILE_VERSION = 78;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
