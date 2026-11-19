@@ -297,7 +297,10 @@ void SerialTransferActivity::handleFrame() {
       memcpy(txBuf + REPLY_HEAD, hello, sizeof(hello));
       txLen = sizeof(hello);
       if (!hostSeen) {
-        hostSeen = true;
+        {
+          RenderLock lock;
+          hostSeen = true;
+        }
         setAction("Computer connected");
         dirty = true;
       }
@@ -530,8 +533,26 @@ uint8_t SerialTransferActivity::cmdWrite(const uint8_t* p, size_t n) {
 
 uint8_t SerialTransferActivity::cmdWriteEnd() {
   if (!writeFile) return ST_STATE;
+  // HalFile::flush() reports nothing, so confirm the stage holds every byte we accepted
+  // (close() also writes the last buffered data) before it may replace anything.
+  const uint32_t expectedSize = static_cast<uint32_t>(writeFile.position());
   writeFile.flush();
-  writeFile.close();
+  const bool closed = writeFile.close();
+  bool complete = closed;
+  if (complete) {
+    HalFile check;
+    complete = Storage.openFileForRead("SER", writePart.c_str(), check) && check.size() == expectedSize;
+    if (check) check.close();
+  }
+  if (!complete) {
+    Storage.remove(writePart.c_str());
+    writePart.clear();
+    writeTarget.clear();
+    writeIsFont = false;
+    setAction("Upload failed: SD write error");
+    dirty = true;
+    return ST_IO;
+  }
   uint8_t status = ST_OK;
   if (writeIsFont) {
     // Same magic-byte check as the web uploader.
@@ -559,6 +580,7 @@ uint8_t SerialTransferActivity::cmdWriteEnd() {
   }
   // Keep the original aside until the new file is in place, so a failed rename loses nothing.
   std::string backup;
+  std::string restoreFailedPath;
   bool replaced = false;
   if (Storage.exists(writeTarget.c_str())) {
     if (!writeOverwrite) {
@@ -590,9 +612,12 @@ uint8_t SerialTransferActivity::cmdWriteEnd() {
         }
       }
     } else {
-      if (replaced) Storage.rename(backup.c_str(), writeTarget.c_str());  // put the original back
       Storage.remove(writePart.c_str());
       status = ST_IO;
+      if (replaced && !Storage.rename(backup.c_str(), writeTarget.c_str())) {
+        // Could not put the original back: leave it where it is and say where.
+        restoreFailedPath = backup;
+      }
     }
   }
   writePart.clear();
@@ -600,7 +625,14 @@ uint8_t SerialTransferActivity::cmdWriteEnd() {
   if (writeIsFont && status == ST_OK) sdFontSystem.markRegistryDirty();
   writeIsFont = false;
   if (status == ST_OK) filesDone++;
-  setAction(status == ST_OK ? "Received " + std::to_string(filesDone) + " file(s)" : std::string("Upload failed"));
+  if (!restoreFailedPath.empty()) {
+    // The reply payload carries the path so the browser can tell the user where the original is.
+    txLen = std::min(restoreFailedPath.size(), MAX_PAYLOAD);
+    memcpy(txBuf + REPLY_HEAD, restoreFailedPath.data(), txLen);
+    setAction("Original kept as " + restoreFailedPath.substr(restoreFailedPath.rfind('/') + 1));
+  } else {
+    setAction(status == ST_OK ? "Received " + std::to_string(filesDone) + " file(s)" : std::string("Upload failed"));
+  }
   dirty = true;
   return status;
 }

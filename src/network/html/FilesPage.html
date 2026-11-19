@@ -3759,6 +3759,8 @@ async function uploadFile() {
           await uploadFileHTTP(file, onProgress, null, null);
           onComplete();
         } catch (httpError) {
+          // A cancel during the HTTP retry must not advance to the next file.
+          if (operationCancelled) { if (uploadGeneration === myGeneration) restoreAfterCancel(); return; }
           onError(httpError.message);
         }
       } else {

@@ -19,8 +19,9 @@
   const dec = new TextDecoder();
 
   class DeviceError extends Error {
-    constructor(status, what) {
-      super((what ? what + ': ' : '') + (STATUS_TEXT[status] || 'error ' + status));
+    constructor(status, what, detail) {
+      super((what ? what + ': ' : '') + (STATUS_TEXT[status] || 'error ' + status) +
+            (detail ? ' (original file kept as ' + detail + ')' : ''));
       this.status = status;
     }
   }
@@ -111,7 +112,7 @@
           try {
             await this.writer.write(frame);
             const r = await this.recv(timeout, id);
-            if (r.status !== 0) throw new DeviceError(r.status, opt.what);
+            if (r.status !== 0) throw new DeviceError(r.status, opt.what, r.payload.length ? dec.decode(r.payload) : '');
             return r.payload;
           } catch (e) {
             if (e instanceof DeviceError) throw e;
@@ -163,6 +164,7 @@
   const showProgress = (t) => { transfer.hidden = !t; transfer.textContent = t || ''; };
 
   let handshakeCancelled = false;
+  let connecting = false;  // one owner for the shared link: an automatic or a manual attempt
   const showChooser = (msg) => {
     $('#cpx-text').textContent = "Connect the reader's USB-C cable, then choose its serial port.";
     $('#cpx-btn').hidden = false; $('#cpx-cancel').hidden = true;
@@ -176,7 +178,7 @@
   async function handshake(timeout, limitMs, progress) {
     const end = limitMs ? Date.now() + limitMs : Infinity;
     for (let attempt = 1; !handshakeCancelled && Date.now() < end; attempt++) {
-      try { await link.call(CMD.HELLO, new Uint8Array(0), { timeout, retries: 1 }); return true; }
+      try { await link.call(CMD.HELLO, new Uint8Array(0), { timeout, retries: 1 }); return !handshakeCancelled; }
       catch (e) { if (progress) progress(attempt); await sleep(300); }
     }
     return false;
@@ -185,6 +187,9 @@
   // Opens the port ONCE at 115200 (the reader's start speed) and keeps retrying HELLO
   // without closing it: re-opening toggles DTR/RTS, which can reset the reader.
   async function connect(port) {
+    try { await connectOnce(port); } finally { connecting = false; }
+  }
+  async function connectOnce(port) {
     handshakeCancelled = false;
     $('#cpx-text').textContent = 'Opening the port... On the reader, open File Transfer > Serial Transfer.';
     $('#cpx-btn').hidden = true; $('#cpx-cancel').hidden = false;
@@ -193,7 +198,7 @@
       'Waiting for the reader (Serial Transfer must be open on it)... try ' + attempt +
       ' - bytes received from the reader so far: ' + link.received +
       (link.received ? ' (it sends data but not valid frames: baud/pins?)' : ' (nothing at all)')));
-    if (!first) { await abandon('Connection cancelled.'); return; }
+    if (!first || handshakeCancelled) { await abandon('Connection cancelled.'); return; }
     // The reader falls back to 115200 by itself if it hears nothing valid at the new speed.
     let fast = false;
     try {
@@ -203,6 +208,7 @@
       await link.open(port, BAUD_FAST);
       fast = await handshake(800, 3000);
     } catch (e) { /* fall through to the slow speed */ }
+    if (handshakeCancelled) { await abandon('Connection cancelled.'); return; }
     if (!fast) {
       setMsg('Fast speed failed, going back to ' + BAUD_SLOW + ' baud...');
       try {
@@ -223,13 +229,19 @@
 
   $('#cpx-btn').onclick = async () => {
     if (!('serial' in navigator)) { setMsg('Web Serial is not available. Use Chrome or Edge.'); return; }
-    try { connect(await navigator.serial.requestPort()); } catch (e) { setMsg(e.message); }
+    if (connecting) return;
+    connecting = true;
+    let port;
+    try { port = await navigator.serial.requestPort(); } catch (e) { connecting = false; setMsg(e.message); return; }
+    connect(port);
   };
   $('#cpx-cancel').onclick = () => { handshakeCancelled = true; };
   if (!('serial' in navigator)) {
     setMsg('This browser has no Web Serial support. Open the page in Chrome or Edge.');
   } else {
-    navigator.serial.getPorts().then((ports) => { if (ports.length === 1) connect(ports[0]); }).catch(() => {});
+    navigator.serial.getPorts().then((ports) => {
+      if (ports.length === 1 && !connecting) { connecting = true; connect(ports[0]); }
+    }).catch(() => {});
   }
 
   // ---- file operations ----
@@ -270,8 +282,17 @@
   const writeFile = (path, data, overwrite, onProgress, signal) =>
     link.exclusive(() => writeFileOp(path, data, overwrite, onProgress, signal || {}));
   async function writeFileOp(path, data, overwrite, onProgress, signal) {
-    await link.call(CMD.WRITE_OPEN, cat(new Uint8Array([overwrite ? 1 : 0]), enc.encode(path)), { what: 'create ' + path });
+    if (signal.aborted) throw new Error('upload cancelled');
+    let opened = false;
     try {
+      try {
+        await link.call(CMD.WRITE_OPEN, cat(new Uint8Array([overwrite ? 1 : 0]), enc.encode(path)), { what: 'create ' + path });
+      } catch (e) {
+        // A refusal means no stage exists; a lost reply may hide an open one, so close it.
+        if (!(e instanceof DeviceError)) opened = true;
+        throw e;
+      }
+      opened = true;
       for (let off = 0; off < data.length; off += CHUNK) {
         if (signal.aborted) throw new Error('upload cancelled');
         await link.call(CMD.WRITE, cat(u32(off), data.subarray(off, off + CHUNK)), { what: 'write' });
@@ -280,7 +301,7 @@
       if (signal.aborted) throw new Error('upload cancelled');
       await link.call(CMD.WRITE_END, new Uint8Array(0), { timeout: 15000, what: 'finish ' + path });
     } catch (e) {
-      await link.call(CMD.CLOSE, new Uint8Array(0), { retries: 1 }).catch(() => {});
+      if (opened) await link.call(CMD.CLOSE, new Uint8Array(0), { retries: 1 }).catch(() => {});
       throw e;
     }
   }
@@ -428,6 +449,28 @@
       const r = await route((init.method || 'GET').toUpperCase(), url, init.body);
       return new Response(r.body, { status: r.status, headers: { 'Content-Type': r.type } });
     };
+    // <img> loads of /download bypass fetch: read the file over serial and hand the image a Blob URL.
+    const imgProto = win.HTMLImageElement.prototype;
+    const imgSrc = Object.getOwnPropertyDescriptor(imgProto, 'src');
+    Object.defineProperty(imgProto, 'src', {
+      get() { return imgSrc.get.call(this); },
+      set(v) {
+        if (typeof v === 'string' && v.startsWith('/download')) {
+          const img = this;
+          const token = (img.__cpxToken = (img.__cpxToken || 0) + 1);
+          readFile(norm(new URL(v, 'http://reader/').searchParams.get('path'))).then((blob) => {
+            if (img.__cpxToken !== token) return;  // the preview moved on
+            const url = URL.createObjectURL(blob);
+            const done = () => URL.revokeObjectURL(url);  // the decoded image no longer needs it
+            img.addEventListener('load', done, { once: true });
+            img.addEventListener('error', done, { once: true });
+            imgSrc.set.call(img, url);
+          }).catch(() => {});
+          return;
+        }
+        imgSrc.set.call(this, v);
+      },
+    });
     win.XMLHttpRequest = FakeXHR;
     win.WebSocket = FakeWS;
     // Scripts the page loads on demand from the reader (/js/...): serve embedded copies.
@@ -460,6 +503,7 @@
       const a = ev.target.closest && ev.target.closest('a[href]');
       if (!a) return;
       const href = a.getAttribute('href') || '';
+      if (a.classList.contains('image-preview-link')) return;  // the page opens its own preview
       if (href.startsWith('/download')) {
         ev.preventDefault();
         download(norm(new URL(href, 'http://reader/').searchParams.get('path')));

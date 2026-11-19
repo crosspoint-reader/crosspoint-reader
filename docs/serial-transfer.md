@@ -37,7 +37,13 @@ The host runs each multi-frame operation (open/read/close, open/write/end, API +
 one unit, because the reader has a single read handle, write handle and API buffer.
 
 BAUD: the reader switches speed after its reply. If it receives no valid frame at the new speed
-within 4 s it returns to 115200 by itself, so the host can always reconnect at 115200.
+within 4 s it returns to 115200 by itself, so a failed switch can be retried at 115200. Once a valid
+frame has arrived at the new speed the switch is confirmed and there is no further fallback: a host
+that reconnects later must use the confirmed speed, or the user must leave Serial Transfer on the
+reader and open it again (the speed is reset to 115200 on entry).
+
+A failed install that also cannot restore the original leaves it as `<path>.bak` (or `.bak1`...);
+the error reply carries that path and the reader screen shows the file name.
 
 Upload safety: data goes to a staging file (`<path>.part`, or `.part1`... if that name is already
 in use, which is never deleted). WRITE_END moves an existing target aside as `<path>.bak`,
