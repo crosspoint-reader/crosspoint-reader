@@ -552,21 +552,4 @@ XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
   return XtcError::OK;
 }
 
-bool XtcParser::isValidXtcFile(const char* filepath) {
-  HalFile file;
-  if (!Storage.openFileForRead("XTC", filepath, file)) {
-    return false;
-  }
-
-  uint32_t magic = 0;
-  size_t bytesRead = file.read(reinterpret_cast<uint8_t*>(&magic), sizeof(magic));
-  file.close();
-
-  if (bytesRead != sizeof(magic)) {
-    return false;
-  }
-
-  return (magic == XTC_MAGIC || magic == XTCH_MAGIC);
-}
-
 }  // namespace xtc
