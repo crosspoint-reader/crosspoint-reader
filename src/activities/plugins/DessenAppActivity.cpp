@@ -22,7 +22,8 @@ constexpr uint32_t STEP_BUDGET = 200000;
 constexpr int MAX_STEPS_PER_RENDER = 8;
 
 bool hasEvent(const fui::InputSnapshot& s) {
-  return s.confirm || s.back || s.prev || s.next || (s.touchReleased && s.touchX >= 0);
+  return s.confirm || s.back || s.prev || s.next || s.swipeUp || s.swipeDown || s.swipeLeft || s.swipeRight ||
+         (s.touchReleased && s.touchX >= 0);
 }
 }  // namespace
 
@@ -128,12 +129,25 @@ void DessenAppActivity::loop() {
     return;
   }
 
-  fui::InputSnapshot snap = touchSnapshotFrom(mappedInput);
+  fui::InputSnapshot snap = touchSnapshotFrom(mappedInput, /*withLongPress=*/true);
   using Button = MappedInputManager::Button;
+  using SwipeDir = MappedInputManager::SwipeDir;
   snap.confirm = mappedInput.wasReleased(Button::Confirm);
   snap.back = mappedInput.wasReleased(Button::Back);
   snap.prev = mappedInput.wasReleased(Button::Left) || mappedInput.wasReleased(Button::Up);
   snap.next = mappedInput.wasReleased(Button::Right) || mappedInput.wasReleased(Button::Down);
+  // Touch swipes are their own events (distinct from the buttons), so an app can
+  // use the page keys to move a selection AND a swipe to scroll. Clear the
+  // release so the swipe is never also read as a tap on what it passed over.
+  const SwipeDir swipe = mappedInput.wasSwipe();
+  if (swipe != SwipeDir::None) {
+    snap.touchReleased = false;
+    snap.touchX = -1;
+    snap.swipeUp = swipe == SwipeDir::Up;
+    snap.swipeDown = swipe == SwipeDir::Down;
+    snap.swipeLeft = swipe == SwipeDir::Left;
+    snap.swipeRight = swipe == SwipeDir::Right;
+  }
 
   dessen::State state;
   bool deliver = false;
