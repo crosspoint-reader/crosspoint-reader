@@ -53,6 +53,8 @@ struct ClippingResult {
   uint32_t endOffset = UINT32_MAX;
   // True when the cursor (not the anchor) was on the first word, i.e. the selection was extended leftwards.
   bool cursorAtStart = false;
+  // Visual fragment ordinal of the selected word; UINT16_MAX for normal text.
+  uint16_t fragmentIndex = UINT16_MAX;
 };
 
 struct ProgressChangeResult {

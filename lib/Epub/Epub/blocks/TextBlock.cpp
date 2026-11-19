@@ -7,6 +7,7 @@
 #include <MemoryManager.h>
 #include <Serialization.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string_view>
 
@@ -136,6 +137,12 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
       boundary[i] = focusBoundary[i];
     }
   }
+}
+
+bool TextBlock::setVisualFragments(std::vector<VisualFragment>&& fragments) {
+  if (fragments.empty()) return true;
+  visualFragments = makeUniqueNoThrow<std::vector<VisualFragment>>(std::move(fragments));
+  return visualFragments != nullptr;
 }
 
 bool TextBlock::hasRuby() const {
@@ -343,7 +350,16 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
 
     const int drawX = wordX;
 
-    if (boundary > 0) {
+    if (visualFragments && std::any_of(visualFragments->begin(), visualFragments->end(),
+                                       [i](const VisualFragment& span) { return span.wordIndex == i; })) {
+      // Dictionary-only: draw all visual pieces of a split logical word at
+      // their full-line positions, without reshaping or joining across runs.
+      for (const auto& span : *visualFragments) {
+        if (span.wordIndex == i)
+          renderer.drawText(wordFont, x + span.x, wordY, span.text.c_str(), true, currentStyle,
+                            BidiUtils::BidiBaseDir::VISUAL, tracking);
+      }
+    } else if (boundary > 0) {
       // Place the logical prefix on the right for RTL words. Each run is reordered by drawText.
       // The bold prefix is bounded to 9 codepoints by the clamp on targetBoldChars in
       // ParsedText::addWord; 9 UTF-8 codepoints occupy at most 9 * 4 = 36 bytes, +1 for null = 37.

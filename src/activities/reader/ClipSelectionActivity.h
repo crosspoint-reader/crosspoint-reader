@@ -25,6 +25,9 @@ class ClipSelectionActivity final : public Activity {
     uint16_t firstWord = 0;
     uint16_t lastWord = 0;
     bool valid = false;
+    // The fragment selected before a nested definition lookup, if split.
+    uint16_t fragmentIndex = UINT16_MAX;
+    bool cursorAtStart = false;
   };
 
   ClipSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -48,6 +51,9 @@ class ClipSelectionActivity final : public Activity {
  private:
   struct WordBox {
     int16_t x = 0;
+    int16_t lineX = 0;
+    int16_t logicalStartX = 0;
+    int16_t logicalEndX = 0;
     int16_t y = 0;
     int16_t width = 0;
     int16_t height = 0;
@@ -57,10 +63,36 @@ class ClipSelectionActivity final : public Activity {
     uint32_t startOffset = UINT32_MAX;
     uint32_t endOffset = UINT32_MAX;
     const char* text = nullptr;
+    const TextBlock* sourceBlock = nullptr;
+    uint16_t sourceWord = 0;
     bool paragraphStart = false;
     bool isRtl = false;
     bool discretionaryHyphen = false;
   };
+
+  // Dictionary selections can retain multiple visual runs for one source word.
+  // Other page blocks keep the existing single-rectangle representation.
+  template <typename Visitor>
+  void forEachVisualSpan(const WordBox& word, Visitor&& visit) const {
+    if (word.sourceBlock) {
+      if (const auto* fragments = word.sourceBlock->getVisualFragments()) {
+        bool found = false;
+        for (const auto& fragment : *fragments) {
+          if (fragment.wordIndex != word.sourceWord) continue;
+          found = true;
+          visit(word.lineX + fragment.x, fragment.width);
+        }
+        if (found) return;
+      }
+    }
+    visit(word.x, word.width);
+  }
+
+  bool hasVisualFragments(const WordBox& word) const;
+  void restoreInitialSelection();
+  void rememberFragmentAtX(int index, int x);
+  void restoreFragmentIndex(uint16_t index);
+  uint16_t activeFragmentIndex() const;
 
   static constexpr size_t MAX_SELECTABLE_WORDS = 240;
 
@@ -71,7 +103,7 @@ class ClipSelectionActivity final : public Activity {
   int firstAction() const { return lookupAvailable ? 0 : 1; }
   int actionCount() const { return mode == Mode::DefinitionLookup ? 1 : 3 - firstAction(); }
   int actionAt(int x, int y) const;
-  int closestInRow(uint16_t row, int centerX) const;
+  int closestInRow(uint16_t row, int centerX, int* fragmentCenter = nullptr) const;
   int wordAt(int x, int y) const;
   int dragWordAt(int x, int y) const;
   bool selectionContains(int x, int y) const;
@@ -83,7 +115,9 @@ class ClipSelectionActivity final : public Activity {
   void confirmSelection(ClippingResult::Action action = ClippingResult::Action::Clip);
   void loopButtons();
   bool handleButtons(uint8_t buttons);
+  int endpointFragmentCenter(const WordBox& word, bool start) const;
   Rect handleRect(int index, bool start) const;
+  int handleEndpointAt(int x, int y, int first, int last) const;
   Rect actionRect() const;
   int selectionTop() const;
   int textOffset() const;
@@ -113,6 +147,9 @@ class ClipSelectionActivity final : public Activity {
   std::unique_ptr<WordBox[]> words;
   size_t wordCount = 0;
   int selected = 0;
+  // Tracks the visual fragment chosen by the last vertical move.
+  int activeFragmentCenterX = 0;
+  bool activeFragmentValid = false;
   int rangeStart = -1;
   uint8_t currentPageOffset = 0;
   uint16_t rowCount = 0;

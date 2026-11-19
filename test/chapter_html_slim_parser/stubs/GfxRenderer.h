@@ -12,7 +12,7 @@
 #include <tuple>
 
 namespace BidiUtils {
-enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
+enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1, VISUAL = 2 };
 }
 
 enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 0x0A, Black = 0x10 };
