@@ -22,8 +22,7 @@ constexpr uint32_t STEP_BUDGET = 200000;
 constexpr int MAX_STEPS_PER_RENDER = 8;
 
 bool hasEvent(const fui::InputSnapshot& s) {
-  return s.confirm || s.back || s.prev || s.next || s.swipeUp || s.swipeDown || s.swipeLeft || s.swipeRight ||
-         (s.touchReleased && s.touchX >= 0);
+  return s.confirm || s.back || s.prev || s.next || (s.touchReleased && s.touchX >= 0);
 }
 }  // namespace
 
@@ -140,13 +139,14 @@ void DessenAppActivity::loop() {
   // use the page keys to move a selection AND a swipe to scroll. Clear the
   // release so the swipe is never also read as a tap on what it passed over.
   const SwipeDir swipe = mappedInput.wasSwipe();
+  dessen::FreeInkHost::Swipe appSwipe = dessen::FreeInkHost::SwipeNone;
   if (swipe != SwipeDir::None) {
-    snap.touchReleased = false;
+    snap.touchReleased = false;  // never also read the swipe as a tap on what it passed over
     snap.touchX = -1;
-    snap.swipeUp = swipe == SwipeDir::Up;
-    snap.swipeDown = swipe == SwipeDir::Down;
-    snap.swipeLeft = swipe == SwipeDir::Left;
-    snap.swipeRight = swipe == SwipeDir::Right;
+    appSwipe = swipe == SwipeDir::Up     ? dessen::FreeInkHost::SwipeUp
+               : swipe == SwipeDir::Down ? dessen::FreeInkHost::SwipeDown
+               : swipe == SwipeDir::Left ? dessen::FreeInkHost::SwipeLeft
+                                         : dessen::FreeInkHost::SwipeRight;
   }
 
   dessen::State state;
@@ -164,8 +164,11 @@ void DessenAppActivity::loop() {
       if (services->serviceAsyncWork()) requestUpdate();
       return;
     }
-    deliver = state == dessen::State::Waiting && hasEvent(snap);
-    if (deliver) pendingInput = snap;
+    deliver = state == dessen::State::Waiting && (hasEvent(snap) || appSwipe != dessen::FreeInkHost::SwipeNone);
+    if (deliver) {
+      pendingInput = snap;
+      pendingSwipe = appSwipe;
+    }
   }
 
   // A launcher/home app asked to open a firmware screen and end. goTo*/goHome
@@ -233,8 +236,9 @@ void DessenAppActivity::render(RenderLock&&) {
   bool drew = false;
   dessen::State state = dessen::State::Running;
   for (int i = 0; i < MAX_STEPS_PER_RENDER; i++) {
-    state = host.step(uiTarget, device, pendingInput, STEP_BUDGET);
+    state = host.step(uiTarget, device, pendingInput, pendingSwipe, STEP_BUDGET);
     pendingInput = fui::InputSnapshot{};
+    pendingSwipe = dessen::FreeInkHost::SwipeNone;
     if (host.takeRefreshRequest()) {
       renderer.displayBuffer();
       // Snapshot the latest clean frame so it can be restored after an overlay.

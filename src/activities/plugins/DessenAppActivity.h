@@ -46,6 +46,7 @@ class DessenAppActivity final : public Activity {
   // host, pendingInput: written by the render task and by loop() under RenderLock.
   dessen::FreeInkHost host;
   freeink::ui::InputSnapshot pendingInput{};
+  dessen::FreeInkHost::Swipe pendingSwipe = dessen::FreeInkHost::SwipeNone;
   std::unique_ptr<CrosspointServices> services;
   // The app's last drawn frame is snapshotted so it can be restored when a
   // system overlay (e.g. the frontlight panel) pops: the app is parked in
