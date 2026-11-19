@@ -37,6 +37,11 @@ class DessenAppActivity final : public Activity {
   freeink::ui::InputSnapshot pendingInput{};
   std::unique_ptr<CrosspointServices> services;
   bool keyboardOpen = false;
+  // The app's last drawn frame is snapshotted so it can be restored when a
+  // system overlay (e.g. the frontlight panel) pops: the app is parked in
+  // wait_event and cannot repaint itself, so the overlay would otherwise linger
+  // until the app next draws.
+  bool frameStored = false;
 };
 
 #endif  // CROSSPOINT_DESSEN_APPS

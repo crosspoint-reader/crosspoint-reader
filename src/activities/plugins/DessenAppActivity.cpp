@@ -144,11 +144,26 @@ void DessenAppActivity::loop() {
 void DessenAppActivity::render(RenderLock&&) {
   // Carries the board's bezel insets for the current rotation; the app draws inside them.
   const fui::DeviceContext device = uiTarget.deviceContext();
+  bool drew = false;
+  dessen::State state = dessen::State::Running;
   for (int i = 0; i < MAX_STEPS_PER_RENDER; i++) {
-    const dessen::State state = host.step(uiTarget, device, pendingInput, STEP_BUDGET);
+    state = host.step(uiTarget, device, pendingInput, STEP_BUDGET);
     pendingInput = fui::InputSnapshot{};
-    if (host.takeRefreshRequest()) renderer.displayBuffer();
+    if (host.takeRefreshRequest()) {
+      renderer.displayBuffer();
+      frameStored = renderer.storeBwBuffer();  // keep the latest clean app frame
+      drew = true;
+    }
     if (state != dessen::State::Running) break;  // still running: loop() asks for another pass
+  }
+  // We were re-rendered with no new frame of our own while the app is parked —
+  // i.e. a system overlay (the frontlight panel) popped and ActivityManager asked
+  // us to repaint. The parked app can't redraw itself, so restore its last frame
+  // to wipe the overlay. Gated on a parked state so long in-VM work (e.g. puzzle
+  // generation, which also produces no frame) does not repaint every pass.
+  if (!drew && frameStored && (state == dessen::State::Waiting || state == dessen::State::Busy)) {
+    renderer.restoreBwBuffer();
+    renderer.displayBuffer();
   }
 }
 
