@@ -15,12 +15,12 @@ struct Line {
 };
 
 // Fixture metrics (stub renderer): every glyph is 8 px wide and a space is 4 px.
-std::vector<Line> layout(const std::vector<const char*>& words, const uint16_t width) {
+std::vector<Line> layout(const std::vector<const char*>& words, const uint16_t width, const bool focus = false) {
   GfxRenderer renderer;
   BlockStyle style;
   style.alignment = CssTextAlign::Left;
   style.textIndentDefined = true;
-  ParsedText text(/*hyphenationEnabled=*/false, /*focusReadingEnabled=*/false, style, 0);
+  ParsedText text(/*hyphenationEnabled=*/false, focus, style, 0);
   for (const char* word : words) text.addWord(word, EpdFontFamily::REGULAR);
   std::vector<Line> lines;
   text.layoutAndExtractLines(renderer, 0, width, [&](std::unique_ptr<TextBlock> block, auto) {
@@ -35,8 +35,8 @@ std::vector<Line> layout(const std::vector<const char*>& words, const uint16_t w
 
 using Words = std::vector<std::string>;
 
-Words firstLineWords(const char* word) {
-  const auto lines = layout({word}, 400);
+Words firstLineWords(const char* word, const bool focus = false) {
+  const auto lines = layout({word}, 400, focus);
   return lines.empty() ? Words{} : lines.front().words;
 }
 
@@ -88,4 +88,10 @@ TEST(ElisionTokenization, LineNeverBreaksInsideTheWord) {
 TEST(ElisionTokenization, HyphenStillAllowsABreakNextToAnElision) {
   // The hyphen keeps its breakable boundary; the elision stays glued.
   EXPECT_EQ(firstLineWords("well-we're"), (Words{"well-", "we", "'", "re"}));
+}
+
+TEST(ElisionTokenization, SplitsWithFocusReadingToo) {
+  EXPECT_EQ(firstLineWords("we're", true), (Words{"we", "'", "re"}));
+  EXPECT_EQ(firstLineWords("l'agent", true), (Words{"l", "'", "agent"}));
+  EXPECT_EQ(firstLineWords("'tis", true), (Words{"'tis"}));  // not between two letters
 }
