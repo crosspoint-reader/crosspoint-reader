@@ -151,7 +151,11 @@ void DessenAppActivity::render(RenderLock&&) {
     pendingInput = fui::InputSnapshot{};
     if (host.takeRefreshRequest()) {
       renderer.displayBuffer();
-      frameStored = renderer.storeBwBuffer();  // keep the latest clean app frame
+      // Snapshot the latest clean frame so it can be restored after an overlay.
+      // discard first: the slot holds the previous frame and storeBwBuffer()
+      // errors on a double store.
+      renderer.discardStoredBwBuffer();
+      frameStored = renderer.storeBwBuffer();
       drew = true;
     }
     if (state != dessen::State::Running) break;  // still running: loop() asks for another pass
@@ -162,8 +166,9 @@ void DessenAppActivity::render(RenderLock&&) {
   // to wipe the overlay. Gated on a parked state so long in-VM work (e.g. puzzle
   // generation, which also produces no frame) does not repaint every pass.
   if (!drew && frameStored && (state == dessen::State::Waiting || state == dessen::State::Busy)) {
-    renderer.restoreBwBuffer();
+    renderer.restoreBwBuffer();  // repaints the saved frame; frees the slot
     renderer.displayBuffer();
+    frameStored = renderer.storeBwBuffer();  // re-save it for the next overlay (slot is free)
   }
 }
 
