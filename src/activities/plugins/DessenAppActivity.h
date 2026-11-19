@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 
+#include "CrosspointServices.h"
 #include "activities/Activity.h"
 
 // Runs one dessen app (a sandboxed RV32IM binary, e.g. <plugin dir>/app.bin)
@@ -26,6 +27,7 @@ class DessenAppActivity final : public Activity {
   static constexpr uint32_t APP_MEMORY_BYTES = 64 * 1024;
 
   bool loadApp();
+  void openKeyboard();  // service asked for text input
 
   std::string appPath;
   freeink::ui::GfxRendererTarget uiTarget;
@@ -33,6 +35,8 @@ class DessenAppActivity final : public Activity {
   // host, pendingInput: written by the render task and by loop() under RenderLock.
   dessen::FreeInkHost host;
   freeink::ui::InputSnapshot pendingInput{};
+  std::unique_ptr<CrosspointServices> services;
+  bool keyboardOpen = false;
 };
 
 #endif  // CROSSPOINT_DESSEN_APPS

@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "MappedInputManager.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UiAppHelpers.h"
 
 namespace fui = freeink::ui;
@@ -45,6 +46,18 @@ bool DessenAppActivity::loadApp() {
     return false;
   }
   host.setRandom(esp_random);
+  // appDir = the plugin folder; appName = its basename. These scope the app's
+  // device id, key store, and secure_wrap blobs.
+  const size_t slash = appPath.find_last_of('/');
+  const std::string appDir = slash == std::string::npos ? "/" : appPath.substr(0, slash);
+  const size_t nameSlash = appDir.find_last_of('/');
+  const std::string appName = nameSlash == std::string::npos ? appDir : appDir.substr(nameSlash + 1);
+  services = makeUniqueNoThrow<CrosspointServices>(appName, appDir);
+  if (!services) {
+    LOG_ERR("DSN", "OOM: services");
+    return false;
+  }
+  host.setServices(services.get());
   return true;
 }
 
@@ -57,10 +70,47 @@ void DessenAppActivity::onEnter() {
   requestUpdate();
 }
 
+void DessenAppActivity::openKeyboard() {
+  keyboardOpen = true;
+  auto kbd = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, services->keyboardPrompt());
+  if (!kbd) {
+    services->cancelText();
+    keyboardOpen = false;
+    requestUpdate();
+    return;
+  }
+  startActivityForResult(std::move(kbd), [this](const ActivityResult& result) {
+    if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) {
+      services->cancelText();
+    } else {
+      services->deliverText(std::get<KeyboardResult>(result.data).text.c_str());
+    }
+    keyboardOpen = false;
+    requestUpdate();
+  });
+}
+
 void DessenAppActivity::loop() {
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= FORCE_QUIT_HOLD_MS) {
     LOG_INF("DSN", "Force quit: %s", appPath.c_str());
     finish();
+    return;
+  }
+
+  // An async call parked the app. The network / keygen work and the keyboard
+  // run here on the loop task (bigger stack than the render task, where step()
+  // runs), then poll() resumes the VM. Under RenderLock so the write of the
+  // result and the render task's poll() do not race.
+  if (host.state() == dessen::State::Busy) {
+    if (services->wantsKeyboard()) {
+      if (!keyboardOpen) openKeyboard();
+      return;  // waiting on the keyboard subactivity's result
+    }
+    if (services->hasPendingWork()) {
+      RenderLock lock;
+      services->serviceAsyncWork();  // blocking HTTP / keygen
+    }
+    requestUpdate();  // render() will poll(), get the result, and resume the app
     return;
   }
 
