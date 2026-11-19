@@ -768,9 +768,36 @@ TEST_F(ChapterHtmlSlimParserTest, PagebreakAttributeOnTextBlockKeepsItsText) {
   EXPECT_EQ(parseToParagraphText("<p>before</p><p epub:type=\"pagebreak\" title=\"5\">Real paragraph</p>"),
             "before\nReal paragraph");
   EXPECT_EQ(parseToParagraphText("<h2 role=\"doc-pagebreak\" title=\"9\">Part Two</h2><p>body</p>"), "Part Two\nbody");
-  EXPECT_EQ(parseToParagraphText("<blockquote epub:type=\"pagebreak\" title=\"3\">Quoted</blockquote>"
-                                 "<ul><li role=\"doc-pagebreak\" title=\"4\">Item</li></ul>"),
-            "Quoted\n\xE2\x80\xA2Item");  // the list item keeps its bullet
+  EXPECT_EQ(parseToParagraphText("<blockquote epub:type=\"pagebreak\" title=\"3\">Quoted</blockquote>"), "Quoted");
+}
+
+// A list item marker is still skipped as on develop: no bullet, no counter step.
+TEST_F(ChapterHtmlSlimParserTest, PagebreakListItemIsSkipped) {
+  const std::string plain = parseToParagraphText("<ol><li>one</li><li>two</li></ol>");
+  EXPECT_EQ(parseToParagraphText("<ol><li>one</li><li role=\"doc-pagebreak\" title=\"4\"/>"
+                                 "<li epub:type=\"pagebreak\">5</li><li>two</li></ol>"),
+            plain);
+}
+
+// An empty block marker adds no line and no spacing.
+TEST_F(ChapterBlockDecorationTest, EmptyBlockPagebreakMarkersAddNoSpace) {
+  const XML_Char* marker[] = {"epub:type", "pagebreak", "title", "5", nullptr};
+  const char* markerTags[] = {nullptr, "p", "blockquote", "h2"};
+  for (const char* tag : markerTags) {
+    if (tag) {
+      ChapterHtmlSlimParser::startElement(&parser, tag, marker);
+      close(tag);
+    }
+    open("p", nullptr);
+    text("Line");
+    close("p");
+  }
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 4u);
+  const int gap = lines[1]->yPos - lines[0]->yPos;
+  EXPECT_GT(gap, 0);
+  EXPECT_EQ(lines[2]->yPos - lines[1]->yPos, gap);
+  EXPECT_EQ(lines[3]->yPos - lines[2]->yPos, gap);
 }
 
 // Inline and other markers keep develop's behavior: the whole subtree is skipped,

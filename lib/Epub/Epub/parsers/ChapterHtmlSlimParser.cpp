@@ -2006,7 +2006,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // Skip blocks with role="doc-pagebreak" and epub:type="pagebreak". Some publishers put
   // the attribute on the paragraph or heading that starts the print page (#3116), so
   // text-bearing blocks render normally.
-  const bool textBearingBlock = strcmp(name, "p") == 0 || strcmp(name, "blockquote") == 0 || strcmp(name, "li") == 0 ||
+  const bool textBearingBlock = strcmp(name, "p") == 0 || strcmp(name, "blockquote") == 0 ||
                                 (name[0] == 'h' && name[1] >= '1' && name[1] <= '6' && name[2] == '\0');
   if (atts != nullptr && !textBearingBlock) {
     for (int i = 0; atts[i]; i += 2) {
