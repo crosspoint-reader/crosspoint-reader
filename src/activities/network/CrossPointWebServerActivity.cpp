@@ -176,6 +176,10 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     return;
   }
 #endif
+  if (mode == NetworkMode::SERIAL_TRANSFER) {
+    activityManager.goToSerialTransfer();
+    return;
+  }
 
   networkMode = mode;
   isApMode = (mode == NetworkMode::CREATE_HOTSPOT);

@@ -36,7 +36,12 @@ void addToLogRingBuffer(const char* message) {
 // Since logging can take a large amount of flash, we want to make the format string as short as possible.
 // This logPrintf prepend the timestamp, level and origin to the user-provided message, so that the user only needs to
 // provide the format string for the message itself.
+static bool logMuted = false;
+void logSetMuted(bool muted) { logMuted = muted; }
+bool logIsMuted() { return logMuted; }
+
 void logPrintf(const char* level, const char* origin, const char* format, ...) {
+  if (logMuted) return;
   va_list args;
   va_start(args, format);
   char buf[MAX_ENTRY_LEN];

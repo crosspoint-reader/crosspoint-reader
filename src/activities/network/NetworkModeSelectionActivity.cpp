@@ -27,6 +27,9 @@ constexpr ModeRow MODE_ROWS[] = {
 #if FREEINK_CAP_USB_MSC
     {NetworkMode::USB_DRIVE, StrId::STR_USB_DRIVE, StrId::STR_USB_DRIVE_DESC, UIIcon::Usb},
 #endif
+#if FREEINK_DEVICE_STICKY
+    {NetworkMode::SERIAL_TRANSFER, StrId::STR_SERIAL_TRANSFER, StrId::STR_SERIAL_TRANSFER_DESC, UIIcon::Usb},
+#endif
 };
 static_assert(sizeof(MODE_ROWS) / sizeof(MODE_ROWS[0]) == NetworkModeSelectionActivity::MAX_ITEM_COUNT);
 }  // namespace
