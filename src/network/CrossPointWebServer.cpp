@@ -1178,6 +1178,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearBookCache(filePath.c_str());
+        sleepImageChanged(filePath.c_str());
         if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
       }
     }
@@ -2739,8 +2740,9 @@ void CrossPointWebServer::handleFetch() {
     Storage.remove(part.c_str());
     complete = false;
     resp["error"] = "sd write failed";
-  } else if (complete && library::isLibraryBookFile(dest)) {
-    library::markLibraryIndexDirty();
+  } else if (complete) {
+    sleepImageChanged(dest.c_str());
+    if (library::isLibraryBookFile(dest)) library::markLibraryIndexDirty();
   }
   resp["status"] = status;
   resp["bytes"] = written;
@@ -2823,8 +2825,9 @@ void CrossPointWebServer::handlePluginFsUpload() {
         fail(400, "empty body");
       } else if (!Storage.replaceFile(st.tmp.c_str(), st.path.c_str())) {
         fail(500, "sd write failed");
-      } else if (library::isLibraryBookFile(st.path)) {
-        library::markLibraryIndexDirty();
+      } else {
+        sleepImageChanged(st.path.c_str());
+        if (library::isLibraryBookFile(st.path)) library::markLibraryIndexDirty();
       }
       return;
     case UPLOAD_FILE_ABORTED:

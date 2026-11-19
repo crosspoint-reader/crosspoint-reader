@@ -5,7 +5,6 @@
 #include <BoardConfig.h>
 #include <Epub.h>
 #include <Epub/converters/PngToFramebufferConverter.h>
-#include <Fnv1a.h>
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -21,6 +20,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <string>
 
@@ -682,41 +682,6 @@ void releaseSdFontCachesForDecode(const GfxRenderer& renderer) {
   }
 }
 
-constexpr char SLEEP_CACHE_DIR[] = "/.crosspoint";
-
-// Hashes the whole file. Files written on the device all carry SdFat's default
-// date, so only the content tells two same-sized images apart.
-bool hashFileContent(HalFile& file, uint32_t& hash) {
-  uint8_t chunk[512];  // one SD sector
-  int got;
-  if (!file.seek(0)) return false;
-  while ((got = file.read(chunk, sizeof(chunk))) > 0) hash = fnv1a::hash(chunk, static_cast<size_t>(got), hash);
-  return got == 0;
-}
-
-// Removes older conversions of the same source image, and the caches that
-// 2.0.0 named sleep_<digits>.bmp.
-void removeStaleSleepCaches(const char* sourcePrefix, const char* keepName) {
-  auto dir = Storage.open(SLEEP_CACHE_DIR);
-  if (!dir || !dir.isDirectory()) return;
-  const size_t prefixLen = strlen(sourcePrefix);
-  char name[48];
-  for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
-    const bool isDir = entry.isDirectory();
-    name[0] = '\0';
-    entry.getName(name, sizeof(name));
-    entry.close();
-    const size_t len = strlen(name);
-    if (isDir || len < 10 || strncmp(name, "sleep_", 6) != 0 || strcmp(name + len - 4, ".bmp") != 0) continue;
-    const bool sameSource = strncmp(name, sourcePrefix, prefixLen) == 0;
-    const bool from200 = std::all_of(name + 6, name + len - 4, [](const char c) { return c >= '0' && c <= '9'; });
-    if ((!sameSource && !from200) || strcmp(name, keepName) == 0) continue;
-    char stalePath[sizeof(SLEEP_CACHE_DIR) + 1 + sizeof(name)];
-    snprintf(stalePath, sizeof(stalePath), "%s/%s", SLEEP_CACHE_DIR, name);
-    Storage.remove(stalePath);
-  }
-}
-
 }  // namespace
 
 void SleepActivity::onEnter() {
@@ -810,32 +775,20 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
   if (!screenReady) {
     // Like book covers: scale and dither once into a cached screen-sized BMP, then draw it without dithering.
     const bool crop = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
-    [[maybe_unused]] const uint32_t hashStart = millis();
-    uint32_t contentKey = fnv1a::OFFSET_BASIS;
-    if (!hashFileContent(file, contentKey)) return false;
-    LOG_DBG("SLP", "Hashed %s in %lu ms", path.c_str(), static_cast<unsigned long>(millis() - hashStart));
-    const uint16_t variant[] = {static_cast<uint16_t>(renderer.getScreenWidth()),
-                                static_cast<uint16_t>(renderer.getScreenHeight()), crop, thresholds};
-    contentKey = fnv1a::hash(variant, sizeof(variant), contentKey);
-    // One cache per source path: sleep_<path hash>_<content and layout hash>.bmp
-    char sourcePrefix[20];
-    snprintf(sourcePrefix, sizeof(sourcePrefix), "sleep_%08x_",
-             static_cast<unsigned>(fnv1a::hash(path.data(), path.size())));
-    char cachePath[sizeof(SLEEP_CACHE_DIR) + 1 + sizeof(sourcePrefix) + 12];
-    snprintf(cachePath, sizeof(cachePath), "%s/%s%08x.bmp", SLEEP_CACHE_DIR, sourcePrefix,
-             static_cast<unsigned>(contentKey));
-    if (!Storage.exists(cachePath)) {
-      const std::string tmpPath = std::string(cachePath) + ".tmp";
+    // Same-sized BMPs share a byte count, so the key also needs the modification time.
+    const std::string key = path + '|' + std::to_string(file.size()) + '|' + std::to_string(file.modificationTime()) +
+                            '|' + std::to_string(renderer.getScreenWidth()) + 'x' +
+                            std::to_string(renderer.getScreenHeight()) + (crop ? "|c" : "|f") +
+                            (thresholds ? "|t" : "");
+    const std::string cachePath = "/.crosspoint/sleep_" + std::to_string(std::hash<std::string>{}(key)) + ".bmp";
+    if (!Storage.exists(cachePath.c_str())) {
+      const std::string tmpPath = cachePath + ".tmp";
       HalFile out;
       bool ok = Storage.openFileForWrite("SLP", tmpPath, out) &&
                 BmpToBmpConverter::bmpFileToBmpStream(file, out, crop, thresholds);
       if (out.isOpen()) ok = out.close() && ok;
-      ok = ok && Storage.rename(tmpPath.c_str(), cachePath);
-      if (ok) {
-        removeStaleSleepCaches(sourcePrefix, cachePath + sizeof(SLEEP_CACHE_DIR));
-      } else {
-        Storage.remove(tmpPath.c_str());
-      }
+      ok = ok && Storage.rename(tmpPath.c_str(), cachePath.c_str());
+      if (!ok) Storage.remove(tmpPath.c_str());
     }
     HalFile cached;
     if (Storage.openFileForRead("SLP", cachePath, cached)) {
@@ -845,7 +798,7 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
         return true;
       }
       cached.close();
-      Storage.remove(cachePath);
+      Storage.remove(cachePath.c_str());
     }
     LOG_ERR("SLP", "Sleep image conversion failed; drawing %s directly", path.c_str());
   }
