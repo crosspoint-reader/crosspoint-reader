@@ -687,15 +687,15 @@ constexpr char SLEEP_CACHE_DIR[] = "/.crosspoint";
 // Hashes the whole file. Files written on the device all carry SdFat's default
 // date, so only the content tells two same-sized images apart.
 bool hashFileContent(HalFile& file, uint32_t& hash) {
-  uint8_t chunk[1024];
+  uint8_t chunk[512];  // one SD sector
   int got;
   if (!file.seek(0)) return false;
   while ((got = file.read(chunk, sizeof(chunk))) > 0) hash = fnv1a::hash(chunk, static_cast<size_t>(got), hash);
   return got == 0;
 }
 
-// Removes older conversions of the same source image, and the caches from
-// 2.0.0 (sleep_<digits>.bmp), which were never removed.
+// Removes older conversions of the same source image, and the caches that
+// 2.0.0 named sleep_<digits>.bmp.
 void removeStaleSleepCaches(const char* sourcePrefix, const char* keepName) {
   auto dir = Storage.open(SLEEP_CACHE_DIR);
   if (!dir || !dir.isDirectory()) return;
@@ -709,7 +709,7 @@ void removeStaleSleepCaches(const char* sourcePrefix, const char* keepName) {
     const size_t len = strlen(name);
     if (isDir || len < 10 || strncmp(name, "sleep_", 6) != 0 || strcmp(name + len - 4, ".bmp") != 0) continue;
     const bool sameSource = strncmp(name, sourcePrefix, prefixLen) == 0;
-    const bool from200 = strchr(name + 6, '_') == nullptr;
+    const bool from200 = std::all_of(name + 6, name + len - 4, [](const char c) { return c >= '0' && c <= '9'; });
     if ((!sameSource && !from200) || strcmp(name, keepName) == 0) continue;
     char stalePath[sizeof(SLEEP_CACHE_DIR) + 1 + sizeof(name)];
     snprintf(stalePath, sizeof(stalePath), "%s/%s", SLEEP_CACHE_DIR, name);
@@ -810,7 +810,7 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
   if (!screenReady) {
     // Like book covers: scale and dither once into a cached screen-sized BMP, then draw it without dithering.
     const bool crop = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
-    const uint32_t hashStart = millis();
+    [[maybe_unused]] const uint32_t hashStart = millis();
     uint32_t contentKey = fnv1a::OFFSET_BASIS;
     if (!hashFileContent(file, contentKey)) return false;
     LOG_DBG("SLP", "Hashed %s in %lu ms", path.c_str(), static_cast<unsigned long>(millis() - hashStart));
