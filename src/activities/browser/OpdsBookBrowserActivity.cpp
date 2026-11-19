@@ -646,11 +646,18 @@ void OpdsBookBrowserActivity::downloadAllNew() {
     fail(StrId::STR_DOWNLOAD_FAILED);
     return;
   }
-  if (result == OpdsBatchDownload::Result::LIMIT_REACHED) LOG_INF("OPDS", "Batch stopped at its limit");
-  if (result != OpdsBatchDownload::Result::CANCELLED && batchStatus.failed > 0) {
-    char counts[24];
-    snprintf(counts, sizeof(counts), " (%d / %d)", batchStatus.failed, batchStatus.downloaded + batchStatus.failed);
-    std::string message = std::string(tr(STR_DOWNLOAD_FAILED)) + counts;
+  const bool limited = result == OpdsBatchDownload::Result::LIMIT_REACHED;
+  const bool failures = result != OpdsBatchDownload::Result::CANCELLED && batchStatus.failed > 0;
+  if (limited) LOG_INF("OPDS", "Batch stopped at its limit");
+  if (limited || failures) {
+    std::string message = limited ? tr(STR_OPDS_BATCH_STOPPED_EARLY) : "";
+    if (failures) {
+      char counts[24];
+      snprintf(counts, sizeof(counts), " (%d / %d)", batchStatus.failed, batchStatus.downloaded + batchStatus.failed);
+      if (limited) message += ' ';
+      message += tr(STR_DOWNLOAD_FAILED);
+      message += counts;
+    }
     {
       RenderLock lock;
       state = State::ERROR;
