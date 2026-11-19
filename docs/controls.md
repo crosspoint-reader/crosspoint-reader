@@ -4,7 +4,7 @@ Open **Settings → Controls** to configure buttons and touch input. The availab
 options depend on the device.
 
 - **Home button gestures** opens the existing gesture assignments.
-- **Power button** contains **Short click** and, on X4 Pro, **Double click**.
+- **Power button** contains **Short click** and **Double click**.
 - **Front buttons** contains remapping, orientation, Back behavior, and the two
   long-press settings at the bottom.
 - **Side buttons** contains the reader layout, orientation, and page-turn long press.
@@ -13,8 +13,10 @@ options depend on the device.
 **Page turn long press** is shared by Front buttons and Side buttons. Changing it
 in either group changes the same setting.
 
-On X4 Pro, **Double click** offers the same actions as **Short click**, plus
-**Frontlight** to toggle the light. With a double-click action enabled, a single
+**Double click** offers the same actions as **Short click**, plus **Frontlight**
+to toggle the light on devices that have one. It is not offered where the power
+button is also Confirm. It defaults to Frontlight on X4 Pro and EEGO A4 and to
+Ignore elsewhere. With a double-click action enabled, a single
 click waits up to half a second before its action runs. A double click runs only
 its assigned action. Set Double click to **Ignore** to remove this wait.
 Reader actions such as page turn and footnotes apply while reading. Sleep,

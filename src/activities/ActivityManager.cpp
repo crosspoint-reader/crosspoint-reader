@@ -116,7 +116,8 @@ void ActivityManager::loop() {
     return;
   }
 
-  if (currentActivity) {
+  // Radio shutdown can defer a screen change after the outgoing activity has released its resources.
+  if (currentActivity && pendingAction == PendingAction::None) {
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
       if (currentActivity->handleHomeGesture()) {
         return;
@@ -375,6 +376,9 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
+  // EEGO A4: after a gray reader page, a fast refresh leaves the page ghosting
+  // in Home's dithered areas.
+  if (BoardConfig::isEegoA4() && isReaderActivity()) cleanInitialRefresh = true;
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }

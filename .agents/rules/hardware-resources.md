@@ -42,4 +42,41 @@ null rather than falling back to internal RAM. Preserve that failure contract.
 8. SD Persistence Throttling: Settings, state, credentials, and other `PersistableStore` JSON files live on SD under `/.crosspoint/` through `HalStorage`; SPIFFS is not mounted. Guard redundant writes and debounce progress saves to avoid serialization, SD I/O, and `storageMutex` cost.
 9. Fallible storage follows the [checked-allocation contract](coding-standards.md#heap-buffer-allocation); budget peak coexistence during container growth, not just final size.
 
+### Flash size: unused features must cost nothing
+
+Flash is limited, and every release target pays for shared code. A new optional
+feature must not grow builds, screens or call sites that do not use it. Before
+adding one to shared code, check each of these, and prefer a design that avoids
+the cost over one that needs measuring:
+
+* **Templates** (FreeInkUI's `list()` and `Frame<N>`, and anything else
+  instantiated per caller): code added inside a template is compiled into every
+  instantiation. Put anything that does not depend on the template parameter in
+  a non-template function and call it. A 10-line branch added to `list()` cost
+  about 250 bytes per instantiation and grew every target by 3.2-3.6 KB.
+* **Per-item and per-call structs** (`ListItem`, `ListProps`, `SettingInfo` and
+  similar): every field is initialized at every construction site and enlarges
+  every array, vector and stack frame that holds one. Do not add a by-value
+  sub-struct for an optional feature. Use a pointer that defaults to `nullptr`,
+  or reuse an existing field.
+* **Header-only `inline` functions** with more than a few lines that many
+  callers use: mark them `__attribute__((noinline))` or move the body to a
+  `.cpp` file so there is one copy.
+* **Device-specific code**: `BoardConfig::ACTIVE` is selected at runtime, so a
+  `BoardConfig::isX4Pro()`-style check does not remove code from other
+  targets. Put anything sizeable behind the device's or capability's build
+  flag (`FREEINK_DEVICE_*`, `FREEINK_CAP_*`); a runtime check is fine for a
+  line or two.
+* **SDK bumps**: a submodule bump that grows every target has pulled in a
+  change of the kinds above. Find it and fix it in the SDK instead of
+  accepting the growth here.
+
+CI posts a per-target size comparison on each pull request. If a feature still
+adds code for targets or callers that do not use it, state the number in the PR
+description with the reason; "the feature needs it" is not one when a pointer,
+a shared function or a build flag would avoid it. To measure before pushing,
+compile one translation unit that uses the component with the target compiler
+at `-Os`, before and after the change, and compare with `size` and
+`nm -S --size-sort`.
+
 ---

@@ -9,6 +9,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -505,6 +506,7 @@ void EpubReaderActivity::idlePrewarmTick() {
     return;
   }
 
+  HalPowerManager::Lock powerLock;
   if (const auto p = section->loadPage(targetPage)) {
     const auto t0 = millis();
     auto scope = fcm->createPrewarmScope(true);
@@ -1447,6 +1449,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
     }
     // The destructor can no longer save the back-stack once epub is gone.
     if (footnoteDepth > 0) saveLinkStack();
+    rememberBookOnceRendered();
     epub.reset();
   }
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
@@ -1697,6 +1700,10 @@ void EpubReaderActivity::renderBook() {
   // exit from the overlay while its deferred chrome refresh is still pending.
   settleOverlayRefresh();
 
+  // The old page snapshot must not compete with chapter builds for heap.
+  // An open overlay gets a fresh snapshot after the new page is rendered.
+  discardOverlayPage();
+
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;
     pendingSyncSaveError = false;
@@ -1858,6 +1865,9 @@ void EpubReaderActivity::renderBook() {
             if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
               showBuildPopup(renderer, pagesUntilFullRefresh);
             }
+            // The render lock is held for the whole build, so the main loop
+            // cannot power the EEGO A4 panel down; left powered it fuzzes.
+            if (BoardConfig::isEegoA4()) display.controllerIdle();
             if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
               LOG_ERR("ERS", "Failed during incremental section build");
               section.reset();
@@ -2008,11 +2018,6 @@ void EpubReaderActivity::renderBook() {
     currentPageLinks = std::move(p->links);
     currentPageLinkMarginLeft = orientedMarginLeft;
     currentPageLinkMarginTop = orientedMarginTop;
-
-    // The overlay and non-tiled grayscale renderer share the renderer's single
-    // stored-BW slot. Release the old page snapshot before renderContents()
-    // needs that slot, then snapshot the newly rendered page below.
-    discardOverlayPage();
 
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
@@ -2170,12 +2175,18 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   } ditherScope{renderer};
   renderer.setDitherImagesInBw(!imageGrayscale);
   const bool pageHasImages = imageGrayscale && page->hasImages();
+  // Images keep every gray level on panels that otherwise render the text
+  // overlay with fewer.
+  struct FullToneScope {
+    ~FullToneScope() { display.setOverlayFullTone(false); }
+  } fullToneScope;
+  display.setOverlayFullTone(pageHasImages);
   const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
   const bool manualRefreshPending = forcedRefreshPending;
   forcedRefreshPending = false;
   const bool cleanImageBasePending = manualRefreshPending || pagesUntilFullRefresh <= 1;
   const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
-  const bool needsAnyGrayscale = needsTextGrayscale || (pageHasImages && !BoardConfig::isEegoA4());
+  const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
   const bool absoluteImageGrayscale =
       pageHasImages && !gpio.deviceIsX3() &&
       (display.getController() == HalDisplay::Controller::UC8279 || BoardConfig::isPicco()) &&
@@ -2186,9 +2197,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // Paper Mono only (no other panel combines): defer the B/W base activation so
   // the gray planes join it in a single waveform. Displaying the base
   // separately makes the gray pass re-drive the whole text body — a visible
-  // flash on every AA page.
-  const bool combinedGrayscaleBase =
-      tiledGrayscale && !pageHasImages && grayscale.base == HalDisplay::GrayscaleBase::Combined;
+  // flash on every AA page. The EEGO A4 combines image pages too: its driver
+  // then shows base and grays itself instead of repainting a displayed base.
+  const bool combinedGrayscaleBase = tiledGrayscale && (!pageHasImages || BoardConfig::isEegoA4()) &&
+                                     grayscale.base == HalDisplay::GrayscaleBase::Combined;
   const bool overlapRefresh = tiledGrayscale && grayscale.asyncBase && !pageHasImages;
   auto renderGrayscalePass = [&]() {
     // A4 gray planes replace the full page, including its clipping highlights.
@@ -2223,7 +2235,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     }
     LOG_DBG("ERS", "Image page: absolute grayscale waveform");
     pagesUntilFullRefresh = 1;
-  } else if (pageHasImages) {
+  } else if (pageHasImages && !combinedGrayscaleBase) {
     // Image pages use one base refresh before the grayscale pass. FAST leaves
     // the panel receptive to the gray waveform; pending cleanup still honors
     // the scheduled/manual HALF refresh.
@@ -2472,6 +2484,8 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
   const auto fillHighlight = [&](const int x, const int y, const int width, const int height) {
     if (BoardConfig::isEegoA4() && renderer.getRenderMode() != GfxRenderer::BW) {
       // Gray planes start at zero and use set bits for ink, opposite to B/W.
+      // MSB plane only: light gray.
+      if (renderer.getRenderMode() != GfxRenderer::GRAYSCALE_MSB) return;
       for (int py = y + (y & 1); py < y + height; py += 2) {
         for (int px = x + (x & 1); px < x + width; px += 2) renderer.drawPixel(px, py, false);
       }

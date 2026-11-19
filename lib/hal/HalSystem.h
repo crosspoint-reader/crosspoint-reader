@@ -11,6 +11,9 @@ struct StackFrame {
 
 void begin();
 
+// Stock EEGO UID from the factory MAC; leaves uid unchanged if unavailable.
+bool getEegoUid(uint32_t& uid);
+
 // Dump panic info to SD card if necessary
 void checkPanic();
 void clearPanic();

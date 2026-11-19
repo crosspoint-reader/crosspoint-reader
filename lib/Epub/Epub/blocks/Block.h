@@ -11,5 +11,4 @@ class Block {
 
   virtual BlockType getType() = 0;
   virtual bool isEmpty() = 0;
-  virtual void finish() {}
 };

@@ -94,13 +94,6 @@ int HttpDownloader::lastStatus() { return g_lastStatus; }
 
 bool HttpDownloader::lastAnswerRedirected() { return g_lastRedirected; }
 
-bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
-                              const std::string& password, const std::vector<Header>& headers) {
-  return fetchUrl(
-      url, [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; }, username,
-      password, headers);
-}
-
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
                               const std::string& password, const std::vector<Header>& headers) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());

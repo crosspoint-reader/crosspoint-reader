@@ -23,7 +23,7 @@ enum class SettingAction {
   Network,
   Bluetooth,
   ClearCache,
-  DisplayRefresh,
+  RefreshLibrary,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,
