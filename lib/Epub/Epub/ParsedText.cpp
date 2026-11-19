@@ -721,6 +721,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   const unsigned char* segmentStart = ptr;
   uint32_t firstCp = utf8NextCodepoint(&ptr);  // Consume the first char to determine initial state
   bool inWordSegment = isWordCharacter(firstCp);
+  uint32_t prevCp = firstCp;
 
   bool isFirstSegment = true;
 
@@ -728,6 +729,13 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     const unsigned char* currentCpStart = ptr;
     uint32_t cp = utf8NextCodepoint(&ptr);
     bool isWordChar = isWordCharacter(cp);
+    // An apostrophe between two letters (we're, l'agent) is its own regular-weight segment, like in the
+    // unfocused path, so the word still splits into three selectable tokens.
+    if (isWordChar && isElisionApostrophe(cp) && isElisionLetter(prevCp) && ptr < end) {
+      const unsigned char* peek = ptr;
+      if (isElisionLetter(utf8NextCodepoint(&peek))) isWordChar = false;
+    }
+    prevCp = cp;
 
     // Whenever the character type flips, slice off the segment we just completed and process it
     if (isWordChar != inWordSegment) {
