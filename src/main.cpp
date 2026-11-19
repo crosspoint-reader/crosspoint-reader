@@ -1055,6 +1055,9 @@ void loop() {
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
+  // Time blocked in the activity (e.g. a synchronous download) is not idle
+  // time, so it is not counted toward auto-sleep.
+  lastActivityTime += activityDuration;
 
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {
