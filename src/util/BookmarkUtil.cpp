@@ -1,5 +1,6 @@
 #include "BookmarkUtil.h"
 
+#include <Utf8.h>
 #include <mbedtls/sha256.h>
 
 #include <algorithm>
@@ -33,9 +34,8 @@ std::string BookmarkUtil::sanitizeBookmarkSummary(std::string summary) {
   summary.erase(
       std::find_if(summary.rbegin(), summary.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(),
       summary.end());
-  if (summary.size() > 72) {
-    summary.resize(72);
-  }
+  // Cut on a character boundary; this also drops a split character left by older firmware.
+  summary.resize(utf8SafeTruncateBuffer(summary.data(), std::min<int>(summary.size(), 72)));
   return summary;
 }
 

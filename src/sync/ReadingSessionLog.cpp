@@ -45,22 +45,24 @@ int utcOffsetMinutes(const time_t at) {
   return std::clamp(static_cast<int>((at - mktime(&utc)) / 60), -720, 840);
 }
 
-// Reads one line without its newline. An overlong line comes back empty.
-// Returns false at the end of the file; an unfinished last line is not returned.
-bool readLine(HalFile& file, char* line, const size_t size) {
-  size_t length = 0;
+// Reads the line that starts at offset, without its newline, and moves offset past it.
+// An overlong line comes back empty. Returns false, leaving offset alone, when no
+// complete line is left: the end of the log, an unfinished last line, or a read error.
+bool readLine(HalFile& file, size_t& offset, char* line, const size_t size) {
+  size_t next = offset;
   bool overlong = false;
-  char c;
-  while (file.read(&c, 1) == 1) {
-    if (c == '\n') {
+  while (file.seek(next)) {
+    const int got = file.read(line, size - 1);
+    if (got <= 0) return false;
+    if (const void* newline = memchr(line, '\n', got)) {
+      const size_t length = static_cast<const char*>(newline) - line;
       line[overlong ? 0 : length] = '\0';
+      offset = next + length + 1;
       return true;
     }
-    if (length + 1 < size) {
-      line[length++] = c;
-    } else {
-      overlong = true;
-    }
+    if (static_cast<size_t>(got) < size - 1) return false;
+    overlong = true;
+    next += got;
   }
   return false;
 }
@@ -96,25 +98,34 @@ bool readingSessionLog::append(const std::string& document, const std::string& b
   doc["to"] = endProgressBp;
   doc["title"] = title.substr(0, utf8SafeTruncateBuffer(title.data(), std::min<int>(title.size(), MAX_TITLE_BYTES)));
   doc["path"] = bookPath;
-  const auto line = makeUniqueNoThrow<char[]>(MAX_LINE + 1);
-  if (!line) return false;
-  size_t length = SyncRequest::serialize(doc, line.get(), MAX_LINE);
+  // One spare byte in front for a newline that ends an unfinished line already in the log.
+  const auto buffer = makeUniqueNoThrow<char[]>(MAX_LINE + 2);
+  if (!buffer) return false;
+  char* line = buffer.get() + 1;
+  size_t length = SyncRequest::serialize(doc, line, MAX_LINE);
   if (length == 0) {
     // upload() skips lines longer than its buffer, so a very long path is left out.
     doc.remove("path");
-    length = SyncRequest::serialize(doc, line.get(), MAX_LINE);
+    length = SyncRequest::serialize(doc, line, MAX_LINE);
   }
   if (length == 0) return false;
   line[length++] = '\n';
 
   Storage.mkdir("/.crosspoint");
-  HalFile file = Storage.open(LOG_PATH, O_WRONLY | O_CREAT | O_APPEND);
+  HalFile file = Storage.open(LOG_PATH, O_RDWR | O_CREAT | O_APPEND);
   if (!file) {
     LOG_ERR("RSL", "Failed to open the reading session log");
     return false;
   }
   const size_t sizeBefore = file.size();
-  const bool written = file.write(line.get(), length) == length;
+  // A power cut can leave an unfinished line, which would swallow this record.
+  char last = '\n';
+  if (sizeBefore > 0 && file.seek(sizeBefore - 1)) file.read(&last, 1);
+  if (last != '\n') {
+    *--line = '\n';
+    ++length;
+  }
+  const bool written = file.write(line, length) == length;
   // A partial line would swallow the next session appended after it.
   if (!written) file.truncate(sizeBefore);
   file.close();
@@ -142,10 +153,11 @@ bool readingSessionLog::upload(SyncRequest& sync) {
   esp_efuse_mac_get_default(mac);
   const int64_t now = trustedtime::trustedNow();
   const std::string url = KOREADER_STORE.getBaseUrl() + "/api/v1/stats/sessions";
-  bool ok = file.seek(offset);
+  bool ok = true;
+  size_t consumed = offset;  // end of the last complete line read
   JsonDocument doc;
   // On the heap: the loop task's stack is small and TLS runs below this frame.
-  const auto lineBuffer = makeUniqueNoThrow<char[]>(MAX_LINE);
+  const auto lineBuffer = makeUniqueNoThrow<char[]>(MAX_LINE + 1);
   if (!lineBuffer) return false;
   char* const line = lineBuffer.get();
   char sessionId[40];
@@ -159,7 +171,7 @@ bool readingSessionLog::upload(SyncRequest& sync) {
     size_t count = 0;
     bool endOfLog = false;
     while (count < BATCH_SIZE) {
-      if (!readLine(file, line, MAX_LINE)) {
+      if (!readLine(file, consumed, line, MAX_LINE + 1)) {
         endOfLog = true;
         break;
       }
@@ -183,7 +195,6 @@ bool readingSessionLog::upload(SyncRequest& sync) {
                          std::clamp(entry["tz"] | 0, -720, 840));
       starts[count++] = start;
     }
-    const size_t consumed = file.position();
 
     if (count > 0) {
       length += snprintf(body + length, SyncRequest::BUFFER_SIZE - length, "]}");

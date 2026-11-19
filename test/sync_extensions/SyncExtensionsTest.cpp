@@ -270,6 +270,30 @@ void sessionsUploadOnce() {
   assert(readingSessionLog::append(document, book, "A \"quoted\" title", 1700100000, 45, 0, 0));
   assert(readingSessionLog::upload(sync));
   assert(uploads.size() == 1 && acceptedCount(uploads[0]) == 1);
+
+  // A power cut left an unfinished line. The next session starts on its own line and is uploaded.
+  auto& bytes = fake::files["/.crosspoint/reading_sessions.jsonl"]->bytes;
+  const char cut[] = "{\"doc\":\"";
+  bytes.insert(bytes.end(), cut, cut + sizeof(cut) - 1);
+  assert(readingSessionLog::append(document, book, "After the cut", 1700200000, 45, 0, 0));
+  uploads.clear();
+  assert(readingSessionLog::upload(sync));
+  assert(uploads.size() == 1 && acceptedCount(uploads[0]) == 1);
+
+  // An unfinished last line is not uploaded, and the upload position stays in front of it.
+  bytes.insert(bytes.end(), cut, cut + sizeof(cut) - 1);
+  uploads.clear();
+  assert(readingSessionLog::upload(sync));
+  assert(uploads.empty());
+  assert(readingSessionLog::append(document, book, "After the cut", 1700300000, 45, 0, 0));
+  assert(readingSessionLog::upload(sync));
+  assert(uploads.size() == 1 && acceptedCount(uploads[0]) == 1);
+}
+
+void summaryIsCutOnCharacterBoundary() {
+  // 71 ASCII bytes and a two-byte character: a cut at 72 bytes would split it.
+  assert(BookmarkUtil::sanitizeBookmarkSummary(std::string(71, 'a') + "\xC3\xA9").size() == 71);
+  assert(BookmarkUtil::sanitizeBookmarkSummary(std::string(70, 'a') + "\xC3\xA9").size() == 72);
 }
 }  // namespace
 
@@ -279,5 +303,6 @@ int main() {
   bookmarksMerge();
   engineGatesEveryUpload();
   sessionsUploadOnce();
+  summaryIsCutOnCharacterBoundary();
   puts("Sync extension tests passed");
 }

@@ -353,6 +353,9 @@ static bool loadSleepFrameBuffer() {
   return true;
 }
 
+// Set while a sleep is in progress once its WiFi join has failed.
+static bool sleepJoinFailed = false;
+
 // The saved networks to try at sleep, best first, at most two. One saved
 // network is tried directly. With several, a scan finds which are in range:
 // the last-used one comes first, then the strongest. The scan costs a few
@@ -395,6 +398,9 @@ static std::vector<WifiCredential> pickSleepNetworks() {
 // for not connecting is logged, because sleep itself never reports a failure.
 static bool joinWifiForSleep(const bool showPopup) {
   if (WiFi.status() == WL_CONNECTED) return true;
+  // Plugin delivery and book sync both call this; a failed join is not repeated in the same sleep.
+  if (sleepJoinFailed) return false;
+  sleepJoinFailed = true;
   // A failed reading is not a low battery: only a known low level skips the join.
   uint16_t battery = 0;
   if (!powerManager.readBatteryPercentage(battery)) {
@@ -436,6 +442,7 @@ static bool joinWifiForSleep(const bool showPopup) {
   // Modem sleep can stall requests for seconds; the radio is torn down right after this work.
   WiFi.setSleep(false);
   trustedtime::startSync();  // snap the clock floor while the network is up
+  sleepJoinFailed = false;
   return true;
 }
 
@@ -571,6 +578,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   deepSleepInProgress = true;
   const bool bluetoothStopped = bleturner::beforeSleep(2000);
   if (!bluetoothStopped) LOG_ERR("SLP", "Bluetooth did not stop; deferring sleep-event delivery");
+  sleepJoinFailed = false;
   deliverSleepPluginEvents(bluetoothStopped);
 
   const bool isQuickResumeSleep =

@@ -78,7 +78,7 @@ bool pushNew(SyncRequest& sync, const std::string& url, JsonDocument& doc, std::
       setId(item, BookmarkUtil::syncId(bookmark.xpath));
       item["xpath"] = bookmark.xpath;
       item["percentage"] = std::isfinite(bookmark.percentage) ? std::clamp(bookmark.percentage, 0.0f, 1.0f) : 0.0f;
-      item["summary"] = bookmark.summary;
+      item["summary"] = BookmarkUtil::sanitizeBookmarkSummary(bookmark.summary);
       item["si"] = bookmark.computedSpineIndex;
       item["pc"] = bookmark.computedChapterPageCount;
       item["pp"] = bookmark.computedChapterProgress;
