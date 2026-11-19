@@ -47,6 +47,7 @@
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
+#include "util/Gray16Tuning.h"
 #include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
 #include "util/SlideSwitch.h"
@@ -974,6 +975,11 @@ void loop() {
         logSerial.write(buf, bufferSize);
         logSerial.printf("SCREENSHOT_END\n");
       }
+#if CROSSPOINT_GRAY16_TUNING
+      else {
+        handleGray16Command(cmd);
+      }
+#endif
     }
   }
 

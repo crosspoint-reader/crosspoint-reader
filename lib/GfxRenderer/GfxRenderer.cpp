@@ -735,6 +735,25 @@ void GfxRenderer::grayArcEdge(const int radius, const int innerRadius, const int
   }
 }
 
+#if !CROSSPOINT_GRAY_UI_FULL_TONE
+// How the Metalio E-Ink4-Plus drives each level of a gray UI frame, measured on
+// the glass (see the SDK's EpdiyDriver for what the numbers mean). A pixel goes
+// straight from white to its level and straight back, where the panel's own
+// table takes every gray by way of black, which showed the grays of the screen
+// being left as a black-and-white picture of it. Row 0 is the top-up for
+// unchanged pixels and the timing (new ink drawn while old ink clears). The UI
+// sends levels GRAY_EDGE_LIGHT_INK (9), GRAY_EDGE_DARK_INK (12) and 15; the
+// other rows keep the table monotonic.
+static constexpr uint8_t kGrayUiLevels[16][3] = {
+    {1, 2, 1},                                                                                             // 0
+    {1, 0, 8},  {1, 0, 8},  {1, 0, 8},  {1, 0, 8}, {1, 0, 8}, {1, 0, 8}, {1, 0, 8}, {1, 0, 8}, {1, 0, 8},  // 1..9
+    {2, 0, 9},  {2, 0, 9},                                                                                 // 10, 11
+    {3, 0, 10}, {3, 0, 10},                                                                                // 12, 13
+    {5, 0, 11},                                                                                            // 14
+    {8, 0, 11},                                                                                            // 15
+};
+#endif
+
 bool GfxRenderer::beginGrayFrame() const {
   if (grayFrameActive_ || !frameBuffer || _stripActive || renderMode != BW || !display.supportsGray16Image()) {
     return false;
@@ -743,6 +762,13 @@ bool GfxRenderer::beginGrayFrame() const {
   if (!grayInk_) grayInk_ = static_cast<uint8_t*>(heap_caps_malloc(pixels, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!grayImage_) grayImage_ = static_cast<uint8_t*>(heap_caps_malloc(pixels / 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!grayInk_ || !grayImage_) return false;
+#if !CROSSPOINT_GRAY_UI_FULL_TONE
+  // Once: a panel without level tuning refuses and keeps its own table.
+  if (!grayLevelsApplied_) {
+    grayLevelsApplied_ = true;
+    display.setGray16Levels(kGrayUiLevels);
+  }
+#endif
   memset(grayInk_, GRAY_FOLLOWS_FB, pixels);
   grayFrameActive_ = true;
   return true;

@@ -27,6 +27,16 @@
 #define CROSSPOINT_GRAY_UI_FULL_TONE 0
 #endif
 
+// Serial commands for calibrating 16-level drawing on the glass
+// (src/util/Gray16Tuning.h). A development tool: off unless the build asks.
+#ifndef CROSSPOINT_GRAY16_TUNING
+#define CROSSPOINT_GRAY16_TUNING 0
+#endif
+#if !CROSSPOINT_GRAY_UI
+#undef CROSSPOINT_GRAY16_TUNING
+#define CROSSPOINT_GRAY16_TUNING 0
+#endif
+
 class HalDisplay {
  public:
   using Controller = BoardConfig::DisplayController;
@@ -165,6 +175,13 @@ class HalDisplay {
   bool displayGray16Image(const uint8_t* levels, bool fast) {
     return einkDisplay.displayGray16Image(levels, true, fast);
   }
+#endif
+#if CROSSPOINT_GRAY_UI
+  // Three numbers per level (0 = white .. 15 = darkest) that say how the panel
+  // drives it; nullptr returns to the built-in levels. See the SDK's driver
+  // for their meaning.
+  bool setGray16Levels(const uint8_t (*paths)[3]) { return einkDisplay.setGray16Levels(paths); }
+  bool getGray16Levels(uint8_t (*paths)[3]) const { return einkDisplay.getGray16Levels(paths); }
 #endif
 
   // Runtime geometry passthrough
