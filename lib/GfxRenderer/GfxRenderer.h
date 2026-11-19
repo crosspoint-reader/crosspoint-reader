@@ -33,8 +33,12 @@ namespace glyphBitmap {
 struct Frame;
 }
 
-// GfxRenderer::drawMask() exists (lets adapters test for it).
+// GfxRenderer::drawMask() exists (lets adapters test for it). Only on the
+// gray-UI board, the one it has been checked on; every other board keeps the
+// per-pixel bitmap path it had.
+#if CROSSPOINT_GRAY_UI
 #define GFX_RENDERER_HAS_DRAW_MASK 1
+#endif
 
 // Color representation: uint8_t mapped to 4x4 Bayer matrix dithering levels
 // 0 = transparent, 1-16 = gray levels (white to black)
@@ -68,9 +72,11 @@ class GfxRenderer {
     h = y1 - y;
   }
   void drawIconScaled(const uint8_t bitmap[], int x, int y, int size, int outSize) const;
+#if CROSSPOINT_GRAY_UI
   // One physical pixel of a scaled mask at `coverage` / 256: inked from half
   // coverage, and during a gray frame recorded at its real level.
   void plotCoverage(int x, int y, bool black, int coverage) const;
+#endif
   void drawImageScaled(const uint8_t bitmap[], int x, int y, int width, int height, int outWidth, int outHeight) const;
 
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
@@ -397,12 +403,14 @@ class GfxRenderer {
                        bool roundBottomLeft, bool roundBottomRight, Color color) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawIcon(const uint8_t bitmap[], int x, int y, int size) const;
+#if CROSSPOINT_GRAY_UI
   // Draw a 1-bit mask (row-major, MSB first, natural orientation) scaled to
   // width x height at (x, y). `inkIsZero` says which bit value is ink; black
   // false draws the ink white. Scaling is bilinear, so curves and diagonals
   // stay even at the board's UI scale.
   void drawMask(const uint8_t* bits, int srcWidth, int srcHeight, bool inkIsZero, int x, int y, int width, int height,
                 bool black = true) const;
+#endif
   // Board UI scale (BoardProfile::uiScale). While active, every public draw
   // and measure call takes and returns logical coordinates, multiplied by the
   // scale on the way to the panel; glyphs, icons and bitmaps are drawn at

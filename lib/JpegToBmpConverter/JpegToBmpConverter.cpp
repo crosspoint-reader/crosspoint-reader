@@ -513,7 +513,9 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
 // Internal implementation with configurable target size and bit depth
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& bmpOut, int targetWidth,
                                                      int targetHeight, bool oneBit, bool crop,
-                                                     bool originalThresholds, bool gray8) {
+                                                     bool originalThresholds, bool gray8Requested) {
+  // 8-bit output is used only for the gray copies of thumbnails, on builds that draw them.
+  const bool gray8 = CROSSPOINT_GRAY_UI_FULL_TONE && gray8Requested;
   LOG_DBG("JPG", "Converting JPEG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {

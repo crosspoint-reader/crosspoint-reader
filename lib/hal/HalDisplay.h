@@ -14,11 +14,12 @@
 #endif
 #endif
 
-// What a gray UI frame carries. 0: only the two edge levels a book page's
-// anti-aliasing uses, on glyph, icon and corner edges, so a screen change
-// drives the same kinds of pixel a page turn does. 1: all 16 levels, with flat
-// gray fills and gray cover thumbnails; on a panel whose waveform reaches every
-// gray by way of black, the grays of the screen being left then show as it goes.
+// What a gray UI frame carries. 0 (the default): only two edge levels, on
+// glyph, icon and corner edges, with dithered fills and 1-bit covers. This is
+// the mode that has been judged on the Metalio E-Ink4-Plus. 1: all 16 levels,
+// with flat gray fills and gray cover thumbnails. Its table gives an even,
+// smooth ramp, but a smooth gray is reached by way of black, and with whole
+// areas doing that the screen changes looked bad on the device.
 #ifndef CROSSPOINT_GRAY_UI_FULL_TONE
 #define CROSSPOINT_GRAY_UI_FULL_TONE 0
 #endif

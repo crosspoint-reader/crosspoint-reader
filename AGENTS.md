@@ -37,6 +37,7 @@ Use the table to find guidance for the decisions being changed. Read relevant se
 | Runtime font discovery, rendering, or cache lifetime | [font ownership](.agents/rules/ui-activities.md#runtime-fonts-and-cache-ownership) |
 | Plugin, service, web endpoint, or protected-book contracts | [service contracts](.agents/rules/architecture-hal.md#service-and-plugin-contracts) and the linked contract that applies |
 | Builds, formatting, or verification | [testing workflow](.agents/rules/testing-debugging.md#testing-and-verification-workflow) and [compact build output](.agents/rules/testing-debugging.md#compact-build-output) |
+| Gray UI levels, their waveform table, or a panel tuning session (Metalio E-Ink4-Plus only) | [gray tuning](docs/gray16-tuning.md), including how to ask an agent to run a session |
 | Crashes, CI, or serial measurements | [crash diagnosis](.agents/rules/testing-debugging.md#debugging-crashes) or the matching CI/serial section |
 | Branch creation, merges, commits, or publication | [git-workflow.md](.agents/rules/git-workflow.md) |
 | User-facing strings or language metadata | [translation workflow](.agents/rules/generated-files-cache.md#translation-workflow) |

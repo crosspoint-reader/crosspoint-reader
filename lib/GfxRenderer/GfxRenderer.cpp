@@ -735,15 +735,32 @@ void GfxRenderer::grayArcEdge(const int radius, const int innerRadius, const int
   }
 }
 
-#if !CROSSPOINT_GRAY_UI_FULL_TONE
 // How the Metalio E-Ink4-Plus drives each level of a gray UI frame, measured on
-// the glass (see the SDK's EpdiyDriver for what the numbers mean). A pixel goes
-// straight from white to its level and straight back, where the panel's own
-// table takes every gray by way of black, which showed the grays of the screen
-// being left as a black-and-white picture of it. Row 0 is the top-up for
-// unchanged pixels and the timing (new ink drawn while old ink clears). The UI
-// sends levels GRAY_EDGE_LIGHT_INK (9), GRAY_EDGE_DARK_INK (12) and 15; the
-// other rows keep the table monotonic.
+// the glass from photographed test ramps (see the SDK's EpdiyDriver for what
+// the three numbers mean). The panel's own table pushes a gray toward black
+// before clearing it, which showed the screen being left as a black-and-white
+// picture of itself; here a level is cleared with white frames alone. Row 0 is
+// the top-up for unchanged pixels and the timing (new ink drawn while old ink
+// clears).
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+// All 16 levels. Each gray is a push toward black and a pull back toward
+// white, which is smooth; the recipes were picked for an even ramp (measured
+// lightness 98, 87, 85, 78, 66, 65, 51, 49, 41, 41, 28, 18, 13, 8 of 100 for
+// levels 1..14). Neighbours that share a recipe are the same gray. The ramp
+// was measured; the screen changes with it were judged bad on the device,
+// since every gray area passes through black on its way in.
+static constexpr uint8_t kGrayUiLevels[16][3] = {
+    {1, 2, 1},                                         // 0
+    {10, 4, 8},  {8, 3, 8},   {4, 2, 8},  {10, 3, 8},  // 1..4
+    {6, 2, 9},   {6, 2, 9},   {8, 2, 9},  {8, 2, 9},   // 5..8
+    {10, 2, 10}, {10, 2, 10}, {6, 1, 10}, {8, 1, 10},  // 9..12
+    {10, 1, 11}, {12, 1, 11}, {10, 0, 11},             // 13..15
+};
+#else
+// Edge levels only: the UI sends GRAY_EDGE_LIGHT_INK (9), GRAY_EDGE_DARK_INK
+// (12) and 15. They go straight from white to their level, which is grainy
+// over an area and unnoticeable on an edge; the other rows keep the table
+// monotonic.
 static constexpr uint8_t kGrayUiLevels[16][3] = {
     {1, 2, 1},                                                                                             // 0
     {1, 0, 8},  {1, 0, 8},  {1, 0, 8},  {1, 0, 8}, {1, 0, 8}, {1, 0, 8}, {1, 0, 8}, {1, 0, 8}, {1, 0, 8},  // 1..9
@@ -762,13 +779,11 @@ bool GfxRenderer::beginGrayFrame() const {
   if (!grayInk_) grayInk_ = static_cast<uint8_t*>(heap_caps_malloc(pixels, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!grayImage_) grayImage_ = static_cast<uint8_t*>(heap_caps_malloc(pixels / 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   if (!grayInk_ || !grayImage_) return false;
-#if !CROSSPOINT_GRAY_UI_FULL_TONE
   // Once: a panel without level tuning refuses and keeps its own table.
   if (!grayLevelsApplied_) {
     grayLevelsApplied_ = true;
     display.setGray16Levels(kGrayUiLevels);
   }
-#endif
   memset(grayInk_, GRAY_FOLLOWS_FB, pixels);
   grayFrameActive_ = true;
   return true;
@@ -1810,6 +1825,7 @@ static bool smoothInk(const InkAt& inkAt, const int srcW, const int srcH, const 
   return (upper * (256 - fy) + lower * fy) * 2 >= 256 * 256;
 }
 
+#if CROSSPOINT_GRAY_UI
 // The same bilinear coverage as smoothInk, 0..256 instead of thresholded.
 template <typename InkAt>
 static int smoothCoverage(const InkAt& inkAt, const int srcW, const int srcH, const int dstX, const int dstY,
@@ -1826,7 +1842,6 @@ static int smoothCoverage(const InkAt& inkAt, const int srcW, const int srcH, co
 }
 
 void GfxRenderer::plotCoverage(const int x, const int y, const bool black, const int coverage) const {
-#if CROSSPOINT_GRAY_UI
   if (grayFrameActive_ && !_stripActive && coverage > 0 && coverage < 256) {
     const int target = black ? 15 : 0;
     if (coverage * 2 < 256) {
@@ -1845,7 +1860,6 @@ void GfxRenderer::plotCoverage(const int x, const int y, const bool black, const
     grayInk_[phyY * panelWidth + phyX] = static_cast<uint8_t>(under + ((target - under) * coverage) / 256);
     return;
   }
-#endif
   if (coverage * 2 >= 256) drawPixel(x, y, black);
 }
 
@@ -1871,6 +1885,7 @@ void GfxRenderer::drawMask(const uint8_t* bits, const int srcWidth, const int sr
     }
   }
 }
+#endif  // CROSSPOINT_GRAY_UI
 
 // drawIcon at outSize x outSize physical pixels, smoothly scaled from the
 // size x size source.
@@ -1882,9 +1897,16 @@ void GfxRenderer::drawIconScaled(const uint8_t bitmap[], const int x, const int 
   };
   for (int row = 0; row < outSize; row++) {
     for (int col = 0; col < outSize; col++) {
+#if CROSSPOINT_GRAY_UI
       const int coverage =
           size == outSize ? (inkAt(col, row) ? 256 : 0) : smoothCoverage(inkAt, size, size, col, row, outSize, outSize);
       if (coverage > 0) plotCoverage(x + (outSize - 1 - row), y + col, true, coverage);
+#else
+      const bool ink = size == outSize ? inkAt(col, row) : smoothInk(inkAt, size, size, col, row, outSize, outSize);
+      if (ink) {
+        drawPixel(x + (outSize - 1 - row), y + col, true);
+      }
+#endif
     }
   }
 }

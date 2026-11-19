@@ -400,7 +400,9 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                   bool oneBit, bool crop, bool originalThresholds, bool gray8) {
+                                                   bool oneBit, bool crop, bool originalThresholds, bool gray8Requested) {
+  // 8-bit output is used only for the gray copies of thumbnails, on builds that draw them.
+  const bool gray8 = CROSSPOINT_GRAY_UI_FULL_TONE && gray8Requested;
   LOG_DBG("PNG", "Converting PNG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   // Verify PNG signature

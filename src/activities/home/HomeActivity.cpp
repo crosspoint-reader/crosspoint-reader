@@ -540,12 +540,14 @@ void HomeActivity::render(RenderLock&&) {
     coverRendered = false;
   }
   bool bufferRestored = coverRendered && coverBufferStored && restoreCoverBuffer();
+#if CROSSPOINT_GRAY_UI
   // A snapshot that cannot be pasted back (taken without the gray levels a
   // gray frame needs) is dropped, so the theme draws the cover from its file.
   if (coverRendered && coverBufferStored && !bufferRestored) {
     freeCoverBuffer();
     coverRendered = false;
   }
+#endif
 
   // Band spans topPadding..homeTopPadding: the cover tile starts at the fixed
   // homeTopPadding, so the height must shrink by topPadding or the band (and a

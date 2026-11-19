@@ -15,8 +15,8 @@ namespace {
 
 uint8_t levelPaths[16][3];
 bool pathsLoaded = false;
-// Edge-only gray frames already run on a tuned table (GfxRenderer's kGrayUiLevels).
-bool tuningOn = !CROSSPOINT_GRAY_UI_FULL_TONE;
+// Gray frames already run on a tuned table (GfxRenderer's kGrayUiLevels).
+bool tuningOn = true;
 
 bool loadPaths() {
   if (!pathsLoaded) pathsLoaded = display.getGray16Levels(levelPaths);
