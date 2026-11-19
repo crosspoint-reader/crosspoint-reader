@@ -150,7 +150,7 @@ struct FontCache {
   Scope createPrewarmScope() { return Scope(*this); }
 };
 struct Renderer {
-  enum RenderMode { BW };
+  enum RenderMode { BW, GRAYSCALE_MSB };
   enum class DitherMode { Replace, PreserveInk };
   enum class TextMeasureMode { Layout, Rendered };
   struct Draw { int x, width, tracking; std::string text{}; };

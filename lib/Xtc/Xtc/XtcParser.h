@@ -35,10 +35,8 @@ class XtcParser {
   // File open/close
   XtcError open(const char* filepath);
   void close();
-  bool isOpen() const { return m_isOpen; }
 
   // Header information access
-  const XtcHeader& getHeader() const { return m_header; }
   uint16_t getPageCount() const { return m_header.pageCount; }
   uint16_t getWidth() const { return m_defaultWidth; }
   uint16_t getHeight() const { return m_defaultHeight; }
@@ -76,9 +74,6 @@ class XtcParser {
 
   bool hasChapters() const { return m_hasChapters; }
   const std::vector<ChapterInfo>& getChapters();
-
-  // Validation
-  static bool isValidXtcFile(const char* filepath);
 
   // Error information
   XtcError getLastError() const { return m_lastError; }

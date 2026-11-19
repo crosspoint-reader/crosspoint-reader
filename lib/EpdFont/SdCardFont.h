@@ -278,7 +278,6 @@ class SdCardFont {
   // Zero means absent; present styles store their array slot plus one.
   uint8_t styleSlots_[MAX_STYLES] = {};
   PerStyle& styleData(uint8_t style) { return styles_[styleSlots_[style] - 1]; }
-  const PerStyle& styleData(uint8_t style) const { return styles_[styleSlots_[style] - 1]; }
   uint8_t styleCount_ = 0;
 
   char filePath_[128] = {};

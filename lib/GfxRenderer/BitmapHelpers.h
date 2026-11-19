@@ -104,13 +104,6 @@ class Atkinson1BitDitherer {
     memset(errorRow2, 0, rowSize * sizeof(int16_t));
   }
 
-  void reset() {
-    if (!isValid()) return;
-    memset(errorRow0, 0, rowSize * sizeof(int16_t));
-    memset(errorRow1, 0, rowSize * sizeof(int16_t));
-    memset(errorRow2, 0, rowSize * sizeof(int16_t));
-  }
-
  private:
   size_t rowSize{0};
   std::unique_ptr<int16_t[]> errorRows;
