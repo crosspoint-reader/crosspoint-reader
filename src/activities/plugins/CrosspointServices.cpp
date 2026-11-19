@@ -16,10 +16,12 @@
 #include <HalStorage.h>
 #include <LibraryBuilder.h>
 #include <LibraryIndexFile.h>
+#include <LibraryText.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <SdCardFontManager.h>
 #include <SdCardFontRegistry.h>
+#include <Utf8.h>
 #include <WiFi.h>
 #include <WifiCredentialStore.h>
 #include <WolfsslCrypto.h>  // freeink::content::WolfsslCrypto
@@ -33,7 +35,6 @@
 #include <cstring>
 #include <ctime>
 #include <string_view>
-#include <unordered_set>
 
 #include "RecentBooksStore.h"
 #include "components/icons/cover.h"  // CoverIcon, the fallback-cover glyph
@@ -45,8 +46,6 @@ using freeink::content::RsaKeyPairDer;
 using freeink::content::WolfsslCrypto;
 
 namespace {
-constexpr uint32_t kPathMax = 255;
-
 // Preserve the guest buffer on failure and stop staging at its capacity.
 class BoundedOutput {
  public:
@@ -90,6 +89,37 @@ class BoundedOutput {
   std::unique_ptr<uint8_t[]> data;
 };
 
+bool shelfControl(unsigned char c) { return c < 0x20 || c == 0x7f; }
+
+bool shelfPathValid(std::string_view path) {
+  return !path.empty() && path.front() == '/' && path.size() <= DSN_BOOK_PATH_MAX &&
+         std::none_of(path.begin(), path.end(), shelfControl);
+}
+
+int writeShelfRow(char* out, uint32_t cap, std::string_view path, std::string_view title, std::string_view author) {
+  if (!shelfPathValid(path)) {
+    if (!cap) return DSN_ERR_TOO_BIG;
+    *out = '\n';
+    return 1;
+  }
+  constexpr size_t TEXT_MAX = 200;  // Size accepted by Dessen's text syscall.
+  if (title.size() > TEXT_MAX) title = title.substr(0, utf8SafeTruncateBuffer(title.data(), TEXT_MAX));
+  if (author.size() > TEXT_MAX) author = author.substr(0, utf8SafeTruncateBuffer(author.data(), TEXT_MAX));
+  constexpr std::string_view suffix = "\t-1\n";
+  const size_t bytes = path.size() + title.size() + author.size() + 2 + suffix.size();
+  if (bytes > cap) return DSN_ERR_TOO_BIG;
+
+  char* pos = out;
+  memcpy(pos, path.data(), path.size());
+  pos += path.size();
+  for (std::string_view field : {title, author}) {
+    *pos++ = '\t';
+    for (char c : field) *pos++ = shelfControl(c) ? ' ' : c;
+  }
+  memcpy(pos, suffix.data(), suffix.size());
+  return static_cast<int>(bytes);
+}
+
 // PKCS#7: pad to a 16-byte boundary, or validate+strip. Returns padded length
 // (encrypt) / plaintext length (decrypt), or -1 on bad padding.
 int pkcs7Strip(const uint8_t* buf, uint32_t len) {
@@ -101,6 +131,55 @@ int pkcs7Strip(const uint8_t* buf, uint32_t len) {
   return static_cast<int>(len - pad);
 }
 }  // namespace
+
+// Cache the native Recent tab's overlap lookup for this launcher's lifetime.
+struct CrosspointServices::ShelfOverlap {
+  static constexpr size_t MAX_OPENED = RecentBooksStore::MAX_RECENT_BOOKS;
+  uint64_t paths[MAX_OPENED] = {};
+  uint16_t rows[MAX_OPENED] = {};
+  uint16_t openedCount = 0, bookCount = 0, nextFirstSeen = 0, hiddenCount = 0;
+  uint32_t indexSize = 0;
+
+  bool resolve(library::LibraryIndexFile& index, const library::BookIdentity* identities, uint16_t count) {
+    const auto& header = index.header();
+    if (header.selfSize == indexSize && header.bookCount == bookCount && header.nextFirstSeen == nextFirstSeen &&
+        count == openedCount && std::equal(identities, identities + count, paths, [](const auto& book, uint64_t hash) {
+          return book.pathHash == hash;
+        }))
+      return true;
+
+    uint16_t ascending[MAX_OPENED];
+    if (!index.recentRowsFor(identities, count, ascending)) return false;
+
+    // An opened file can have changed size since the current index was written.
+    library::BookIdentity unresolved[MAX_OPENED];
+    uint16_t pending[MAX_OPENED], n = 0;
+    for (uint16_t i = 0; i < count; ++i) {
+      if (ascending[i] == UINT16_MAX && identities[i].fileSize) {
+        pending[n] = i;
+        unresolved[n++] = {identities[i].pathHash, 0};
+      }
+    }
+    if (n) {
+      uint16_t found[MAX_OPENED];
+      if (!index.recentRowsFor(unresolved, n, found)) return false;
+      for (uint16_t i = 0; i < n; ++i) ascending[pending[i]] = found[i];
+    }
+
+    indexSize = header.selfSize;
+    bookCount = header.bookCount;
+    nextFirstSeen = header.nextFirstSeen;
+    openedCount = count;
+    hiddenCount = 0;
+    for (uint16_t i = 0; i < count; ++i) {
+      paths[i] = identities[i].pathHash;
+      if (ascending[i] < bookCount) rows[hiddenCount++] = bookCount - 1 - ascending[i];
+    }
+    std::sort(rows, rows + hiddenCount);
+    hiddenCount = std::unique(rows, rows + hiddenCount) - rows;
+    return true;
+  }
+};
 
 CrosspointServices::CrosspointServices(std::string appName, std::string appDir)
     : appName_(std::move(appName)), appDir_(std::move(appDir)), crypto_(new WolfsslCrypto()) {}
@@ -154,10 +233,10 @@ int CrosspointServices::deviceId(char* out, uint32_t cap) {
 }
 
 // ---- storage ----
-int CrosspointServices::resolve(const char* path, std::string& out) const {
+int CrosspointServices::resolve(const char* path, std::string& out, uint32_t maxLen) const {
   // The binding already enforced the path rules; map the app root to the SD
   // card. Apps are user-installed from the owner's own card (whole-card policy).
-  if (!path || path[0] != '/' || strlen(path) > kPathMax) return DSN_ERR_INVALID;
+  if (!path || path[0] != '/' || strlen(path) > maxLen) return DSN_ERR_INVALID;
   out = path;
   return 0;
 }
@@ -239,40 +318,84 @@ int CrosspointServices::recents(char* out, uint32_t cap) {
   return static_cast<int>(acc.size());
 }
 
-// Return complete title-sorted records from the existing index.
-int CrosspointServices::library(char* out, uint32_t cap) {
-  library::LibraryIndexFile index;
-  if (!index.open(library::libraryIndexPath())) return 0;
+int CrosspointServices::recentShelf(uint32_t first, uint32_t count, char* out, uint32_t cap) {
+  if (count > DSN_SHELF_PAGE_MAX) return DSN_ERR_INVALID;
+  if (!count) return 0;
+
+  const RecentBook* opened[ShelfOverlap::MAX_OPENED];
+  library::BookIdentity identities[ShelfOverlap::MAX_OPENED];
+  uint16_t openedCount = 0;
+  for (const RecentBook& book : RECENT_BOOKS.getBooks()) {
+    if (openedCount == ShelfOverlap::MAX_OPENED) break;
+    if (!shelfPathValid(book.path)) continue;
+    auto file = Storage.open(book.path.c_str());
+    if (!file || file.isDirectory()) continue;
+    identities[openedCount] = {library::clixPathHash(book.path.data(), book.path.size()),
+                               static_cast<uint32_t>(file.fileSize())};
+    opened[openedCount++] = &book;
+  }
   uint32_t used = 0;
-  std::unordered_set<std::string> seen;  // collapse the same book kept in >1 folder
-  const uint16_t n = index.bookCount();
-  for (uint16_t row = 0; row < n; ++row) {
-    const uint16_t ordinal = index.ordinalForRow(library::SortOrder::TitleAsc, row);
-    library::ClixRecord rec{};
-    if (ordinal == 0xFFFF || !index.readRecord(ordinal, rec)) continue;
-    std::string path, title, author;
-    if (!index.readPath(rec, path)) continue;
-    if (!index.readTitle(rec, title) || title.empty()) index.readName(rec, title);
-    index.readAuthor(rec, author);
-    constexpr std::string_view suffix = "\t-1\n";  // progress is available through book_progress()
-    const size_t bytes = path.size() + title.size() + author.size() + 2 + suffix.size();
-    if (!seen.insert(title + '\x01' + author).second) continue;
-    if (bytes > cap - used) break;
-    for (std::string* field : {&title, &author}) {
-      std::replace_if(field->begin(), field->end(), [](char c) { return c == '\t' || c == '\r' || c == '\n'; }, ' ');
+  while (first < openedCount && count) {
+    const RecentBook& book = *opened[first++];
+    const int bytes = writeShelfRow(out + used, cap - used, book.path, book.title, book.author);
+    if (bytes < 0) return used ? static_cast<int>(used) : bytes;
+    used += bytes;
+    --count;
+  }
+  if (!count) return static_cast<int>(used);
+
+  uint32_t row = first - openedCount;
+  library::LibraryIndexFile index;
+  const char* indexPath = library::libraryIndexPath();
+  if (!index.open(indexPath)) return Storage.exists(indexPath) ? DSN_ERR_IO : static_cast<int>(used);
+  if (row >= index.bookCount()) return static_cast<int>(used);
+  if (!shelfOverlap_) shelfOverlap_ = makeUniqueNoThrow<ShelfOverlap>();
+  if (!shelfOverlap_ || !shelfOverlap_->resolve(index, identities, openedCount)) return DSN_ERR_IO;
+
+  size_t hidden = 0;
+  while (hidden < shelfOverlap_->hiddenCount && shelfOverlap_->rows[hidden] <= row) {
+    ++hidden;
+    ++row;
+  }
+  uint16_t ordinals[DSN_SHELF_PAGE_MAX];
+  uint32_t n = 0;
+  for (; n < count && row < index.bookCount(); ++row) {
+    if (hidden < shelfOverlap_->hiddenCount && shelfOverlap_->rows[hidden] == row) {
+      ++hidden;
+      continue;
     }
-    for (const std::string_view part : {std::string_view(path), std::string_view("\t"), std::string_view(title),
-                                        std::string_view("\t"), std::string_view(author), suffix}) {
-      memcpy(out + used, part.data(), part.size());
-      used += part.size();
+    ordinals[n++] = index.ordinalForRow(library::SortOrder::RecentDesc, static_cast<uint16_t>(row));
+  }
+  if (index.ioFailed()) return DSN_ERR_IO;
+  if (!n) return static_cast<int>(used);
+  auto folders = makeUniqueNoThrow<library::LibraryIndexFile::FolderLookup[]>(n);
+  if (!folders) return DSN_ERR_IO;
+  library::ClixRecord rec{};
+  for (uint32_t i = 0; i < n; ++i) {
+    folders[i].id = index.readRecord(ordinals[i], rec) ? rec.folderId : UINT16_MAX;
+    if (index.ioFailed()) return DSN_ERR_IO;
+  }
+  if (!index.readFolders(folders.get(), n)) return DSN_ERR_IO;
+
+  std::string name, title, author;
+  for (uint32_t i = 0; i < n; ++i) {
+    std::string path;
+    if (folders[i].path[0] && index.readRecord(ordinals[i], rec) && index.readName(rec, name)) {
+      path = library::joinLibraryPath(folders[i].path, name);
+      if (!index.readTitle(rec, title)) title = name;
+      index.readAuthor(rec, author);
     }
+    if (index.ioFailed()) return DSN_ERR_IO;
+    const int bytes = writeShelfRow(out + used, cap - used, path, title, author);
+    if (bytes < 0) return used ? static_cast<int>(used) : bytes;
+    used += bytes;
   }
   return static_cast<int>(used);
 }
 
 int CrosspointServices::bookProgress(const char* path) {
   std::string full;
-  if (resolve(path, full)) return -1;
+  if (resolve(path, full, DSN_BOOK_PATH_MAX)) return -1;
   return loadBookProgress(full);
 }
 
@@ -318,7 +441,7 @@ int CrosspointServices::bookCover(const char* path, uint32_t height, uint8_t* ou
   return DSN_ERR_UNAVAILABLE;  // covers need PSRAM for the decode/scale buffers
 #else
   std::string full;
-  if (resolve(path, full)) return DSN_ERR_INVALID;
+  if (resolve(path, full, DSN_BOOK_PATH_MAX)) return DSN_ERR_INVALID;
   if (height < 16 || height > 512) return DSN_ERR_INVALID;
   const int ph = static_cast<int>(height), pw = ph * 2 / 3;  // placeholder size (book aspect)
   if (!FsHelpers::hasReflowableBookExtension(full)) return packPlaceholderCover(out, cap, pw, ph);
@@ -356,7 +479,6 @@ int CrosspointServices::bookCover(const char* path, uint32_t height, uint8_t* ou
   return static_cast<int>(need);
 #endif
 }
-
 
 // Load a .cpfont from the app's folder at `size` and bind it to the custom font
 // slot (DSN_FONT_CUSTOM). One per app; a second call replaces the first. Uses

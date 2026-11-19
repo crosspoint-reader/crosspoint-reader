@@ -123,7 +123,7 @@ bool LibraryIndexFile::recentRowsFor(const BookIdentity* books, const size_t cou
         // may be the only reader the card allows); the hash alone decides.
         if (books[i].fileSize != 0 && books[i].fileSize != record.fileSize) continue;
         if (!hashRead) {
-          if (record.nameOff > head.nameLen) break;  // unvalidated record; skip it
+          if (record.nameOff > head.nameLen || sizeof(hash) > head.nameLen - record.nameOff) break;
           if (!readPathHash(record, hash)) return false;
           hashRead = true;
         }
@@ -257,6 +257,47 @@ bool LibraryIndexFile::readPath(const ClixRecord& record, std::string& out) {
     if (offset >= folderEnd) return false;
   }
   return false;
+}
+
+bool LibraryIndexFile::readFolders(FolderLookup* folders, size_t count) {
+  if (!opened || head.folderCount > head.bookCount || head.folderLen > 256u * head.folderCount) return false;
+  size_t remaining = 0;
+  for (size_t i = 0; i < count; ++i) {
+    folders[i].path[0] = '\0';
+    if (folders[i].id < head.folderCount) ++remaining;
+  }
+  if (!remaining) return true;
+
+  constexpr uint32_t BLOCK_SIZE = CLIX_ALIGN;
+  auto block = makeUniqueNoThrow<uint8_t[]>(BLOCK_SIZE);
+  if (!block) return false;
+
+  const uint32_t end = head.folderStart + head.folderLen;
+  uint32_t offset = head.folderStart, blockStart = 0, blockEnd = 0;
+  for (uint32_t id = 0; id < head.folderCount && remaining; ++id) {
+    if (offset >= end) break;
+    if (offset >= blockEnd) {
+      blockStart = offset;
+      blockEnd = offset + std::min(BLOCK_SIZE, end - offset);
+      if (!readAt(blockStart, block.get(), blockEnd - blockStart)) return false;
+    }
+    const uint8_t len = block[offset - blockStart];
+    ++offset;
+    if (!len || len > end - offset) break;
+    for (size_t i = 0; i < count; ++i) {
+      auto& folder = folders[i];
+      if (folder.id != id) continue;
+      if (offset + len <= blockEnd) {
+        memcpy(folder.path, block.get() + (offset - blockStart), len);
+      } else if (!readAt(offset, folder.path, len)) {
+        return false;
+      }
+      folder.path[std::memchr(folder.path, '\0', len) ? 0 : len] = '\0';
+      --remaining;
+    }
+    offset += len;
+  }
+  return true;
 }
 
 }  // namespace library

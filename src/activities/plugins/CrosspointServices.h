@@ -50,7 +50,7 @@ class CrosspointServices : public dessen::Services {
   int keystore(const char* path, const uint8_t* key, uint32_t n, uint32_t expires) override;
   // launcher / home
   int recents(char* out, uint32_t cap) override;
-  int library(char* out, uint32_t cap) override;
+  int recentShelf(uint32_t first, uint32_t count, char* out, uint32_t cap) override;
   int bookProgress(const char* path) override;
   int bookCover(const char* path, uint32_t height, uint8_t* out, uint32_t cap) override;
   int fontLoad(const char* path, int size) override;
@@ -101,11 +101,13 @@ class CrosspointServices : public dessen::Services {
  private:
   enum class Op : uint8_t { None, Net, Fetch, Keygen, TextInput, WifiStart, WifiConnecting };
 
-  int resolve(const char* path, std::string& out) const;  // app "/x" -> real SD path
-  bool deviceKek(uint8_t out[32]) const;                  // secure_wrap key
+  int resolve(const char* path, std::string& out, uint32_t maxLen = 255) const;  // app "/x" -> real SD path
+  bool deviceKek(uint8_t out[32]) const;                                         // secure_wrap key
 
   std::string appName_, appDir_;
   std::unique_ptr<freeink::content::Crypto> crypto_;
+  struct ShelfOverlap;
+  std::unique_ptr<ShelfOverlap> shelfOverlap_;
   // The one custom font an app may load (replacing any previous one). The
   // manager owns the loaded font; unloadFont() unregisters it from the renderer.
   GfxRenderer* renderer_ = nullptr;

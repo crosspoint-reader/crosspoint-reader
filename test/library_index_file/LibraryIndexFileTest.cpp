@@ -222,3 +222,34 @@ TEST(LibraryIndexFile, RejectsFolderRecordBeyondFolderBlob) {
   std::string path;
   EXPECT_FALSE(index.readPath(record, path));
 }
+
+TEST(LibraryIndexFile, ResolvesUnsortedFoldersAcrossReadBlocks) {
+  library::ClixHeader header{};
+  std::memcpy(header.magic, library::CLIX_MAGIC, sizeof(header.magic));
+  header.formatVersion = library::CLIX_FORMAT_VERSION;
+  header.foldVersion = library::CLIX_FOLD_VERSION;
+  header.bookCount = header.folderCount = 5;
+  const std::string paths[] = {"/first", "/" + std::string(249, 'a'), "/" + std::string(254, 'b'), "/last",
+                               std::string("/bad\0path", 9)};
+  std::vector<uint8_t> folders;
+  for (const auto& path : paths) {
+    folders.push_back(path.size());
+    folders.insert(folders.end(), path.begin(), path.end());
+  }
+  library::layoutSections(header, folders.size(), 0);
+  std::vector<uint8_t> bytes(header.selfSize, 0);
+  std::memcpy(bytes.data(), &header, sizeof(header));
+  std::copy(folders.begin(), folders.end(), bytes.begin() + header.folderStart);
+  Storage.setFile("/library.clx", std::move(bytes));
+
+  library::LibraryIndexFile index;
+  ASSERT_TRUE(index.open("/library.clx"));
+  library::LibraryIndexFile::FolderLookup lookups[] = {{3, {}}, {2, {}}, {0, {}}, {3, {}}, {4, {}}, {5, {}}};
+  ASSERT_TRUE(index.readFolders(lookups, 6));
+  EXPECT_EQ(lookups[0].path, paths[3]);
+  EXPECT_EQ(lookups[1].path, paths[2]);
+  EXPECT_EQ(lookups[2].path, paths[0]);
+  EXPECT_EQ(lookups[3].path, paths[3]);
+  EXPECT_STREQ(lookups[4].path, "");
+  EXPECT_STREQ(lookups[5].path, "");
+}
