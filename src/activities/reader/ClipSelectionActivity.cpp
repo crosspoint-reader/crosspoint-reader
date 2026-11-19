@@ -556,7 +556,6 @@ void ClipSelectionActivity::loop() {
     return;
   } else if (mappedInput.wasScreenTouchPressed(touchX, touchY)) {
     if (rangeStart >= 0) {
-      if (actionAt(touchX, touchY) >= 0) return;
       const int first = std::min(rangeStart, selected);
       const int last = std::max(rangeStart, selected);
       for (int endpoint = 0; endpoint < 2; ++endpoint) {
@@ -577,6 +576,7 @@ void ClipSelectionActivity::loop() {
         touchDragPageEndIndex = -1;
         return;
       }
+      if (actionAt(touchX, touchY) >= 0) return;
       return;
     }
     const int hit = wordAt(touchX, touchY);
@@ -667,6 +667,17 @@ int ClipSelectionActivity::selectionTop() const {
   return top;
 }
 
+int ClipSelectionActivity::selectionBottom() const {
+  const int first = std::min(rangeStart, selected);
+  const int last = std::max(rangeStart, selected);
+  int bottom = 0;
+  for (int i = first; i <= last; ++i) {
+    if (words[i].pageOffset == currentPageOffset)
+      bottom = std::max(bottom, static_cast<int>(words[i].y + words[i].height));
+  }
+  return bottom;
+}
+
 int ClipSelectionActivity::actionAt(const int x, const int y) const {
   return selectionGeometry::actionAt(actionRect(), UITheme::getInstance().getMetrics().menuSpacing, x, y,
                                      actionCount());
@@ -695,8 +706,11 @@ Rect ClipSelectionActivity::actionRect() const {
   int first = std::min(rangeStart, selected);
   const int last = std::max(rangeStart, selected);
   while (first < last && words[first].pageOffset < currentPageOffset) ++first;
+  const int wordHeight = words[first].height > 0 ? words[first].height : lineHeight;
+  const int handleSize = std::max(24, metrics.verticalSpacing * 2);
   return selectionGeometry::actions(safe, selectionTop(), height + padding * 2, metrics.verticalSpacing, width,
-                                    words[first].x - padding);
+                                    words[first].x - padding, selectionBottom(), wordHeight, handleSize,
+                                    words[first].y);
 }
 
 int ClipSelectionActivity::textOffset() const {
