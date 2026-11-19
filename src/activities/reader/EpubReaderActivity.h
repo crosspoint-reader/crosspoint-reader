@@ -181,6 +181,11 @@ class EpubReaderActivity final : public ReaderActivity {
   void openReaderMenu();
   // Toolbar reader menu (see Overlay above).
   bool usesToolbarMenu() const;
+  // The toolbar and its panels are UI drawn over the page: on a gray-UI panel
+  // their frames go out as 16-level images like any other screen's. Begun when
+  // the chrome is painted, ended once that paint has been pushed.
+  bool overlayGrayFrame = false;
+  void endOverlayGrayFrame();
   void openOverlay(Overlay target);
   void closeOverlayToPage();
   void discardOverlayPage();

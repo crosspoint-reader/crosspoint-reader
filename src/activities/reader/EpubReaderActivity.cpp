@@ -2713,12 +2713,25 @@ void EpubReaderActivity::discardOverlayPage() {
 // the chrome answers taps and buttons the moment it is visible instead of only
 // after a blocking displayBuffer() returns. Caller must hold the RenderLock.
 void EpubReaderActivity::pushOverlayRefresh() {
+  if (overlayGrayFrame) {
+    // A gray frame is shown in one blocking call; nothing is left pending.
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    endOverlayGrayFrame();
+    return;
+  }
   if (renderer.supportsAsyncRefresh()) {
     renderer.displayBufferAsync(HalDisplay::FAST_REFRESH);
     overlayRefreshPending = true;
   } else {
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   }
+}
+
+void EpubReaderActivity::endOverlayGrayFrame() {
+#if CROSSPOINT_GRAY_UI
+  if (overlayGrayFrame) renderer.endGrayFrame();
+#endif
+  overlayGrayFrame = false;
 }
 
 // Wait out a pending deferred overlay refresh and reseed the panel's
@@ -2826,6 +2839,11 @@ void EpubReaderActivity::closeOverlayToPage() {
 
 void EpubReaderActivity::renderOverlay() {
   if (!epub || !section || !toolbarUi) return;
+#if CROSSPOINT_GRAY_UI
+  // The page under the chrome stays as the framebuffer has it; only what is
+  // drawn from here on has its levels recorded.
+  if (!overlayGrayFrame) overlayGrayFrame = renderer.beginGrayFrame();
+#endif
 
   ReaderToolbarUi::Model model;
   // The toolbar's tool pill is the button-navigation cursor: tap-first (same
@@ -3304,6 +3322,7 @@ void EpubReaderActivity::activateMoreRow(int row) {
         RenderLock lock;  // the render task shares the framebuffer
         renderOverlay();
         renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+        endOverlayGrayFrame();
       }
       return;
     }
