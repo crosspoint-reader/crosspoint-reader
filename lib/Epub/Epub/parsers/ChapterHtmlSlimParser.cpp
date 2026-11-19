@@ -1383,19 +1383,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // A <br> inside a pagebreak marker (Calibre emits
-  // <span epub:type="pagebreak" ...><br class="calibre1"/></span>) is print-layout
-  // junk, not proof of real content: swallow it instead of letting the child-element
-  // check below disarm the capture, so the marker still renders nothing. Depth moves
-  // like a normal element (back out via this <br>'s own endElement) so the marker's
-  // closing tag lands at the depth the capture-close check expects.
-  if (self->pagebreakCapturing && strcmp(name, "br") == 0) {
-    self->depth += 1;
-    return;
+  // Inside a pagebreak marker, a <br> (Calibre emits
+  // <span epub:type="pagebreak" ...><br class="calibre1"/></span>) or a bare span/a
+  // wrapper around the label (<span aria-label="136"><span>136</span></span>) is not
+  // proof of real content: swallow the tag and keep capturing, so a label still renders
+  // nothing. A bare wrapper (no class, style or href) has no styling or link to lose if
+  // its text is replayed later. endElement swallows the matching close tag.
+  if (self->pagebreakCapturing) {
+    const bool bareWrapper = (strcmp(name, "span") == 0 || strcmp(name, "a") == 0) && !getAttribute(atts, "class") &&
+                             !getAttribute(atts, "style") && !getAttribute(atts, "href");
+    if (strcmp(name, "br") == 0 || bareWrapper) {
+      self->depth += 1;
+      return;
+    }
   }
 
-  // A child element appearing while capturing a pagebreak marker's text proves it's
-  // real content: a bare page-number marker never has children. Replay what was
+  // Any other child element appearing while capturing a pagebreak marker's text
+  // proves it's real content. Replay what was
   // captured so far as normal text, forget the capture, and let this element fall
   // through to its normal handling below.
   if (self->pagebreakCapturing) {
@@ -2694,7 +2698,13 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->nonVisibleTextDepth--;
   }
 
-  // Closing the pagebreak-marker element itself while still capturing (no nested
+  // Closing a child startElement swallowed while capturing: it had no effects to undo.
+  if (self->pagebreakCapturing && self->depth - 1 > self->pagebreakCaptureDepth) {
+    self->depth -= 1;
+    return;
+  }
+
+  // Closing the pagebreak-marker element itself while still capturing (no other nested
   // element and no overflow forced a replay along the way). Trim ASCII whitespace
   // and decide: drop the text if it's empty, matches the marker's own aria-label/
   // title, or is a short arabic/roman page number; otherwise it's real content that

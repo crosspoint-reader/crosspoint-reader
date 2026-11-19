@@ -787,6 +787,57 @@ TEST_F(ChapterHtmlSlimParserTest, EmptyAndLabelPagebreakMarkersRenderNothing) {
             "one two three four five");
 }
 
+TEST_F(ChapterHtmlSlimParserTest, LabelInNestedWrapperInPagebreakMarkerRendersNothing) {
+  EXPECT_EQ(
+      parseToParagraphText("<p>one <span epub:type=\"pagebreak\" aria-label=\"136\"><span>136</span></span>two "
+                           "<span role=\"doc-pagebreak\" title=\"p. 12\"><a id=\"p12\">p. 12</a></span>three</p>"),
+      "one two three");
+}
+
+TEST_F(ChapterHtmlSlimParserTest, ProseInNestedWrapperInPagebreakMarkerIsKept) {
+  EXPECT_EQ(parseToParagraphText(
+                "<p>It went <span epub:type=\"pagebreak\" title=\"7\"><span>real words here</span></span> on.</p>"),
+            "It went real words here on.");
+  // Longer than the capture buffer: replayed early, from inside the wrapper.
+  EXPECT_EQ(parseToParagraphText("<p>It went <span epub:type=\"pagebreak\" title=\"7\"><span>on with a sentence too "
+                                 "long for any page label</span></span> here.</p><p>next</p>"),
+            "It went on with a sentence too long for any page label here.\nnext");
+}
+
+// A styled or linking child is not a bare wrapper: it replays at once and keeps its formatting.
+TEST_F(ChapterHtmlSlimParserTest, StyledOrLinkingChildInPagebreakMarkerKeepsItsFormatting) {
+  const XML_Char* marker[] = {"epub:type", "pagebreak", "title", "7", nullptr};
+  const XML_Char* bold[] = {"style", "font-weight: bold", nullptr};
+  const XML_Char* link[] = {"href", "#note", nullptr};
+  parser.beginParse();
+  ChapterHtmlSlimParser::startElement(&parser, "p", nullptr);
+  ChapterHtmlSlimParser::characterData(&parser, "Plain ", 6);
+  ChapterHtmlSlimParser::startElement(&parser, "span", marker);
+  ChapterHtmlSlimParser::startElement(&parser, "span", bold);
+  ChapterHtmlSlimParser::characterData(&parser, "strong", 6);
+  ChapterHtmlSlimParser::endElement(&parser, "span");
+  ChapterHtmlSlimParser::endElement(&parser, "span");
+  ChapterHtmlSlimParser::characterData(&parser, " ", 1);
+  ChapterHtmlSlimParser::startElement(&parser, "span", marker);
+  ChapterHtmlSlimParser::startElement(&parser, "a", link);
+  const uint8_t linkId = parser.currentFootnoteLinkId;
+  ChapterHtmlSlimParser::characterData(&parser, "noted", 5);
+  ChapterHtmlSlimParser::endElement(&parser, "a");
+  ChapterHtmlSlimParser::endElement(&parser, "span");
+  ChapterHtmlSlimParser::characterData(&parser, " end", 4);
+  parser.flushPartWordBuffer();
+
+  ASSERT_EQ(parser.currentTextBlock->size(), 4u);
+  EXPECT_EQ(parser.currentTextBlock->wordAt(1), "strong");
+  EXPECT_NE(static_cast<uint8_t>(parser.currentTextBlock->getWordStyleAt(1)) & EpdFontFamily::BOLD, 0u);
+  EXPECT_EQ(static_cast<uint8_t>(parser.currentTextBlock->getWordStyleAt(0)) & EpdFontFamily::BOLD, 0u);
+  EXPECT_EQ(parser.currentTextBlock->wordAt(2), "noted");
+  ASSERT_NE(linkId, 0u);
+  EXPECT_TRUE(parser.currentTextBlock->linkTargetMatches(linkId, "#note"));
+  EXPECT_EQ(static_cast<uint8_t>(parser.currentTextBlock->getWordStyleAt(3)) & EpdFontFamily::BOLD, 0u);
+  parser.abortParse();
+}
+
 TEST_F(ChapterHtmlSlimParserTest, PagebreakAttributeOnParagraphKeepsItsText) {
   EXPECT_EQ(parseToParagraphText("<p>before</p><p epub:type=\"pagebreak\" title=\"5\">Real paragraph</p>"),
             "before\nReal paragraph");
