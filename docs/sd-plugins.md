@@ -26,6 +26,14 @@ browser-only plugin (no `device.json`) can explain how to use it from the web
 UI; without a README the row does nothing. `title`/`description` are read from
 `manifest.json`, with `device.json` overriding when present.
 
+In builds with Dessen enabled, selecting a plugin with an `app.bin` runs the
+app. The app takes precedence over the catalog and README. A plugin with
+`"home": true` in its `manifest.json` can be selected in
+**Settings → Display → Home Launcher**.
+CrossPoint opens its built-in Home when the selected launcher is unavailable,
+is being installed, fails to load, or Plugins is disabled. Use the device's
+Home action or hold Back for one second to leave a custom launcher.
+
 `<root>` is any of `/.crosspoint/plugins`, `/plugins`, or `/.plugins` — the
 first two-dot-free options exist so plugins are easy to copy onto the card
 from a computer. All three roots are scanned; on a name collision the earlier

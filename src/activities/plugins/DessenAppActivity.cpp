@@ -26,8 +26,12 @@ bool hasEvent(const fui::InputSnapshot& s) {
 }
 }  // namespace
 
-DessenAppActivity::DessenAppActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string appPath)
-    : Activity("DessenApp", renderer, mappedInput), appPath(std::move(appPath)), uiTarget(makeUiTarget(renderer)) {}
+DessenAppActivity::DessenAppActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string appPath,
+                                     bool homeLauncher)
+    : Activity("DessenApp", renderer, mappedInput),
+      appPath(std::move(appPath)),
+      homeLauncher(homeLauncher),
+      uiTarget(makeUiTarget(renderer)) {}
 
 bool DessenAppActivity::loadApp() {
   HalFile file;
@@ -74,54 +78,53 @@ bool DessenAppActivity::loadApp() {
 
 void DessenAppActivity::onEnter() {
   Activity::onEnter();
-  if (!loadApp()) {
-    finish();
-    return;
+  {
+    RenderLock lock;
+    if (loadApp()) {
+      requestUpdate();
+      return;
+    }
   }
-  requestUpdate();
+  leaveApp();
+}
+
+void DessenAppActivity::leaveApp() {
+  if (homeLauncher) {
+    activityManager.goHome(HomeMenuItem::NONE, /*cleanInitialRefresh=*/false, /*forceDefaultHome=*/true);
+  } else {
+    finish();
+  }
+}
+
+bool DessenAppActivity::handleHomeGesture() {
+  if (!homeLauncher) return false;
+  leaveApp();
+  return true;
 }
 
 void DessenAppActivity::openKeyboard() {
-  keyboardOpen = true;
   auto kbd = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, services->keyboardPrompt());
   if (!kbd) {
+    RenderLock lock;
     services->cancelText();
-    keyboardOpen = false;
     requestUpdate();
     return;
   }
   startActivityForResult(std::move(kbd), [this](const ActivityResult& result) {
+    RenderLock lock;
     if (result.isCancelled || !std::holds_alternative<KeyboardResult>(result.data)) {
       services->cancelText();
     } else {
       services->deliverText(std::get<KeyboardResult>(result.data).text.c_str());
     }
-    keyboardOpen = false;
     requestUpdate();
   });
 }
 
 void DessenAppActivity::loop() {
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= FORCE_QUIT_HOLD_MS) {
+  if (mappedInput.wasLongPressed(MappedInputManager::Button::Back, FORCE_QUIT_HOLD_MS)) {
     LOG_INF("DSN", "Force quit: %s", appPath.c_str());
-    finish();
-    return;
-  }
-
-  // An async call parked the app. The network / keygen work and the keyboard
-  // run here on the loop task (bigger stack than the render task, where step()
-  // runs), then poll() resumes the VM. Under RenderLock so the write of the
-  // result and the render task's poll() do not race.
-  if (host.state() == dessen::State::Busy) {
-    if (services->wantsKeyboard()) {
-      if (!keyboardOpen) openKeyboard();
-      return;  // waiting on the keyboard subactivity's result
-    }
-    if (services->hasPendingWork()) {
-      RenderLock lock;
-      services->serviceAsyncWork();  // blocking HTTP / keygen
-    }
-    requestUpdate();  // render() will poll(), get the result, and resume the app
+    leaveApp();
     return;
   }
 
@@ -137,6 +140,16 @@ void DessenAppActivity::loop() {
   {
     RenderLock lock;
     state = host.state();
+    if (state == dessen::State::Busy) {
+      if (services->wantsKeyboard()) {
+        lock.unlock();
+        openKeyboard();
+        return;
+      }
+      // Blocking work uses the loop stack. Keep the render task out of poll().
+      if (services->serviceAsyncWork()) requestUpdate();
+      return;
+    }
     deliver = state == dessen::State::Waiting && hasEvent(snap);
     if (deliver) pendingInput = snap;
   }
@@ -146,7 +159,7 @@ void DessenAppActivity::loop() {
   if (state == dessen::State::Launch) {
     switch (host.launch()) {
       case dessen::Launch::Reader:
-        activityManager.goToReader(host.launchPath());
+        if (!activityManager.goToReader(host.launchPath())) leaveApp();
         break;
       case dessen::Launch::Settings:
         activityManager.goToSettings();
@@ -163,7 +176,7 @@ void DessenAppActivity::loop() {
             activityManager.goToSettings();
             break;
           case DSN_HOME_LIBRARY:
-            activityManager.goToLibrary();
+            if (!activityManager.goToLibrary()) leaveApp();
             break;
           case DSN_HOME_PLUGINS:
             activityManager.goToPlugins();
@@ -182,7 +195,7 @@ void DessenAppActivity::loop() {
         break;
       }
       default:
-        finish();
+        leaveApp();
         break;
     }
     return;
@@ -192,18 +205,15 @@ void DessenAppActivity::loop() {
     if (state == dessen::State::Faulted) {
       LOG_ERR("DSN", "App fault at 0x%08x (pc 0x%08x): %s", static_cast<unsigned>(host.vm().fault_addr),
               static_cast<unsigned>(host.vm().pc), appPath.c_str());
-      // A faulting app must not relaunch itself (a custom home app would loop):
-      // fall back to the firmware's own home screen.
-      activityManager.goHome(HomeMenuItem::NONE, /*cleanInitialRefresh=*/false, /*forceDefaultHome=*/true);
-      return;
     }
-    finish();
+    leaveApp();
     return;
   }
   if (deliver || state == dessen::State::Running) requestUpdate();
 }
 
 void DessenAppActivity::render(RenderLock&&) {
+  if (!services || host.state() == dessen::State::Launch) return;
   // Carries the board's bezel insets for the current rotation; the app draws inside them.
   const fui::DeviceContext device = uiTarget.deviceContext();
   bool drew = false;

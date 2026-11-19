@@ -16,11 +16,13 @@
 // Holding Back for a second always leaves, so an app cannot trap the user.
 class DessenAppActivity final : public Activity {
  public:
-  DessenAppActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string appPath);
+  DessenAppActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string appPath,
+                    bool homeLauncher = false);
 
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool handleHomeGesture() override;
 
  private:
   // Every app gets one fixed block; nothing else is allocated while it runs.
@@ -34,16 +36,17 @@ class DessenAppActivity final : public Activity {
 #endif
 
   bool loadApp();
+  void leaveApp();
   void openKeyboard();  // service asked for text input
 
   std::string appPath;
+  const bool homeLauncher;
   freeink::ui::GfxRendererTarget uiTarget;
   std::unique_ptr<uint8_t[]> memory;
   // host, pendingInput: written by the render task and by loop() under RenderLock.
   dessen::FreeInkHost host;
   freeink::ui::InputSnapshot pendingInput{};
   std::unique_ptr<CrosspointServices> services;
-  bool keyboardOpen = false;
   // The app's last drawn frame is snapshotted so it can be restored when a
   // system overlay (e.g. the frontlight panel) pops: the app is parked in
   // wait_event and cannot repaint itself, so the overlay would otherwise linger

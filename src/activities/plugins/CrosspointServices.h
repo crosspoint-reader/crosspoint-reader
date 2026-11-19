@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <vector>
 
 class GfxRenderer;
 class SdCardFontManager;
@@ -51,7 +50,9 @@ class CrosspointServices : public dessen::Services {
   int keystore(const char* path, const uint8_t* key, uint32_t n, uint32_t expires) override;
   // launcher / home
   int recents(char* out, uint32_t cap) override;
+  int library(char* out, uint32_t cap) override;
   int bookProgress(const char* path) override;
+  int bookCover(const char* path, uint32_t height, uint8_t* out, uint32_t cap) override;
   int fontLoad(const char* path, int size) override;
   int wifiConnectStart() override;
 
@@ -87,10 +88,9 @@ class CrosspointServices : public dessen::Services {
   int poll() override;
 
   // ---- loop-task side, driven by DessenAppActivity ----
-  bool hasPendingWork() const { return pending_ != Op::None && !done_; }
   bool wantsKeyboard() const { return pending_ == Op::TextInput && !done_; }
-  // Run the queued network/keygen work (blocking) on the caller's (loop) task.
-  void serviceAsyncWork();
+  // Run work on the loop task. True when render can resume the VM.
+  bool serviceAsyncWork();
   // The keyboard prompt the app asked for, and whether to mask it.
   const std::string& keyboardPrompt() const { return prompt_; }
   bool keyboardMasked() const { return inputFlags_ & 1; }
@@ -99,7 +99,7 @@ class CrosspointServices : public dessen::Services {
   void cancelText();
 
  private:
-  enum class Op : uint8_t { None, Net, Fetch, Keygen, TextInput, Wifi };
+  enum class Op : uint8_t { None, Net, Fetch, Keygen, TextInput, WifiStart, WifiConnecting };
 
   int resolve(const char* path, std::string& out) const;  // app "/x" -> real SD path
   bool deviceKek(uint8_t out[32]) const;                  // secure_wrap key
@@ -115,12 +115,13 @@ class CrosspointServices : public dessen::Services {
   static constexpr int kCustomFontId = 0x7F00;  // app font slot in the renderer's font map
 
   // Single outstanding async op. Buffers point into guest memory (valid while
-  // the VM is parked) except `head_`/`url_`/`dest_`, which are copied.
+  // the VM is parked). Request strings from the syscall stack are copied.
   Op pending_ = Op::None;
   bool done_ = false;
   int result_ = 0;
   std::string head_, url_, dest_, prompt_;
-  std::vector<uint8_t> body_;
+  const uint8_t* body_ = nullptr;
+  uint32_t bodySize_ = 0;
   uint8_t* out_ = nullptr;  // net resp / keygen pub / text buffer
   uint32_t outCap_ = 0;
   uint8_t* priv_ = nullptr;  // keygen private buffer

@@ -25,6 +25,7 @@ class HttpDownloader {
     FILE_ERROR,
     ABORTED,
     UNAUTHORIZED,  // 401/403: callers holding a refreshable credential can retry
+    TOO_BIG,       // response exceeds the requested file size limit
   };
 
   // Pre-flight floor for starting a TLS transfer. Below this the session or
@@ -84,6 +85,12 @@ class HttpDownloader {
 
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const FetchOptions& options);
 
+#if CROSSPOINT_DESSEN_APPS
+  // Send one request and stream the response body. Returns 0 on transport failure.
+  static int request(const char* method, const std::string& url, const std::vector<Header>& headers,
+                     const uint8_t* body, size_t bodySize, const DataCallback& onData);
+#endif
+
   /**
    * POST an application/x-www-form-urlencoded body (e.g. an OAuth token
    * request) and collect the response body (any status) into outResponse,
@@ -100,11 +107,13 @@ class HttpDownloader {
    * downgradeRedirectsToHttp rewrites followed redirect targets from https to
    * http so the bulk transfer skips a second TLS session (and its ~17KB record
    * buffer — the OOM site on low-heap C3 boards).
+   * The staged file is limited to maxBytes. bytesOut receives the installed byte count.
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, const bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "",
-                                      const std::vector<Header>& headers = {}, bool downgradeRedirectsToHttp = false);
+                                      const std::vector<Header>& headers = {}, bool downgradeRedirectsToHttp = false,
+                                      size_t* bytesOut = nullptr, size_t maxBytes = SIZE_MAX);
 
   /**
    * POST a body (e.g. an LCP license to the fulfillment service) and stream

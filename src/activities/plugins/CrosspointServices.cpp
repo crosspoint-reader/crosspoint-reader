@@ -1,30 +1,42 @@
 #if CROSSPOINT_DESSEN_APPS
 #include "CrosspointServices.h"
 
+#include <Bitmap.h>
 #include <BookKey.h>
 #include <Crypto.h>  // freeink::content::Crypto, RsaKeyPairDer
 #include <DeviceSecret.h>
+#include <Epub.h>
 #include <FreeInkUIGfxRenderer.h>
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include <WiFi.h>
-#include <ctime>
 #include <HalClock.h>
-#include <WifiCredentialStore.h>
 #include <HalFrontlight.h>  // declares the `Frontlight` singleton
 #include <HalHaptics.h>
 #include <HalPowerManager.h>  // declares the `powerManager` singleton
 #include <HalStorage.h>
+#include <LibraryBuilder.h>
+#include <LibraryIndexFile.h>
+#include <Logging.h>
+#include <Memory.h>
 #include <SdCardFontManager.h>
 #include <SdCardFontRegistry.h>
+#include <WiFi.h>
+#include <WifiCredentialStore.h>
 #include <WolfsslCrypto.h>  // freeink::content::WolfsslCrypto
 #include <sdk/dessen_abi.h>
+#include <strings.h>
 #include <time.h>
 #include <wolfssl/wolfcrypt/aes.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
+#include <string_view>
+#include <unordered_set>
 
 #include "RecentBooksStore.h"
+#include "components/icons/cover.h"  // CoverIcon, the fallback-cover glyph
 #include "network/HttpDownloader.h"
 #include "util/BookProgress.h"
 
@@ -34,6 +46,49 @@ using freeink::content::WolfsslCrypto;
 
 namespace {
 constexpr uint32_t kPathMax = 255;
+
+// Preserve the guest buffer on failure and stop staging at its capacity.
+class BoundedOutput {
+ public:
+  explicit BoundedOutput(size_t limit) : limit(limit) {}
+
+  bool append(const void* src, size_t len) {
+    if (!len) return true;
+    if (len > limit - used) {
+      error = DSN_ERR_TOO_BIG;
+      return false;
+    }
+    const size_t needed = used + len;
+    if (needed > capacity) {
+      const size_t nextCapacity = std::max(needed, std::min(limit, std::max<size_t>(256, capacity * 2)));
+      auto next = makeUniqueNoThrow<uint8_t[]>(nextCapacity);
+      if (!next) {
+        LOG_ERR("DSN", "OOM: %zu bytes for syscall output", nextCapacity);
+        error = DSN_ERR_IO;
+        return false;
+      }
+      if (used) memcpy(next.get(), data.get(), used);
+      data = std::move(next);
+      capacity = nextCapacity;
+    }
+    memcpy(data.get() + used, src, len);
+    used = needed;
+    return true;
+  }
+
+  int copyTo(void* out) const {
+    if (used) memcpy(out, data.get(), used);
+    return static_cast<int>(used);
+  }
+
+  int error = 0;
+
+ private:
+  const size_t limit;
+  size_t capacity = 0;
+  size_t used = 0;
+  std::unique_ptr<uint8_t[]> data;
+};
 
 // PKCS#7: pad to a 16-byte boundary, or validate+strip. Returns padded length
 // (encrypt) / plaintext length (decrypt), or -1 on bad padding.
@@ -133,17 +188,16 @@ int CrosspointServices::fsList(const char* path, char* out, uint32_t cap) {
   if (int e = resolve(path, full)) return e;
   HalFile dir;
   if (!Storage.openFileForRead("DSN", full, dir) || !dir.isDirectory()) return DSN_ERR_IO;
-  std::string acc;
+  BoundedOutput entries(cap);
   for (HalFile e = dir.openNextFile(); e; e = dir.openNextFile()) {
-    char name[256];
-    if (e.getName(name, sizeof name) == 0) continue;
-    acc += name;
-    if (e.isDirectory()) acc += '/';
-    acc += '\n';
+    char name[257];
+    size_t len = e.getName(name, sizeof name - 1);
+    if (len == 0) continue;
+    if (e.isDirectory()) name[len++] = '/';
+    name[len++] = '\n';
+    if (!entries.append(name, len)) return entries.error;
   }
-  if (acc.size() > cap) return DSN_ERR_TOO_BIG;
-  memcpy(out, acc.data(), acc.size());
-  return static_cast<int>(acc.size());
+  return entries.copyTo(out);
 }
 
 int CrosspointServices::fsDelete(const char* path) {
@@ -185,11 +239,124 @@ int CrosspointServices::recents(char* out, uint32_t cap) {
   return static_cast<int>(acc.size());
 }
 
+// Return complete title-sorted records from the existing index.
+int CrosspointServices::library(char* out, uint32_t cap) {
+  library::LibraryIndexFile index;
+  if (!index.open(library::libraryIndexPath())) return 0;
+  uint32_t used = 0;
+  std::unordered_set<std::string> seen;  // collapse the same book kept in >1 folder
+  const uint16_t n = index.bookCount();
+  for (uint16_t row = 0; row < n; ++row) {
+    const uint16_t ordinal = index.ordinalForRow(library::SortOrder::TitleAsc, row);
+    library::ClixRecord rec{};
+    if (ordinal == 0xFFFF || !index.readRecord(ordinal, rec)) continue;
+    std::string path, title, author;
+    if (!index.readPath(rec, path)) continue;
+    if (!index.readTitle(rec, title) || title.empty()) index.readName(rec, title);
+    index.readAuthor(rec, author);
+    constexpr std::string_view suffix = "\t-1\n";  // progress is available through book_progress()
+    const size_t bytes = path.size() + title.size() + author.size() + 2 + suffix.size();
+    if (!seen.insert(title + '\x01' + author).second) continue;
+    if (bytes > cap - used) break;
+    for (std::string* field : {&title, &author}) {
+      std::replace_if(field->begin(), field->end(), [](char c) { return c == '\t' || c == '\r' || c == '\n'; }, ' ');
+    }
+    for (const std::string_view part : {std::string_view(path), std::string_view("\t"), std::string_view(title),
+                                        std::string_view("\t"), std::string_view(author), suffix}) {
+      memcpy(out + used, part.data(), part.size());
+      used += part.size();
+    }
+  }
+  return static_cast<int>(used);
+}
+
 int CrosspointServices::bookProgress(const char* path) {
   std::string full;
   if (resolve(path, full)) return -1;
   return loadBookProgress(full);
 }
+
+// The firmware's fallback cover (drawCoverPlaceholder) as a 1-bit bitmap: a
+// white top band with the book glyph, a black body, and a border. Returned by
+// bookCover() whenever a book has no usable cover, so every book shows one.
+static int packPlaceholderCover(uint8_t* out, uint32_t cap, int w, int h) {
+  const uint32_t stride = (static_cast<uint32_t>(w) + 7) / 8;
+  const uint32_t need = 4 + stride * static_cast<uint32_t>(h);
+  if (need > cap) return DSN_ERR_TOO_BIG;
+  out[0] = static_cast<uint8_t>(w);
+  out[1] = static_cast<uint8_t>(w >> 8);
+  out[2] = static_cast<uint8_t>(h);
+  out[3] = static_cast<uint8_t>(h >> 8);
+  uint8_t* px = out + 4;
+  memset(px, 0, stride * static_cast<uint32_t>(h));
+  auto set = [&](int x, int y) {
+    if (x >= 0 && x < w && y >= 0 && y < h) px[static_cast<uint32_t>(y) * stride + (x >> 3)] |= 0x80 >> (x & 7);
+  };
+  const int top = h / 3;
+  for (int y = top; y < h; ++y)
+    for (int x = 0; x < w; ++x) set(x, y);  // black body (bottom two thirds)
+  for (int x = 0; x < w; ++x) set(x, 0), set(x, h - 1);
+  for (int y = 0; y < h; ++y) set(0, y), set(w - 1, y);  // border
+  if (w >= 36 && top >= 36) {                            // book glyph, centred in the top band
+    const int ix = (w - 32) / 2, iy = (top - 32) / 2;
+    for (int row = 0; row < 32; ++row)
+      for (int col = 0; col < 32; ++col)
+        if (((CoverIcon[row * 4 + (col >> 3)] >> (7 - (col & 7))) & 1) == 0) set(ix + col, iy + row);  // bit0 = ink
+  }
+  return static_cast<int>(need);
+}
+
+// A book's cover as a dithered 1-bit bitmap scaled to `height`: writes
+// {u16 w, u16 h} then the packed MSB-first rows (the dsn_bitmap BW format).
+// Generates and caches the thumbnail on first use (the slow part — decoding the
+// cover image), so apps request one per redraw. A book with no usable cover
+// gets the firmware's placeholder, so it never returns 0 for a real book. PSRAM
+// only: the decode/scale buffers are too large for a C3's internal RAM.
+int CrosspointServices::bookCover(const char* path, uint32_t height, uint8_t* out, uint32_t cap) {
+#ifndef BOARD_HAS_PSRAM
+  (void)path, (void)height, (void)out, (void)cap;
+  return DSN_ERR_UNAVAILABLE;  // covers need PSRAM for the decode/scale buffers
+#else
+  std::string full;
+  if (resolve(path, full)) return DSN_ERR_INVALID;
+  if (height < 16 || height > 512) return DSN_ERR_INVALID;
+  const int ph = static_cast<int>(height), pw = ph * 2 / 3;  // placeholder size (book aspect)
+  if (!FsHelpers::hasReflowableBookExtension(full)) return packPlaceholderCover(out, cap, pw, ph);
+  Epub epub(full, "/.crosspoint");
+  const std::string thumb = epub.getThumbBmpPath(static_cast<int>(height));
+  if (!Storage.exists(thumb.c_str())) {  // decode + cache on first use (slow)
+    const bool cacheLoaded = epub.load(false, true);
+    if (!(cacheLoaded ? epub.generateThumbBmp(static_cast<int>(height))
+                      : epub.generateThumbBmpFromSource(static_cast<int>(height))))
+      return packPlaceholderCover(out, cap, pw, ph);  // no cover image in this book
+  }
+  HalFile file;
+  if (!Storage.openFileForRead("DSN", thumb, file)) return packPlaceholderCover(out, cap, pw, ph);
+  Bitmap bmp(file);
+  if (bmp.parseHeaders() != BmpReaderError::Ok) return packPlaceholderCover(out, cap, pw, ph);
+  const int w = bmp.getWidth(), h = bmp.getHeight();
+  if (w <= 0 || h <= 0) return packPlaceholderCover(out, cap, pw, ph);
+  const uint32_t stride = (static_cast<uint32_t>(w) + 7) / 8;
+  const uint32_t need = 4 + stride * static_cast<uint32_t>(h);
+  if (need > cap) return DSN_ERR_TOO_BIG;
+  out[0] = static_cast<uint8_t>(w);
+  out[1] = static_cast<uint8_t>(w >> 8);
+  out[2] = static_cast<uint8_t>(h);
+  out[3] = static_cast<uint8_t>(h >> 8);
+  uint8_t* px = out + 4;
+  memset(px, 0, stride * static_cast<uint32_t>(h));
+  static const uint8_t BAYER[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+  std::vector<uint8_t> gray(w), rowbuf(static_cast<size_t>(w) * 4 + 16);
+  for (int y = 0; y < h; ++y) {
+    if (bmp.readRowGray(y, gray.data(), rowbuf.data()) != BmpReaderError::Ok) break;
+    uint8_t* line = px + static_cast<uint32_t>(y) * stride;
+    for (int x = 0; x < w; ++x)
+      if (gray[x] < BAYER[y & 3][x & 3] * 16 + 8) line[x >> 3] |= 0x80 >> (x & 7);  // dark -> black bit
+  }
+  return static_cast<int>(need);
+#endif
+}
+
 
 // Load a .cpfont from the app's folder at `size` and bind it to the custom font
 // slot (DSN_FONT_CUSTOM). One per app; a second call replaces the first. Uses
@@ -403,26 +570,17 @@ int CrosspointServices::accel(uint8_t*) {
 
 // ---- async: queue on the render task, execute on the loop task ----
 int CrosspointServices::wifiConnectStart() {
-  if (WiFi.status() == WL_CONNECTED) return 0;  // already online
-  // Attempt a saved network: the last-connected one, else the first stored.
-  std::optional<WifiCredential> cred;
-  const std::string last = WIFI_STORE.getLastConnectedSsid();
-  if (!last.empty()) cred = WIFI_STORE.findCredential(last);
-  if (!cred && WIFI_STORE.getCredentialCount() > 0) cred = WIFI_STORE.getCredentialAt(0);
-  if (!cred) return DSN_ERR_UNAVAILABLE;  // no saved networks
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
-  pending_ = Op::Wifi;
+  pending_ = Op::WifiStart;
   done_ = false;
-  wifiStart_ = millis();
-  return dessen::kPending;  // poll() advances it (non-blocking)
+  return dessen::kPending;
 }
 
 int CrosspointServices::netStart(const char* head, const uint8_t* body, uint32_t bn, uint8_t* resp, uint32_t cap) {
   pending_ = Op::Net;
   done_ = false;
   head_ = head;
-  body_.assign(body, body + bn);
+  body_ = body;
+  bodySize_ = bn;
   out_ = resp;
   outCap_ = cap;
   return dessen::kPending;
@@ -458,78 +616,90 @@ int CrosspointServices::textInputStart(const char* prompt, int flags, char* out,
 }
 
 int CrosspointServices::poll() {
-  if (pending_ == Op::Wifi && !done_) {  // non-blocking Wi-Fi state machine
-    if (WiFi.status() == WL_CONNECTED) {
-      result_ = 0;
-      done_ = true;
-    } else if (millis() - wifiStart_ > 20000) {
-      result_ = DSN_ERR_IO;  // timed out
-      done_ = true;
-    }
-  }
   if (!done_) return dessen::kPending;
   pending_ = Op::None;
   return result_;
 }
 
-void CrosspointServices::serviceAsyncWork() {
+bool CrosspointServices::serviceAsyncWork() {
+  if (done_) return true;
   switch (pending_) {
     case Op::Net: {
-      // head: first line "METHOD url", then "Header: value" lines.
-      const size_t nl = head_.find('\n');
-      std::string first = nl == std::string::npos ? head_ : head_.substr(0, nl);
-      const size_t sp = first.find(' ');
-      if (sp == std::string::npos) {
+      const std::string_view request = head_;
+      const size_t newline = request.find('\n');
+      const auto first = request.substr(0, newline);
+      const size_t space = first.find(' ');
+      if (space == std::string_view::npos) {
         result_ = DSN_ERR_INVALID;
         break;
       }
-      const std::string method = first.substr(0, sp), url = first.substr(sp + 1);
-      std::vector<HttpDownloader::Header> headers;
-      size_t p = nl == std::string::npos ? head_.size() : nl + 1;
-      while (p < head_.size()) {
-        const size_t e = head_.find('\n', p);
-        const std::string ln = head_.substr(p, (e == std::string::npos ? head_.size() : e) - p);
-        const size_t c = ln.find(':');
-        if (c != std::string::npos) headers.push_back({ln.substr(0, c), ln.substr(ln.find_first_not_of(' ', c + 1))});
-        p = e == std::string::npos ? head_.size() : e + 1;
-      }
-      std::vector<uint8_t> bodyOut;
-      HttpDownloader::FetchOptions opt;
-      int status = 0;
-      opt.statusOut = &status;
-      opt.captureErrorBody = true;
-      opt.headers = headers;
-      const auto onData = [&](const uint8_t* d, size_t l) {
-        bodyOut.insert(bodyOut.end(), d, d + l);
-        return bodyOut.size() <= outCap_;  // stop if it will not fit
-      };
-      bool ok;
-      if (method == "GET") {
-        ok = HttpDownloader::fetchUrl(url, onData, opt);
-      } else {  // POST/PUT: send body
-        std::string resp;
-        ok = HttpDownloader::postForm(url, std::string(body_.begin(), body_.end()), resp, &status);
-        if (ok) bodyOut.assign(resp.begin(), resp.end());
-      }
-      if (!ok && status == 0) {
-        result_ = DSN_ERR_IO;
+      const std::string method(first.substr(0, space));
+      auto url = first.substr(space + 1);
+      if (url.ends_with('\r')) url.remove_suffix(1);
+      if ((method != "GET" && method != "POST" && method != "PUT") || url.empty() ||
+          std::any_of(url.begin(), url.end(), [](unsigned char c) { return c <= 32 || c == 127; })) {
+        result_ = DSN_ERR_INVALID;
         break;
       }
-      if (4 + bodyOut.size() > outCap_) {
+      if (outCap_ < 4) {
         result_ = DSN_ERR_TOO_BIG;
+        break;
+      }
+      std::vector<HttpDownloader::Header> headers;
+      result_ = 0;
+      for (size_t pos = newline; pos != std::string_view::npos && ++pos < request.size();) {
+        const size_t end = request.find('\n', pos);
+        auto line = request.substr(pos, end == std::string_view::npos ? end : end - pos);
+        pos = end;
+        if (line.ends_with('\r')) line.remove_suffix(1);
+        if (line.empty() && (end == std::string_view::npos || end + 1 == request.size())) break;
+        const size_t colon = line.find(':');
+        const auto name = line.substr(0, colon);
+        if (colon == std::string_view::npos || name.empty() ||
+            name.find_first_not_of("!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") !=
+                std::string_view::npos) {
+          result_ = DSN_ERR_INVALID;
+          break;
+        }
+        auto value = line.substr(colon + 1);
+        if (std::any_of(value.begin(), value.end(),
+                        [](unsigned char c) { return (c < 32 && c != '\t') || c == 127; })) {
+          result_ = DSN_ERR_INVALID;
+          break;
+        }
+        value.remove_prefix(std::min(value.find_first_not_of(" \t"), value.size()));
+        headers.emplace_back(name, value);
+        const char* headerName = headers.back().first.c_str();
+        if (strcasecmp(headerName, "Host") == 0 || strcasecmp(headerName, "Connection") == 0 ||
+            strcasecmp(headerName, "Content-Length") == 0 || strcasecmp(headerName, "Transfer-Encoding") == 0) {
+          result_ = DSN_ERR_INVALID;
+          break;
+        }
+      }
+      if (result_ < 0) break;
+
+      BoundedOutput response(outCap_ - 4);
+      const int status =
+          HttpDownloader::request(method.c_str(), std::string(url), headers, body_, bodySize_,
+                                  [&](const uint8_t* bytes, size_t len) { return response.append(bytes, len); });
+      if (status == 0) {
+        result_ = response.error ? response.error : DSN_ERR_IO;
         break;
       }
       out_[0] = (status >> 8) & 0xff;
       out_[1] = status & 0xff;
-      out_[2] = 0;  // header block length (not surfaced yet)
+      out_[2] = 0;
       out_[3] = 0;
-      memcpy(out_ + 4, bodyOut.data(), bodyOut.size());
-      result_ = static_cast<int>(bodyOut.size());
+      result_ = response.copyTo(out_ + 4);
       break;
     }
     case Op::Fetch: {
-      const HttpDownloader::DownloadError e = HttpDownloader::downloadToFile(url_, dest_);
-      result_ = e == HttpDownloader::OK ? 0 : DSN_ERR_IO;
+      size_t bytes = 0;
+      const auto error = HttpDownloader::downloadToFile(url_, dest_, nullptr, nullptr, "", "", {}, false, &bytes,
+                                                        dessen::kPending - 1);
+      result_ = error == HttpDownloader::OK        ? static_cast<int>(bytes)
+                : error == HttpDownloader::TOO_BIG ? DSN_ERR_TOO_BIG
+                                                   : DSN_ERR_IO;
       break;
     }
     case Op::Keygen: {
@@ -551,10 +721,42 @@ void CrosspointServices::serviceAsyncWork() {
       result_ = static_cast<int>(pair.spki.size()) << 16 | static_cast<int>(pair.pkcs8.size());
       break;
     }
-    default:
-      break;  // TextInput is completed by the activity via deliverText/cancelText
+    case Op::WifiStart: {
+      if (WiFi.status() == WL_CONNECTED) {
+        result_ = 0;
+        break;
+      }
+      // The launcher can be the first Wi-Fi user after boot.
+      WIFI_STORE.loadFromFile();
+      const auto last = WIFI_STORE.getLastConnectedSsid();
+      auto cred = last.empty() ? std::nullopt : WIFI_STORE.findCredential(last);
+      if (!cred) cred = WIFI_STORE.getCredentialAt(0);
+      if (!cred) {
+        result_ = DSN_ERR_UNAVAILABLE;
+        break;
+      }
+      WiFi.persistent(false);
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+      wifiStart_ = millis();
+      pending_ = Op::WifiConnecting;
+      return false;
+    }
+    case Op::WifiConnecting:
+      if (WiFi.status() == WL_CONNECTED) {
+        result_ = 0;
+      } else if (millis() - wifiStart_ > 20000) {
+        result_ = DSN_ERR_IO;
+      } else {
+        return false;
+      }
+      break;
+    case Op::None:
+    case Op::TextInput:
+      return false;
   }
-  if (pending_ != Op::TextInput) done_ = true;
+  done_ = true;
+  return true;
 }
 
 void CrosspointServices::deliverText(const char* text) {

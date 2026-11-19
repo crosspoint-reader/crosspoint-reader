@@ -3,10 +3,12 @@
 #include <Arduino.h>
 #include <Logging.h>
 #include <ResumableFetch.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <functional>
 #include <string>
+#include <string_view>
 
 #include "WifiPowerSaveGuard.h"
 
@@ -159,6 +161,30 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   return status >= 200 && status < 300 && !sinkStopped;
 }
 
+#if CROSSPOINT_DESSEN_APPS
+int HttpDownloader::request(const char* method, const std::string& url, const std::vector<Header>& headers,
+                            const uint8_t* body, size_t bodySize, const DataCallback& onData) {
+  WifiPowerSaveGuard psGuard;
+  freeink::SecureHttpClient http;
+  if (!http.begin(url)) return 0;
+  applyCommonClientSetup(http);
+  bool hasContentType = false;
+  for (const auto& [name, value] : headers) {
+    if (strcasecmp(name.c_str(), "User-Agent") == 0) {
+      http.setUserAgent(value);
+    } else {
+      http.addHeader(name, value);
+    }
+    hasContentType |= strcasecmp(name.c_str(), "Content-Type") == 0;
+  }
+  if (std::string_view(method) == "POST" && !hasContentType) {
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  }
+  const int status = http.sendRequest(method, body, bodySize, onData);
+  return status > 0 && http.responseComplete() ? status : 0;
+}
+#endif
+
 bool HttpDownloader::postForm(const std::string& url, const std::string& formBody, std::string& outResponse,
                               int* statusOut) {
   WifiPowerSaveGuard psGuard;
@@ -257,7 +283,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
                                                              ProgressCallback progress, const bool* cancelFlag,
                                                              const std::string& username, const std::string& password,
                                                              const std::vector<Header>& headers,
-                                                             bool downgradeRedirectsToHttp) {
+                                                             bool downgradeRedirectsToHttp, size_t* bytesOut,
+                                                             size_t maxBytes) {
+  if (bytesOut) *bytesOut = 0;
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
   // Stage in <dest>.part: a failed or cancelled download never replaces an
@@ -270,10 +298,21 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     return FILE_ERROR;
   }
 
+  size_t written = 0;
+  bool tooBig = false;
   freeink::FetchSink sink;
-  sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
+  sink.write = [&](const uint8_t* data, size_t len) {
+    if (len > maxBytes - written) {
+      tooBig = true;
+      return false;
+    }
+    if (file.write(data, len) != len) return false;
+    written += len;
+    return true;
+  };
   // Reopening for write truncates: the server restarted the body from byte 0.
-  sink.rewind = [&file, &partPath] {
+  sink.rewind = [&] {
+    written = 0;
     file.close();
     return Storage.openFileForWrite("HTTP", partPath.c_str(), file);
   };
@@ -286,9 +325,9 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // otherwise close only after the remove. A failed rewind leaves no open handle.
   if (file.isOpen()) file.close();
 
-  if (result != OK) {
+  if (tooBig || result != OK) {
     Storage.remove(partPath.c_str());
-    return result;
+    return tooBig ? TOO_BIG : result;
   }
   if (downloaded == 0) {
     LOG_ERR("HTTP", "no data received");
@@ -301,5 +340,6 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     return FILE_ERROR;
   }
   LOG_DBG("HTTP", "Downloaded %zu bytes", downloaded);
+  if (bytesOut) *bytesOut = downloaded;
   return OK;
 }
