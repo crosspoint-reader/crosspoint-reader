@@ -17,7 +17,7 @@ namespace OpdsBatchDownload {
 
 enum class Result {
   COMPLETED,      // Whole catalog walked (individual books may still have failed)
-  LIMIT_REACHED,  // Stopped at MAX_ENTRIES or the page cap with books left
+  LIMIT_REACHED,  // Stopped at MAX_ENTRIES, the page cap or a truncated page; books may be left
   CANCELLED,      // Caller asked to stop
   FAILED,         // A feed page could not be fetched or parsed
 };
@@ -27,7 +27,7 @@ struct Status {
   int examined = 0;    // Acquisition entries seen so far
   int downloaded = 0;  // Books written to the SD card
   int skipped = 0;     // Books already present under their target filename
-  int failed = 0;      // Books whose transfer errored (the walk continues)
+  int failed = 0;      // Books whose link or transfer errored (the walk continues)
   // Title of the book currently transferring; empty between books.
   const char* title = "";
 };

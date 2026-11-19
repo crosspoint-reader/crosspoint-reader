@@ -650,10 +650,11 @@ void OpdsBookBrowserActivity::downloadAllNew() {
   if (result != OpdsBatchDownload::Result::CANCELLED && batchStatus.failed > 0) {
     char counts[24];
     snprintf(counts, sizeof(counts), " (%d / %d)", batchStatus.failed, batchStatus.downloaded + batchStatus.failed);
-    fail(StrId::STR_DOWNLOAD_FAILED);
+    std::string message = std::string(tr(STR_DOWNLOAD_FAILED)) + counts;
     {
       RenderLock lock;
-      errorMessage += counts;
+      state = State::ERROR;
+      errorMessage = std::move(message);
     }
     requestUpdate();
     return;

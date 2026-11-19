@@ -75,6 +75,8 @@ Result run(freeink::opds::OpdsClient& client, const std::string& serverUrl, cons
   const auto notify = [&hooks, &status] { return hooks.progress ? hooks.progress(hooks.ctx, status) : true; };
 
   std::string pageUrl = feedUrl;
+  int transfers = 0;
+  bool truncated = false;
   for (int page = 0; page < MAX_PAGES; page++) {
     LOG_DBG("OPDS", "Batch page %d: %s", page, pageUrl.c_str());
 
@@ -84,6 +86,7 @@ Result run(freeink::opds::OpdsClient& client, const std::string& serverUrl, cons
       OpdsFeedParser parser;
       if (client.fetchFeed(pageUrl, parser) != freeink::opds::OpdsClient::FetchStatus::Ok) return Result::FAILED;
       nextHref = parser.getNextPageUrl();
+      truncated |= parser.truncated();
       for (auto& entry : parser.takeEntries()) {
         // Buying is never implied by "download new", and LCP books need the
         // per-book passphrase flow.
@@ -93,11 +96,11 @@ Result run(freeink::opds::OpdsClient& client, const std::string& serverUrl, cons
     }
 
     for (const auto& book : books) {
-      if (status.downloaded + status.failed >= MAX_ENTRIES) return Result::LIMIT_REACHED;
-      status.examined++;
-
       const std::string filename = destPath(book.author, book.title);
-      if (Storage.exists(filename.c_str())) {
+      const bool present = Storage.exists(filename.c_str());
+      if (!present && transfers >= MAX_ENTRIES) return Result::LIMIT_REACHED;
+      status.examined++;
+      if (present) {
         status.skipped++;
         if (!notify()) return Result::CANCELLED;
         continue;
@@ -119,6 +122,7 @@ Result run(freeink::opds::OpdsClient& client, const std::string& serverUrl, cons
         if (resolved) downloadUrl = std::move(direct);
       }
 
+      if (resolved) transfers++;
       auto result = resolved ? hooks.transfer(hooks.ctx, downloadUrl, filename, client.downloadAuth())
                              : HttpDownloader::HTTP_ERROR;
       if (authRetryAllowed(result, downloadUrl, serverUrl)) {
@@ -144,7 +148,8 @@ Result run(freeink::opds::OpdsClient& client, const std::string& serverUrl, cons
       if (!notify()) return Result::CANCELLED;
     }
 
-    if (nextHref.empty()) return Result::COMPLETED;
+    if (nextHref.empty()) return truncated ? Result::LIMIT_REACHED : Result::COMPLETED;
+    if (transfers >= MAX_ENTRIES) return Result::LIMIT_REACHED;
     pageUrl = UrlUtils::buildUrl(pageUrl, nextHref);
   }
 
