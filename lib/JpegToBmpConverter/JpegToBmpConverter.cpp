@@ -514,8 +514,8 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& bmpOut, int targetWidth,
                                                      int targetHeight, bool oneBit, bool crop,
                                                      bool originalThresholds, bool gray8Requested) {
-  // 8-bit output is used only for the gray copies of thumbnails, on builds that draw them.
-  const bool gray8 = CROSSPOINT_GRAY_UI_FULL_TONE && gray8Requested;
+  // 8-bit output is used only for the gray copies stored after covers and thumbnails, on gray-UI builds.
+  const bool gray8 = CROSSPOINT_GRAY_UI && gray8Requested;
   LOG_DBG("JPG", "Converting JPEG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
@@ -740,4 +740,11 @@ bool JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(HalFile& jpegFile, Prin
 bool JpegToBmpConverter::jpegFileToGray8BmpStreamWithSize(HalFile& jpegFile, Print& bmpOut, int targetMaxWidth,
                                                           int targetMaxHeight) {
   return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false, true, false, true);
+}
+
+// The 8-bit grayscale twin of jpegFileToBmpStream: same size and crop
+bool JpegToBmpConverter::jpegFileToGray8BmpStream(HalFile& jpegFile, Print& bmpOut, bool crop) {
+  const int targetWidth = display.getDisplayHeight();
+  const int targetHeight = display.getDisplayWidth();
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, false, crop, false, true);
 }

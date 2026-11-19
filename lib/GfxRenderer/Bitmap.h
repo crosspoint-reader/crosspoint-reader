@@ -86,9 +86,9 @@ class Bitmap {
   HalFile& source() const { return file; }
   // File offset just past the pixel data.
   uint32_t dataEnd() const { return bfOffBits + static_cast<uint32_t>(rowBytes) * static_cast<uint32_t>(height); }
-  // True for a 1-bit thumbnail at `path` with nothing stored after its pixel
-  // data and no "<path>.nogray" marker beside it: its 8-bit gray copy has not
-  // been attempted yet.
+  // True for a 1- or 2-bit bitmap at `path` with nothing stored after its
+  // pixel data and no "<path>.nogray" marker beside it: its 8-bit gray copy
+  // has not been attempted yet.
   static bool lacksGrayCopy(const std::string& path);
 
  private:

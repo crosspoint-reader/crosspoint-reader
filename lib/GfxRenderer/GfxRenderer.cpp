@@ -864,6 +864,95 @@ bool GfxRenderer::displayGrayFrame(const HalDisplay::RefreshMode refreshMode) co
   // FAST drives the pixels that changed; the cleanup modes drive every pixel.
   return display.displayGray16Image(grayImage_, refreshMode == HalDisplay::FAST_REFRESH);
 }
+
+bool GfxRenderer::displayGray16Bitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight,
+                                      const float cropX, const float cropY) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, maxWidth, maxHeight);
+    if (std::abs(maxWidth - bitmap.getWidth()) <= 1) maxWidth = bitmap.getWidth();
+    if (std::abs(maxHeight - bitmap.getHeight()) <= 1) maxHeight = bitmap.getHeight();
+    return displayGray16Bitmap(bitmap, x, y, maxWidth, maxHeight, cropX, cropY);
+  }
+  if (!display.supportsGray16Image() || display.isInverted()) return false;
+
+  // Where the luminance comes from.
+  Bitmap copy(bitmap.source(), false, false, bitmap.dataEnd());
+  const Bitmap* gray = &bitmap;
+  if (bitmap.getBpp() < 8) {
+    if (copy.parseHeaders() != BmpReaderError::Ok || copy.getBpp() != 8 || copy.getWidth() != bitmap.getWidth() ||
+        copy.getHeight() != bitmap.getHeight()) {
+      return false;
+    }
+    gray = &copy;
+  }
+
+  const size_t imageBytes = static_cast<size_t>(panelWidth / 2) * panelHeight;
+  if (!grayImage_) grayImage_ = static_cast<uint8_t*>(heap_caps_malloc(imageBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!grayImage_) return false;
+  memset(grayImage_, 0, imageBytes);  // white
+
+  // The placement drawBitmap() uses: crop, fit by scaling down only, offset.
+  const int width = gray->getWidth();
+  const int height = gray->getHeight();
+  const int cropPixX = static_cast<int>(std::floor(width * cropX / 2.0f));
+  const int cropPixY = static_cast<int>(std::floor(height * cropY / 2.0f));
+  const float croppedWidth = (1.0f - cropX) * static_cast<float>(width);
+  const float croppedHeight = (1.0f - cropY) * static_cast<float>(height);
+  float scale = 1.0f;
+  bool hasTargetBounds = false;
+  if (maxWidth > 0 && croppedWidth > 0.0f) {
+    scale = static_cast<float>(maxWidth) / croppedWidth;
+    hasTargetBounds = true;
+  }
+  if (maxHeight > 0 && croppedHeight > 0.0f) {
+    const float heightScale = static_cast<float>(maxHeight) / croppedHeight;
+    scale = hasTargetBounds ? std::min(scale, heightScale) : heightScale;
+    hasTargetBounds = true;
+  }
+  const bool isScaled = hasTargetBounds && scale < 1.0f;
+
+  auto scratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(width) + gray->getRowBytes());
+  if (!scratch) return false;
+  uint8_t* const lum = scratch.get();
+  uint8_t* const raw = lum + width;
+  // 256 gray values into 16 levels: an ordered dither between neighbouring
+  // levels keeps smooth shading from banding.
+  static constexpr uint8_t kBayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+  const int stride = panelWidth / 2;
+  for (int row = cropPixY; row < height - cropPixY; ++row) {
+    int screenY = row - cropPixY;
+    if (isScaled) screenY = static_cast<int>(std::floor(screenY * scale));
+    screenY += y;
+    if (screenY < 0) continue;
+    if (screenY >= screenHeight) break;
+    if (gray->readRowGray(row, lum, raw) != BmpReaderError::Ok) return false;
+    for (int col = cropPixX; col < width - cropPixX; ++col) {
+      int screenX = col - cropPixX;
+      if (isScaled) screenX = static_cast<int>(std::floor(screenX * scale));
+      screenX += x;
+      if (screenX < 0) continue;
+      if (screenX >= screenWidth) break;
+      int px, py;
+      rotateCoordinates(orientation, screenX, screenY, &px, &py, panelWidth, panelHeight);
+      if (px < 0 || px >= panelWidth || py < 0 || py >= panelHeight) continue;
+      const int fine = (255 - lum[col]) * 15;  // ink in 255ths of a level
+      int ink = fine / 255;
+      if ((fine % 255) * 32 > (kBayer[py & 3][px & 3] * 2 + 1) * 255) ++ink;
+      uint8_t& byte = grayImage_[py * stride + (px >> 1)];
+      const int shift = (px & 1) ? 0 : 4;
+      byte = static_cast<uint8_t>((byte & ~(0x0F << shift)) | (ink << shift));
+    }
+  }
+
+  // With the panel's own table for this one frame, then back to the UI's.
+  if (grayLevelsApplied_) display.setGray16Levels(nullptr);
+  const bool shown = display.displayGray16Image(grayImage_, false);
+  if (grayLevelsApplied_) display.setGray16Levels(kGrayUiLevels);
+  return shown;
+}
 #endif
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and

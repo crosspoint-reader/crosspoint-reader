@@ -401,8 +401,8 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
 
 bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
                                                    bool oneBit, bool crop, bool originalThresholds, bool gray8Requested) {
-  // 8-bit output is used only for the gray copies of thumbnails, on builds that draw them.
-  const bool gray8 = CROSSPOINT_GRAY_UI_FULL_TONE && gray8Requested;
+  // 8-bit output is used only for the gray copies stored after covers and thumbnails, on gray-UI builds.
+  const bool gray8 = CROSSPOINT_GRAY_UI && gray8Requested;
   LOG_DBG("PNG", "Converting PNG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   // Verify PNG signature
@@ -839,4 +839,11 @@ bool PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(HalFile& pngFile, Print& 
 bool PngToBmpConverter::pngFileToGray8BmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth,
                                                         int targetMaxHeight) {
   return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, false, true, false, true);
+}
+
+// The 8-bit grayscale twin of pngFileToBmpStream: same size and crop
+bool PngToBmpConverter::pngFileToGray8BmpStream(HalFile& pngFile, Print& bmpOut, bool crop) {
+  const int targetWidth = display.getDisplayHeight();
+  const int targetHeight = display.getDisplayWidth();
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, false, crop, false, true);
 }

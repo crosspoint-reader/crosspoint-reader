@@ -862,6 +862,19 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
                             (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
                                                        CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
+#if CROSSPOINT_GRAY_UI
+  // A plain, unfiltered cover that has real gray data goes up in the panel's
+  // 16 levels. Otherwise it is drawn in the four tones below.
+  if (!preserveBackground && overlayCover != &bitmap &&
+      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER) {
+    if (renderer.displayGray16Bitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY)) return;
+    if (bitmap.rewindToData() != BmpReaderError::Ok) {
+      renderer.displayBuffer(kSleepClean);
+      return;
+    }
+  }
+#endif
+
   if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, preserveBackground)) {
     renderer.displayBuffer(kSleepClean);
     return;

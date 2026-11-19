@@ -851,9 +851,24 @@ bool generateGifBmp(const Epub& epub, const std::string& href, const std::string
 }
 }  // namespace
 
+#if CROSSPOINT_GRAY_UI
+// On a gray-UI panel a cover carries an 8-bit gray copy after its 2-bit
+// pixels, for the 16-level sleep screen. One made before that is made again.
+static bool coverUpToDate(const std::string& path) {
+  return Storage.exists(path.c_str()) && !Bitmap::lacksGrayCopy(path);
+}
+// Records that no gray copy will follow, so the cover is not made again.
+static void markCoverWithoutGray(const std::string& path) {
+  HalFile marker;
+  if (Storage.openFileForWrite("EBP", path + ".nogray", marker)) marker.close();
+}
+#else
+static bool coverUpToDate(const std::string& path) { return Storage.exists(path.c_str()); }
+#endif
+
 bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
   // Already generated, return true
-  if (Storage.exists(getCoverBmpPath(cropped, originalThresholds).c_str())) {
+  if (coverUpToDate(getCoverBmpPath(cropped, originalThresholds))) {
     return true;
   }
 
@@ -869,8 +884,12 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
   }
 
   if (Txt::isTxtOrMd(filepath)) {
-    return Txt::convertCoverImageToBmp(coverImageHref, getCoverBmpPath(cropped, originalThresholds), 0, cropped,
-                                       originalThresholds);
+    const bool converted = Txt::convertCoverImageToBmp(coverImageHref, getCoverBmpPath(cropped, originalThresholds),
+                                                       0, cropped, originalThresholds);
+#if CROSSPOINT_GRAY_UI
+    if (converted) markCoverWithoutGray(getCoverBmpPath(cropped, originalThresholds));
+#endif
+    return converted;
   }
 
   if (FsHelpers::hasJpgExtension(coverImageHref)) {
@@ -889,6 +908,12 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
       return false;
     }
     const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped, originalThresholds);
+#if CROSSPOINT_GRAY_UI
+    // The 8-bit gray copy goes straight after the 2-bit pixels, in the same file.
+    if (success && !(coverJpg.seek(0) && JpegToBmpConverter::jpegFileToGray8BmpStream(coverJpg, coverBmp, cropped))) {
+      markCoverWithoutGray(getCoverBmpPath(cropped, originalThresholds));
+    }
+#endif
     // Explicitly close() files before calling Storage.remove()
     coverJpg.close();
     coverBmp.close();
@@ -918,6 +943,11 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
       return false;
     }
     const bool success = PngToBmpConverter::pngFileToBmpStream(coverPng, coverBmp, cropped, originalThresholds);
+#if CROSSPOINT_GRAY_UI
+    if (success && !(coverPng.seek(0) && PngToBmpConverter::pngFileToGray8BmpStream(coverPng, coverBmp, cropped))) {
+      markCoverWithoutGray(getCoverBmpPath(cropped, originalThresholds));
+    }
+#endif
     // Explicitly close() files before calling Storage.remove()
     coverPng.close();
     coverBmp.close();
@@ -932,10 +962,15 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
   }
 
   if (FsHelpers::hasGifExtension(coverImageHref)) {
-    return generateGifBmp(*this, coverImageHref, getCoverBmpPath(cropped, originalThresholds),
-                          [cropped, originalThresholds](HalFile& gif, Print& bmp) {
-                            return GifToBmpConverter::gifFileToBmpStream(gif, bmp, cropped, originalThresholds);
-                          });
+    const bool converted =
+        generateGifBmp(*this, coverImageHref, getCoverBmpPath(cropped, originalThresholds),
+                       [cropped, originalThresholds](HalFile& gif, Print& bmp) {
+                         return GifToBmpConverter::gifFileToBmpStream(gif, bmp, cropped, originalThresholds);
+                       });
+#if CROSSPOINT_GRAY_UI
+    if (converted) markCoverWithoutGray(getCoverBmpPath(cropped, originalThresholds));
+#endif
+    return converted;
   }
 
   LOG_ERR("EBP", "Cover image is not a supported format, skipping");

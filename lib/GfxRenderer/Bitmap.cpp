@@ -348,7 +348,7 @@ bool Bitmap::lacksGrayCopy(const std::string& path) {
   HalFile file;
   if (!Storage.openFileForRead("BMP", path, file)) return false;
   Bitmap bitmap(file);
-  const bool lacks = bitmap.parseHeaders() == BmpReaderError::Ok && bitmap.is1Bit() && file.size() <= bitmap.dataEnd() &&
+  const bool lacks = bitmap.parseHeaders() == BmpReaderError::Ok && bitmap.getBpp() <= 2 && file.size() <= bitmap.dataEnd() &&
                      !Storage.exists((path + ".nogray").c_str());
   file.close();
   return lacks;

@@ -508,6 +508,15 @@ class GfxRenderer {
   bool beginGrayFrame() const;
   void endGrayFrame() const { grayFrameActive_ = false; }
   bool isGrayFrame() const { return grayFrameActive_; }
+  // Show a still picture in the panel's 16 levels, placed as drawBitmap()
+  // places it, in one clean frame of the panel's own table (smooth levels; a
+  // still does not mind that they pass through black). The levels come from
+  // the bitmap itself when it has 8 or more bits per pixel, else from the
+  // 8-bit gray copy stored after it. False, with nothing shown, when there is
+  // neither or the panel takes no 16-level image; the bitmap's read position
+  // is then undefined (rewindToData() before drawing it another way).
+  bool displayGray16Bitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
+                           float cropY = 0) const;
 #else
   bool isGrayFrame() const { return false; }
 #endif

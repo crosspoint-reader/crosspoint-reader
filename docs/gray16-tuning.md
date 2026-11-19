@@ -10,6 +10,20 @@ compiled only for that board, and the numbers in `kGrayUiLevels`
 (`lib/GfxRenderer/GfxRenderer.cpp`) are that panel's. Another panel needs its
 own driver support in the SDK and its own session.
 
+## Where 16 levels are used
+
+- **UI screens** use two edge grays by default (text, icon and corner edges),
+  drawn with `kGrayUiLevels`. Flat gray fills and gray covers in the UI are
+  behind `CROSSPOINT_GRAY_UI_FULL_TONE`; their screen changes looked bad on the
+  Plus, because every gray area passes through black on its way in.
+- **The sleep cover** is shown in all 16 levels
+  (`GfxRenderer::displayGray16Bitmap`). It is a still, so it is drawn in one
+  clean frame of the panel's own table, which has the smoothest levels. It needs
+  real gray data: a book cover carries an 8-bit copy after its 2-bit pixels, and
+  a picture of 8 or more bits per pixel is used as it is. Without either, the
+  cover is drawn in four tones as before.
+- **Book pages** keep the reader's own four-tone path.
+
 ## What the table says
 
 Level 0 is white and level 15 is black. Each of levels 1 to 15 has three
