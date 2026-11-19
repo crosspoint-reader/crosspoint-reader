@@ -5,7 +5,8 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Xtc.h>
-#include <strings.h>
+#include <common/FsUtf.h>
+#include <common/upcase.h>
 
 #include "BookCacheUtils.h"
 #include "BookmarkUtil.h"
@@ -23,18 +24,32 @@ std::string bookCachePathFor(const std::string& path) {
   return "";
 }
 
+bool isFolder(const std::string& path) { return Storage.open(path.c_str()).isDirectory(); }
+
 bool hasBookmarks(const std::string& path) { return FsHelpers::hasReflowableBookExtension(path); }
 
-// FAT names compare case-insensitively, so e.g. /Books_A.epub and /books/A.epub share one bookmarks file.
+// Same match as SdFat's long-name lookup (FatFile::cmpName): UTF-16 units folded by toUpcase().
+bool sameFatName(const std::string& a, const std::string& b) {
+  const char *pa = a.c_str(), *endA = pa + a.size(), *pb = b.c_str(), *endB = pb + b.size();
+  while (pa < endA && pb < endB) {
+    uint16_t hiA, loA, hiB, loB;
+    pa = FsUtf::mbToU16(pa, endA, &hiA, &loA);
+    pb = FsUtf::mbToU16(pb, endB, &hiB, &loB);
+    if (!pa || !pb || toUpcase(hiA) != toUpcase(hiB) || toUpcase(loA) != toUpcase(loB)) return false;
+  }
+  return pa == endA && pb == endB;
+}
+
+// FAT matches /Books_A.epub and /books/A.epub, accented letters included, to one bookmarks file.
 bool shareBookmarks(const std::string& a, const std::string& b) {
   return hasBookmarks(a) && hasBookmarks(b) &&
-         strcasecmp(BookmarkUtil::getBookmarkPath(a).c_str(), BookmarkUtil::getBookmarkPath(b).c_str()) == 0;
+         sameFatName(BookmarkUtil::getBookmarkPath(a), BookmarkUtil::getBookmarkPath(b));
 }
 
 }  // namespace
 
 void clearBookData(const std::string& path, const std::string& sourcePath) {
-  if (bookCachePathFor(path).empty()) return;
+  if (bookCachePathFor(path).empty() || isFolder(path)) return;
   clearBookCache(path);
   if (!hasBookmarks(path) || shareBookmarks(path, sourcePath)) return;
   const std::string bookmarkPath = BookmarkUtil::getBookmarkPath(path);
@@ -44,6 +59,7 @@ void clearBookData(const std::string& path, const std::string& sourcePath) {
 }
 
 void moveBookData(const std::string& oldPath, const std::string& newPath) {
+  if (isFolder(newPath)) return;
   clearBookData(newPath, oldPath);
   const std::string oldCachePath = bookCachePathFor(oldPath);
   if (oldCachePath.empty()) return;

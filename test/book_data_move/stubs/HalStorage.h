@@ -1,6 +1,7 @@
 #pragma once
 
-#include <strings.h>
+#include <common/FsUtf.h>
+#include <common/upcase.h>
 
 #include <cstring>
 #include <map>
@@ -8,26 +9,45 @@
 
 namespace fake {
 
-// FAT compares names case-insensitively.
+// FAT long names match after SdFat's own UTF-16 case fold.
+inline std::u16string fold(const std::string& path) {
+  std::u16string out;
+  for (const char *p = path.c_str(), *end = p + path.size(); p && p < end;) {
+    uint16_t hi, lo;
+    p = FsUtf::mbToU16(p, end, &hi, &lo);
+    if (p) out += {static_cast<char16_t>(toUpcase(hi)), static_cast<char16_t>(toUpcase(lo))};
+  }
+  return out;
+}
+
 struct FatLess {
-  bool operator()(const std::string& a, const std::string& b) const { return strcasecmp(a.c_str(), b.c_str()) < 0; }
+  bool operator()(const std::string& a, const std::string& b) const { return fold(a) < fold(b); }
 };
 
-// Path -> contents; directories are entries too.
+// Path -> contents; a directory holds kDir.
+inline constexpr const char* kDir = "<dir>";
 inline std::map<std::string, std::string, FatLess> files;
 
 inline bool within(const std::string& path, const std::string& dir) {
-  return strcasecmp(path.c_str(), dir.c_str()) == 0 || (path.size() > dir.size() && path[dir.size()] == '/' &&
-                                                        strncasecmp(path.c_str(), dir.c_str(), dir.size()) == 0);
+  return fold(path) == fold(dir) || fold(path).starts_with(fold(dir + "/"));
 }
 
 }  // namespace fake
+
+struct HalFile {
+  bool directory = false;
+  bool isDirectory() const { return directory; }
+};
 
 class HalStorage {
  public:
   static HalStorage& getInstance() {
     static HalStorage storage;
     return storage;
+  }
+  HalFile open(const char* path) const {
+    const auto it = fake::files.find(path);
+    return {it != fake::files.end() && it->second == fake::kDir};
   }
   bool exists(const char* path) const { return fake::files.count(path) != 0; }
   bool remove(const char* path) { return fake::files.erase(path) != 0; }

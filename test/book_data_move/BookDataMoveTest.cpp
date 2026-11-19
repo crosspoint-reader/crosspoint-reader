@@ -23,6 +23,22 @@ TEST(BookDataMove, CaseOnlyBookmarkCollisionKeepsBookmarksOnCopy) {
   EXPECT_TRUE(Storage.exists(bookmarks("/Books_A.epub").c_str()));
 }
 
+TEST(BookDataMove, AccentedCaseOnlyCollisionKeepsBookmarks) {
+  fake::files = {{bookmarks("/À_B.epub"), "marks"}};
+  clearBookData("/à/B.epub", "/À_B.epub");
+  EXPECT_TRUE(Storage.exists(bookmarks("/À_B.epub").c_str()));
+  moveBookData("/À_B.epub", "/à/B.epub");
+  EXPECT_TRUE(Storage.exists(bookmarks("/à/B.epub").c_str()));
+}
+
+TEST(BookDataMove, FolderNamedLikeBookLeavesOtherBooksAlone) {
+  fake::files = {{"/Done.epub", fake::kDir}, {bookmarks("/Done.txt"), "marks"}};
+  moveBookData("/Reading", "/Done.epub");
+  EXPECT_TRUE(Storage.exists(bookmarks("/Done.txt").c_str()));
+  clearBookData("/Done.epub", "/Reading");
+  EXPECT_TRUE(Storage.exists(bookmarks("/Done.txt").c_str()));
+}
+
 TEST(BookDataMove, FolderOrNonBookRenameLeavesOtherBooksAlone) {
   fake::files = {{bookmarks("/Done.epub"), "marks"}, {cacheDir("/Done.epub"), ""}};
   moveBookData("/Reading", "/Done");
