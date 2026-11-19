@@ -647,14 +647,19 @@ void OpdsBookBrowserActivity::downloadAllNew() {
     return;
   }
   const bool limited = result == OpdsBatchDownload::Result::LIMIT_REACHED;
+  const bool pageTruncated = result == OpdsBatchDownload::Result::PAGE_TRUNCATED;
   const bool failures = result != OpdsBatchDownload::Result::CANCELLED && batchStatus.failed > 0;
   if (limited) LOG_INF("OPDS", "Batch stopped at its limit");
-  if (limited || failures) {
-    std::string message = limited ? tr(STR_OPDS_BATCH_STOPPED_EARLY) : "";
+  if (pageTruncated) LOG_INF("OPDS", "Batch ended on a truncated page");
+  const bool notice = limited || pageTruncated;
+  if (notice || failures) {
+    std::string message = limited         ? tr(STR_OPDS_BATCH_STOPPED_EARLY)
+                          : pageTruncated ? tr(STR_OPDS_BATCH_PAGE_TRUNCATED)
+                                          : "";
     if (failures) {
       char counts[24];
       snprintf(counts, sizeof(counts), " (%d / %d)", batchStatus.failed, batchStatus.downloaded + batchStatus.failed);
-      if (limited) message += ' ';
+      if (notice) message += ' ';
       message += tr(STR_DOWNLOAD_FAILED);
       message += counts;
     }

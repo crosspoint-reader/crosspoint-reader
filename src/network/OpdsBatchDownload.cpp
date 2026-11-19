@@ -15,9 +15,6 @@
 #include "util/UrlUtils.h"
 
 namespace {
-// Bounds the walk, skipped books included, and stops a `next` link cycle.
-constexpr int MAX_PAGES = 8;
-
 // The fields a transfer needs, copied out of the page so the parsed feed can
 // be freed before TLS claims its buffers.
 struct PendingBook {
@@ -148,7 +145,7 @@ Result run(freeink::opds::OpdsClient& client, const std::string& serverUrl, cons
       if (!notify()) return Result::CANCELLED;
     }
 
-    if (nextHref.empty()) return truncated ? Result::LIMIT_REACHED : Result::COMPLETED;
+    if (nextHref.empty()) return truncated ? Result::PAGE_TRUNCATED : Result::COMPLETED;
     if (transfers >= MAX_ENTRIES) return Result::LIMIT_REACHED;
     pageUrl = UrlUtils::buildUrl(pageUrl, nextHref);
   }

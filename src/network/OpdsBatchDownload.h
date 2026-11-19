@@ -16,10 +16,11 @@
 namespace OpdsBatchDownload {
 
 enum class Result {
-  COMPLETED,      // Whole catalog walked (individual books may still have failed)
-  LIMIT_REACHED,  // Stopped at MAX_ENTRIES, the page cap or a truncated page; books may be left
-  CANCELLED,      // Caller asked to stop
-  FAILED,         // A feed page could not be fetched or parsed
+  COMPLETED,       // Whole catalog walked (individual books may still have failed)
+  LIMIT_REACHED,   // Stopped at MAX_ENTRIES or MAX_PAGES; browsing further in and retrying can reach the rest
+  PAGE_TRUNCATED,  // Walk ended, but the parser cut a page short (too many entries); retrying lands on the same page
+  CANCELLED,       // Caller asked to stop
+  FAILED,          // A feed page could not be fetched or parsed
 };
 
 // Live counters, passed to the caller on every progress tick.
@@ -46,6 +47,10 @@ struct Hooks {
 // Hard ceiling on transfers attempted in one run (skips excluded), so a large
 // catalog cannot keep a battery-powered device busy forever.
 constexpr int MAX_ENTRIES = 200;
+
+// Bounds the walk, skipped books included, and stops a `next` link cycle.
+// STR_OPDS_SYNC_ON_STARTUP quotes this number in its label; keep them in sync.
+constexpr int MAX_PAGES = 8;
 
 // Destination path for `book` on the SD card, resolved against
 // SETTINGS.opdsDownloadFolder and SETTINGS.opdsFilenameFormat (creating the
