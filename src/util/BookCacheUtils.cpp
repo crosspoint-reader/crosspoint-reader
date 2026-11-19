@@ -37,6 +37,7 @@ void clearBookCache(const std::string& path) {
 }
 
 void sleepImageChanged(const char* path) {
+  while (path[0] == '/' && path[1] == '/') ++path;
   // FAT names are case-insensitive.
   if (strcasecmp(path, "/sleep.bmp") != 0 && strncasecmp(path, "/sleep/", 7) != 0 &&
       strncasecmp(path, "/.sleep/", 8) != 0) {

@@ -505,6 +505,7 @@ void FileBrowserActivity::renameSelectedFile(const std::string& oldPath, const s
     return;
   }
 
+  sleepImageChanged(newPath.c_str());
   RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);
   if (APP_STATE.openEpubPath == oldPath) {
     APP_STATE.openEpubPath = newPath;
