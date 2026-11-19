@@ -8,6 +8,7 @@
 #include "Xtc.h"
 
 #include <Bitmap.h>
+#include <HalDisplay.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <freertos/FreeRTOS.h>
@@ -19,6 +20,46 @@ void yieldDuringThumbnail(uint8_t& rowsSinceYield) {
   rowsSinceYield = 0;
   vTaskDelay(1);
 }
+
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+void putLe32(uint8_t* p, const uint32_t v) {
+  p[0] = static_cast<uint8_t>(v);
+  p[1] = static_cast<uint8_t>(v >> 8);
+  p[2] = static_cast<uint8_t>(v >> 16);
+  p[3] = static_cast<uint8_t>(v >> 24);
+}
+
+// Append an 8-bit grayscale BMP (top-down, gray palette) holding `gray`,
+// width * height bytes, after the 1-bit thumbnail already written to `out`.
+void appendGrayCopy(HalFile& out, const uint8_t* gray, const uint16_t width, const uint16_t height) {
+  const uint32_t rowBytes = (static_cast<uint32_t>(width) + 3) / 4 * 4;
+  const uint32_t pixelOffset = 14 + 40 + 256 * 4;
+  uint8_t header[54] = {};
+  header[0] = 'B';
+  header[1] = 'M';
+  putLe32(header + 2, pixelOffset + rowBytes * height);
+  putLe32(header + 10, pixelOffset);
+  putLe32(header + 14, 40);
+  putLe32(header + 18, width);
+  putLe32(header + 22, static_cast<uint32_t>(-static_cast<int32_t>(height)));  // negative: top-down
+  header[26] = 1;                                                              // planes
+  header[28] = 8;                                                              // bits per pixel
+  putLe32(header + 34, rowBytes * height);
+  putLe32(header + 46, 256);  // colors used
+  out.write(header, sizeof(header));
+  uint8_t palette[256 * 4];
+  for (int i = 0; i < 256; ++i) {
+    palette[i * 4] = palette[i * 4 + 1] = palette[i * 4 + 2] = static_cast<uint8_t>(i);
+    palette[i * 4 + 3] = 0;
+  }
+  out.write(palette, sizeof(palette));
+  const uint8_t padding[3] = {};
+  for (uint16_t y = 0; y < height; ++y) {
+    out.write(gray + static_cast<size_t>(y) * width, width);
+    if (rowBytes > width) out.write(padding, rowBytes - width);
+  }
+}
+#endif
 }  // namespace
 
 #include "../Memory/Memory.h"
@@ -281,9 +322,16 @@ std::string Xtc::getThumbBmpPath(int height) const { return cachePath + "/thumb_
 
 bool Xtc::generateThumbBmp(int height) const {
   // Already generated
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  // One made before thumbnails carried a gray copy is made again.
+  if (Storage.exists(getThumbBmpPath(height).c_str()) && !Bitmap::lacksGrayCopy(getThumbBmpPath(height))) {
+    return true;
+  }
+#else
   if (Storage.exists(getThumbBmpPath(height).c_str())) {
     return true;
   }
+#endif
 
   if (!loaded || !parser) {
     LOG_ERR("XTC", "Cannot generate thumb BMP, file not loaded");
@@ -379,6 +427,11 @@ bool Xtc::generateThumbBmp(int height) const {
   createBmpHeader(&bmpHeader, thumbWidth, thumbHeight, BmpRowOrder::TopDown);
   thumbBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
 
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  // The averaged gray of every thumbnail pixel, kept to store after the 1-bit rows.
+  auto grayCopy = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(thumbWidth) * thumbHeight);
+#endif
+
   // Fixed-point scale factor (16.16)
   uint32_t scaleInv_fp = static_cast<uint32_t>(65536.0f / scale);
 
@@ -456,6 +509,9 @@ bool Xtc::generateThumbBmp(int height) const {
 
       // Calculate average grayscale and quantize to 1-bit with noise dithering
       uint8_t avgGray = (totalCount > 0) ? static_cast<uint8_t>(graySum / totalCount) : 255;
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+      if (grayCopy) grayCopy[static_cast<size_t>(dstY) * thumbWidth + dstX] = avgGray;
+#endif
 
       // Hash-based noise dithering for 1-bit output
       uint32_t hash = static_cast<uint32_t>(dstX) * 374761393u + static_cast<uint32_t>(dstY) * 668265263u;
@@ -483,6 +539,15 @@ bool Xtc::generateThumbBmp(int height) const {
     thumbBmp.write(rowBuffer, rowSize);
     yieldDuringThumbnail(rowsSinceYield);
   }
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  if (grayCopy) {
+    appendGrayCopy(thumbBmp, grayCopy.get(), thumbWidth, thumbHeight);
+  } else {
+    // No memory for the gray copy: mark the thumbnail so it is not made again.
+    HalFile marker;
+    if (Storage.openFileForWrite("XTC", getThumbBmpPath(height) + ".nogray", marker)) marker.close();
+  }
+#endif
   LOG_DBG("XTC", "Generated thumb BMP (%dx%d): %s", thumbWidth, thumbHeight, getThumbBmpPath(height).c_str());
   return true;
 }

@@ -3,15 +3,28 @@
 #include <BoardConfig.h>
 #include <EInkDisplay.h>
 
-// Gray settle: a screen that stands unchanged is redrawn with anti-aliased
-// glyph edges on panels that take a 16-level image. Compiled only where the
-// board has one and the SDK provides the call.
-#ifndef CROSSPOINT_GRAY_SETTLE
+// Gray UI: screens that ask for it are drawn as a 16-level image, with
+// anti-aliased text, icons and corners and flat grays, on panels that take
+// one. Compiled only where the board has one and the SDK provides the call.
+#ifndef CROSSPOINT_GRAY_UI
 #if defined(FREEINK_HAS_GRAY16) && FREEINK_DEVICE_METALIO_EINK4_PLUS
-#define CROSSPOINT_GRAY_SETTLE 1
+#define CROSSPOINT_GRAY_UI 1
 #else
-#define CROSSPOINT_GRAY_SETTLE 0
+#define CROSSPOINT_GRAY_UI 0
 #endif
+#endif
+
+// What a gray UI frame carries. 0: only the two edge levels a book page's
+// anti-aliasing uses, on glyph, icon and corner edges, so a screen change
+// drives the same kinds of pixel a page turn does. 1: all 16 levels, with flat
+// gray fills and gray cover thumbnails; on a panel whose waveform reaches every
+// gray by way of black, the grays of the screen being left then show as it goes.
+#ifndef CROSSPOINT_GRAY_UI_FULL_TONE
+#define CROSSPOINT_GRAY_UI_FULL_TONE 0
+#endif
+#if !CROSSPOINT_GRAY_UI
+#undef CROSSPOINT_GRAY_UI_FULL_TONE
+#define CROSSPOINT_GRAY_UI_FULL_TONE 0
 #endif
 
 class HalDisplay {
@@ -144,7 +157,7 @@ class HalDisplay {
   // the whole text body (a visible flash).
   bool combinesGrayscaleBase() const;
 
-#if CROSSPOINT_GRAY_SETTLE
+#if CROSSPOINT_GRAY_UI
   // 16-level image: 4 bpp, 0 = white .. 15 = darkest, left pixel in the high
   // nibble, getDisplayWidth() / 2 bytes per panel row. fast drives only the
   // pixels that change.

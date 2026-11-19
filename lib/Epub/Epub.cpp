@@ -4,6 +4,8 @@
 #include <GifImageLayout.h>
 #include <GifLimitedWriter.h>
 #include <GifToBmpConverter.h>
+#include <HalDisplay.h>
+#include <Bitmap.h>
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
@@ -943,9 +945,24 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
 std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb_[HEIGHT].bmp"; }
 std::string Epub::getThumbBmpPath(int height) const { return cachePath + "/thumb_" + std::to_string(height) + ".bmp"; }
 
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+// On a gray-UI panel a thumbnail carries an 8-bit gray copy after its 1-bit
+// pixels. One generated before that, or by a build without it, is made again.
+static bool thumbUpToDate(const std::string& path) {
+  return Storage.exists(path.c_str()) && !Bitmap::lacksGrayCopy(path);
+}
+// Records that no gray copy will follow, so the thumbnail is not made again.
+static void markThumbWithoutGray(const std::string& path) {
+  HalFile marker;
+  if (Storage.openFileForWrite("EBP", path + ".nogray", marker)) marker.close();
+}
+#else
+static bool thumbUpToDate(const std::string& path) { return Storage.exists(path.c_str()); }
+#endif
+
 bool Epub::generateThumbBmp(int height) const {
   // Already generated, return true
-  if (Storage.exists(getThumbBmpPath(height).c_str())) {
+  if (thumbUpToDate(getThumbBmpPath(height))) {
     return true;
   }
 
@@ -958,7 +975,7 @@ bool Epub::generateThumbBmp(int height) const {
 }
 
 bool Epub::generateThumbBmpFromSource(int height) {
-  if (Storage.exists(getThumbBmpPath(height).c_str())) return true;
+  if (thumbUpToDate(getThumbBmpPath(height))) return true;
   if (Txt::isTxtOrMd(filepath)) {
     std::string companionCover = Txt::findCompanionCoverImage(filepath);
     if (companionCover.empty()) return false;
@@ -991,7 +1008,11 @@ bool Epub::generateThumbBmpForCover(int height, const std::string& coverImageHre
   }
 
   if (Txt::isTxtOrMd(filepath)) {
-    return Txt::convertCoverImageToBmp(coverImageHref, getThumbBmpPath(height), height);
+    const bool converted = Txt::convertCoverImageToBmp(coverImageHref, getThumbBmpPath(height), height);
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+    if (converted) markThumbWithoutGray(getThumbBmpPath(height));
+#endif
+    return converted;
   }
 
   if (FsHelpers::hasJpgExtension(coverImageHref)) {
@@ -1014,6 +1035,13 @@ bool Epub::generateThumbBmpForCover(int height, const std::string& coverImageHre
     int THUMB_TARGET_HEIGHT = height;
     const bool success = JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(coverJpg, thumbBmp, THUMB_TARGET_WIDTH,
                                                                              THUMB_TARGET_HEIGHT);
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+    // The 8-bit gray copy goes straight after the 1-bit pixels, in the same file.
+    if (success && !(coverJpg.seek(0) && JpegToBmpConverter::jpegFileToGray8BmpStreamWithSize(
+                                             coverJpg, thumbBmp, THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT))) {
+      markThumbWithoutGray(getThumbBmpPath(height));
+    }
+#endif
     // Explicitly close() files before calling Storage.remove()
     coverJpg.close();
     thumbBmp.close();
@@ -1043,6 +1071,12 @@ bool Epub::generateThumbBmpForCover(int height, const std::string& coverImageHre
     int THUMB_TARGET_HEIGHT = height;
     const bool success =
         PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(coverPng, thumbBmp, THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT);
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+    if (success && !(coverPng.seek(0) && PngToBmpConverter::pngFileToGray8BmpStreamWithSize(
+                                             coverPng, thumbBmp, THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT))) {
+      markThumbWithoutGray(getThumbBmpPath(height));
+    }
+#endif
     // Explicitly close() files before calling Storage.remove()
     coverPng.close();
     thumbBmp.close();
@@ -1055,9 +1089,14 @@ bool Epub::generateThumbBmpForCover(int height, const std::string& coverImageHre
     LOG_DBG("EBP", "Generated thumb BMP from PNG cover image, success: %s", success ? "yes" : "no");
     return success;
   } else if (FsHelpers::hasGifExtension(coverImageHref)) {
-    return generateGifBmp(*this, coverImageHref, getThumbBmpPath(height), [height](HalFile& gif, Print& bmp) {
-      return GifToBmpConverter::gifFileTo1BitBmpStreamWithSize(gif, bmp, height * 0.6, height);
-    });
+    const bool converted =
+        generateGifBmp(*this, coverImageHref, getThumbBmpPath(height), [height](HalFile& gif, Print& bmp) {
+          return GifToBmpConverter::gifFileTo1BitBmpStreamWithSize(gif, bmp, height * 0.6, height);
+        });
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+    if (converted) markThumbWithoutGray(getThumbBmpPath(height));
+#endif
+    return converted;
   } else {
     LOG_ERR("EBP", "Cover image is not a supported format, skipping thumbnail");
   }

@@ -33,6 +33,9 @@ namespace glyphBitmap {
 struct Frame;
 }
 
+// GfxRenderer::drawMask() exists (lets adapters test for it).
+#define GFX_RENDERER_HAS_DRAW_MASK 1
+
 // Color representation: uint8_t mapped to 4x4 Bayer matrix dithering levels
 // 0 = transparent, 1-16 = gray levels (white to black)
 enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 0x0A, Black = 0x10 };
@@ -65,6 +68,9 @@ class GfxRenderer {
     h = y1 - y;
   }
   void drawIconScaled(const uint8_t bitmap[], int x, int y, int size, int outSize) const;
+  // One physical pixel of a scaled mask at `coverage` / 256: inked from half
+  // coverage, and during a gray frame recorded at its real level.
+  void plotCoverage(int x, int y, bool black, int coverage) const;
   void drawImageScaled(const uint8_t bitmap[], int x, int y, int width, int height, int outWidth, int outHeight) const;
 
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
@@ -117,14 +123,39 @@ class GfxRenderer {
   mutable int _stripY0 = 0;
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
-#if CROSSPOINT_GRAY_SETTLE
-  // Gray settle (see beginGraySettle): glyph ink recorded per panel pixel in
-  // the 16-level image layout, 0 where no glyph drew.
+#if CROSSPOINT_GRAY_UI
+  // Gray frame (see beginGrayFrame): one byte per panel pixel, row-major.
+  // GRAY_FOLLOWS_FB means the pixel is whatever the framebuffer says; any
+  // other value is its ink, 0 = white .. 15 = black.
+  static constexpr uint8_t GRAY_FOLLOWS_FB = 0xFF;
+  // Flat levels for the two dither colors: their ink shares, 1 in 4 and 1 in 2.
+  static constexpr uint8_t GRAY_LIGHT_INK = 4;
+  static constexpr uint8_t GRAY_DARK_INK = 8;
+  // The two edge levels shown without CROSSPOINT_GRAY_UI_FULL_TONE. On the
+  // Metalio E-Ink4-Plus the display maps these inks to the waveform levels its
+  // overlay grayscale uses for a book page's light and dark gray.
+  static constexpr uint8_t GRAY_EDGE_LIGHT_INK = 9;
+  static constexpr uint8_t GRAY_EDGE_DARK_INK = 12;
   mutable uint8_t* grayInk_ = nullptr;
-  mutable bool graySettleActive_ = false;
-  void recordGlyphInk(const uint8_t* bitmap, int width, int height, const glyphBitmap::Frame& physical,
-                      int left, int top, int right, int bottom) const;
-  void clearGlyphInk(int phyX0, int phyY0, int phyX1, int phyY1) const;
+  mutable uint8_t* grayImage_ = nullptr;  // the packed 16-level image handed to the display
+  mutable bool grayFrameActive_ = false;
+  // Show the framebuffer and the recorded levels as one 16-level image.
+  bool displayGrayFrame(HalDisplay::RefreshMode refreshMode) const;
+  // Record the 8-bit gray copy stored after a thumbnail's 1-bit bitmap, if any.
+  void recordBitmapGray(const Bitmap& bitmap, int x, int y, float scale, bool isScaled, int cropPixX,
+                        int cropPixY) const;
+  // Ink of panel pixel (px, py) as drawn so far.
+  uint8_t grayUnder(int px, int py) const;
+  // Blend ink `target` over logical pixel (x, y) at coverage / 256.
+  void grayBlend(int x, int y, int target, int coverage) const;
+  void recordGlyphInk(const uint8_t* bitmap, int width, int height, const glyphBitmap::Frame& physical, bool twoBit,
+                      bool state, int left, int top, int right, int bottom) const;
+  // Set panel pixels [phyX0, phyX1] x [phyY0, phyY1] to `ink`; with preserve,
+  // only where that is darker than what is there.
+  void grayFill(int phyX0, int phyY0, int phyX1, int phyY1, uint8_t ink, bool preserve) const;
+  // Soften the outer edge of a quarter disc of `radius` (and the inner edge of
+  // a ring from `innerRadius`, 0 = disc) just drawn in `ink` around (cx, cy).
+  void grayArcEdge(int radius, int innerRadius, int cx, int cy, int xDir, int yDir, int ink) const;
 #endif
   mutable int clipLeft_ = 0;
   mutable int clipTop_ = 0;
@@ -365,6 +396,12 @@ class GfxRenderer {
                        bool roundBottomLeft, bool roundBottomRight, Color color) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawIcon(const uint8_t bitmap[], int x, int y, int size) const;
+  // Draw a 1-bit mask (row-major, MSB first, natural orientation) scaled to
+  // width x height at (x, y). `inkIsZero` says which bit value is ink; black
+  // false draws the ink white. Scaling is bilinear, so curves and diagonals
+  // stay even at the board's UI scale.
+  void drawMask(const uint8_t* bits, int srcWidth, int srcHeight, bool inkIsZero, int x, int y, int width, int height,
+                bool black = true) const;
   // Board UI scale (BoardProfile::uiScale). While active, every public draw
   // and measure call takes and returns logical coordinates, multiplied by the
   // scale on the way to the panel; glyphs, icons and bitmaps are drawn at
@@ -451,17 +488,19 @@ class GfxRenderer {
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getTextHeight(int fontId) const;
 
-#if CROSSPOINT_GRAY_SETTLE
-  // Gray settle: redraw the screen that is already up with anti-aliased text.
-  // Between begin and end the caller renders the screen again: drawing goes to
-  // the framebuffer as usual, displayBuffer() draws nothing, and the coverage
-  // of black 2-bit glyphs is recorded. end() shows the framebuffer as a
-  // 16-level image with glyph edges at their recorded level (fast: changed
-  // pixels only); show = false drops the capture. begin returns false when the
-  // panel takes no 16-level image or the capture buffer cannot be allocated.
-  bool supportsGraySettle() const { return display.supportsGray16Image(); }
-  bool beginGraySettle() const;
-  bool endGraySettle(bool show, bool fast) const;
+#if CROSSPOINT_GRAY_UI
+  // Gray frame: between begin and end, drawing goes to the framebuffer as
+  // usual and each pixel's real level is recorded beside it: the coverage of
+  // glyph, icon and corner edges, a flat level for the dither colors, and the
+  // gray copy of cover thumbnails. displayBuffer() and displayBufferAsync()
+  // then show the two together as a 16-level image instead of the B/W frame.
+  // begin returns false when the panel takes no 16-level image or the buffers
+  // cannot be allocated.
+  bool beginGrayFrame() const;
+  void endGrayFrame() const { grayFrameActive_ = false; }
+  bool isGrayFrame() const { return grayFrameActive_; }
+#else
+  bool isGrayFrame() const { return false; }
 #endif
 
   // Grayscale functions

@@ -16,7 +16,6 @@
 // ============================================================================
 // IMAGE PROCESSING OPTIONS - Toggle these to test different configurations
 // ============================================================================
-constexpr bool USE_8BIT_OUTPUT = false;  // true: 8-bit grayscale (no quantization), false: 2-bit (4 levels)
 // Dithering method selection (only one should be true, or all false for simple quantization):
 constexpr bool USE_ATKINSON = true;          // Atkinson dithering (cleaner than F-S, less error diffusion)
 constexpr bool USE_FLOYD_STEINBERG = false;  // Floyd-Steinberg error diffusion (can cause "worm" artifacts)
@@ -220,6 +219,7 @@ struct BmpConvertCtx {
   int outWidth;
   int outHeight;
   bool oneBit;
+  bool gray8;  // 8-bit grayscale output, no quantization
   int bytesPerRow;
   bool needsScaling;
   uint32_t scaleX_fp;  // source pixels per output pixel, 16.16 fixed-point
@@ -272,7 +272,7 @@ static void yieldDuringDecodeBlock(BmpConvertCtx* ctx) {
 static void writeOutputRow(BmpConvertCtx* ctx, const uint8_t* srcRow, int outY) {
   memset(ctx->bmpRow.get(), 0, ctx->bytesPerRow);
 
-  if (USE_8BIT_OUTPUT && !ctx->oneBit) {
+  if (ctx->gray8) {
     for (int x = 0; x < ctx->outWidth; x++) {
       ctx->bmpRow[x] = adjustPixel(srcRow[x]);
     }
@@ -392,7 +392,7 @@ static void finishSmoothUpscale(BmpConvertCtx* ctx) {
 static void flushScaledRow(BmpConvertCtx* ctx) {
   memset(ctx->bmpRow.get(), 0, ctx->bytesPerRow);
 
-  if (USE_8BIT_OUTPUT && !ctx->oneBit) {
+  if (ctx->gray8) {
     for (int x = 0; x < ctx->outWidth; x++) {
       const uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
       ctx->bmpRow[x] = adjustPixel(gray);
@@ -513,7 +513,7 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
 // Internal implementation with configurable target size and bit depth
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& bmpOut, int targetWidth,
                                                      int targetHeight, bool oneBit, bool crop,
-                                                     bool originalThresholds) {
+                                                     bool originalThresholds, bool gray8) {
   LOG_DBG("JPG", "Converting JPEG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
@@ -605,7 +605,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
 
   // Write BMP header with output dimensions
   int bytesPerRow;
-  if (USE_8BIT_OUTPUT && !oneBit) {
+  if (gray8) {
     writeBmpHeader8bit(bmpOut, outWidth, outHeight);
     bytesPerRow = (outWidth + 3) / 4 * 4;
   } else if (oneBit) {
@@ -623,6 +623,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
   ctx.outWidth = outWidth;
   ctx.outHeight = outHeight;
   ctx.oneBit = oneBit;
+  ctx.gray8 = gray8;
   ctx.bytesPerRow = bytesPerRow;
   ctx.needsScaling = needsScaling;
   ctx.scaleX_fp = scaleX_fp;
@@ -679,7 +680,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
       LOG_ERR("JPG", "OOM: Atkinson1BitDitherer");
       return false;
     }
-  } else if (!USE_8BIT_OUTPUT) {
+  } else if (!gray8) {
     if (USE_ATKINSON) {
       ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth, originalThresholds);
       if (!ctx.atkinsonDitherer || !ctx.atkinsonDitherer->isValid()) {
@@ -731,4 +732,10 @@ bool JpegToBmpConverter::jpegFileToBmpStreamWithSize(HalFile& jpegFile, Print& b
 bool JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(HalFile& jpegFile, Print& bmpOut, int targetMaxWidth,
                                                          int targetMaxHeight) {
   return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true);
+}
+
+// Convert to an 8-bit grayscale BMP of the same size and crop as the 1-bit thumbnail
+bool JpegToBmpConverter::jpegFileToGray8BmpStreamWithSize(HalFile& jpegFile, Print& bmpOut, int targetMaxWidth,
+                                                          int targetMaxHeight) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false, true, false, true);
 }

@@ -8,6 +8,8 @@ class HalFile;
 
 class SleepActivity final : public Activity {
  public:
+  // Runs its own grayscale passes over a full-screen image.
+  bool wantsGrayFrame() const override { return false; }
   explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool fromTimeout = false)
       : Activity("Sleep", renderer, mappedInput), fromTimeout(fromTimeout) {}
   void onEnter() override;

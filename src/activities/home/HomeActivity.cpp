@@ -120,9 +120,21 @@ void HomeActivity::resolveGridCoverPaths() {
   }
 }
 
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+// A book's thumbnail from before it carried a gray copy: made again once, and
+// kept if that fails.
+static bool thumbWantsGrayCopy(const RecentBook& book, const std::string& thumbPath) {
+  return (FsHelpers::hasReflowableBookExtension(book.path) || FsHelpers::hasXtcExtension(book.path)) &&
+         Bitmap::lacksGrayCopy(thumbPath);
+}
+#else
+static bool thumbWantsGrayCopy(const RecentBook&, const std::string&) { return false; }
+#endif
+
 void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoading, Rect& popupRect) {
-  if (!book.coverBmpPath.empty() && Storage.exists(UITheme::getCoverThumbPath(book.coverBmpPath, height).c_str()))
-    return;
+  const bool hadThumb =
+      !book.coverBmpPath.empty() && Storage.exists(UITheme::getCoverThumbPath(book.coverBmpPath, height).c_str());
+  if (hadThumb && !thumbWantsGrayCopy(book, UITheme::getCoverThumbPath(book.coverBmpPath, height))) return;
   // Only one parser lives at a time; EPUB/XTC objects exceed the stack budget.
   if (FsHelpers::hasReflowableBookExtension(book.path)) {
     auto epub = makeUniqueNoThrow<Epub>(book.path, "/.crosspoint");
@@ -131,13 +143,13 @@ void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoad
       return;
     }
     book.coverBmpPath = epub->getThumbBmpPath();
-    if (Storage.exists(epub->getThumbBmpPath(UITheme::coverThumbPixels(height)).c_str())) return;
+    if (!hadThumb && Storage.exists(epub->getThumbBmpPath(UITheme::coverThumbPixels(height)).c_str())) return;
     if (!showingLoading) {
       showingLoading = true;
       popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
       GUI.fillPopupProgress(renderer, popupRect, 0);
     }
-    if (epub->generateThumbBmpFromSource(UITheme::coverThumbPixels(height))) {
+    if (epub->generateThumbBmpFromSource(UITheme::coverThumbPixels(height)) || hadThumb) {
       return;
     }
   } else if (FsHelpers::hasXtcExtension(book.path)) {
@@ -147,13 +159,13 @@ void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoad
       return;
     }
     book.coverBmpPath = xtc->getThumbBmpPath();
-    if (Storage.exists(xtc->getThumbBmpPath(UITheme::coverThumbPixels(height)).c_str())) return;
+    if (!hadThumb && Storage.exists(xtc->getThumbBmpPath(UITheme::coverThumbPixels(height)).c_str())) return;
     if (!showingLoading) {
       showingLoading = true;
       popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
       GUI.fillPopupProgress(renderer, popupRect, 0);
     }
-    if (xtc->load() && xtc->generateThumbBmp(UITheme::coverThumbPixels(height))) {
+    if ((xtc->load() && xtc->generateThumbBmp(UITheme::coverThumbPixels(height))) || hadThumb) {
       return;
     }
   }
@@ -178,7 +190,8 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     }
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, thumbHeight);
-      if (!Storage.exists(coverPath.c_str())) {
+      const bool hadThumb = Storage.exists(coverPath.c_str());
+      if (!hadThumb || thumbWantsGrayCopy(book, coverPath)) {
         // If epub/txt/md, try to load the metadata for title/author and cover
         if (FsHelpers::hasReflowableBookExtension(book.path)) {
           Epub epub(book.path, "/.crosspoint");
@@ -195,7 +208,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           // so read the cover location straight from the EPUB.
           bool success = cacheLoaded ? epub.generateThumbBmp(UITheme::coverThumbPixels(thumbHeight))
                                      : epub.generateThumbBmpFromSource(UITheme::coverThumbPixels(thumbHeight));
-          if (!success) {
+          if (!success && !hadThumb) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
             book.coverBmpPath = "";
           }
@@ -212,7 +225,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
             bool success = xtc.generateThumbBmp(UITheme::coverThumbPixels(thumbHeight));
-            if (!success) {
+            if (!success && !hadThumb) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
               book.coverBmpPath = "";
             }
@@ -527,6 +540,12 @@ void HomeActivity::render(RenderLock&&) {
     coverRendered = false;
   }
   bool bufferRestored = coverRendered && coverBufferStored && restoreCoverBuffer();
+  // A snapshot that cannot be pasted back (taken without the gray levels a
+  // gray frame needs) is dropped, so the theme draws the cover from its file.
+  if (coverRendered && coverBufferStored && !bufferRestored) {
+    freeCoverBuffer();
+    coverRendered = false;
+  }
 
   // Band spans topPadding..homeTopPadding: the cover tile starts at the fixed
   // homeTopPadding, so the height must shrink by topPadding or the band (and a

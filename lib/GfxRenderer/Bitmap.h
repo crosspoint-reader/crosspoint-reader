@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 
 #include <cstdint>
+#include <string>
 
 #include "BitmapHelpers.h"
 
@@ -65,8 +66,10 @@ class Bitmap {
  public:
   static const char* errorToString(BmpReaderError err);
 
-  explicit Bitmap(HalFile& file, bool dithering = false, bool originalThresholds = false)
-      : file(file), dithering(dithering), originalThresholds(originalThresholds) {}
+  // baseOffset: where the bitmap starts in the file (a second bitmap stored
+  // after the first one's pixel data starts at that one's dataEnd()).
+  explicit Bitmap(HalFile& file, bool dithering = false, bool originalThresholds = false, uint32_t baseOffset = 0)
+      : file(file), dithering(dithering), originalThresholds(originalThresholds), baseOffset(baseOffset) {}
   ~Bitmap();
   BmpReaderError parseHeaders();
   BmpReaderError readNextRow(uint8_t* data, uint8_t* rowBuffer) const;
@@ -80,6 +83,13 @@ class Bitmap {
   int getRowBytes() const { return rowBytes; }
   bool is1Bit() const { return bpp == 1; }
   uint16_t getBpp() const { return bpp; }
+  HalFile& source() const { return file; }
+  // File offset just past the pixel data.
+  uint32_t dataEnd() const { return bfOffBits + static_cast<uint32_t>(rowBytes) * static_cast<uint32_t>(height); }
+  // True for a 1-bit thumbnail at `path` with nothing stored after its pixel
+  // data and no "<path>.nogray" marker beside it: its 8-bit gray copy has not
+  // been attempted yet.
+  static bool lacksGrayCopy(const std::string& path);
 
  private:
   static uint16_t readLE16(HalFile& f);
@@ -88,6 +98,7 @@ class Bitmap {
   HalFile& file;
   bool dithering = false;
   bool originalThresholds = false;
+  uint32_t baseOffset = 0;
   int width = 0;
   int height = 0;
   bool topDown = false;

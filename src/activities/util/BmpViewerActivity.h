@@ -8,6 +8,8 @@
 
 class BmpViewerActivity final : public Activity {
  public:
+  // Runs its own grayscale passes over a full-screen image.
+  bool wantsGrayFrame() const override { return false; }
   BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath);
 
   void onEnter() override;

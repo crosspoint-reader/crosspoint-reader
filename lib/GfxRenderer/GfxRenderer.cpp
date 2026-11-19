@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <vector>
 
-#if CROSSPOINT_GRAY_SETTLE
+#if CROSSPOINT_GRAY_UI
 #include <esp_heap_caps.h>
 #endif
 
@@ -650,79 +650,178 @@ void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const 
                                    : mode == GRAYSCALE_MSB ? glyphBitmap::Plane::GrayMSB
                                                            : glyphBitmap::Plane::GrayLSB;
   glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, clip);
-#if CROSSPOINT_GRAY_SETTLE
-  if (graySettleActive_ && twoBit && mode == BW && state && !_stripActive) {
-    recordGlyphInk(bitmap, width, height, physical, clip.left, clip.top, clip.right, clip.bottom);
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && mode == BW && !_stripActive) {
+    recordGlyphInk(bitmap, width, height, physical, twoBit, state, clip.left, clip.top, clip.right, clip.bottom);
   }
 #endif
 }
 
-#if CROSSPOINT_GRAY_SETTLE
-// 2-bit coverage 1..3 as 16-level ink 5, 10, 15. Overlapping glyphs keep the darker.
+#if CROSSPOINT_GRAY_UI
+uint8_t GfxRenderer::grayUnder(const int px, const int py) const {
+  const uint8_t ink = grayInk_[py * panelWidth + px];
+  if (ink != GRAY_FOLLOWS_FB) return ink;
+  return (frameBuffer[py * panelWidthBytes + (px >> 3)] & (0x80 >> (px & 7))) ? 0 : 15;
+}
+
+void GfxRenderer::grayBlend(const int x, const int y, const int target, const int coverage) const {
+  if (coverage <= 0 || x < clipLeft_ || y < clipTop_ || x >= clipRight_ || y >= clipBottom_) return;
+  int px, py;
+  rotateCoordinates(orientation, x, y, &px, &py, panelWidth, panelHeight);
+  if (px < 0 || px >= panelWidth || py < 0 || py >= panelHeight) return;
+  const int under = grayUnder(px, py);
+  grayInk_[py * panelWidth + px] = static_cast<uint8_t>(under + ((target - under) * std::min(coverage, 256)) / 256);
+}
+
+// Glyph coverage 1..3 of 3 (a 1-bit glyph is all 3) blended over what is under
+// it: black text toward full ink, white text toward paper. The framebuffer
+// already holds the glyph as solid, so where nothing recorded a level the page
+// under black text is taken as white and under white text as black.
 void GfxRenderer::recordGlyphInk(const uint8_t* bitmap, const int width, const int height,
-                                 const glyphBitmap::Frame& physical, int left, int top, int right, int bottom) const {
+                                 const glyphBitmap::Frame& physical, const bool twoBit, const bool state, int left,
+                                 int top, int right, int bottom) const {
   left = std::max(left, 0);
   top = std::max(top, 0);
   right = std::min(right, width);
   bottom = std::min(bottom, height);
-  const int stride = panelWidth / 2;
+  const int target = state ? 15 : 0;
   for (int y = top; y < bottom; ++y) {
     for (int x = left; x < right; ++x) {
       const int source = y * width + x;
-      const uint8_t ink = static_cast<uint8_t>(((bitmap[source >> 2] >> (6 - (source & 3) * 2)) & 3) * 5);
-      if (ink == 0) continue;
+      const int coverage = twoBit ? (bitmap[source >> 2] >> (6 - (source & 3) * 2)) & 3
+                                  : ((bitmap[source >> 3] >> (7 - (source & 7))) & 1) * 3;
+      if (coverage == 0) continue;
       const int px = physical.x + x * physical.dxX + y * physical.dyX;
       const int py = physical.y + x * physical.dxY + y * physical.dyY;
       if (px < 0 || px >= panelWidth || py < 0 || py >= panelHeight) continue;
-      uint8_t& byte = grayInk_[py * stride + (px >> 1)];
-      const int shift = (px & 1) ? 0 : 4;
-      if (((byte >> shift) & 0x0F) < ink) byte = static_cast<uint8_t>((byte & ~(0x0F << shift)) | (ink << shift));
+      uint8_t& ink = grayInk_[py * panelWidth + px];
+      const int under = ink != GRAY_FOLLOWS_FB ? ink : 15 - target;
+      ink = static_cast<uint8_t>(under + ((target - under) * coverage) / 3);
     }
   }
 }
 
-// A fill replaces whatever glyphs were under it. Bounds are inclusive panel pixels.
-void GfxRenderer::clearGlyphInk(const int phyX0, const int phyY0, const int phyX1, const int phyY1) const {
-  const int stride = panelWidth / 2;
+void GfxRenderer::grayFill(const int phyX0, const int phyY0, const int phyX1, const int phyY1, const uint8_t ink,
+                           const bool preserve) const {
   for (int py = phyY0; py <= phyY1; ++py) {
-    uint8_t* row = grayInk_ + py * stride;
-    int px = phyX0;
-    if (px & 1) row[px++ >> 1] &= 0xF0;
-    for (; px + 1 <= phyX1; px += 2) row[px >> 1] = 0;
-    if (px == phyX1) row[px >> 1] &= 0x0F;
+    uint8_t* row = grayInk_ + py * panelWidth;
+    if (!preserve) {
+      memset(row + phyX0, ink, static_cast<size_t>(phyX1 - phyX0 + 1));
+      continue;
+    }
+    for (int px = phyX0; px <= phyX1; ++px) {
+      const uint8_t under = grayUnder(px, py);
+      if (under < ink) row[px] = ink;
+    }
   }
 }
 
-bool GfxRenderer::beginGraySettle() const {
-  if (graySettleActive_ || !frameBuffer || _stripActive || renderMode != BW || !display.supportsGray16Image()) {
+// The row spans of an arc cover pixels whose centre is within `radius` of the
+// corner centre; the shape's true edge runs half a pixel further out. The
+// pixels in that last half-step, which the spans left alone, get part ink.
+void GfxRenderer::grayArcEdge(const int radius, const int innerRadius, const int cx, const int cy, const int xDir,
+                              const int yDir, const int ink) const {
+  for (int dy = 0; dy <= radius; ++dy) {
+    for (int dx = 0; dx <= radius; ++dx) {
+      const float d = sqrtf(static_cast<float>(dx * dx + dy * dy));
+      int coverage = 0;
+      if (d > radius) {
+        coverage = static_cast<int>((radius + 1 - d) * 256);
+      } else if (innerRadius > 0 && d < innerRadius) {
+        coverage = static_cast<int>((d - innerRadius + 1) * 256);
+      }
+      if (coverage > 0) grayBlend(cx + xDir * dx, cy + yDir * dy, ink, coverage);
+    }
+  }
+}
+
+bool GfxRenderer::beginGrayFrame() const {
+  if (grayFrameActive_ || !frameBuffer || _stripActive || renderMode != BW || !display.supportsGray16Image()) {
     return false;
   }
-  const size_t bytes = static_cast<size_t>(panelWidth / 2) * panelHeight;
-  if (!grayInk_) grayInk_ = static_cast<uint8_t*>(heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-  if (!grayInk_) return false;
-  memset(grayInk_, 0, bytes);
-  graySettleActive_ = true;
+  const size_t pixels = static_cast<size_t>(panelWidth) * panelHeight;
+  if (!grayInk_) grayInk_ = static_cast<uint8_t*>(heap_caps_malloc(pixels, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!grayImage_) grayImage_ = static_cast<uint8_t*>(heap_caps_malloc(pixels / 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!grayInk_ || !grayImage_) return false;
+  memset(grayInk_, GRAY_FOLLOWS_FB, pixels);
+  grayFrameActive_ = true;
   return true;
 }
 
-bool GfxRenderer::endGraySettle(const bool show, const bool fast) const {
-  if (!graySettleActive_) return false;
-  graySettleActive_ = false;
-  if (!show || !frameBuffer) return false;
-  // Framebuffer black is full ink unless a glyph recorded a lighter level
-  // there; framebuffer white is paper whatever was recorded (painted over).
-  uint8_t* out = grayInk_;
-  for (uint32_t i = 0; i < frameBufferSize; ++i) {
-    const uint8_t bits = frameBuffer[i];
-    for (int pair = 0; pair < 4; ++pair, ++out) {
-      const uint8_t recorded = *out;
-      uint8_t left = 0, right = 0;
-      if (!(bits & (0x80 >> (pair * 2)))) left = (recorded >> 4) ? (recorded >> 4) : 15;
-      if (!(bits & (0x40 >> (pair * 2)))) right = (recorded & 0x0F) ? (recorded & 0x0F) : 15;
-      *out = static_cast<uint8_t>((left << 4) | right);
+// Same placement as the bitmap draw that just ran: display row and column,
+// less the crop, scaled, then offset.
+void GfxRenderer::recordBitmapGray(const Bitmap& bitmap, const int x, const int y, const float scale,
+                                   const bool isScaled, const int cropPixX, const int cropPixY) const {
+  Bitmap gray(bitmap.source(), false, false, bitmap.dataEnd());
+  if (gray.parseHeaders() != BmpReaderError::Ok || gray.getBpp() != 8 || gray.getWidth() != bitmap.getWidth() ||
+      gray.getHeight() != bitmap.getHeight()) {
+    return;
+  }
+  const int width = gray.getWidth();
+  // Night mode complements every level on its way to the panel, so an image's
+  // levels are stored complemented to come out positive, as its framebuffer
+  // bits are (see preserveImagePolarity).
+  const bool preInvert = display.isInverted();
+  auto scratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(width) + gray.getRowBytes());
+  if (!scratch) return;
+  uint8_t* const lum = scratch.get();
+  uint8_t* const raw = lum + width;
+  for (int row = cropPixY; row < gray.getHeight() - cropPixY; ++row) {
+    int screenY = row - cropPixY;
+    if (isScaled) screenY = static_cast<int>(std::floor(screenY * scale));
+    screenY += y;
+    if (screenY < 0) continue;
+    if (screenY >= getScreenHeight()) break;
+    if (gray.readRowGray(row, lum, raw) != BmpReaderError::Ok) return;
+    for (int col = cropPixX; col < width - cropPixX; ++col) {
+      int screenX = col - cropPixX;
+      if (isScaled) screenX = static_cast<int>(std::floor(screenX * scale));
+      screenX += x;
+      if (screenX < 0) continue;
+      if (screenX >= getScreenWidth()) break;
+      grayBlend(screenX, screenY, preInvert ? lum[col] / 17 : 15 - lum[col] / 17, 256);
     }
   }
-  return display.displayGray16Image(grayInk_, fast);
+}
+
+bool GfxRenderer::displayGrayFrame(const HalDisplay::RefreshMode refreshMode) const {
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  const auto shown = [](const uint8_t ink) { return ink; };
+#else
+  // Edge pixels are shown at one of the two levels a book page's anti-aliasing
+  // uses (GRAY_EDGE_LIGHT_INK, GRAY_EDGE_DARK_INK); anything lighter than the
+  // light one is left as paper. Night mode complements the image on its way
+  // out, so there the levels are picked on the complemented ink.
+  static constexpr uint8_t kEdgeInk[16] = {0,
+                                           0,
+                                           0,
+                                           0,
+                                           GRAY_EDGE_LIGHT_INK,
+                                           GRAY_EDGE_LIGHT_INK,
+                                           GRAY_EDGE_LIGHT_INK,
+                                           GRAY_EDGE_LIGHT_INK,
+                                           GRAY_EDGE_LIGHT_INK,
+                                           GRAY_EDGE_DARK_INK,
+                                           GRAY_EDGE_DARK_INK,
+                                           GRAY_EDGE_DARK_INK,
+                                           GRAY_EDGE_DARK_INK,
+                                           GRAY_EDGE_DARK_INK,
+                                           15,
+                                           15};
+  const bool inverted = display.isInverted();
+  const auto shown = [inverted](const uint8_t ink) {
+    return inverted ? static_cast<uint8_t>(15 - kEdgeInk[15 - ink]) : kEdgeInk[ink];
+  };
+#endif
+  // Two pixels per byte, left one in the high nibble.
+  uint8_t* out = grayImage_;
+  for (int py = 0; py < panelHeight; ++py) {
+    for (int px = 0; px < panelWidth; px += 2) {
+      *out++ = static_cast<uint8_t>((shown(grayUnder(px, py)) << 4) | shown(grayUnder(px + 1, py)));
+    }
+  }
+  // FAST drives the pixels that changed; the cleanup modes drive every pixel.
+  return display.displayGray16Image(grayImage_, refreshMode == HalDisplay::FAST_REFRESH);
 }
 #endif
 
@@ -758,6 +857,10 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
     target = _stripBuf;
     rowY = static_cast<uint32_t>(phyY - _stripY0);
   }
+
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && !_stripActive) grayInk_[phyY * panelWidth + phyX] = GRAY_FOLLOWS_FB;
+#endif
 
   // Calculate byte position and bit position
   const uint32_t byteIndex = rowY * panelWidthBytes + (phyX / 8);
@@ -1093,6 +1196,9 @@ void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const
 
     fillRect(left, py, width, 1, state);
   }
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_) grayArcEdge(outerRadius, innerRadius, cx, cy, xDir, yDir, state ? 15 : 0);
+#endif
 };
 
 // Border is inside the rectangle, rounded corners
@@ -1194,11 +1300,17 @@ void GfxRenderer::drawPixelDither<Color::White>(const int x, const int y) const 
 template <>
 void GfxRenderer::drawPixelDither<Color::LightGray>(const int x, const int y) const {
   drawPixel(x, y, x % 2 == 0 && y % 2 == 0);
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  if (grayFrameActive_ && !uiScaleActive_) grayBlend(x, y, GRAY_LIGHT_INK, 256);
+#endif
 }
 
 template <>
 void GfxRenderer::drawPixelDither<Color::DarkGray>(const int x, const int y) const {
   drawPixel(x, y, (x + y) % 2 == 0);  // TODO: maybe find a better pattern?
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  if (grayFrameActive_ && !uiScaleActive_) grayBlend(x, y, GRAY_DARK_INK, 256);
+#endif
 }
 
 void GfxRenderer::fillRectDither(int x, int y, int width, int height, Color color, const DitherMode mode) const {
@@ -1265,8 +1377,18 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
 
   // Bit/byte layout: MSB-first within a byte, so phyX → bit (7 - (phyX & 7)).
   // Head and tail masks cover only the in-rect bits of the first/last byte.
-#if CROSSPOINT_GRAY_SETTLE
-  if (graySettleActive_ && !_stripActive && mode == DitherMode::Replace) clearGlyphInk(phyX0, phyY0, phyX1, phyY1);
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && !_stripActive) {
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+    // Solid fills follow the framebuffer; the dither colors become a flat level.
+    const uint8_t ink = C == Color::LightGray ? GRAY_LIGHT_INK : C == Color::DarkGray ? GRAY_DARK_INK : GRAY_FOLLOWS_FB;
+    grayFill(phyX0, phyY0, phyX1, phyY1, ink, ink != GRAY_FOLLOWS_FB && mode == DitherMode::PreserveInk);
+#else
+    // Every fill, dithered ones included, follows the framebuffer. A dither
+    // added over existing ink leaves that ink's levels alone.
+    if (mode != DitherMode::PreserveInk) grayFill(phyX0, phyY0, phyX1, phyY1, GRAY_FOLLOWS_FB, false);
+#endif
+  }
 #endif
 
   const int byteStart = phyX0 >> 3;
@@ -1449,6 +1571,23 @@ void GfxRenderer::maskRoundedRectOutsideCorners(int x, int y, int width, int hei
           drawPixelDither<Color::DarkGray>(x + width - 1 - dx, y + height - 1 - dy);  // bottom-right
         }
       }
+#if CROSSPOINT_GRAY_UI
+      else if (grayFrameActive_ &&
+               (CROSSPOINT_GRAY_UI_FULL_TONE || color == Color::Black || color == Color::White)) {
+        // Kept pixels within half a pixel of the cut take part of the mask color.
+        const int coverage = static_cast<int>((sqrtf(static_cast<float>(tx * tx + ty * ty)) - rr + 0.5f) * 256);
+        if (coverage > 0) {
+          const int ink = color == Color::Black       ? 15
+                          : color == Color::DarkGray  ? GRAY_DARK_INK
+                          : color == Color::LightGray ? GRAY_LIGHT_INK
+                                                      : 0;
+          grayBlend(x + dx, y + dy, ink, coverage);
+          grayBlend(x + width - 1 - dx, y + dy, ink, coverage);
+          grayBlend(x + dx, y + height - 1 - dy, ink, coverage);
+          grayBlend(x + width - 1 - dx, y + height - 1 - dy, ink, coverage);
+        }
+      }
+#endif
     }
   }
 }
@@ -1490,6 +1629,16 @@ void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const
       fillRectDither(x0, py, width, 1, color);
     }
   }
+#if CROSSPOINT_GRAY_UI
+  // Without full tone the dither colors stay a dither, edge included.
+  if (grayFrameActive_ && (CROSSPOINT_GRAY_UI_FULL_TONE || color == Color::Black || color == Color::White)) {
+    const int ink = color == Color::Black       ? 15
+                    : color == Color::DarkGray  ? GRAY_DARK_INK
+                    : color == Color::LightGray ? GRAY_LIGHT_INK
+                                                : 0;
+    grayArcEdge(maxRadius, 0, cx, cy, xDir, yDir, ink);
+  }
+#endif
 }
 
 void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, const int height, const int cornerRadius,
@@ -1635,6 +1784,68 @@ static bool smoothInk(const InkAt& inkAt, const int srcW, const int srcH, const 
   return (upper * (256 - fy) + lower * fy) * 2 >= 256 * 256;
 }
 
+// The same bilinear coverage as smoothInk, 0..256 instead of thresholded.
+template <typename InkAt>
+static int smoothCoverage(const InkAt& inkAt, const int srcW, const int srcH, const int dstX, const int dstY,
+                          const int dstW, const int dstH) {
+  const int sx = ((2 * dstX + 1) * srcW * 128) / dstW - 128;
+  const int sy = ((2 * dstY + 1) * srcH * 128) / dstH - 128;
+  const int x0 = sx >> 8, y0 = sy >> 8, fx = sx & 0xFF, fy = sy & 0xFF;
+  const auto at = [&](const int x, const int y) {
+    return x >= 0 && y >= 0 && x < srcW && y < srcH && inkAt(x, y) ? 1 : 0;
+  };
+  const int upper = at(x0, y0) * (256 - fx) + at(x0 + 1, y0) * fx;
+  const int lower = at(x0, y0 + 1) * (256 - fx) + at(x0 + 1, y0 + 1) * fx;
+  return (upper * (256 - fy) + lower * fy) >> 8;
+}
+
+void GfxRenderer::plotCoverage(const int x, const int y, const bool black, const int coverage) const {
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && !_stripActive && coverage > 0 && coverage < 256) {
+    const int target = black ? 15 : 0;
+    if (coverage * 2 < 256) {
+      grayBlend(x, y, target, coverage);  // too light for the framebuffer: gray only
+      return;
+    }
+    // drawPixel() makes the pixel follow the framebuffer, so take what is
+    // under it first and record the blend afterwards.
+    int phyX, phyY;
+    rotateCoordinates(orientation, x, y, &phyX, &phyY, panelWidth, panelHeight);
+    const bool visible = phyX >= 0 && phyX < panelWidth && phyY >= 0 && phyY < panelHeight && x >= clipLeft_ &&
+                         y >= clipTop_ && x < clipRight_ && y < clipBottom_;
+    if (!visible) return;
+    const int under = grayUnder(phyX, phyY);
+    drawPixel(x, y, black);
+    grayInk_[phyY * panelWidth + phyX] = static_cast<uint8_t>(under + ((target - under) * coverage) / 256);
+    return;
+  }
+#endif
+  if (coverage * 2 >= 256) drawPixel(x, y, black);
+}
+
+void GfxRenderer::drawMask(const uint8_t* bits, const int srcWidth, const int srcHeight, const bool inkIsZero, int x,
+                           int y, int width, int height, const bool black) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    drawMask(bits, srcWidth, srcHeight, inkIsZero, x, y, width, height, black);
+    return;
+  }
+  if (!bits || srcWidth <= 0 || srcHeight <= 0 || width <= 0 || height <= 0) return;
+  const int rowBytes = (srcWidth + 7) / 8;
+  const auto inkAt = [&](const int col, const int row) {
+    return (((bits[row * rowBytes + (col >> 3)] >> (7 - (col & 7))) & 1) == 0) == inkIsZero;
+  };
+  const bool exact = width == srcWidth && height == srcHeight;
+  for (int row = 0; row < height; ++row) {
+    for (int col = 0; col < width; ++col) {
+      const int coverage =
+          exact ? (inkAt(col, row) ? 256 : 0) : smoothCoverage(inkAt, srcWidth, srcHeight, col, row, width, height);
+      if (coverage > 0) plotCoverage(x + col, y + row, black, coverage);
+    }
+  }
+}
+
 // drawIcon at outSize x outSize physical pixels, smoothly scaled from the
 // size x size source.
 void GfxRenderer::drawIconScaled(const uint8_t bitmap[], const int x, const int y, const int size,
@@ -1645,10 +1856,9 @@ void GfxRenderer::drawIconScaled(const uint8_t bitmap[], const int x, const int 
   };
   for (int row = 0; row < outSize; row++) {
     for (int col = 0; col < outSize; col++) {
-      const bool ink = size == outSize ? inkAt(col, row) : smoothInk(inkAt, size, size, col, row, outSize, outSize);
-      if (ink) {
-        drawPixel(x + (outSize - 1 - row), y + col, true);
-      }
+      const int coverage =
+          size == outSize ? (inkAt(col, row) ? 256 : 0) : smoothCoverage(inkAt, size, size, col, row, outSize, outSize);
+      if (coverage > 0) plotCoverage(x + (outSize - 1 - row), y + col, true, coverage);
     }
   }
 }
@@ -1794,6 +2004,11 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, i
     }
   }
 
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  if (grayFrameActive_ && renderMode == BW && bitmap.is1Bit() && !whiteAsTransparent) {
+    recordBitmapGray(bitmap, x, y, scale, isScaled, cropPixX, cropPixY);
+  }
+#endif
   const int sourceWidth = bitmap.getWidth() - cropPixX * 2;
   const int sourceHeight = bitmap.getHeight() - cropPixY * 2;
   const int renderedWidth = isScaled ? static_cast<int>(std::floor((sourceWidth - 1) * scale)) + 1 : sourceWidth;
@@ -1871,6 +2086,9 @@ bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidt
     }
   }
 
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  if (grayFrameActive_ && renderMode == BW) recordBitmapGray(bitmap, x, y, scale, isScaled, 0, 0);
+#endif
   const int renderedWidth =
       isScaled ? static_cast<int>(std::floor((bitmap.getWidth() - 1) * scale)) + 1 : bitmap.getWidth();
   const int renderedHeight =
@@ -1996,8 +2214,8 @@ void GfxRenderer::clearScreen(const uint8_t color) const {
     memset(_stripBuf, color, static_cast<size_t>(panelWidthBytes) * _stripRows);
     return;
   }
-#if CROSSPOINT_GRAY_SETTLE
-  if (graySettleActive_) memset(grayInk_, 0, static_cast<size_t>(panelWidth / 2) * panelHeight);
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_) memset(grayInk_, GRAY_FOLLOWS_FB, static_cast<size_t>(panelWidth) * panelHeight);
 #endif
   display.clearScreen(color);
 }
@@ -2048,20 +2266,20 @@ HalDisplay::RefreshMode GfxRenderer::applyPromotedRefresh(const HalDisplay::Refr
 }
 
 void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
-#if CROSSPOINT_GRAY_SETTLE
-  if (graySettleActive_) return;  // endGraySettle() shows the frame
-#endif
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   refreshMode = applyPromotedRefresh(refreshMode);
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && displayGrayFrame(refreshMode)) return;
+#endif
   display.displayBuffer(refreshMode, fadingFix);
 }
 
 void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const {
-#if CROSSPOINT_GRAY_SETTLE
-  if (graySettleActive_) return;
-#endif
   refreshMode = applyPromotedRefresh(refreshMode);
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && displayGrayFrame(refreshMode)) return;
+#endif
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
   if (fadingFix) {
@@ -2119,6 +2337,9 @@ void GfxRenderer::writeFramebufferRegion(int x, int y, int w, int h, const uint8
   if (!mem.valid) return;
 
   const size_t rowBytes = mem.w / 8;  // exact: mem.w is a multiple of 8
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_) grayFill(mem.x, mem.y, mem.x + mem.w - 1, mem.y + mem.h - 1, GRAY_FOLLOWS_FB, false);
+#endif
 
   for (uint16_t row = 0; row < mem.h; ++row) {
     const uint8_t* srcRow = src + (static_cast<size_t>(row) * rowBytes);
@@ -2358,7 +2579,13 @@ size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
   const int byteX1 = x1 / 8;
   const int bytesPerRow = byteX1 - byteX0 + 1;
   const int rowCount = y1 - y0 + 1;
-  return static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
+  const size_t fbBytes = static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
+#if CROSSPOINT_GRAY_UI
+  // A snapshot taken during a gray frame also keeps each pixel's level: a
+  // flag byte, then one byte per pixel of the same byte-aligned rectangle.
+  if (display.supportsGray16Image()) return fbBytes + 1 + fbBytes * 8;
+#endif
+  return fbBytes;
 }
 
 bool GfxRenderer::copyRegionToBuffer(int lx, int ly, int lw, int lh, uint8_t* buf, size_t bufSize) const {
@@ -2381,6 +2608,18 @@ bool GfxRenderer::copyRegionToBuffer(int lx, int ly, int lw, int lh, uint8_t* bu
     const uint8_t* src = frameBuffer + (y0 + row) * panelWidthBytes + byteX0;
     memcpy(buf + row * bytesPerRow, src, bytesPerRow);
   }
+#if CROSSPOINT_GRAY_UI
+  if (bufSize >= needed + 1 + needed * 8) {
+    uint8_t* levels = buf + needed;
+    *levels++ = grayFrameActive_ ? 1 : 0;
+    if (grayFrameActive_) {
+      for (int row = 0; row < rowCount; row++) {
+        memcpy(levels + static_cast<size_t>(row) * bytesPerRow * 8, grayInk_ + (y0 + row) * panelWidth + byteX0 * 8,
+               static_cast<size_t>(bytesPerRow) * 8);
+      }
+    }
+  }
+#endif
   return true;
 }
 
@@ -2400,6 +2639,17 @@ bool GfxRenderer::copyBufferToRegion(int lx, int ly, int lw, int lh, const uint8
   const int rowCount = y1 - y0 + 1;
   const size_t needed = static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
   if (bufSize < needed || !frameBuffer || !buf) return false;
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_) {
+    // A snapshot without levels cannot serve a gray frame: the caller redraws.
+    if (bufSize < needed + 1 + needed * 8 || buf[needed] != 1) return false;
+    const uint8_t* levels = buf + needed + 1;
+    for (int row = 0; row < rowCount; row++) {
+      memcpy(grayInk_ + (y0 + row) * panelWidth + byteX0 * 8, levels + static_cast<size_t>(row) * bytesPerRow * 8,
+             static_cast<size_t>(bytesPerRow) * 8);
+    }
+  }
+#endif
   for (int row = 0; row < rowCount; row++) {
     uint8_t* dst = frameBuffer + (y0 + row) * panelWidthBytes + byteX0;
     memcpy(dst, buf + row * bytesPerRow, bytesPerRow);

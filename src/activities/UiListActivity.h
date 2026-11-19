@@ -23,7 +23,6 @@ class UiListActivity : public Activity, protected UiAppHost {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool wantsGraySettle() const override { return true; }
 
  protected:
   // Base-owned row action; subclass-registered actions start at ACTION_USER.
