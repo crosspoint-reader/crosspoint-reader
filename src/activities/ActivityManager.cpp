@@ -282,13 +282,14 @@ void ActivityManager::goToJoinNetwork() {
   replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, /*startInJoinNetwork=*/true));
 }
 
-void ActivityManager::goToSerialTransfer() {
+bool ActivityManager::goToSerialTransfer() {
   auto activity = makeUniqueNoThrow<SerialTransferActivity>(renderer, mappedInput);
   if (!activity) {
     LOG_ERR("ACT", "OOM: Serial Transfer activity");
-    return;
+    return false;
   }
   replaceActivity(std::move(activity));
+  return true;
 }
 
 void ActivityManager::goToUsbDrive() {

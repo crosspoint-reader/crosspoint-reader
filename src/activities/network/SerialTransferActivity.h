@@ -26,6 +26,7 @@ class SerialTransferActivity final : public Activity {
  private:
   static constexpr size_t MAX_PAYLOAD = 4096;
   static constexpr unsigned long FRAME_TIMEOUT_MS = 1000;
+  static constexpr size_t REPLY_HEAD = 6;  // sync(2) + status + request id + length(2)
 
   enum class Parse : uint8_t { Sync0, Sync1, Header, Payload, Crc };
 
@@ -33,6 +34,7 @@ class SerialTransferActivity final : public Activity {
   void handleFrame();
   void reply(uint8_t status, const uint8_t* payload = nullptr, size_t len = 0);
   void closeFiles();
+  void setAction(std::string text);
 
   // Commands; each returns a status code (0 = OK) and fills txBuf/txLen.
   uint8_t cmdList(const uint8_t* p, size_t n);
@@ -48,9 +50,10 @@ class SerialTransferActivity final : public Activity {
   uint8_t cmdDelete(const uint8_t* p, size_t n);
 
   Parse parse = Parse::Sync0;
-  uint8_t header[3] = {0, 0, 0};
+  uint8_t header[4] = {0, 0, 0, 0};
   size_t headerGot = 0;
   uint8_t cmd = 0;
+  uint8_t reqId = 0;  // echoed in the reply so the host can tell replies apart
   size_t rxLen = 0;
   size_t rxGot = 0;
   uint8_t crcBytes[4] = {0, 0, 0, 0};
@@ -71,6 +74,10 @@ class SerialTransferActivity final : public Activity {
   std::string apiOut;
 
   uint32_t pendingBaud = 0;
+  unsigned long baudConfirmDeadline = 0;  // 0 = no speed change awaiting a valid frame
+  bool haveEndResult = false;             // result of the last WRITE_END, kept for a retried request
+  uint8_t endReqId = 0;
+  uint8_t endStatus = 0;
   bool hostSeen = false;
   bool dirty = true;
   bool exitRequested = false;

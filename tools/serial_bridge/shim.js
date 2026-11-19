@@ -45,7 +45,7 @@
   // ---- serial link ----
   const link = {
     received: 0, port: null, reader: null, writer: null, rx: new Uint8Array(0), waiter: null, reading: false, baud: 0,
-    chain: Promise.resolve(),
+    chain: Promise.resolve(), ops: Promise.resolve(), nextId: 0,
 
     async open(port, baud) {
       await port.open({ baudRate: baud, bufferSize: 1 << 16 });
@@ -71,23 +71,25 @@
       try { this.writer.releaseLock(); } catch (e) { /* */ }
       try { await this.port.close(); } catch (e) { /* */ }
     },
-    // Waits until a full response frame is buffered, scanning for the sync bytes.
-    async recv(timeout) {
+    // Waits until the reply to request `id` is buffered, scanning for the sync bytes.
+    // Replies carrying another id (late answers to an earlier attempt) are dropped.
+    async recv(timeout, id) {
       const deadline = Date.now() + timeout;
       for (;;) {
         const b = this.rx;
         let i = 0;
         while (i + 1 < b.length && !(b[i] === 0xA5 && b[i + 1] === 0x5A)) i++;
         if (i + 1 >= b.length) { this.rx = b.slice(Math.max(0, b.length - 1)); }
-        else if (i + 5 <= b.length) {
-          const len = b[i + 3] | (b[i + 4] << 8);
+        else if (i + 6 <= b.length) {
+          // Reply layout: A5 5A | status | id | len(u16 LE) | payload | crc32
+          const len = b[i + 4] | (b[i + 5] << 8);
           if (len > 4096) { this.rx = b.slice(i + 2); continue; }
-          if (i + 5 + len + 4 <= b.length) {
-            const head = b.slice(i + 2, i + 5), payload = b.slice(i + 5, i + 5 + len);
-            const crc = (b[i + 5 + len] | (b[i + 6 + len] << 8) | (b[i + 7 + len] << 16) | (b[i + 8 + len] << 24)) >>> 0;
-            this.rx = b.slice(i + 9 + len);
-            if (crc === crc32(head, payload)) return { status: head[0], payload };
-            continue;  // corrupt: keep scanning
+          if (i + 6 + len + 4 <= b.length) {
+            const head = b.slice(i + 2, i + 6), payload = b.slice(i + 6, i + 6 + len);
+            const crc = (b[i + 6 + len] | (b[i + 7 + len] << 8) | (b[i + 8 + len] << 16) | (b[i + 9 + len] << 24)) >>> 0;
+            this.rx = b.slice(i + 10 + len);
+            if (crc === crc32(head, payload) && head[1] === id) return { status: head[0], payload };
+            continue;  // corrupt or for another request: keep scanning
           }
         }
         const left = deadline - Date.now();
@@ -99,14 +101,16 @@
     call(cmd, payload = new Uint8Array(0), opt = {}) {
       const run = async () => {
         const timeout = opt.timeout || 3000, retries = opt.retries || 3;
-        const head = new Uint8Array([cmd, payload.length & 255, payload.length >> 8]);
+        // One id per request, reused by its retries so a late reply to an earlier attempt still matches.
+        this.nextId = (this.nextId % 255) + 1;
+        const id = this.nextId;
+        const head = new Uint8Array([cmd, id, payload.length & 255, payload.length >> 8]);
         const frame = cat(new Uint8Array([0xA5, 0x5A]), head, payload, u32(crc32(head, payload)));
         let last;
         for (let a = 0; a < retries; a++) {
           try {
-            this.rx = new Uint8Array(0);
             await this.writer.write(frame);
-            const r = await this.recv(timeout);
+            const r = await this.recv(timeout, id);
             if (r.status !== 0) throw new DeviceError(r.status, opt.what);
             return r.payload;
           } catch (e) {
@@ -118,6 +122,13 @@
       };
       const p = this.chain.then(run, run);
       this.chain = p.catch(() => {});
+      return p;
+    },
+    // Runs a whole multi-frame operation (open/read/close, open/write/commit, API + body reads)
+    // without any other operation touching the reader's single file handle or API buffer.
+    exclusive(fn) {
+      const p = this.ops.then(fn, fn);
+      this.ops = p.catch(() => {});
       return p;
     },
   };
@@ -140,7 +151,7 @@
   overlay.id = 'cpx';
   overlay.innerHTML = `<div class="box"><h2>CrossPoint serial file manager</h2>
     <p id="cpx-text">Connect the reader's USB-C cable, then choose its serial port.</p>
-    <p><button id="cpx-btn">Choose serial port</button></p><p class="msg" id="cpx-msg"></p></div>`;
+    <p><button id="cpx-btn">Choose serial port</button> <button id="cpx-cancel" hidden>Cancel</button></p><p class="msg" id="cpx-msg"></p></div>`;
   const badge = document.createElement('div');
   badge.id = 'cpx-badge'; badge.hidden = true;
   const transfer = document.createElement('div');
@@ -151,35 +162,55 @@
   const setMsg = (t) => { const m = $('#cpx-msg'); if (m) m.textContent = t || ''; };
   const showProgress = (t) => { transfer.hidden = !t; transfer.textContent = t || ''; };
 
+  let handshakeCancelled = false;
+  const showChooser = (msg) => {
+    $('#cpx-text').textContent = "Connect the reader's USB-C cable, then choose its serial port.";
+    $('#cpx-btn').hidden = false; $('#cpx-cancel').hidden = true;
+    setMsg(msg);
+  };
+  async function abandon(msg) {
+    try { await link.close(); } catch (e) { /* already closed */ }
+    showChooser(msg);
+  }
+  // Tries HELLO until the reader answers, the user cancels or `limitMs` passes.
+  async function handshake(timeout, limitMs, progress) {
+    const end = limitMs ? Date.now() + limitMs : Infinity;
+    for (let attempt = 1; !handshakeCancelled && Date.now() < end; attempt++) {
+      try { await link.call(CMD.HELLO, new Uint8Array(0), { timeout, retries: 1 }); return true; }
+      catch (e) { if (progress) progress(attempt); await sleep(300); }
+    }
+    return false;
+  }
+
   // Opens the port ONCE at 115200 (the reader's start speed) and keeps retrying HELLO
   // without closing it: re-opening toggles DTR/RTS, which can reset the reader.
   async function connect(port) {
+    handshakeCancelled = false;
     $('#cpx-text').textContent = 'Opening the port... On the reader, open File Transfer > Serial Transfer.';
-    $('#cpx-btn').hidden = true;
-    try { await link.open(port, BAUD_SLOW); } catch (e) { setMsg('Cannot open the port: ' + e.message); $('#cpx-btn').hidden = false; return; }
-    let total = 0;
-    for (let attempt = 1; ; attempt++) {
-      try {
-        const before = link.received;
-        await link.call(CMD.HELLO, new Uint8Array(0), { timeout: 800, retries: 1 });
-        break;
-      } catch (e) {
-        setMsg('Waiting for the reader (Serial Transfer must be open on it)... try ' + attempt +
-               ' - bytes received from the reader so far: ' + link.received +
-               (link.received ? ' (it sends data but not valid frames: baud/pins?)' : ' (nothing at all)'));
-        await sleep(300);
-      }
-    }
+    $('#cpx-btn').hidden = true; $('#cpx-cancel').hidden = false;
+    try { await link.open(port, BAUD_SLOW); } catch (e) { showChooser('Cannot open the port: ' + e.message); return; }
+    const first = await handshake(800, 0, (attempt) => setMsg(
+      'Waiting for the reader (Serial Transfer must be open on it)... try ' + attempt +
+      ' - bytes received from the reader so far: ' + link.received +
+      (link.received ? ' (it sends data but not valid frames: baud/pins?)' : ' (nothing at all)')));
+    if (!first) { await abandon('Connection cancelled.'); return; }
+    // The reader falls back to 115200 by itself if it hears nothing valid at the new speed.
+    let fast = false;
     try {
       await link.call(CMD.BAUD, u32(BAUD_FAST));
       await sleep(50);
       await link.close();
       await link.open(port, BAUD_FAST);
-      await link.call(CMD.HELLO, new Uint8Array(0), { timeout: 1000, retries: 3 });
-    } catch (e) {
-      // Fast speed failed: fall back to the slow one (the reader may or may not have switched).
-      try { await link.close(); await link.open(port, BAUD_SLOW); await link.call(CMD.HELLO, new Uint8Array(0), { timeout: 1000, retries: 2 }); }
-      catch (e2) { setMsg('Lost the reader after the speed change: ' + e2.message); return; }
+      fast = await handshake(800, 3000);
+    } catch (e) { /* fall through to the slow speed */ }
+    if (!fast) {
+      setMsg('Fast speed failed, going back to ' + BAUD_SLOW + ' baud...');
+      try {
+        await link.close();
+        await link.open(port, BAUD_SLOW);
+        // The reader needs a few seconds to give up on the fast speed.
+        if (!(await handshake(1000, 12000))) throw new Error('no answer');
+      } catch (e) { await abandon('Lost the reader after the speed change. Choose the port again.'); return; }
     }
     connected = true;
     overlay.hidden = true;
@@ -194,6 +225,7 @@
     if (!('serial' in navigator)) { setMsg('Web Serial is not available. Use Chrome or Edge.'); return; }
     try { connect(await navigator.serial.requestPort()); } catch (e) { setMsg(e.message); }
   };
+  $('#cpx-cancel').onclick = () => { handshakeCancelled = true; };
   if (!('serial' in navigator)) {
     setMsg('This browser has no Web Serial support. Open the page in Chrome or Edge.');
   } else {
@@ -201,7 +233,8 @@
   }
 
   // ---- file operations ----
-  const norm = (p) => '/' + decodeURIComponent(p || '/').replace(/\\/g, '/').split('/').filter(Boolean).join('/');
+  // Paths arrive already decoded (URLSearchParams / form parsing): never decode them again.
+  const norm = (p) => '/' + (p || '/').replace(/\\/g, '/').split('/').filter(Boolean).join('/');
   const joinPath = (a, b) => norm(a + '/' + b);
   const parentOf = (p) => norm(p.slice(0, p.lastIndexOf('/')) || '/');
 
@@ -218,7 +251,8 @@
       if (!more) return out;
     }
   }
-  async function readFile(path, onProgress) {
+  const readFile = (path, onProgress) => link.exclusive(() => readFileOp(path, onProgress));
+  async function readFileOp(path, onProgress) {
     const o = await link.call(CMD.READ_OPEN, enc.encode(path), { what: 'open ' + path });
     const size = (o[0] | (o[1] << 8) | (o[2] << 16) | (o[3] << 24)) >>> 0;
     const parts = []; let off = 0;
@@ -233,13 +267,17 @@
     } finally { await link.call(CMD.CLOSE, new Uint8Array(0), { retries: 1 }).catch(() => {}); }
     return new Blob(parts);
   }
-  async function writeFile(path, data, overwrite, onProgress) {
+  const writeFile = (path, data, overwrite, onProgress, signal) =>
+    link.exclusive(() => writeFileOp(path, data, overwrite, onProgress, signal || {}));
+  async function writeFileOp(path, data, overwrite, onProgress, signal) {
     await link.call(CMD.WRITE_OPEN, cat(new Uint8Array([overwrite ? 1 : 0]), enc.encode(path)), { what: 'create ' + path });
     try {
       for (let off = 0; off < data.length; off += CHUNK) {
+        if (signal.aborted) throw new Error('upload cancelled');
         await link.call(CMD.WRITE, cat(u32(off), data.subarray(off, off + CHUNK)), { what: 'write' });
         if (onProgress) onProgress(Math.min(off + CHUNK, data.length), data.length);
       }
+      if (signal.aborted) throw new Error('upload cancelled');
       await link.call(CMD.WRITE_END, new Uint8Array(0), { timeout: 15000, what: 'finish ' + path });
     } catch (e) {
       await link.call(CMD.CLOSE, new Uint8Array(0), { retries: 1 }).catch(() => {});
@@ -248,7 +286,8 @@
   }
 
   // Settings / fonts are served by the reader's own web-server code (CMD_API).
-  async function callApi(method, uri, body) {
+  const callApi = (method, uri, body) => link.exclusive(() => callApiOp(method, uri, body));
+  async function callApiOp(method, uri, body) {
     const m = new Uint8Array([method]);
     const payload = body ? cat(m, enc.encode(uri), new Uint8Array([0]), enc.encode(body)) : cat(m, enc.encode(uri));
     const d = await link.call(CMD.API, payload, { timeout: 20000, what: 'request' });
@@ -258,7 +297,7 @@
     while (off < total) {
       const n = Math.min(CHUNK, total - off);
       const c = await link.call(CMD.API_READ, cat(u32(off), new Uint8Array([n & 255, n >> 8])), { what: 'read' });
-      if (!c.length) break;
+      if (!c.length) throw new Error('The reader returned a short settings/fonts reply');
       parts.push(c); off += c.length;
     }
     return { status: http, text: dec.decode(cat(...parts)) };
@@ -272,7 +311,7 @@
   const codeFor = (e) => ({ 3: 404, 4: 400, 5: 403 }[e.status] || 500);
 
   // Returns {status, body, type} for the stock web UI's endpoints.
-  async function route(method, url, body, onProgress) {
+  async function route(method, url, body, onProgress, signal) {
     const u = new URL(url, 'http://reader/');
     const q = u.searchParams;
     try {
@@ -293,7 +332,7 @@
         const file = body.get('file'), family = body.get('family');
         try {
           const data = new Uint8Array(await file.arrayBuffer());
-          await writeFile('/@font/' + family + '/' + file.name.replace(/ /g, '_'), data, true, onProgress);
+          await writeFile('/@font/' + family + '/' + file.name.replace(/ /g, '_'), data, true, onProgress, signal);
           return { status: 200, type: 'application/json', body: '{"ok":true}' };
         } catch (e) {
           if (e instanceof DeviceError) return { status: 400, type: 'application/json', body: '{"error":"Invalid font file"}' };
@@ -307,7 +346,7 @@
         const file = body.get('file');
         const data = new Uint8Array(await file.arrayBuffer());
         const overwrite = ['1', 'true'].includes(q.get('overwrite'));
-        await writeFile(joinPath(norm(q.get('path') || '/'), file.name), data, overwrite, onProgress);
+        await writeFile(joinPath(norm(q.get('path') || '/'), file.name), data, overwrite, onProgress, signal);
         return { status: 200, type: 'text/plain', body: 'File uploaded successfully: ' + file.name };
       }
       if (method === 'POST' && u.pathname === '/mkdir') {
@@ -352,12 +391,14 @@
     addEventListener(t, fn) { this['on' + t] = fn; }
     abort() { this.aborted = true; if (this.onabort) this.onabort(); }
     async send(body) {
+      const xhr = this;
       await connectedPromise;
       const onProgress = (loaded, total) => {
         if (this.upload.onprogress) this.upload.onprogress({ lengthComputable: true, loaded, total });
         showProgress('Transferring ' + Math.round(100 * loaded / total) + '%');
       };
-      const r = await route(this.method, this.url, body, onProgress);
+      const signal = { get aborted() { return xhr.aborted; } };
+      const r = await route(this.method, this.url, body, onProgress, signal);
       showProgress('');
       if (this.aborted) return;
       this.status = r.status; this.responseText = r.body; this.readyState = 4;

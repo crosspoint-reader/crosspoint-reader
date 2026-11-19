@@ -177,7 +177,17 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   }
 #endif
   if (mode == NetworkMode::SERIAL_TRANSFER) {
-    activityManager.goToSerialTransfer();
+    if (!activityManager.goToSerialTransfer()) {
+      // Out of memory: the mode picker is already closed, so leave through Home.
+      onGoHome();
+      return;
+    }
+    // Wi-Fi is still on if the user backed out of Join Network; turn it off so onExit
+    // does not restart to Home instead of entering Serial Transfer.
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+      WiFi.disconnect(false);
+      WiFi.mode(WIFI_OFF);
+    }
     return;
   }
 

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
 #include "MappedInputManager.h"
@@ -27,6 +28,9 @@ namespace {
 constexpr uint8_t SYNC0 = 0xA5;
 constexpr uint8_t SYNC1 = 0x5A;
 constexpr uint32_t DEFAULT_BAUD = 115200;
+// After a speed change the reader waits this long for a valid frame at the new speed
+// and falls back to DEFAULT_BAUD otherwise, so the host can always recover the link.
+constexpr unsigned long BAUD_CONFIRM_MS = 4000;
 
 enum Cmd : uint8_t {
   CMD_HELLO = 0x01,
@@ -136,7 +140,7 @@ void SerialTransferActivity::onEnter() {
   rxBuf = static_cast<uint8_t*>(heap_caps_malloc(MAX_PAYLOAD, MALLOC_CAP_8BIT));
   txBuf = static_cast<uint8_t*>(heap_caps_malloc(MAX_PAYLOAD + 16, MALLOC_CAP_8BIT));
   if (!rxBuf || !txBuf) {
-    lastAction = "Out of memory";
+    setAction("Out of memory");
     exitRequested = true;
     requestUpdate();
     return;
@@ -164,6 +168,12 @@ void SerialTransferActivity::onExit() {
   Activity::onExit();
 }
 
+// The render task reads lastAction under RenderLock, so every write takes it too.
+void SerialTransferActivity::setAction(std::string text) {
+  RenderLock lock;
+  lastAction = std::move(text);
+}
+
 void SerialTransferActivity::closeFiles() {
   if (readFile) readFile.close();
   if (writeFile) {
@@ -180,6 +190,13 @@ void SerialTransferActivity::loop() {
     return;
   }
   pump();
+  if (baudConfirmDeadline != 0 && millis() > baudConfirmDeadline) {
+    // Nothing valid arrived at the new speed: go back to the speed every host starts with.
+    baudConfirmDeadline = 0;
+    port().updateBaudRate(DEFAULT_BAUD);
+    while (port().available() > 0) port().read();
+    parse = Parse::Sync0;
+  }
   if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
       mappedInput.wasPressed(MappedInputManager::Button::Power) || mappedInput.wasHomeGesture()) {
     activityManager.goHome();
@@ -223,9 +240,10 @@ void SerialTransferActivity::pump() {
       }
       case Parse::Header:
         header[headerGot++] = static_cast<uint8_t>(port().read());
-        if (headerGot == 3) {
+        if (headerGot == 4) {
           cmd = header[0];
-          rxLen = static_cast<size_t>(header[1]) | (static_cast<size_t>(header[2]) << 8);
+          reqId = header[1];
+          rxLen = static_cast<size_t>(header[2]) | (static_cast<size_t>(header[3]) << 8);
           rxGot = 0;
           crcGot = 0;
           parse = rxLen > MAX_PAYLOAD ? Parse::Sync0 : (rxLen == 0 ? Parse::Crc : Parse::Payload);
@@ -242,7 +260,7 @@ void SerialTransferActivity::pump() {
         crcBytes[crcGot++] = static_cast<uint8_t>(port().read());
         if (crcGot == 4) {
           parse = Parse::Sync0;
-          if (rd32(crcBytes) == crc32(header, 3, rxBuf, rxLen)) {
+          if (rd32(crcBytes) == crc32(header, 4, rxBuf, rxLen)) {
             handleFrame();
           }  // a corrupt frame gets no reply; the host times out and retries
         }
@@ -252,20 +270,22 @@ void SerialTransferActivity::pump() {
 }
 
 void SerialTransferActivity::reply(uint8_t status, const uint8_t* payload, size_t len) {
-  if (payload && payload != txBuf + 5) memcpy(txBuf + 5, payload, len);
+  if (payload && payload != txBuf + REPLY_HEAD) memcpy(txBuf + REPLY_HEAD, payload, len);
   txBuf[0] = SYNC0;
   txBuf[1] = SYNC1;
   txBuf[2] = status;
-  txBuf[3] = static_cast<uint8_t>(len);
-  txBuf[4] = static_cast<uint8_t>(len >> 8);
-  // Layout: [0..1] sync, [2] status, [3..4] length, [5..] payload, then CRC32.
-  const uint32_t crc = crc32(txBuf + 2, 3, txBuf + 5, len);
-  wr32(txBuf + 5 + len, crc);
-  port().write(txBuf, 5 + len + 4);
+  txBuf[3] = reqId;
+  txBuf[4] = static_cast<uint8_t>(len);
+  txBuf[5] = static_cast<uint8_t>(len >> 8);
+  // Layout: [0..1] sync, [2] status, [3] request id, [4..5] length, [6..] payload, then CRC32.
+  const uint32_t crc = crc32(txBuf + 2, 4, txBuf + REPLY_HEAD, len);
+  wr32(txBuf + REPLY_HEAD + len, crc);
+  port().write(txBuf, REPLY_HEAD + len + 4);
   port().flush();
 }
 
 void SerialTransferActivity::handleFrame() {
+  baudConfirmDeadline = 0;  // a valid frame arrived at the current speed
   txLen = 0;
   uint8_t status = ST_BAD_CMD;
   const uint8_t* p = rxBuf;
@@ -274,18 +294,18 @@ void SerialTransferActivity::handleFrame() {
   switch (cmd) {
     case CMD_HELLO: {
       static const char hello[] = "CPXFER1";
-      memcpy(txBuf + 5, hello, sizeof(hello));
+      memcpy(txBuf + REPLY_HEAD, hello, sizeof(hello));
       txLen = sizeof(hello);
       if (!hostSeen) {
         hostSeen = true;
-        lastAction = "Computer connected";
+        setAction("Computer connected");
         dirty = true;
       }
       status = ST_OK;
       break;
     }
     case CMD_STATUS: {
-      const int len = snprintf(reinterpret_cast<char*>(txBuf + 5), 200,
+      const int len = snprintf(reinterpret_cast<char*>(txBuf + REPLY_HEAD), 200,
                                "{\"version\":\"%s\",\"freeHeap\":%u,\"uptime\":%lu,\"device\":\"Sticky\"}",
                                CROSSPOINT_VERSION, static_cast<unsigned>(ESP.getFreeHeap()), millis() / 1000UL);
       txLen = len > 0 ? static_cast<size_t>(len) : 0;
@@ -302,7 +322,9 @@ void SerialTransferActivity::handleFrame() {
       status = cmdRead(p, n);
       break;
     case CMD_CLOSE:
+      // Also abandons an unfinished upload: the host sends CLOSE when it gives up on one.
       if (readFile) readFile.close();
+      if (writeFile) closeFiles();
       status = ST_OK;
       break;
     case CMD_WRITE_OPEN:
@@ -312,7 +334,14 @@ void SerialTransferActivity::handleFrame() {
       status = cmdWrite(p, n);
       break;
     case CMD_WRITE_END:
-      status = cmdWriteEnd();
+      if (haveEndResult && reqId == endReqId) {
+        status = endStatus;  // retry of a commit whose reply was lost: report the original result
+      } else {
+        status = cmdWriteEnd();
+        haveEndResult = true;
+        endReqId = reqId;
+        endStatus = status;
+      }
       break;
     case CMD_MKDIR:
       status = cmdMkdir(p, n);
@@ -344,6 +373,7 @@ void SerialTransferActivity::handleFrame() {
   reply(status, nullptr, txLen);
   if (cmd == CMD_BAUD && status == ST_OK && pendingBaud != 0) {
     port().updateBaudRate(pendingBaud);
+    baudConfirmDeadline = pendingBaud == DEFAULT_BAUD ? 0 : millis() + BAUD_CONFIRM_MS;
     pendingBaud = 0;
   }
 }
@@ -361,7 +391,7 @@ uint8_t SerialTransferActivity::cmdList(const uint8_t* p, size_t n) {
     dir.close();
     return ST_BAD_ARG;
   }
-  uint8_t* out = txBuf + 5;
+  uint8_t* out = txBuf + REPLY_HEAD;
   size_t used = 1;  // out[0] = more flag
   out[0] = 0;
   uint32_t index = 0;
@@ -407,9 +437,9 @@ uint8_t SerialTransferActivity::cmdReadOpen(const uint8_t* p, size_t n) {
     readFile.close();
     return ST_BAD_ARG;
   }
-  wr32(txBuf + 5, static_cast<uint32_t>(readFile.size()));
+  wr32(txBuf + REPLY_HEAD, static_cast<uint32_t>(readFile.size()));
   txLen = 4;
-  lastAction = "Sending " + path.substr(path.rfind('/') + 1);
+  setAction("Sending " + path.substr(path.rfind('/') + 1));
   dirty = true;
   return ST_OK;
 }
@@ -421,7 +451,7 @@ uint8_t SerialTransferActivity::cmdRead(const uint8_t* p, size_t n) {
   size_t len = static_cast<size_t>(p[4]) | (static_cast<size_t>(p[5]) << 8);
   if (len > MAX_PAYLOAD) len = MAX_PAYLOAD;
   if (readFile.position() != off && !readFile.seek(off)) return ST_IO;
-  const int got = readFile.read(txBuf + 5, len);
+  const int got = readFile.read(txBuf + REPLY_HEAD, len);
   if (got < 0) return ST_IO;
   txLen = static_cast<size_t>(got);
   return ST_OK;
@@ -466,15 +496,22 @@ uint8_t SerialTransferActivity::cmdWriteOpen(const uint8_t* p, size_t n) {
     if (isDir) return ST_EXISTS;
     if (!overwrite) return ST_EXISTS;
   }
-  const std::string part = path + ".part";
-  Storage.remove(part.c_str());
+  // Stage next to the target under a name nobody owns: never delete or reuse an existing file.
+  std::string part;
+  for (int i = 0; i < 100; i++) {
+    part = path + (i == 0 ? ".part" : ".part" + std::to_string(i));
+    if (!Storage.exists(part.c_str())) break;
+    part.clear();
+  }
+  if (part.empty()) return ST_IO;
+  haveEndResult = false;
   const size_t slash = path.rfind('/');
   if (slash != std::string::npos && slash > 0) Storage.mkdir(path.substr(0, slash).c_str());
   if (!Storage.openFileForWrite("SER", part.c_str(), writeFile)) return ST_IO;
   writeTarget = path;
   writePart = part;
   writeOverwrite = overwrite;
-  lastAction = "Receiving " + path.substr(path.rfind('/') + 1);
+  setAction("Receiving " + path.substr(path.rfind('/') + 1));
   dirty = true;
   return ST_OK;
 }
@@ -519,20 +556,51 @@ uint8_t SerialTransferActivity::cmdWriteEnd() {
       writeTarget.clear();
       return ST_BAD_ARG;
     }
-    if (Storage.exists(writeTarget.c_str())) Storage.remove(writeTarget.c_str());
-  } else if (writeOverwrite && Storage.exists(writeTarget.c_str())) {
-    removeBookFile(writeTarget.c_str());
   }
-  if (!Storage.rename(writePart.c_str(), writeTarget.c_str())) {
-    Storage.remove(writePart.c_str());
-    status = ST_IO;
+  // Keep the original aside until the new file is in place, so a failed rename loses nothing.
+  std::string backup;
+  bool replaced = false;
+  if (Storage.exists(writeTarget.c_str())) {
+    if (!writeOverwrite) {
+      Storage.remove(writePart.c_str());
+      status = ST_EXISTS;
+    }
+    for (int i = 0; status == ST_OK && i < 100; i++) {
+      backup = writeTarget + (i == 0 ? ".bak" : ".bak" + std::to_string(i));
+      if (!Storage.exists(backup.c_str())) break;
+      backup.clear();
+    }
+    if (status != ST_OK) {
+      // the target appeared during the upload and overwriting was not requested
+    } else if (backup.empty() || !Storage.rename(writeTarget.c_str(), backup.c_str())) {
+      Storage.remove(writePart.c_str());
+      status = ST_IO;
+      backup.clear();
+    } else {
+      replaced = true;
+    }
+  }
+  if (status == ST_OK) {
+    if (Storage.rename(writePart.c_str(), writeTarget.c_str())) {
+      if (replaced) {
+        Storage.remove(backup.c_str());
+        if (!writeIsFont) {
+          clearBookCache(writeTarget);
+          ClippingStore::deleteForFilePath(writeTarget, "epub");
+        }
+      }
+    } else {
+      if (replaced) Storage.rename(backup.c_str(), writeTarget.c_str());  // put the original back
+      Storage.remove(writePart.c_str());
+      status = ST_IO;
+    }
   }
   writePart.clear();
   writeTarget.clear();
   if (writeIsFont && status == ST_OK) sdFontSystem.markRegistryDirty();
   writeIsFont = false;
-  filesDone++;
-  lastAction = "Received " + std::to_string(filesDone) + " file(s)";
+  if (status == ST_OK) filesDone++;
+  setAction(status == ST_OK ? "Received " + std::to_string(filesDone) + " file(s)" : std::string("Upload failed"));
   dirty = true;
   return status;
 }
@@ -588,11 +656,11 @@ uint8_t SerialTransferActivity::cmdApi(const uint8_t* p, size_t n) {
       http = 500;
     }
   }
-  txBuf[5] = static_cast<uint8_t>(http);
-  txBuf[6] = static_cast<uint8_t>(http >> 8);
-  wr32(txBuf + 7, static_cast<uint32_t>(apiOut.size()));
+  txBuf[REPLY_HEAD] = static_cast<uint8_t>(http);
+  txBuf[REPLY_HEAD + 1] = static_cast<uint8_t>(http >> 8);
+  wr32(txBuf + REPLY_HEAD + 2, static_cast<uint32_t>(apiOut.size()));
   txLen = 6;
-  lastAction = "Settings / fonts";
+  setAction("Settings / fonts");
   dirty = true;
   return ST_OK;
 }
@@ -604,7 +672,7 @@ uint8_t SerialTransferActivity::cmdApiRead(const uint8_t* p, size_t n) {
   if (len > MAX_PAYLOAD) len = MAX_PAYLOAD;
   if (off > apiOut.size()) return ST_BAD_ARG;
   len = std::min(len, static_cast<size_t>(apiOut.size() - off));
-  memcpy(txBuf + 5, apiOut.data() + off, len);
+  memcpy(txBuf + REPLY_HEAD, apiOut.data() + off, len);
   txLen = len;
   return ST_OK;
 }

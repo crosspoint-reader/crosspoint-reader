@@ -87,7 +87,8 @@ class ActivityManager {
   void goToFileTransfer();
   void goToJoinNetwork();  // File Transfer straight into Join Network (post heap-defrag reboot)
   void goToUsbDrive();
-  void goToSerialTransfer();
+  // Returns false (and changes nothing) if the activity cannot be allocated.
+  bool goToSerialTransfer();
   // openSection jumps straight into one group (End = the section list).
   void goToSettings(SettingsSection openSection = SettingsSection::End);
   void goToFileBrowser(std::string path = {});
