@@ -1178,6 +1178,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearBookCache(filePath.c_str());
+        sleepImageChanged(filePath.c_str());
         if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
       }
     }
@@ -1339,6 +1340,7 @@ void CrossPointWebServer::handleRename() const {
   const bool success = ClippingStore::moveBook(itemPath.c_str(), newPath.c_str());
 
   if (success) {
+    sleepImageChanged(newPath.c_str());
     LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Renamed successfully");
   } else {
@@ -1437,6 +1439,7 @@ void CrossPointWebServer::handleMove() const {
   const bool success = ClippingStore::moveBook(itemPath.c_str(), newPath.c_str());
 
   if (success) {
+    sleepImageChanged(newPath.c_str());
     LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Moved successfully");
   } else {
@@ -2739,8 +2742,9 @@ void CrossPointWebServer::handleFetch() {
     Storage.remove(part.c_str());
     complete = false;
     resp["error"] = "sd write failed";
-  } else if (complete && library::isLibraryBookFile(dest)) {
-    library::markLibraryIndexDirty();
+  } else if (complete) {
+    sleepImageChanged(dest.c_str());
+    if (library::isLibraryBookFile(dest)) library::markLibraryIndexDirty();
   }
   resp["status"] = status;
   resp["bytes"] = written;
@@ -2823,8 +2827,9 @@ void CrossPointWebServer::handlePluginFsUpload() {
         fail(400, "empty body");
       } else if (!Storage.replaceFile(st.tmp.c_str(), st.path.c_str())) {
         fail(500, "sd write failed");
-      } else if (library::isLibraryBookFile(st.path)) {
-        library::markLibraryIndexDirty();
+      } else {
+        sleepImageChanged(st.path.c_str());
+        if (library::isLibraryBookFile(st.path)) library::markLibraryIndexDirty();
       }
       return;
     case UPLOAD_FILE_ABORTED:
