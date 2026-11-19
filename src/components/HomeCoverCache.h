@@ -16,7 +16,7 @@ class HomeCoverCache {
   static constexpr size_t MAX_COVERS = 7;
   explicit HomeCoverCache(GfxRenderer& renderer) : renderer(renderer) {}
   void begin();
-  void prepare();
+  void prepare(bool* cacheValidity);
   void invalidate();
   void invalidate(size_t index);
   bool paint(freeink::ui::Rect rect, size_t index, const std::string& path);

@@ -24,21 +24,21 @@ void HomeCoverCache::begin() {
 void HomeCoverCache::invalidate() {
   coverCacheUsed = 0;
   cachedCovers.fill(CachedCover{});
+  LOG_DBG("HOME", "Invalidate all cache");
 }
 
 void HomeCoverCache::invalidate(size_t index) {
   if (index < cachedCovers.size()) cachedCovers[index].valid = false;
 }
 
-void HomeCoverCache::prepare() {
+void HomeCoverCache::prepare(bool* cacheValidity) {
   const int orientation = static_cast<int>(renderer.getOrientation());
-  // Night mode stores images pre-inverted, so a snapshot from the other
-  // polarity would paste back as a negative.
-  const bool inverted = display.isInverted();
-  if (coverCacheOrientation != orientation || coverCacheInverted != inverted) {
+  if (coverCacheOrientation != orientation || (cacheValidity && !*cacheValidity)) {
     invalidate();
     coverCacheOrientation = orientation;
-    coverCacheInverted = inverted;
+    if (cacheValidity) {
+      *cacheValidity = true;
+    }
   }
 }
 
@@ -46,11 +46,15 @@ bool HomeCoverCache::paint(fui::Rect rect, size_t index, const std::string& path
   if (index >= cachedCovers.size()) return false;
   auto& cached = cachedCovers[index];
   uint8_t* const cacheData = coverCache.get();
+
+  // direct copyBufferToRegion ignores cover pixel preservation
+  // pass coverRendered to detect mode change
   if (coverCache && cached.valid && cached.rect.x == rect.x && cached.rect.y == rect.y &&
       cached.rect.width == rect.width && cached.rect.height == rect.height &&
       renderer.copyBufferToRegion(rect.x, rect.y, rect.width, rect.height, cacheData + cached.offset, cached.bytes)) {
     return true;
   }
+
   cached.valid = false;
   bool drawn = false;
   if (!path.empty() && Storage.openFileForRead("HOME", path, coverFile)) {

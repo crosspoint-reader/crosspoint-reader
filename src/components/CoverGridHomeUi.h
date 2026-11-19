@@ -23,6 +23,7 @@ class CoverGridHomeUi final : public UiAppHost {
 
   explicit CoverGridHomeUi(GfxRenderer& renderer);
   void begin(const std::vector<RecentBook>& books, SlotTab slotTab, bool hasContinueReading);
+  void setCacheValidity(bool* cacheValidity);
   void refreshCoverPaths();
   void setSelection(int selection) { selected = selection; }
   int selectedAction(const MappedInputManager& input);
@@ -46,6 +47,7 @@ class CoverGridHomeUi final : public UiAppHost {
   void refreshCoverPath(size_t index);
   void noteThumbHeight(int slotHeight);
 
+  bool* cacheValidity = nullptr;
   HomeCoverCache coverCache;
   GfxRenderer& renderer;
   const std::vector<RecentBook>* books = nullptr;

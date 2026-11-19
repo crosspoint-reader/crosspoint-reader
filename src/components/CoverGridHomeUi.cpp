@@ -30,6 +30,8 @@ constexpr int COVER_ROW_EXTRA_HEIGHT = 8;
 CoverGridHomeUi::CoverGridHomeUi(GfxRenderer& renderer)
     : UiAppHost(renderer), coverCache(renderer), renderer(renderer) {}
 
+void CoverGridHomeUi::setCacheValidity(bool* cacheValidity) { this->cacheValidity = cacheValidity; }
+
 void CoverGridHomeUi::begin(const std::vector<RecentBook>& recent, const SlotTab slot, bool continuing) {
   books = &recent;
   slotTab = slot;
@@ -87,7 +89,8 @@ int CoverGridHomeUi::selectedAction(const MappedInputManager& input) {
 void CoverGridHomeUi::screenFn(UiScreen& screen, void* user) { static_cast<CoverGridHomeUi*>(user)->draw(screen); }
 
 void CoverGridHomeUi::draw(UiScreen& screen) {
-  coverCache.prepare();
+  LOG_DBG("HOME", "Drawing covers");
+  coverCache.prepare(cacheValidity);
   const auto& theme = screen.theme();
   const auto safe = UITheme::getInstance().getScreenSafeArea(renderer, true);
   // Sides clear the rounded corners like the header, so the grid lines up under it.
