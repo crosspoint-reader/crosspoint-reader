@@ -76,12 +76,47 @@ void ActivityManager::renderTaskTrampoline(void* param) {
 }
 
 void ActivityManager::renderTaskLoop() {
+#if CROSSPOINT_GRAY_SETTLE
+  // A frame from an activity that wants it is redrawn in 16 levels once no
+  // other render has been requested for this long.
+  constexpr TickType_t GRAY_SETTLE_DELAY = pdMS_TO_TICKS(1500);
+  // Every Nth settle drives all pixels, clearing what changed-pixel frames leave.
+  constexpr uint8_t GRAY_SETTLE_CLEAN_EVERY = 8;
+  TickType_t wait = portMAX_DELAY;
+  bool renderPending = false;
+  uint8_t settles = 0;
+#endif
   while (true) {
+#if CROSSPOINT_GRAY_SETTLE
+    const bool requested = renderPending || ulTaskNotifyTake(pdTRUE, wait) != 0;
+    renderPending = false;
+    wait = portMAX_DELAY;
+    if (!requested) {
+      RenderLock settleLock;
+      if (currentActivity && currentActivity->wantsGraySettle()) {
+        HalPowerManager::Lock powerLock;
+        display.setInverted(SETTINGS.screenInverted != 0);
+        if (renderer.beginGraySettle()) {
+          currentActivity->render(std::move(settleLock));
+          // A render requested meanwhile means the screen is changing: show that instead.
+          renderPending = ulTaskNotifyTake(pdTRUE, 0) != 0;
+          const bool clean = ++settles >= GRAY_SETTLE_CLEAN_EVERY;
+          if (clean) settles = 0;
+          renderer.endGraySettle(!renderPending, !clean);
+        }
+      }
+      continue;
+    }
+#else
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+#endif
     // Acquire the lock before reading currentActivity to avoid a TOCTOU race
     // where the main task deletes the activity between the null-check and render().
     RenderLock lock;
     if (currentActivity) {
+#if CROSSPOINT_GRAY_SETTLE
+      if (currentActivity->wantsGraySettle() && renderer.supportsGraySettle()) wait = GRAY_SETTLE_DELAY;
+#endif
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       // Night mode is a global output polarity applied to every activity.
       // The sleep screen forces normal polarity itself (SleepActivity).

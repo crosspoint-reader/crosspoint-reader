@@ -14,6 +14,10 @@
 #include <algorithm>
 #include <vector>
 
+#if CROSSPOINT_GRAY_SETTLE
+#include <esp_heap_caps.h>
+#endif
+
 #include "../Memory/Memory.h"
 #include "FontCacheManager.h"
 #include "GlyphBitmap.h"
@@ -646,7 +650,81 @@ void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const 
                                    : mode == GRAYSCALE_MSB ? glyphBitmap::Plane::GrayMSB
                                                            : glyphBitmap::Plane::GrayLSB;
   glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, clip);
+#if CROSSPOINT_GRAY_SETTLE
+  if (graySettleActive_ && twoBit && mode == BW && state && !_stripActive) {
+    recordGlyphInk(bitmap, width, height, physical, clip.left, clip.top, clip.right, clip.bottom);
+  }
+#endif
 }
+
+#if CROSSPOINT_GRAY_SETTLE
+// 2-bit coverage 1..3 as 16-level ink 5, 10, 15. Overlapping glyphs keep the darker.
+void GfxRenderer::recordGlyphInk(const uint8_t* bitmap, const int width, const int height,
+                                 const glyphBitmap::Frame& physical, int left, int top, int right, int bottom) const {
+  left = std::max(left, 0);
+  top = std::max(top, 0);
+  right = std::min(right, width);
+  bottom = std::min(bottom, height);
+  const int stride = panelWidth / 2;
+  for (int y = top; y < bottom; ++y) {
+    for (int x = left; x < right; ++x) {
+      const int source = y * width + x;
+      const uint8_t ink = static_cast<uint8_t>(((bitmap[source >> 2] >> (6 - (source & 3) * 2)) & 3) * 5);
+      if (ink == 0) continue;
+      const int px = physical.x + x * physical.dxX + y * physical.dyX;
+      const int py = physical.y + x * physical.dxY + y * physical.dyY;
+      if (px < 0 || px >= panelWidth || py < 0 || py >= panelHeight) continue;
+      uint8_t& byte = grayInk_[py * stride + (px >> 1)];
+      const int shift = (px & 1) ? 0 : 4;
+      if (((byte >> shift) & 0x0F) < ink) byte = static_cast<uint8_t>((byte & ~(0x0F << shift)) | (ink << shift));
+    }
+  }
+}
+
+// A fill replaces whatever glyphs were under it. Bounds are inclusive panel pixels.
+void GfxRenderer::clearGlyphInk(const int phyX0, const int phyY0, const int phyX1, const int phyY1) const {
+  const int stride = panelWidth / 2;
+  for (int py = phyY0; py <= phyY1; ++py) {
+    uint8_t* row = grayInk_ + py * stride;
+    int px = phyX0;
+    if (px & 1) row[px++ >> 1] &= 0xF0;
+    for (; px + 1 <= phyX1; px += 2) row[px >> 1] = 0;
+    if (px == phyX1) row[px >> 1] &= 0x0F;
+  }
+}
+
+bool GfxRenderer::beginGraySettle() const {
+  if (graySettleActive_ || !frameBuffer || _stripActive || renderMode != BW || !display.supportsGray16Image()) {
+    return false;
+  }
+  const size_t bytes = static_cast<size_t>(panelWidth / 2) * panelHeight;
+  if (!grayInk_) grayInk_ = static_cast<uint8_t*>(heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!grayInk_) return false;
+  memset(grayInk_, 0, bytes);
+  graySettleActive_ = true;
+  return true;
+}
+
+bool GfxRenderer::endGraySettle(const bool show, const bool fast) const {
+  if (!graySettleActive_) return false;
+  graySettleActive_ = false;
+  if (!show || !frameBuffer) return false;
+  // Framebuffer black is full ink unless a glyph recorded a lighter level
+  // there; framebuffer white is paper whatever was recorded (painted over).
+  uint8_t* out = grayInk_;
+  for (uint32_t i = 0; i < frameBufferSize; ++i) {
+    const uint8_t bits = frameBuffer[i];
+    for (int pair = 0; pair < 4; ++pair, ++out) {
+      const uint8_t recorded = *out;
+      uint8_t left = 0, right = 0;
+      if (!(bits & (0x80 >> (pair * 2)))) left = (recorded >> 4) ? (recorded >> 4) : 15;
+      if (!(bits & (0x40 >> (pair * 2)))) right = (recorded & 0x0F) ? (recorded & 0x0F) : 15;
+      *out = static_cast<uint8_t>((left << 4) | right);
+    }
+  }
+  return display.displayGray16Image(grayInk_, fast);
+}
+#endif
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
 // efficient as possible.
@@ -1187,6 +1265,10 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
 
   // Bit/byte layout: MSB-first within a byte, so phyX → bit (7 - (phyX & 7)).
   // Head and tail masks cover only the in-rect bits of the first/last byte.
+#if CROSSPOINT_GRAY_SETTLE
+  if (graySettleActive_ && !_stripActive && mode == DitherMode::Replace) clearGlyphInk(phyX0, phyY0, phyX1, phyY1);
+#endif
+
   const int byteStart = phyX0 >> 3;
   const int byteEnd = phyX1 >> 3;  // inclusive
   const uint8_t headMask = static_cast<uint8_t>(0xFFu >> (phyX0 & 7));
@@ -1914,6 +1996,9 @@ void GfxRenderer::clearScreen(const uint8_t color) const {
     memset(_stripBuf, color, static_cast<size_t>(panelWidthBytes) * _stripRows);
     return;
   }
+#if CROSSPOINT_GRAY_SETTLE
+  if (graySettleActive_) memset(grayInk_, 0, static_cast<size_t>(panelWidth / 2) * panelHeight);
+#endif
   display.clearScreen(color);
 }
 
@@ -1963,6 +2048,9 @@ HalDisplay::RefreshMode GfxRenderer::applyPromotedRefresh(const HalDisplay::Refr
 }
 
 void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
+#if CROSSPOINT_GRAY_SETTLE
+  if (graySettleActive_) return;  // endGraySettle() shows the frame
+#endif
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   refreshMode = applyPromotedRefresh(refreshMode);
@@ -1970,6 +2058,9 @@ void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
 }
 
 void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const {
+#if CROSSPOINT_GRAY_SETTLE
+  if (graySettleActive_) return;
+#endif
   refreshMode = applyPromotedRefresh(refreshMode);
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.

@@ -53,6 +53,10 @@ class Activity {
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
   virtual bool isHomeActivity() const { return false; }
+  // True when render() may be run again a moment after a frame to redraw the
+  // same screen with anti-aliased text (see GfxRenderer::beginGraySettle).
+  // render() must then show its frame with renderer.displayBuffer() only.
+  virtual bool wantsGraySettle() const { return false; }
   virtual bool handleHomeGesture() { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 

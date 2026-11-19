@@ -3,6 +3,17 @@
 #include <BoardConfig.h>
 #include <EInkDisplay.h>
 
+// Gray settle: a screen that stands unchanged is redrawn with anti-aliased
+// glyph edges on panels that take a 16-level image. Compiled only where the
+// board has one and the SDK provides the call.
+#ifndef CROSSPOINT_GRAY_SETTLE
+#if defined(FREEINK_HAS_GRAY16) && FREEINK_DEVICE_METALIO_EINK4_PLUS
+#define CROSSPOINT_GRAY_SETTLE 1
+#else
+#define CROSSPOINT_GRAY_SETTLE 0
+#endif
+#endif
+
 class HalDisplay {
  public:
   using Controller = BoardConfig::DisplayController;
@@ -132,6 +143,16 @@ class HalDisplay {
   // displayBuffer(): a separate B/W refresh first makes the gray pass re-drive
   // the whole text body (a visible flash).
   bool combinesGrayscaleBase() const;
+
+#if CROSSPOINT_GRAY_SETTLE
+  // 16-level image: 4 bpp, 0 = white .. 15 = darkest, left pixel in the high
+  // nibble, getDisplayWidth() / 2 bytes per panel row. fast drives only the
+  // pixels that change.
+  bool supportsGray16Image() const { return einkDisplay.supportsGray16Image(); }
+  bool displayGray16Image(const uint8_t* levels, bool fast) {
+    return einkDisplay.displayGray16Image(levels, true, fast);
+  }
+#endif
 
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;

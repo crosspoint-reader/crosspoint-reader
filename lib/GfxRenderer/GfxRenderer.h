@@ -117,6 +117,15 @@ class GfxRenderer {
   mutable int _stripY0 = 0;
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
+#if CROSSPOINT_GRAY_SETTLE
+  // Gray settle (see beginGraySettle): glyph ink recorded per panel pixel in
+  // the 16-level image layout, 0 where no glyph drew.
+  mutable uint8_t* grayInk_ = nullptr;
+  mutable bool graySettleActive_ = false;
+  void recordGlyphInk(const uint8_t* bitmap, int width, int height, const glyphBitmap::Frame& physical,
+                      int left, int top, int right, int bottom) const;
+  void clearGlyphInk(int phyX0, int phyY0, int phyX1, int phyY1) const;
+#endif
   mutable int clipLeft_ = 0;
   mutable int clipTop_ = 0;
   mutable int clipRight_ = 32767;
@@ -441,6 +450,19 @@ class GfxRenderer {
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getTextHeight(int fontId) const;
+
+#if CROSSPOINT_GRAY_SETTLE
+  // Gray settle: redraw the screen that is already up with anti-aliased text.
+  // Between begin and end the caller renders the screen again: drawing goes to
+  // the framebuffer as usual, displayBuffer() draws nothing, and the coverage
+  // of black 2-bit glyphs is recorded. end() shows the framebuffer as a
+  // 16-level image with glyph edges at their recorded level (fast: changed
+  // pixels only); show = false drops the capture. begin returns false when the
+  // panel takes no 16-level image or the capture buffer cannot be allocated.
+  bool supportsGraySettle() const { return display.supportsGray16Image(); }
+  bool beginGraySettle() const;
+  bool endGraySettle(bool show, bool fast) const;
+#endif
 
   // Grayscale functions
   void setRenderMode(RenderMode mode);

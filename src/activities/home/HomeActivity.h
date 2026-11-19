@@ -100,4 +100,5 @@ class HomeActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isHomeActivity() const override { return true; }
+  bool wantsGraySettle() const override { return true; }
 };
