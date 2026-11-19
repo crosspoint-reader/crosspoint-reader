@@ -380,8 +380,12 @@ static std::vector<WifiCredential> pickSleepNetworks() {
     }
   }
   WiFi.scanDelete();
-  std::sort(inRange.begin(), inRange.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
-  for (size_t i = 0; i < inRange.size() && i < 2; i++) picked.push_back(std::move(inRange[i].second));
+  for (size_t i = 0; i < inRange.size() && i < 2; i++) {
+    const auto best = std::max_element(inRange.begin(), inRange.end(),
+                                       [](const auto& a, const auto& b) { return a.first < b.first; });
+    picked.push_back(std::move(best->second));
+    best->first = INT32_MIN;  // taken
+  }
   return picked;
 }
 

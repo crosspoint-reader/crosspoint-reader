@@ -31,7 +31,19 @@ class SyncRequest {
   // Sends a GET, or a PUT of doc when upload is set. On success doc holds the response.
   bool send(const std::string& url, JsonDocument& doc, bool upload = false);
 
+  // For a request written straight into the buffer: write up to BUFFER_SIZE - 1 bytes at body(),
+  // then PUT the first length of them. On success response holds the answer.
+  char* body() { return buffer; }
+  bool sendBody(const std::string& url, size_t length, JsonDocument& response);
+
+  // Shared by the sync code so each file does not build its own JSON reader and writer.
+  // serialize returns 0 when doc does not fit in size bytes with its terminator.
+  static size_t serialize(const JsonDocument& doc, char* out, size_t size);
+  static bool parse(JsonDocument& doc, char* text, size_t length);
+
  private:
+  bool transfer(const std::string& url, const char* method, size_t payloadSize, JsonDocument& doc);
+
   char* buffer = nullptr;
   std::unique_ptr<freeink::SecureHttpClient> http;
 };

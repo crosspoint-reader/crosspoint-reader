@@ -96,16 +96,16 @@ bool readingSessionLog::append(const std::string& document, const std::string& b
   doc["to"] = endProgressBp;
   doc["title"] = title.substr(0, utf8SafeTruncateBuffer(title.data(), std::min<int>(title.size(), MAX_TITLE_BYTES)));
   doc["path"] = bookPath;
-  std::string line;
-  serializeJson(doc, line);
-  if (line.size() >= MAX_LINE) {
+  const auto line = makeUniqueNoThrow<char[]>(MAX_LINE + 1);
+  if (!line) return false;
+  size_t length = SyncRequest::serialize(doc, line.get(), MAX_LINE);
+  if (length == 0) {
     // upload() skips lines longer than its buffer, so a very long path is left out.
     doc.remove("path");
-    line.clear();
-    serializeJson(doc, line);
+    length = SyncRequest::serialize(doc, line.get(), MAX_LINE);
   }
-  if (doc.overflowed() || line.size() >= MAX_LINE) return false;
-  line += '\n';
+  if (length == 0) return false;
+  line[length++] = '\n';
 
   Storage.mkdir("/.crosspoint");
   HalFile file = Storage.open(LOG_PATH, O_WRONLY | O_CREAT | O_APPEND);
@@ -114,7 +114,7 @@ bool readingSessionLog::append(const std::string& document, const std::string& b
     return false;
   }
   const size_t sizeBefore = file.size();
-  const bool written = file.write(line.data(), line.size()) == line.size();
+  const bool written = file.write(line.get(), length) == length;
   // A partial line would swallow the next session appended after it.
   if (!written) file.truncate(sizeBefore);
   file.close();
@@ -151,9 +151,10 @@ bool readingSessionLog::upload(SyncRequest& sync) {
   char sessionId[40];
 
   for (size_t batch = 0; ok && batch < MAX_BATCHES; ++batch) {
-    doc.clear();
-    doc["device_id"] = KOReaderSyncClient::DEVICE_ID;
-    JsonArray items = doc["items"].to<JsonArray>();
+    // Written straight into the request buffer: every value is a number or checked hex, so nothing needs escaping.
+    char* const body = sync.body();
+    size_t length =
+        snprintf(body, SyncRequest::BUFFER_SIZE, "{\"device_id\":\"%s\",\"items\":[", KOReaderSyncClient::DEVICE_ID);
     int64_t starts[BATCH_SIZE];
     size_t count = 0;
     bool endOfLog = false;
@@ -163,7 +164,7 @@ bool readingSessionLog::upload(SyncRequest& sync) {
         break;
       }
       JsonDocument entry;
-      if (deserializeJson(entry, static_cast<const char*>(line))) continue;
+      if (!SyncRequest::parse(entry, line, strlen(line))) continue;
       const char* document = entry["doc"] | "";
       const int64_t start = entry["start"] | static_cast<int64_t>(0);
       const uint32_t seconds = entry["secs"] | static_cast<uint32_t>(0);
@@ -174,19 +175,19 @@ bool readingSessionLog::upload(SyncRequest& sync) {
         continue;
       }
       formatSessionId(sessionId, sizeof(sessionId), start, mac);
-      JsonObject item = items.add<JsonObject>();
-      item["session_id"] = static_cast<const char*>(sessionId);  // const char* makes ArduinoJson copy the text
-      item["document"] = document;
-      item["started_at"] = start;
-      item["ended_at"] = start + seconds;
-      item["seconds"] = seconds;
-      item["utc_offset_minutes"] = std::clamp(entry["tz"] | 0, -720, 840);
+      length += snprintf(body + length, SyncRequest::BUFFER_SIZE - length,
+                         "%s{\"session_id\":\"%s\",\"document\":\"%s\",\"started_at\":%lld,\"ended_at\":%lld,"
+                         "\"seconds\":%lu,\"utc_offset_minutes\":%d}",
+                         count ? "," : "", sessionId, document, static_cast<long long>(start),
+                         static_cast<long long>(start + seconds), static_cast<unsigned long>(seconds),
+                         std::clamp(entry["tz"] | 0, -720, 840));
       starts[count++] = start;
     }
     const size_t consumed = file.position();
 
     if (count > 0) {
-      if (!sync.send(url, doc, true)) {
+      length += snprintf(body + length, SyncRequest::BUFFER_SIZE - length, "]}");
+      if (!sync.sendBody(url, length, doc)) {
         ok = false;
         break;
       }

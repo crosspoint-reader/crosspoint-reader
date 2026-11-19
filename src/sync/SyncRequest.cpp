@@ -39,15 +39,32 @@ bool SyncRequest::supportsDeltaSync(const std::string& url) {
   return send(url, doc) && doc["sync_version"].as<unsigned>() == 2;
 }
 
+size_t SyncRequest::serialize(const JsonDocument& doc, char* out, const size_t size) {
+  if (doc.overflowed() || measureJson(doc) >= size) return 0;
+  return serializeJson(doc, out, size);
+}
+
+bool SyncRequest::parse(JsonDocument& doc, char* text, const size_t length) {
+  return !deserializeJson(doc, text, length, DeserializationOption::NestingLimit(4));
+}
+
 bool SyncRequest::send(const std::string& url, JsonDocument& doc, const bool upload) {
   size_t payloadSize = 0;
   if (upload) {
-    if (doc.overflowed() || measureJson(doc) >= BUFFER_SIZE) {
+    payloadSize = serialize(doc, buffer, BUFFER_SIZE);
+    if (payloadSize == 0) {
       LOG_ERR("SYNC", "Request exceeds buffer");
       return false;
     }
-    payloadSize = serializeJson(doc, buffer, BUFFER_SIZE);
   }
+  return transfer(url, upload ? "PUT" : "GET", payloadSize, doc);
+}
+
+bool SyncRequest::sendBody(const std::string& url, const size_t length, JsonDocument& response) {
+  return length < BUFFER_SIZE && transfer(url, "PUT", length, response);
+}
+
+bool SyncRequest::transfer(const std::string& url, const char* method, const size_t payloadSize, JsonDocument& doc) {
   doc.clear();
   if (!http->begin(url)) {
     LOG_ERR("SYNC", "Invalid sync URL");
@@ -65,7 +82,7 @@ bool SyncRequest::send(const std::string& url, JsonDocument& doc, const bool upl
   if (!customAuthorization) http->addHeader("Authorization", KOREADER_STORE.getBasicAuthorization());
   http->addHeader("Content-Type", "application/json");
   size_t received = 0;
-  const int status = http->sendRequest(upload ? "PUT" : "GET", reinterpret_cast<const uint8_t*>(buffer), payloadSize,
+  const int status = http->sendRequest(method, reinterpret_cast<const uint8_t*>(buffer), payloadSize,
                                        [&](const uint8_t* data, const size_t length) {
                                          if (length >= BUFFER_SIZE - received) return false;
                                          memcpy(buffer + received, data, length);
@@ -77,9 +94,8 @@ bool SyncRequest::send(const std::string& url, JsonDocument& doc, const bool upl
     return false;
   }
   buffer[received] = '\0';
-  const auto error = deserializeJson(doc, buffer, received, DeserializationOption::NestingLimit(4));
-  if (error) {
-    LOG_ERR("SYNC", "Invalid response: %s", error.c_str());
+  if (!parse(doc, buffer, received)) {
+    LOG_ERR("SYNC", "Invalid response");
     return false;
   }
   return true;
