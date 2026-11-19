@@ -374,6 +374,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t readerMenuStyle = READER_MENU_LIST;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
+#if CROSSPOINT_DESSEN_APPS
+  // Absolute SD path of a dessen app to use as the home screen (empty = firmware home).
+  char customHomeApp[256] = {0};
+#endif
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
   // Save successful dictionary lookups to vocabulary history (default off).

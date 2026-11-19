@@ -32,6 +32,9 @@
 #include "settings/SettingsListActivity.h"
 #include "util/BmpViewerActivity.h"
 #include "util/FrontlightPanelActivity.h"
+#if CROSSPOINT_DESSEN_APPS
+#include "plugins/DessenAppActivity.h"
+#endif
 #include "util/FullScreenMessageActivity.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
@@ -359,7 +362,7 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
   replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
 }
 
-void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh) {
+void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh, bool forceDefaultHome) {
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
     const auto& activityName = currentActivity->name;
     if (activityName == "FileBrowser") {
@@ -379,6 +382,17 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
   // EEGO A4: after a gray reader page, a fast refresh leaves the page ghosting
   // in Home's dithered areas.
   if (BoardConfig::isEegoA4() && isReaderActivity()) cleanInitialRefresh = true;
+#if CROSSPOINT_DESSEN_APPS
+  // A user-chosen home app replaces the firmware home screen. forceDefaultHome
+  // bypasses it for the file browser (open_browser) and the fault fallback, so
+  // a broken home app cannot trap the device.
+  LOG_DBG("DSN", "goHome: force=%d customHomeApp='%s' exists=%d", forceDefaultHome, SETTINGS.customHomeApp,
+          SETTINGS.customHomeApp[0] ? Storage.exists(SETTINGS.customHomeApp) : -1);
+  if (!forceDefaultHome && SETTINGS.customHomeApp[0] != '\0' && Storage.exists(SETTINGS.customHomeApp)) {
+    replaceActivity(std::make_unique<DessenAppActivity>(renderer, mappedInput, SETTINGS.customHomeApp));
+    return;
+  }
+#endif
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }

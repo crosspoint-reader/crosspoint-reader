@@ -5,6 +5,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <esp_random.h>
+#include <sdk/dessen_abi.h>  // DSN_HOME_*
 
 #include <utility>
 
@@ -29,19 +30,28 @@ DessenAppActivity::DessenAppActivity(GfxRenderer& renderer, MappedInputManager& 
     : Activity("DessenApp", renderer, mappedInput), appPath(std::move(appPath)), uiTarget(makeUiTarget(renderer)) {}
 
 bool DessenAppActivity::loadApp() {
-  memory = makeUniqueNoThrow<uint8_t[]>(APP_MEMORY_BYTES);
-  if (!memory) {
-    LOG_ERR("DSN", "OOM: %u bytes of app memory", static_cast<unsigned>(APP_MEMORY_BYTES));
-    return false;
-  }
   HalFile file;
   if (!Storage.openFileForRead("DSN", appPath, file)) return false;
   const size_t size = file.fileSize();
-  if (size == 0 || size > APP_MEMORY_BYTES || file.read(memory.get(), size) != static_cast<int>(size)) {
-    LOG_ERR("DSN", "Unreadable or oversized app (%u bytes): %s", static_cast<unsigned>(size), appPath.c_str());
+  // Peek the header for the memory block the app asked for (2nd u32, little-endian).
+  uint8_t hdr[DSN_HEADER_SIZE];
+  if (size < DSN_HEADER_SIZE || file.read(hdr, DSN_HEADER_SIZE) != static_cast<int>(DSN_HEADER_SIZE)) return false;
+  const uint32_t memSize = hdr[4] | hdr[5] << 8 | hdr[6] << 16 | hdr[7] << 24;
+  if (memSize < size || memSize > MAX_APP_MEMORY) {
+    LOG_ERR("DSN", "App wants %u bytes (file %u, cap %u): out of range", static_cast<unsigned>(memSize),
+            static_cast<unsigned>(size), static_cast<unsigned>(MAX_APP_MEMORY));
     return false;
   }
-  if (!host.load(memory.get(), static_cast<uint32_t>(size), APP_MEMORY_BYTES)) {
+  memory = makeUniqueNoThrow<uint8_t[]>(memSize);  // > ~4 KB -> PSRAM on an S3
+  if (!memory) {
+    LOG_ERR("DSN", "OOM: %u bytes of app memory", static_cast<unsigned>(memSize));
+    return false;
+  }
+  if (!file.seek(0) || file.read(memory.get(), size) != static_cast<int>(size)) {
+    LOG_ERR("DSN", "Unreadable app: %s", appPath.c_str());
+    return false;
+  }
+  if (!host.load(memory.get(), static_cast<uint32_t>(size), memSize)) {
     LOG_ERR("DSN", "Not a valid dessen app: %s", appPath.c_str());
     return false;
   }
@@ -58,6 +68,7 @@ bool DessenAppActivity::loadApp() {
     return false;
   }
   host.setServices(services.get());
+  services->setFontContext(&renderer, &uiTarget);  // lets font_load bind the custom font slot
   return true;
 }
 
@@ -130,10 +141,61 @@ void DessenAppActivity::loop() {
     if (deliver) pendingInput = snap;
   }
 
+  // A launcher/home app asked to open a firmware screen and end. goTo*/goHome
+  // replace this activity, so there is nothing to finish afterwards.
+  if (state == dessen::State::Launch) {
+    switch (host.launch()) {
+      case dessen::Launch::Reader:
+        activityManager.goToReader(host.launchPath());
+        break;
+      case dessen::Launch::Settings:
+        activityManager.goToSettings();
+        break;
+      case dessen::Launch::Browser:
+        activityManager.goToFileBrowser();
+        break;
+      case dessen::Launch::Home: {
+        // open_home(dest): open the destination directly, the same way the home
+        // menu does. goHome(item) only lands on the home menu with the item
+        // highlighted, which reads as "back to the default home".
+        switch (host.launchHomeDest()) {
+          case DSN_HOME_SETTINGS:
+            activityManager.goToSettings();
+            break;
+          case DSN_HOME_LIBRARY:
+            activityManager.goToLibrary();
+            break;
+          case DSN_HOME_PLUGINS:
+            activityManager.goToPlugins();
+            break;
+          case DSN_HOME_OPDS:
+            activityManager.goToBrowser();
+            break;
+          case DSN_HOME_TRANSFER:
+            activityManager.goToFileTransfer();
+            break;
+          case DSN_HOME_FILES:
+          default:
+            activityManager.goToFileBrowser();
+            break;
+        }
+        break;
+      }
+      default:
+        finish();
+        break;
+    }
+    return;
+  }
+
   if (state == dessen::State::Exited || state == dessen::State::Faulted) {
     if (state == dessen::State::Faulted) {
       LOG_ERR("DSN", "App fault at 0x%08x (pc 0x%08x): %s", static_cast<unsigned>(host.vm().fault_addr),
               static_cast<unsigned>(host.vm().pc), appPath.c_str());
+      // A faulting app must not relaunch itself (a custom home app would loop):
+      // fall back to the firmware's own home screen.
+      activityManager.goHome(HomeMenuItem::NONE, /*cleanInitialRefresh=*/false, /*forceDefaultHome=*/true);
+      return;
     }
     finish();
     return;

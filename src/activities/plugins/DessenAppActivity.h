@@ -24,7 +24,14 @@ class DessenAppActivity final : public Activity {
 
  private:
   // Every app gets one fixed block; nothing else is allocated while it runs.
-  static constexpr uint32_t APP_MEMORY_BYTES = 64 * 1024;
+  // The app declares how much memory it wants in its image header; we allocate
+  // exactly that (one block), capped for sanity. On PSRAM boards a block over
+  // ~4 KB lands in PSRAM automatically, so apps can ask for hundreds of KB.
+#ifdef BOARD_HAS_PSRAM
+  static constexpr uint32_t MAX_APP_MEMORY = 4u * 1024 * 1024;
+#else
+  static constexpr uint32_t MAX_APP_MEMORY = 128u * 1024;  // C3: internal RAM only
+#endif
 
   bool loadApp();
   void openKeyboard();  // service asked for text input

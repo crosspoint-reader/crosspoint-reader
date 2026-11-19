@@ -8,9 +8,14 @@
 #include <string>
 #include <vector>
 
+class GfxRenderer;
+class SdCardFontManager;
 namespace freeink {
 namespace content {
 class Crypto;
+}
+namespace ui {
+class GfxRendererTarget;
 }
 }  // namespace freeink
 
@@ -34,6 +39,7 @@ class CrosspointServices : public dessen::Services {
 
   // ---- core ----
   uint32_t timeNow() override;
+  int clock(uint8_t* out) override;
   bool randomBytes(uint8_t* out, uint32_t n) override;
   int deviceId(char* out, uint32_t cap) override;
   // ---- storage ----
@@ -43,10 +49,23 @@ class CrosspointServices : public dessen::Services {
   int fsDelete(const char* path) override;
   int fsAppDir(char* out, uint32_t cap) override;
   int keystore(const char* path, const uint8_t* key, uint32_t n, uint32_t expires) override;
+  // launcher / home
+  int recents(char* out, uint32_t cap) override;
+  int bookProgress(const char* path) override;
+  int fontLoad(const char* path, int size) override;
+  int wifiConnectStart() override;
+
+  // DessenAppActivity wires the renderer + its text target so fontLoad can
+  // register the app's custom font and bind it to the custom font slot.
+  void setFontContext(GfxRenderer* renderer, freeink::ui::GfxRendererTarget* target) {
+    renderer_ = renderer;
+    target_ = target;
+  }
   // ---- crypto (all wrap freeink::content::Crypto) ----
   int hash(int algo, const uint8_t* data, uint32_t n, uint8_t* out, uint32_t cap) override;
   int aesCbc(int flags, const uint8_t* keyiv, const uint8_t* data, uint32_t n, uint8_t* out, uint32_t cap) override;
-  int rsaEncrypt(const uint8_t* cert, uint32_t cn, const uint8_t* data, uint32_t n, uint8_t* out, uint32_t cap) override;
+  int rsaEncrypt(const uint8_t* cert, uint32_t cn, const uint8_t* data, uint32_t n, uint8_t* out,
+                 uint32_t cap) override;
   int rsaDecrypt(int flags, const uint8_t* priv, uint32_t pn, const uint8_t* data, uint32_t n, uint8_t* out,
                  uint32_t cap) override;
   int rsaSign(int algo, const uint8_t* priv, uint32_t pn, const uint8_t* digest, uint32_t dn, uint8_t* out,
@@ -80,13 +99,20 @@ class CrosspointServices : public dessen::Services {
   void cancelText();
 
  private:
-  enum class Op : uint8_t { None, Net, Fetch, Keygen, TextInput };
+  enum class Op : uint8_t { None, Net, Fetch, Keygen, TextInput, Wifi };
 
   int resolve(const char* path, std::string& out) const;  // app "/x" -> real SD path
-  bool deviceKek(uint8_t out[32]) const;                   // secure_wrap key
+  bool deviceKek(uint8_t out[32]) const;                  // secure_wrap key
 
   std::string appName_, appDir_;
   std::unique_ptr<freeink::content::Crypto> crypto_;
+  // The one custom font an app may load (replacing any previous one). The
+  // manager owns the loaded font; unloadFont() unregisters it from the renderer.
+  GfxRenderer* renderer_ = nullptr;
+  freeink::ui::GfxRendererTarget* target_ = nullptr;
+  std::unique_ptr<SdCardFontManager> fontManager_;
+  bool customFontLoaded_ = false;
+  static constexpr int kCustomFontId = 0x7F00;  // app font slot in the renderer's font map
 
   // Single outstanding async op. Buffers point into guest memory (valid while
   // the VM is parked) except `head_`/`url_`/`dest_`, which are copied.
@@ -95,11 +121,12 @@ class CrosspointServices : public dessen::Services {
   int result_ = 0;
   std::string head_, url_, dest_, prompt_;
   std::vector<uint8_t> body_;
-  uint8_t* out_ = nullptr;   // net resp / keygen pub / text buffer
+  uint8_t* out_ = nullptr;  // net resp / keygen pub / text buffer
   uint32_t outCap_ = 0;
   uint8_t* priv_ = nullptr;  // keygen private buffer
   uint32_t privCap_ = 0;
   uint32_t bits_ = 0;
+  unsigned long wifiStart_ = 0;
   int inputFlags_ = 0;
 };
 

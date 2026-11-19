@@ -31,6 +31,9 @@ enum class SettingAction {
   TextSettings,
   Plugins,
   KeyboardLayouts,
+#if CROSSPOINT_DESSEN_APPS
+  HomeApp,
+#endif
   HomeButton,
   ControlsPower,
   ControlsFront,

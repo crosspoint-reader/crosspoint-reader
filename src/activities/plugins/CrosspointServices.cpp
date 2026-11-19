@@ -1,21 +1,32 @@
 #if CROSSPOINT_DESSEN_APPS
 #include "CrosspointServices.h"
 
-#include <Crypto.h>         // freeink::content::Crypto, RsaKeyPairDer
 #include <BookKey.h>
+#include <Crypto.h>  // freeink::content::Crypto, RsaKeyPairDer
 #include <DeviceSecret.h>
+#include <FreeInkUIGfxRenderer.h>
+#include <GfxRenderer.h>
+#include <WiFi.h>
+#include <ctime>
+#include <HalClock.h>
+#include <WifiCredentialStore.h>
 #include <HalFrontlight.h>  // declares the `Frontlight` singleton
 #include <HalHaptics.h>
 #include <HalPowerManager.h>  // declares the `powerManager` singleton
 #include <HalStorage.h>
+#include <SdCardFontManager.h>
+#include <SdCardFontRegistry.h>
 #include <WolfsslCrypto.h>  // freeink::content::WolfsslCrypto
 #include <sdk/dessen_abi.h>
 #include <time.h>
 #include <wolfssl/wolfcrypt/aes.h>
 
+#include <cstdio>
 #include <cstring>
 
+#include "RecentBooksStore.h"
 #include "network/HttpDownloader.h"
+#include "util/BookProgress.h"
 
 using freeink::content::Crypto;
 using freeink::content::RsaKeyPairDer;
@@ -38,12 +49,32 @@ int pkcs7Strip(const uint8_t* buf, uint32_t len) {
 
 CrosspointServices::CrosspointServices(std::string appName, std::string appDir)
     : appName_(std::move(appName)), appDir_(std::move(appDir)), crypto_(new WolfsslCrypto()) {}
-CrosspointServices::~CrosspointServices() = default;
+CrosspointServices::~CrosspointServices() {
+  // Drop the app's custom font from the renderer before the manager frees it.
+  if (renderer_ && fontManager_ && customFontLoaded_) fontManager_->unloadFont(*renderer_, kCustomFontId);
+}
 
 // ---- core ----
 uint32_t CrosspointServices::timeNow() {
   const time_t t = ::time(nullptr);
   return t > 0 ? static_cast<uint32_t>(t) : 0;
+}
+
+// Local wall-clock for home themes (clock + date). The RTC keeps UTC; halClock
+// applies the user's timezone. 8 bytes LE: u16 year, u8 month,day,hour,min,sec,wday.
+int CrosspointServices::clock(uint8_t* out) {
+  struct tm t;
+  if (!halClock.localTime(t)) return DSN_ERR_UNAVAILABLE;  // clock unset
+  const uint16_t year = static_cast<uint16_t>(t.tm_year + 1900);
+  out[0] = static_cast<uint8_t>(year & 0xff);
+  out[1] = static_cast<uint8_t>(year >> 8);
+  out[2] = static_cast<uint8_t>(t.tm_mon + 1);
+  out[3] = static_cast<uint8_t>(t.tm_mday);
+  out[4] = static_cast<uint8_t>(t.tm_hour);
+  out[5] = static_cast<uint8_t>(t.tm_min);
+  out[6] = static_cast<uint8_t>(t.tm_sec);
+  out[7] = static_cast<uint8_t>(t.tm_wday);
+  return 0;
 }
 
 bool CrosspointServices::randomBytes(uint8_t* out, uint32_t n) {
@@ -134,6 +165,73 @@ int CrosspointServices::keystore(const char* path, const uint8_t* key, uint32_t 
   return bookkey::write(full, key, n, expires ? static_cast<int64_t>(expires) : 0) ? 0 : DSN_ERR_IO;
 }
 
+// ---- launcher / home ----
+int CrosspointServices::recents(char* out, uint32_t cap) {
+  std::string acc;
+  for (const RecentBook& b : RECENT_BOOKS.getBooks()) {
+    char pct[8];
+    snprintf(pct, sizeof pct, "%d", loadBookProgress(b.path));  // -1 when unknown
+    acc += b.path;
+    acc += '\t';
+    acc += b.title;
+    acc += '\t';
+    acc += b.author;
+    acc += '\t';
+    acc += pct;
+    acc += '\n';
+  }
+  if (acc.size() > cap) return DSN_ERR_TOO_BIG;
+  memcpy(out, acc.data(), acc.size());
+  return static_cast<int>(acc.size());
+}
+
+int CrosspointServices::bookProgress(const char* path) {
+  std::string full;
+  if (resolve(path, full)) return -1;
+  return loadBookProgress(full);
+}
+
+// Load a .cpfont from the app's folder at `size` and bind it to the custom font
+// slot (DSN_FONT_CUSTOM). One per app; a second call replaces the first. Uses
+// the family-variant loader — the same path the global SD font uses, including
+// its C3 heap guards (it skips a variant when the free block is too small).
+//
+// The app ships a flat <appdir>/<name>.cpfont; we describe it as a one-file
+// "loose" family so filePath() resolves to exactly that path. Untested on device.
+int CrosspointServices::fontLoad(const char* path, int size) {
+  if (!renderer_ || !target_) return DSN_ERR_UNAVAILABLE;
+  if (size < 4 || size > 255) return DSN_ERR_INVALID;
+  std::string full;
+  if (int e = resolve(path, full)) return e;
+
+  const size_t slash = full.find_last_of('/');
+  const std::string dir = full.substr(0, slash);  // valid for the whole call
+  const std::string file = full.substr(slash + 1);
+
+  if (!fontManager_) fontManager_.reset(new SdCardFontManager());
+  if (customFontLoaded_) {
+    fontManager_->unloadFont(*renderer_, kCustomFontId);
+    customFontLoaded_ = false;
+  }
+
+  SdCardFontFamilyInfo fam;
+  fam.name = "app";
+  fam.root = dir.c_str();
+  fam.loose = true;    // file sits directly under root (no family directory)
+  fam.vector = false;  // bitmap .cpfont
+  SdCardFontFileInfo fi;
+  fi.name.reset(new char[file.size() + 1]);
+  memcpy(fi.name.get(), file.c_str(), file.size() + 1);
+  fi.pointSize = static_cast<uint8_t>(size);
+  fi.style = 0;
+  fam.files.push_back(std::move(fi));
+
+  if (!fontManager_->loadFamilyVariant(fam, *renderer_, static_cast<uint8_t>(size), kCustomFontId)) return DSN_ERR_IO;
+  customFontLoaded_ = true;
+  target_->setFont(freeink::ui::GfxRendererTarget::FONT_LABEL, kCustomFontId);  // slot 3 = DSN_FONT_CUSTOM
+  return DSN_FONT_CUSTOM;
+}
+
 // ---- crypto ----
 int CrosspointServices::hash(int algo, const uint8_t* data, uint32_t n, uint8_t* out, uint32_t cap) {
   if (algo == DSN_HASH_SHA1) {
@@ -192,7 +290,10 @@ int CrosspointServices::rsaDecrypt(int flags, const uint8_t* priv, uint32_t pn, 
   if (blockLen < 11 || block[0] != 0x00 || block[1] != 0x02) return DSN_ERR_INVALID;
   int sep = -1;
   for (int i = 2; i < blockLen; i++)
-    if (block[i] == 0x00) { sep = i; break; }
+    if (block[i] == 0x00) {
+      sep = i;
+      break;
+    }
   if (sep < 10) return DSN_ERR_INVALID;  // need >= 8 padding bytes
   const uint32_t msgLen = blockLen - sep - 1;
   if (msgLen > cap) return DSN_ERR_TOO_BIG;
@@ -246,8 +347,8 @@ int CrosspointServices::secureWrap(const uint8_t* data, uint32_t n, uint8_t* out
   uint8_t* ct = out + 14;
   Aes aes;
   if (wc_AesInit(&aes, nullptr, INVALID_DEVID) != 0) return DSN_ERR_IO;
-  const bool ok = wc_AesGcmSetKey(&aes, kek, 32) == 0 &&
-                  wc_AesGcmEncrypt(&aes, ct, data, n, nonce, 12, ct + n, 16, out, 2) == 0;
+  const bool ok =
+      wc_AesGcmSetKey(&aes, kek, 32) == 0 && wc_AesGcmEncrypt(&aes, ct, data, n, nonce, 12, ct + n, 16, out, 2) == 0;
   wc_AesFree(&aes);
   return ok ? static_cast<int>(2 + 12 + n + 16) : DSN_ERR_IO;
 }
@@ -272,7 +373,8 @@ int CrosspointServices::secureUnwrap(const uint8_t* blob, uint32_t n, uint8_t* o
 int CrosspointServices::backlightSet(int brightness, int warm) {
   if (!Frontlight.present()) return DSN_ERR_UNAVAILABLE;
   if (brightness >= 0) Frontlight.setBrightness(static_cast<uint8_t>(brightness > 100 ? 100 : brightness));
-  if (warm >= 0 && Frontlight.hasColorTemperature()) Frontlight.setWarmth(static_cast<uint8_t>(warm > 100 ? 100 : warm));
+  if (warm >= 0 && Frontlight.hasColorTemperature())
+    Frontlight.setWarmth(static_cast<uint8_t>(warm > 100 ? 100 : warm));
   return 0;
 }
 
@@ -300,6 +402,22 @@ int CrosspointServices::accel(uint8_t*) {
 }
 
 // ---- async: queue on the render task, execute on the loop task ----
+int CrosspointServices::wifiConnectStart() {
+  if (WiFi.status() == WL_CONNECTED) return 0;  // already online
+  // Attempt a saved network: the last-connected one, else the first stored.
+  std::optional<WifiCredential> cred;
+  const std::string last = WIFI_STORE.getLastConnectedSsid();
+  if (!last.empty()) cred = WIFI_STORE.findCredential(last);
+  if (!cred && WIFI_STORE.getCredentialCount() > 0) cred = WIFI_STORE.getCredentialAt(0);
+  if (!cred) return DSN_ERR_UNAVAILABLE;  // no saved networks
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+  pending_ = Op::Wifi;
+  done_ = false;
+  wifiStart_ = millis();
+  return dessen::kPending;  // poll() advances it (non-blocking)
+}
+
 int CrosspointServices::netStart(const char* head, const uint8_t* body, uint32_t bn, uint8_t* resp, uint32_t cap) {
   pending_ = Op::Net;
   done_ = false;
@@ -340,6 +458,15 @@ int CrosspointServices::textInputStart(const char* prompt, int flags, char* out,
 }
 
 int CrosspointServices::poll() {
+  if (pending_ == Op::Wifi && !done_) {  // non-blocking Wi-Fi state machine
+    if (WiFi.status() == WL_CONNECTED) {
+      result_ = 0;
+      done_ = true;
+    } else if (millis() - wifiStart_ > 20000) {
+      result_ = DSN_ERR_IO;  // timed out
+      done_ = true;
+    }
+  }
   if (!done_) return dessen::kPending;
   pending_ = Op::None;
   return result_;
@@ -352,7 +479,10 @@ void CrosspointServices::serviceAsyncWork() {
       const size_t nl = head_.find('\n');
       std::string first = nl == std::string::npos ? head_ : head_.substr(0, nl);
       const size_t sp = first.find(' ');
-      if (sp == std::string::npos) { result_ = DSN_ERR_INVALID; break; }
+      if (sp == std::string::npos) {
+        result_ = DSN_ERR_INVALID;
+        break;
+      }
       const std::string method = first.substr(0, sp), url = first.substr(sp + 1);
       std::vector<HttpDownloader::Header> headers;
       size_t p = nl == std::string::npos ? head_.size() : nl + 1;
@@ -381,8 +511,14 @@ void CrosspointServices::serviceAsyncWork() {
         ok = HttpDownloader::postForm(url, std::string(body_.begin(), body_.end()), resp, &status);
         if (ok) bodyOut.assign(resp.begin(), resp.end());
       }
-      if (!ok && status == 0) { result_ = DSN_ERR_IO; break; }
-      if (4 + bodyOut.size() > outCap_) { result_ = DSN_ERR_TOO_BIG; break; }
+      if (!ok && status == 0) {
+        result_ = DSN_ERR_IO;
+        break;
+      }
+      if (4 + bodyOut.size() > outCap_) {
+        result_ = DSN_ERR_TOO_BIG;
+        break;
+      }
       out_[0] = (status >> 8) & 0xff;
       out_[1] = status & 0xff;
       out_[2] = 0;  // header block length (not surfaced yet)
@@ -397,10 +533,19 @@ void CrosspointServices::serviceAsyncWork() {
       break;
     }
     case Op::Keygen: {
-      if (bits_ != 1024) { result_ = DSN_ERR_INVALID; break; }
+      if (bits_ != 1024) {
+        result_ = DSN_ERR_INVALID;
+        break;
+      }
       RsaKeyPairDer pair;
-      if (!crypto_->rsaGenerate(&pair)) { result_ = DSN_ERR_IO; break; }
-      if (pair.spki.size() > outCap_ || pair.pkcs8.size() > privCap_) { result_ = DSN_ERR_TOO_BIG; break; }
+      if (!crypto_->rsaGenerate(&pair)) {
+        result_ = DSN_ERR_IO;
+        break;
+      }
+      if (pair.spki.size() > outCap_ || pair.pkcs8.size() > privCap_) {
+        result_ = DSN_ERR_TOO_BIG;
+        break;
+      }
       memcpy(out_, pair.spki.data(), pair.spki.size());
       memcpy(priv_, pair.pkcs8.data(), pair.pkcs8.size());
       result_ = static_cast<int>(pair.spki.size()) << 16 | static_cast<int>(pair.pkcs8.size());
