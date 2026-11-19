@@ -17,6 +17,9 @@
 
 namespace {
 
+// Compile-time check for the <= 15/255 outer-halo dead-zone clip in kTtfGamma4Lut.
+static_assert(kTtfGamma4Lut[15] == 0 && kTtfGamma4Lut[16] == 1, "kTtfGamma4Lut must clip <= 15/255 to 0");
+
 // Cache growth policy: PsramAlloc ABORTS when fiFontMalloc fails, and vector
 // doubling transiently needs old+new blocks, so every cache expansion must be
 // an exact, heap-checked reserve. On no-PSRAM boards the block lands in
@@ -110,6 +113,11 @@ void TtfEpdFont::resolveFaces() {
 
 bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t glyphCacheBytes,
                       const uint16_t maxGlyphs) {
+  return load(pointSize, twoBit ? BitDepth::Bpp2 : BitDepth::Bpp1, glyphCacheBytes, maxGlyphs);
+}
+
+bool TtfEpdFont::load(const uint16_t pointSize, const BitDepth bitDepth, const size_t glyphCacheBytes,
+                      const uint16_t maxGlyphs) {
   loaded_ = false;
   master_ = nullptr;
   for (uint8_t& lock : faceLocks_) lock = 0;
@@ -128,7 +136,7 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
     Face& f = faces_[i];
     f.owner = this;
     f.ft = &f.ftStorage_;
-    f.twoBit = twoBit;
+    f.bitDepth = bitDepth;
     f.sizePx = sizePx;
     // Regular face (style 0) owns the full novel cache budget split into 75% core / 25% tail;
     // styled variants (bold/italic) only hold occasional emphasis words, capped at 64KB/512 glyphs
@@ -168,6 +176,11 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
 
 bool TtfEpdFont::loadVariantOf(TtfEpdFont& master, const uint16_t pointSize, const bool twoBit,
                                const size_t glyphCacheBytes, const uint16_t maxGlyphs) {
+  return loadVariantOf(master, pointSize, twoBit ? BitDepth::Bpp2 : BitDepth::Bpp1, glyphCacheBytes, maxGlyphs);
+}
+
+bool TtfEpdFont::loadVariantOf(TtfEpdFont& master, const uint16_t pointSize, const BitDepth bitDepth,
+                               const size_t glyphCacheBytes, const uint16_t maxGlyphs) {
   loaded_ = false;
   TtfEpdFont* root = &master;
   while (root->master_) root = root->master_;
@@ -185,7 +198,7 @@ bool TtfEpdFont::loadVariantOf(TtfEpdFont& master, const uint16_t pointSize, con
     f.srcIndex = mf.srcIndex;
     f.weight = mf.weight;
     f.wantItalic = mf.wantItalic;
-    f.twoBit = twoBit;
+    f.bitDepth = bitDepth;
     f.sizePx = sizePx;
     // Variants only use the tail buffer (no core retention)
     f.cap = (i == 0) ? glyphCacheBytes : std::min<size_t>(glyphCacheBytes, 64 * 1024);
@@ -346,11 +359,12 @@ void TtfEpdFont::setupFace(Face& f) {
   f.data.advanceY = static_cast<uint8_t>(lineHeight > 255 ? 255 : (lineHeight < 0 ? 0 : lineHeight));
   f.data.ascender = ascent;
   f.data.descender = lineHeight - ascent > 0 ? lineHeight - ascent : 0;
-  f.data.is2Bit = f.twoBit;
+  f.data.is2Bit = f.bitDepth == BitDepth::Bpp2;
+  f.data.is4Bit = f.bitDepth == BitDepth::Bpp4;
   f.data.glyphMissHandler = &TtfEpdFont::missThunk;
   f.data.glyphMissCtx = &f;
   f.data.coverageHandler = &TtfEpdFont::coverageThunk;
-  f.data.vectorBitmapHandler = &TtfEpdFont::bitmapThunk;
+  f.data.bitmapHandler = &TtfEpdFont::bitmapThunk;
   // GSUB-derived ligature pairs (resolveLigatures). Empty until this face
   // inits — a lazy style renders its first pass ligature-free, then picks
   // them up once its glyphs fault the face in.
@@ -469,8 +483,9 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
   freeink::font::FtFont::GlyphMetrics gm;
   const bool haveMetrics = f.ft->metricsGlyph26_6(gid, size26_6, gm);
   const freeink::font::GlyphBitmap* g = f.ft->rasterizeGlyph26_6(gid, size26_6);
-  uint32_t px = (g && g->pixels) ? static_cast<uint32_t>(g->width) * g->height : 0;
-  size_t bytes = px ? (f.twoBit ? (px + 3) / 4 : (px + 7) / 8) : 0;
+  const bool validBitmap = g && g->pixels && g->width <= UINT8_MAX && g->height <= UINT8_MAX;
+  uint32_t px = validBitmap ? static_cast<uint32_t>(g->width) * g->height : 0;
+  size_t bytes = ttfPackedBitmapBytes(px, f.bitDepth);
   if (bytes > f.cap) {
     bytes = 0;
     px = 0;
@@ -555,23 +570,8 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
     // flush/trim above guarantees bmpUsed + bytes <= bmpCap, so this never exceeds
     // the ceiling; capacity is retained across page turns (clearCache keeps it).
     if (bmpVec.size() < bmpUsed + bytes) bmpVec.resize(bmpUsed + bytes, 0);
-    uint8_t* dst = bmpVec.data() + bmpUsed;
-    for (size_t i = 0; i < bytes; ++i) dst[i] = 0;
-    for (uint32_t i = 0; i < px; ++i) {
-      const uint8_t a = g->pixels[i];
-      if (f.twoBit) {
-        // Same 25/50/75% level thresholds as the .cpfont converter
-        // (fontconvert_sdcard.py's 4-bit >=4/8/12 downsample), so a TTF face
-        // prints at the same stroke weight as its .cpfont rendition. The BW
-        // page-turn pass inks ANY nonzero level, so the 25% start is what
-        // gives CJK strokes their full weight; starting at 50% rendered
-        // visibly thinner than cpfont.
-        const uint8_t v = a < 64 ? 0 : a < 128 ? 1 : a < 192 ? 2 : 3;
-        dst[i >> 2] |= static_cast<uint8_t>(v << ((3 - (i & 3)) * 2));
-      } else if (a >= 128) {
-        dst[i >> 3] |= static_cast<uint8_t>(1u << (7 - (i & 7)));
-      }
-    }
+    packTtfGlyphBitmap(g->pixels, static_cast<uint16_t>(g->width), static_cast<uint16_t>(g->height), f.bitDepth,
+                       bmpVec.data() + bmpUsed);
     eg.width = static_cast<uint8_t>(g->width);
     eg.height = static_cast<uint8_t>(g->height);
     eg.left = g->xoff;

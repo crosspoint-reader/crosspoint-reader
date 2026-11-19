@@ -1,5 +1,7 @@
 #pragma once
 
+#include <HalStorage.h>
+
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -30,6 +32,15 @@ class SdCardFont {
   // Distinct from a missed-glyph count so the caller can retry smaller.
   static constexpr int PREWARM_ARENA_TOO_LARGE = -2;
   static constexpr uint8_t MAX_STYLES = 4;
+  static constexpr uint16_t CPFONT_FLAG_2BIT = 0x0001;
+  static constexpr uint16_t CPFONT_FLAG_4BIT = 0x0002;
+  static constexpr uint32_t MINI_SLAB_SHIFT = 13;
+  static constexpr uint32_t MINI_SLAB_SIZE = 1u << MINI_SLAB_SHIFT;  // 8,192 B non-straddling slabs
+  static constexpr uint32_t MINI_SLAB_MASK = MINI_SLAB_SIZE - 1u;
+  static constexpr uint8_t MAX_MINI_SLABS = 16;
+  static constexpr uint8_t MAX_NO_PSRAM_SLABS = 4;  // <= 32 KB resident 4bpp cap on ESP32-C3
+  // Marks a resident EpdGlyph entry whose bitmap spilled past the slab cap and faults via overflow_.
+  static constexpr uint32_t SPILLED_BITMAP_FLAG = 0x80000000u;
 
   SdCardFont() = default;
   ~SdCardFont();
@@ -90,10 +101,30 @@ class SdCardFont {
   // Returns true if advance table is populated for at least one style.
   bool hasAdvanceTable() const;
 
+  // Retain an open read-only file handle across an active render PrewarmScope.
+  void beginPrewarmScope() {
+    scopeActive_ = true;
+    scannedStyleMask_ = 0;
+  }
+
+  // Record a style observed during FontCacheManager::recordText(), even when
+  // scan font or codepoint slots are saturated, so compactForRender() keeps it.
+  void noteScannedStyle(uint8_t style) {
+    if (loaded_) {
+      scannedStyleMask_ |= static_cast<uint8_t>(1u << resolveStyle(style));
+    }
+  }
+  uint8_t scannedStyleMask() const { return scannedStyleMask_; }
+
   // Free mini data for all styles and restore stub EpdFontData.
   // Preserves the persistent advance cache so repeated layout passes can reuse
   // previously fetched metrics.
   void clearCache();
+
+  // Reclaim unreferenced style arenas, trailing unused 4bpp slabs, and (when
+  // layout is idle) persistent advance tables on non-PSRAM boards right after
+  // PrewarmScope::endScanAndPrewarm().
+  void compactForRender(uint8_t activeStyleMask, bool dropLayoutAdvanceCache);
 
   // Drop the persistent advance cache. Call when unloading the SD font or
   // when font/size/family/glyph-table state changes, or to recover a failed bitmap allocation.
@@ -125,15 +156,9 @@ class SdCardFont {
   // Number of styles present in this font file.
   uint8_t styleCount() const { return styleCount_; }
 
-  // Returns true if the glyph pointer points into the overflow buffer.
-  bool isOverflowGlyph(const EpdGlyph* glyph) const;
-
-  // Returns the bitmap for an on-demand-loaded (overflow) glyph.
-  const uint8_t* getOverflowBitmap(const EpdGlyph* glyph) const;
-
-  // Extract SdCardFont* from an opaque glyphMissCtx pointer.
-  // Used by GfxRenderer::getGlyphBitmap() to recover the SdCardFont from EpdFontData::glyphMissCtx.
-  static SdCardFont* fromMissCtx(void* ctx);
+  // Resolve bitmap pointer for any glyph of this SdCardFont (overflow LRU slot,
+  // 8 KB non-straddling 4bpp slab, spilled/metadata-only glyph, or contiguous miniBitmap).
+  static const uint8_t* resolveGlyphBitmap(void* ctx, const EpdGlyph* glyph);
 
   // True once after a loaded font first hits a corrupt glyph entry, so the UI can tell the user.
   static bool takeCorruptGlyphNotice() { return corruptGlyphNotice_.exchange(false); }
@@ -162,6 +187,7 @@ class SdCardFont {
     int16_t ascender = 0;
     int16_t descender = 0;
     bool is2Bit = false;
+    bool is4Bit = false;
     uint16_t kernLeftEntryCount = 0;
     uint16_t kernRightEntryCount = 0;
     uint8_t kernLeftClassCount = 0;
@@ -231,11 +257,16 @@ class SdCardFont {
     EpdUnicodeInterval* miniIntervals = nullptr;
     EpdGlyph* miniGlyphs = nullptr;
     uint8_t* miniBitmap = nullptr;
+    uint8_t* miniBitmapSlabs[MAX_MINI_SLABS] = {};
     uint32_t miniIntervalCount = 0;
     uint32_t miniGlyphCount = 0;
     uint32_t miniIntervalCapacity = 0;
     uint32_t miniGlyphCapacity = 0;
     uint32_t miniBitmapCapacity = 0;
+    uint8_t miniBitmapSlabsAllocated = 0;
+    uint8_t miniBitmapSlabsUsed = 0;
+    bool miniSlabCapped = false;
+    uint16_t miniSpilledCount = 0;
     // Bitmap bytes the current page actually used (set by prewarmStyle), the
     // underuse-hysteresis signal; 0 = no bitmap built this scope (metadata-only
     // prewarm), which leaves the hysteresis counter untouched.
@@ -300,17 +331,23 @@ class SdCardFont {
   };
   OverflowContext overflowCtx_[MAX_STYLES] = {};
 
-  // Shared on-demand overflow buffer (ring buffer of glyphs loaded via glyphMissHandler)
-  static constexpr uint32_t OVERFLOW_CAPACITY = 8;
+  // Shared on-demand overflow buffer (LRU cache of glyphs loaded via glyphMissHandler)
+  static constexpr uint32_t OVERFLOW_CAPACITY = 16;
   struct OverflowEntry {
     EpdGlyph glyph;
     uint8_t* bitmap = nullptr;
     uint32_t codepoint = 0;
+    uint32_t bitmapOffset = UINT32_MAX;
+    uint32_t lastAccess = 0;
     uint8_t styleIdx = 0;
   };
   OverflowEntry overflow_[OVERFLOW_CAPACITY] = {};
   uint32_t overflowCount_ = 0;
-  uint32_t overflowNext_ = 0;
+  uint32_t overflowClock_ = 0;
+
+  HalFile cachedReadFile_;
+  bool scopeActive_ = false;
+  uint8_t scannedStyleMask_ = 0;
 
   // Compact advance-only table for layout measurement (per-style).
   // Built by buildAdvanceTable(), queried by getAdvance().
@@ -357,6 +394,10 @@ class SdCardFont {
   void applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const;
   void applyGlyphMissCallback(uint8_t styleIdx);
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
+  static int32_t findMiniGlyphIndex(const PerStyle& s, uint32_t codepoint);
+  const uint8_t* loadSpilledBitmap(uint8_t styleIdx, const EpdGlyph& glyph);
+  HalFile* openOrReuseReadFile(HalFile& localFallback);
+  void closeCachedReadFile();
   // Drops this style's reference to its interval table and frees the table with the last one.
   static void releaseIntervals(PerStyle& s);
   // False for a glyph entry the file cannot back (a corrupt .cpfont): its data length must be the

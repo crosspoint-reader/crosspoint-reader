@@ -434,7 +434,8 @@ bool SdCardFontSystem::loadTtfVariant(const uint8_t pointSize, const int fontId)
     return false;
   }
   // Variants carry headings and inline runs, sharing ttf_'s FreeType faces.
-  if (!font->loadVariantOf(*ttf_, pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/64 * 1024, /*maxGlyphs=*/512))
+  if (!font->loadVariantOf(*ttf_, pointSize, TtfEpdFont::BitDepth::Bpp4, /*glyphCacheBytes=*/64 * 1024,
+                           /*maxGlyphs=*/512))
     return false;
   font->build(" ");
   renderer_->insertFont(fontId, font->family());
@@ -560,8 +561,9 @@ void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
       LOG_ERR("SDFS", "OOM: TtfEpdFont for UI fallback @%upt", ui.pointSize);
       continue;  // built-in bitmap UI fonts keep covering this size
     }
-    const bool ok =
-        f->loadVariantOf(*ttf_, ui.pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/16 * 1024, /*maxGlyphs=*/384);
+    // Keep UI fallbacks at 2bpp so short title/row glyph caches stay compact.
+    const bool ok = f->loadVariantOf(*ttf_, ui.pointSize, TtfEpdFont::BitDepth::Bpp2, /*glyphCacheBytes=*/16 * 1024,
+                                     /*maxGlyphs=*/384);
     if (!ok) continue;
     LOG_DBG("SDFS", "TTF UI fallback @%upt loaded (heap free %u)", ui.pointSize, (unsigned)ESP.getFreeHeap());
     // Distinct id from the reader-size font: a UI size can equal the reader size
@@ -606,7 +608,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     clearTtfVariants(renderer);  // their ids derive from the old reader size
     renderer.unregisterTtfFont(ttfFontId_);
     renderer.removeFont(ttfFontId_);
-    if (ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs)) {
+    if (ttf_->load(size, TtfEpdFont::BitDepth::Bpp4, cacheBytes, maxGlyphs)) {
       ttf_->build(" ");
       ttfFontId_ = computeTtfFontId(family.name.c_str(), size, ttf_->contentKey());
       renderer.insertFont(ttfFontId_, ttf_->family());
@@ -656,7 +658,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     return;
   }
   addTtfSources(*ttf_);
-  const bool ok = ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs);
+  const bool ok = ttf_->load(size, TtfEpdFont::BitDepth::Bpp4, cacheBytes, maxGlyphs);
   if (!ok) {
     // init failure is ambiguous (corrupt font vs. transient OOM inside
     // FreeType): keep the selection and retry next ensureLoaded() rather than

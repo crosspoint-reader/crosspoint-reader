@@ -18,6 +18,9 @@ Usage:
     # Generate only specific families
     python3 build-sd-fonts.py --only Literata,IBMPlexMono
 
+    # Generate 4-bit fonts (--4bit --stem-anchor --halo-clip --gamma 1.10)
+    python3 build-sd-fonts.py --4bit --only NotoSerif,Literata --output-dir dist-4bit/
+
     # Stream child process output for debugging
     python3 build-sd-fonts.py --verbose
 
@@ -26,6 +29,7 @@ Usage:
 """
 
 import argparse
+import math
 import os
 import shutil
 import subprocess
@@ -48,6 +52,7 @@ DEFAULT_OUTPUT = SCRIPT_DIR / "output"
 DOWNLOAD_DIR = SCRIPT_DIR / "downloaded_fonts"
 INSTANCE_DIR = SCRIPT_DIR / "instanced_fonts"
 DEFAULT_FALLBACK_FONT = EPDFONTS_DIR / "builtinFonts/source/NotoSans/NotoSans-Regular.ttf"
+DEFAULT_4BIT_GAMMA = 1.10
 
 
 _orig_getaddrinfo = socket.getaddrinfo
@@ -185,30 +190,48 @@ def _stream_pipe(pipe, prefix: str, dest: list[str]):
         print(f"  [{prefix}] {line}", end="", flush=True)
 
 
-def build_family(
-    family: dict, output_base: Path, verbose: bool = False, timeout: int = 600
-) -> tuple[str, bool, str]:
-    """Build a single font family. Returns (name, success, message)."""
+def build_fontconvert_cmd(
+    family: dict,
+    resolved_styles: dict[str, Path],
+    output_dir: Path,
+    *,
+    four_bit: bool | None = None,
+    gamma: float | None = None,
+    stem_anchor: bool | None = None,
+    halo_clip: bool | None = None,
+    sizes_override: list[int] | None = None,
+) -> list[str]:
+    """Build the fontconvert_sdcard.py command line for one family."""
     name = family["name"]
-    output_dir = output_base / name
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    styles = family.get("styles", {})
     intervals = family["intervals"]
-    sizes = ",".join(str(s) for s in family["sizes"])
+    sizes_list = sizes_override if sizes_override is not None else family["sizes"]
+    sizes = ",".join(str(s) for s in sizes_list)
 
-    # Resolve all font file paths (downloads as needed)
-    try:
-        resolved_styles = {}
-        for style_name, style_spec in styles.items():
-            resolved_styles[style_name] = resolve_font_path(style_spec, name, style_name)
-    except (FileNotFoundError, RuntimeError) as e:
-        return name, False, str(e)
+    use_4bit = bool(family.get("four_bit", False)) if four_bit is None else bool(four_bit)
+    use_stem_anchor = (
+        (bool(family["stem_anchor"]) if "stem_anchor" in family else use_4bit)
+        if stem_anchor is None
+        else bool(stem_anchor)
+    )
+    use_halo_clip = (
+        (bool(family["halo_clip"]) if "halo_clip" in family else use_4bit)
+        if halo_clip is None
+        else bool(halo_clip)
+    )
+    if gamma is not None:
+        eff_gamma: float | None = float(gamma)
+    elif family.get("gamma") is not None:
+        eff_gamma = float(family["gamma"])
+    elif use_4bit:
+        eff_gamma = DEFAULT_4BIT_GAMMA
+    else:
+        eff_gamma = None
 
-    # Build the fontconvert_sdcard.py command
+    if eff_gamma is not None and (eff_gamma <= 0.0 or not math.isfinite(eff_gamma)):
+        raise ValueError(f"{name}: gamma must be finite and > 0, got {eff_gamma}")
+
     cmd = [sys.executable, str(FONTCONVERT)]
 
-    multi_style = len(resolved_styles) > 1 or "regular" not in resolved_styles
     has_any_multi = any(k in resolved_styles for k in ("regular", "bold", "italic", "bolditalic"))
 
     if has_any_multi and len(resolved_styles) > 1:
@@ -231,6 +254,54 @@ def build_family(
 
     if family.get("force_autohint", False):
         cmd.append("--force-autohint")
+    if use_4bit:
+        cmd.append("--4bit")
+    if eff_gamma is not None:
+        gamma_str = f"{eff_gamma:.2f}" if round(eff_gamma, 2) == eff_gamma else str(eff_gamma)
+        cmd.extend(["--gamma", gamma_str])
+    if use_stem_anchor:
+        cmd.append("--stem-anchor")
+    if use_halo_clip:
+        cmd.append("--halo-clip")
+
+    return cmd
+
+
+def build_family(
+    family: dict,
+    output_base: Path,
+    verbose: bool = False,
+    timeout: int = 600,
+    four_bit: bool | None = None,
+    gamma: float | None = None,
+    stem_anchor: bool | None = None,
+    halo_clip: bool | None = None,
+    sizes_override: list[int] | None = None,
+) -> tuple[str, bool, str]:
+    """Build a single font family. Returns (name, success, message)."""
+    name = family["name"]
+    output_dir = output_base / name
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    styles = family.get("styles", {})
+
+    # Resolve all font file paths (downloads as needed)
+    try:
+        resolved_styles = {}
+        for style_name, style_spec in styles.items():
+            resolved_styles[style_name] = resolve_font_path(style_spec, name, style_name)
+        cmd = build_fontconvert_cmd(
+            family,
+            resolved_styles,
+            output_dir,
+            four_bit=four_bit,
+            gamma=gamma,
+            stem_anchor=stem_anchor,
+            halo_clip=halo_clip,
+            sizes_override=sizes_override,
+        )
+    except (FileNotFoundError, RuntimeError, ValueError) as e:
+        return name, False, str(e)
 
     # Run fontconvert_sdcard.py
     start = time.monotonic()
@@ -315,7 +386,7 @@ def generate_manifest(
     print(f"Manifest written: {manifest_path}")
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build SD card fonts from YAML config")
     parser.add_argument(
         "--config", default=str(DEFAULT_CONFIG), help="Path to font families YAML config"
@@ -323,7 +394,38 @@ def main():
     parser.add_argument(
         "--output-dir", default=str(DEFAULT_OUTPUT), help="Output directory for .cpfont files"
     )
-    parser.add_argument("--only", help="Comma-separated family names to build (default: all)")
+    parser.add_argument(
+        "--only", "--families", dest="only",
+        help="Comma-separated family names to build (default: all)"
+    )
+    parser.add_argument(
+        "--sizes", default=None,
+        help="Override comma-separated point sizes to build, e.g. '14,16' (default: per-family sizes in YAML)"
+    )
+    depth_group = parser.add_mutually_exclusive_group()
+    depth_group.add_argument(
+        "-2", "--2bit", dest="two_bit", action="store_true",
+        help="Emit 2-bit (4-level, flags=0x0001) glyph bitmaps (default)."
+    )
+    depth_group.add_argument(
+        "-4", "--4bit", dest="four_bit", action="store_true",
+        help=(
+            f"Emit 4-bit (16-level, flags=0x0002) glyph bitmaps with "
+            f"--stem-anchor --halo-clip and default --gamma {DEFAULT_4BIT_GAMMA:.2f}."
+        ),
+    )
+    parser.add_argument(
+        "--gamma", type=float, default=None,
+        help=f"Reflectance-space quantization gamma override (default: {DEFAULT_4BIT_GAMMA:.2f} with --4bit)."
+    )
+    parser.add_argument(
+        "--stem-anchor", dest="stem_anchor", action=argparse.BooleanOptionalAction, default=None,
+        help="Enable or disable outline stem anchoring (default: enabled with --4bit, disabled with --2bit)."
+    )
+    parser.add_argument(
+        "--halo-clip", dest="halo_clip", action=argparse.BooleanOptionalAction, default=None,
+        help="Enable or disable outer-halo clip & tight-counter guard (default: enabled with --4bit, disabled with --2bit)."
+    )
     parser.add_argument("--manifest", action="store_true", help="Also generate fonts.json manifest")
     parser.add_argument("--base-url", default="", help="Base URL for manifest (required with --manifest)")
     parser.add_argument(
@@ -342,10 +444,28 @@ def main():
         "--timeout", type=int, default=600,
         help="Per-family timeout in seconds (default: 600)"
     )
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
 
     if args.manifest and not args.base_url:
         parser.error("--base-url is required when using --manifest")
+    if args.gamma is not None and (args.gamma <= 0.0 or not math.isfinite(args.gamma)):
+        parser.error("--gamma must be finite and greater than 0")
+
+    sizes_override = None
+    if args.sizes:
+        try:
+            sizes_override = [int(s.strip()) for s in args.sizes.split(",") if s.strip()]
+        except ValueError:
+            parser.error("--sizes must be comma-separated integers (e.g. '14,16')")
+        if not sizes_override:
+            parser.error("--sizes must specify at least one point size")
+
+    cli_four_bit: bool | None = True if args.four_bit else (False if args.two_bit else None)
 
     # Load config
     config_path = Path(args.config)
@@ -410,7 +530,18 @@ def main():
     failed = []
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(build_family, family, output_base, verbose, timeout): family["name"]
+            executor.submit(
+                build_family,
+                family,
+                output_base,
+                verbose,
+                timeout,
+                cli_four_bit,
+                args.gamma,
+                args.stem_anchor,
+                args.halo_clip,
+                sizes_override,
+            ): family["name"]
             for family in families
         }
         for future in as_completed(futures):

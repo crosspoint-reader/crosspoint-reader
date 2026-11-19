@@ -38,15 +38,107 @@
 // e.g. an open SD file) is BORROWED and must outlive this object, which must
 // outlive any GfxRenderer registration.
 
+#include <cstddef>
+#include <cstdint>
+
 #include "VectorFontSupport.h"
+
+enum class TtfBitDepth : uint8_t { Bpp1 = 1, Bpp2 = 2, Bpp4 = 4 };
+
+// Reflectance-space gamma = 1.20 quantization LUT (0 = white .. 15 = black)
+// with <= 15/255 outer-halo dead-zone clip.
+inline constexpr uint8_t kTtfGamma4Lut[256] = {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
+    2,  2,  2,  2,  2,  2,  2,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  4,  4,
+    4,  4,  4,  4,  4,  4,  4,  4,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,
+    6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,
+    8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,
+    10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11,
+    11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13,
+    13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14,
+    14, 14, 14, 14, 14, 14, 14, 14, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+};
+
+constexpr size_t ttfPackedBitmapBytes(const uint32_t pixelCount, const TtfBitDepth bitDepth) {
+  if (pixelCount == 0) return 0;
+  switch (bitDepth) {
+    case TtfBitDepth::Bpp1:
+      return (pixelCount + 7u) / 8u;
+    case TtfBitDepth::Bpp2:
+      return (pixelCount + 3u) / 4u;
+    case TtfBitDepth::Bpp4:
+      return (pixelCount + 1u) / 2u;
+  }
+  return 0;
+}
+
+// In-place 4-neighbor tight-counter guard on a packed MSB-first 4bpp glyph bitmap:
+// snaps interior light pixels (ink 1..3) with >= 3 dark cardinal neighbors (ink >= 11)
+// to white (0), keeping small 12-14 pt 'e'/'a'/'g' eyes open under stem darkening.
+inline void applyTtfTightCounterGuard4Bit(uint8_t* dst, const uint16_t width, const uint16_t height) {
+  if (dst == nullptr || width < 3 || height < 3) return;
+  const auto getInk = [dst](const uint32_t idx) -> uint8_t {
+    const uint8_t byte = dst[idx >> 1];
+    return (idx & 1u) ? static_cast<uint8_t>(byte & 0x0Fu) : static_cast<uint8_t>(byte >> 4);
+  };
+  for (uint16_t y = 1; y + 1 < height; ++y) {
+    const uint32_t rowOff = static_cast<uint32_t>(y) * width;
+    for (uint16_t x = 1; x + 1 < width; ++x) {
+      const uint32_t idx = rowOff + x;
+      const uint8_t ink = getInk(idx);
+      if (ink == 0 || ink > 3) continue;
+      const uint8_t walls = static_cast<uint8_t>((getInk(idx - width) >= 11) + (getInk(idx + width) >= 11) +
+                                                 (getInk(idx - 1) >= 11) + (getInk(idx + 1) >= 11));
+      if (walls >= 3) {
+        dst[idx >> 1] &= static_cast<uint8_t>((idx & 1u) ? 0xF0u : 0x0Fu);
+      }
+    }
+  }
+}
+
+// Pack 8-bit FreeType coverage pixels into dst (MSB-first for 1/2/4bpp, matching GlyphBitmap).
+inline void packTtfGlyphBitmap(const uint8_t* src, const uint32_t pixelCount, const TtfBitDepth bitDepth,
+                               uint8_t* dst) {
+  const size_t bytes = ttfPackedBitmapBytes(pixelCount, bitDepth);
+  for (size_t i = 0; i < bytes; ++i) dst[i] = 0;
+  switch (bitDepth) {
+    case TtfBitDepth::Bpp4:
+      for (uint32_t i = 0; i < pixelCount; ++i) {
+        const uint8_t nib = kTtfGamma4Lut[src[i]];
+        dst[i >> 1] |= static_cast<uint8_t>(nib << ((i & 1u) ? 0u : 4u));
+      }
+      break;
+    case TtfBitDepth::Bpp2:
+      for (uint32_t i = 0; i < pixelCount; ++i) {
+        const uint8_t a = src[i];
+        // Match fontconvert_sdcard.py's 25/50/75% thresholds so 2bpp TTF glyphs
+        // keep the same stroke weight as 2bpp .cpfont renditions.
+        const uint8_t v = a < 64 ? 0 : a < 128 ? 1 : a < 192 ? 2 : 3;
+        dst[i >> 2] |= static_cast<uint8_t>(v << ((3u - (i & 3u)) * 2u));
+      }
+      break;
+    case TtfBitDepth::Bpp1:
+      for (uint32_t i = 0; i < pixelCount; ++i) {
+        if (src[i] >= 128) {
+          dst[i >> 3] |= static_cast<uint8_t>(1u << (7u - (i & 7u)));
+        }
+      }
+      break;
+  }
+}
+
+inline void packTtfGlyphBitmap(const uint8_t* src, const uint16_t width, const uint16_t height,
+                               const TtfBitDepth bitDepth, uint8_t* dst) {
+  packTtfGlyphBitmap(src, static_cast<uint32_t>(width) * height, bitDepth, dst);
+  if (bitDepth == TtfBitDepth::Bpp4) {
+    applyTtfTightCounterGuard4Bit(dst, width, height);
+  }
+}
 
 #if CROSSPOINT_VECTOR_FONTS
 
 #include <FontPsram.h>
 #include <FtFont.h>
-
-#include <cstddef>
-#include <cstdint>
 
 #include "ComplexShaper.h"
 #include "EpdFont.h"
@@ -55,6 +147,8 @@
 
 class TtfEpdFont {
  public:
+  using BitDepth = TtfBitDepth;
+
   // Style roles for source slots.
   enum Style : uint8_t { Regular = 0, Bold = 1, Italic = 2, BoldItalic = 3 };
 
@@ -67,11 +161,14 @@ class TtfEpdFont {
   // Build the family at the given reader point size from the configured sources.
   // Returns false if the regular source is missing or unparseable.
   bool load(uint16_t pointSize, bool twoBit = true, size_t glyphCacheBytes = 32 * 1024, uint16_t maxGlyphs = 768);
+  bool load(uint16_t pointSize, BitDepth bitDepth, size_t glyphCacheBytes = 32 * 1024, uint16_t maxGlyphs = 768);
 
   // Initialize as a sized variant of an existing (master) font family. Borrows
   // the master font's sources and FreeType faces (no re-parsing of font files
   // and no duplicate FT_Face allocations in memory).
   bool loadVariantOf(TtfEpdFont& master, uint16_t pointSize, bool twoBit = true, size_t glyphCacheBytes = 64 * 1024,
+                     uint16_t maxGlyphs = 512);
+  bool loadVariantOf(TtfEpdFont& master, uint16_t pointSize, BitDepth bitDepth, size_t glyphCacheBytes = 64 * 1024,
                      uint16_t maxGlyphs = 512);
 
   EpdFontFamily family() const;
@@ -132,7 +229,7 @@ class TtfEpdFont {
 
     size_t cap = 0;
     uint16_t maxGlyphs = 0;
-    bool twoBit = true;
+    BitDepth bitDepth = BitDepth::Bpp2;
     uint16_t sizePx = 0;
     uint8_t srcIndex = 0;           // which Source this face initializes from
     int weight = 400;               // design weight requested (wght axis / faux bold)

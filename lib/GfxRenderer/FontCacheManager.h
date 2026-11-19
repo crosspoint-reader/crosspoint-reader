@@ -31,6 +31,9 @@ class FontCacheManager {
   }
   void releaseSdFontCaches();
   bool prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F, bool accumulate = true);
+  // Compacts unused SD font styles/variants, trailing 4bpp slabs, and (when
+  // dropLayoutAdvanceCache is true) layout advance tables.
+  void compactAfterPrewarm(bool dropLayoutAdvanceCache = true);
   // Recommended lookahead depth for idle prewarming. TTF fonts on PSRAM
   // accumulate glyphs across multiple pages; single-page SD fonts use 1.
   int getIdleLookaheadPages(int fontId) const;
@@ -86,7 +89,12 @@ class FontCacheManager {
   int scanFontIds_[MAX_SCAN_FONTS] = {};
   uint32_t scanCodepoints_[MAX_SCAN_CODEPOINTS + 1] = {};
   uint16_t scanGroupCounts_[SCAN_GROUP_COUNT] = {};
+  uint8_t scanStyleMasks_[MAX_SCAN_FONTS] = {};
   uint16_t scanCodepointCount_ = 0;
   uint8_t scanFontCount_ = 0;
   bool scanOverflowWarned_ = false;
+
+  int lastScanFontIds_[MAX_SCAN_FONTS] = {};
+  uint8_t lastScanStyleMasks_[MAX_SCAN_FONTS] = {};
+  uint8_t lastScanFontCount_ = 0;
 };

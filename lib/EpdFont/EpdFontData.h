@@ -239,8 +239,7 @@ typedef struct {
   /// before requesting another missed glyph.
   const EpdGlyph* (*glyphMissHandler)(void* ctx, uint32_t codepoint);
 
-  /// Context pointer for glyphMissHandler (typically SdCardFont*).  Also used by
-  /// GfxRenderer::getGlyphBitmap() to retrieve overflow bitmaps via SdCardFont.
+  /// Context pointer for glyphMissHandler, coverageHandler, bitmapHandler, kernHandler, and shapeHandler.
   void* glyphMissCtx;
 
   /// Full-coverage query for fonts whose interval table only reflects what is
@@ -250,13 +249,11 @@ typedef struct {
   /// nullptr for fonts whose interval table is already complete (built-ins).
   bool (*coverageHandler)(void* ctx, uint32_t codepoint);
 
-  /// Vector-font bitmap accessor (FreeInkFont / TtfEpdFont). When non-null,
-  /// GfxRenderer::getGlyphBitmap() returns vectorBitmapHandler(glyphMissCtx, glyph)
-  /// instead of indexing ->bitmap or going through the SdCardFont overflow path.
-  /// This lets a runtime-rasterized TTF fault + cache glyphs on ANY draw path
-  /// (via glyphMissHandler) without pre-warming. nullptr for every other font,
-  /// so the SD/built-in bitmap paths are unaffected (all fonts zero-init this).
-  const uint8_t* (*vectorBitmapHandler)(void* ctx, const EpdGlyph* glyph);
+  /// Handler-backed bitmap accessor (SdCardFont slabs/overflow and TtfEpdFont).
+  /// When non-null, GfxRenderer::getGlyphBitmap() resolves glyph pixels via
+  /// bitmapHandler(glyphMissCtx, glyph) instead of indexing ->bitmap. nullptr
+  /// for built-in uncompressed and group-compressed fonts.
+  const uint8_t* (*bitmapHandler)(void* ctx, const EpdGlyph* glyph);
 
   /// Dynamic kerning for handler-backed fonts (TTF via FreeInkFont): returns
   /// the 4.4 fixed-point pixel adjustment for the pair, 0 when none. Checked
@@ -271,7 +268,13 @@ typedef struct {
   /// Shares glyphMissCtx. nullptr for fonts without shaping data (all fonts
   /// zero-init this).
   bool (*shapeHandler)(void* ctx, const char* utf8, std::string* out);
+
+  /// True for 4-bit (16-level, 2 pixels/byte) fonts. Appended last so positional
+  /// aggregate initializers in builtinFonts/*.h zero-initialize this field to false.
+  bool is4Bit;
 } EpdFontData;
+
+constexpr uint8_t epdBitsPerPixel(const EpdFontData& d) { return d.is4Bit ? 4 : (d.is2Bit ? 2 : 1); }
 
 // Solid Unicode symbols can be drawn as rectangles when the font lacks them.
 namespace syntheticGlyph {

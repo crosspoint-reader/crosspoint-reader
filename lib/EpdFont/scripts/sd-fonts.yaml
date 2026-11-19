@@ -13,6 +13,10 @@
 #   intervals:   Comma-separated Unicode interval presets for fontconvert_sdcard.py
 #   sizes:       Point sizes to generate
 #   force_autohint: (optional) Force FreeType auto-hinter instead of native hinting
+#   four_bit:    (optional) Emit 4-bit (16-level) glyph bitmaps instead of 2-bit
+#   gamma:       (optional) Reflectance-space quantization gamma override (default 1.10 with --4bit)
+#   stem_anchor: (optional) Override outline stem anchoring & Y-zone overshoot snap (bool)
+#   halo_clip:   (optional) Override outer-halo dead-zone clip & tight-counter guard (bool)
 #   styles:      Map of style name -> font source
 #                  path: relative to lib/EpdFont (for committed fonts)
 #                  url:  download URL (for fonts not in the repo)
