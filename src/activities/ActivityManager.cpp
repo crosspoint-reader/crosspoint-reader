@@ -116,7 +116,8 @@ void ActivityManager::loop() {
     return;
   }
 
-  if (currentActivity) {
+  // Radio shutdown can defer a screen change after the outgoing activity has released its resources.
+  if (currentActivity && pendingAction == PendingAction::None) {
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
       if (currentActivity->handleHomeGesture()) {
         return;

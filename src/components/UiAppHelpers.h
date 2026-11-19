@@ -143,34 +143,6 @@ inline freeink::ui::BitmapRef listIconFor(const UIIcon icon, const int size = 24
   }
 }
 
-// Bottom-anchored Cancel / OK pair for slider dialogs on touch devices, where
-// the physical Back/Confirm buttons (and their auto-hidden hints) may not
-// exist. Callers gate on hasTouch(): button boards keep the hint chrome and
-// need no on-screen pair. Consumes the bottom of the screen's content band.
-template <typename Screen>
-inline void addDialogCancelOk(Screen& screen, const freeink::ui::ActionId cancelAction,
-                              const freeink::ui::ActionId okAction) {
-  const auto& theme = screen.theme();
-  const int16_t sideInset = static_cast<int16_t>(theme.spaceLg * 2);
-  const freeink::ui::Rect band =
-      screen.takeBottom(theme.rowHeight, theme.spaceLg).inset(freeink::ui::Insets{0, sideInset, 0, sideInset});
-  const int16_t gap = theme.spaceLg;
-  const int16_t buttonWidth = static_cast<int16_t>((band.width - gap) / 2);
-
-  freeink::ui::ButtonProps cancel;
-  cancel.label = tr(STR_CANCEL);
-  cancel.action = cancelAction;
-  cancel.inputMask = freeink::ui::InputTouch;
-  cancel.text = theme.bodyText;
-  freeink::ui::ButtonProps ok = cancel;
-  ok.label = tr(STR_OK_BUTTON);
-  ok.action = okAction;
-  freeink::ui::button(screen.frame(), freeink::ui::Rect{band.x, band.y, buttonWidth, band.height}, cancel);
-  freeink::ui::button(
-      screen.frame(),
-      freeink::ui::Rect{static_cast<int16_t>(band.x + band.width - buttonWidth), band.y, buttonWidth, band.height}, ok);
-}
-
 // withLongPress: the SDK touch classifier fires the long-press WHILE the
 // finger is still down (matching the physical-button hold-to-act feel) and
 // suppresses the remainder of the contact, so the finger lift can't also
