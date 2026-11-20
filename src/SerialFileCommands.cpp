@@ -237,6 +237,7 @@ void putFile(const SerialCommand& cmd) {
         sdFontSystem.markRegistryDirty();
       } else {
         clearBookCache(path);
+        sleepImageChanged(path.c_str());
         if (library::isLibraryBookFile(path)) library::markLibraryIndexDirty();
       }
     } else {
@@ -441,6 +442,11 @@ void moveItem(const SerialCommand& cmd) {
       }
     } else {
       moved = moveBookFile(source, target);
+    }
+    if (moved) {
+      // A sleep image moved in or out of the sleep folders is converted again at the next sleep.
+      sleepImageChanged(source.c_str());
+      sleepImageChanged(target.c_str());
     }
   }
   if (!moved) return replyErr(cmd, "could not move it");
