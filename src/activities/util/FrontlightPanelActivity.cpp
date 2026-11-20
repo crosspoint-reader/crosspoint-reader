@@ -13,6 +13,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "activities/home/HomeActivity.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/icons/customListIcons.h"
@@ -436,6 +437,18 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
 }
 
 void FrontlightPanelActivity::render(RenderLock&&) {
+  bool curIsInverted = display.isInverted();
+  const bool inversionChanged = !inversionStateKnown || curIsInverted != prevIsInverted;
+
+  if (inversionChanged) {
+    renderer.clearScreen();
+    Activity* activity = activityManager.getUnderlyingActivity();
+    if (auto* home = dynamic_cast<HomeActivity*>(activityManager.getUnderlyingActivity())) {
+      home->drawHomeContent();
+    }
+    prevIsInverted = curIsInverted;
+  }
+
   panelBottom = computePanelBottom();
 
   // fui::sheet draws the card body, its bottom rule, and the grabber during
