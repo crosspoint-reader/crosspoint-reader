@@ -285,7 +285,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     const int smallLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
     const int titleBlockHeight = titleLineHeight * static_cast<int>(titleLines.size());
     const int authorHeight = book.author.empty() ? 0 : smallLineHeight * 3 / 2;
-    constexpr int progressGap = 8;
+    constexpr int progressGap = 12;
     constexpr int barGap = 2;
     constexpr int barHeight = 4;
     const bool showProgress =
