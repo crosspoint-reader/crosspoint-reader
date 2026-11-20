@@ -34,7 +34,8 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   // so buildBrowsingScreen() reuses it on every repaint instead of rebuilding
   // a ListItem vector per render.
   std::vector<freeink::ui::ListItem> rowItems;
-  void rebuildRowItems();
+  // Bit i of `downloaded` (from findDownloaded()) = entries[i] gets the downloaded mark.
+  void rebuildRowItems(uint64_t downloaded);
   std::vector<std::string> navigationHistory;
   std::string currentPath;
   // The active search query. While browsing its results the header shows it
@@ -121,7 +122,19 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   void promptLcpPassphrase(bool retry);
   // Decodes the /unlock response ({content_key: b64, expires: epoch}).
   static bool parseUnlockResponse(const std::string& response, LcpWrappedKey* wrapped, int64_t* expiresAt);
+  // Folder downloads are saved in ("" = SD root).
+  const char* downloadFolder() const;
+  // Where a download would be saved, creating nothing: that folder if it exists, else SD root ("").
+  const char* existingDownloadFolder() const;
   std::string downloadDestination(const OpdsEntry& book) const;
+  static std::string bookPathIn(const char* folder, const OpdsEntry& book);
+  static std::string bookFilename(const OpdsEntry& book);
+  // Free, direct download: not a purchase, loan or LCP book.
+  static bool isPlainDownload(const OpdsEntry& book);
+  // Path of the plain download's file where a download would save it, or "" if not there.
+  std::string localCopyPath(const OpdsEntry& book) const;
+  // Which of the feed's first 64 entries are plain downloads already where a download would save them.
+  uint64_t findDownloaded(const std::vector<OpdsEntry>& feed) const;
   bool verifyAndRegisterEpub(const std::string& filename);
   // Fulfilled LCP book awaiting its passphrase (path + parsed license).
   freeink::content::LcpLicense pendingLcpLicense;
@@ -133,7 +146,9 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   void releaseEntries();
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
-  void downloadBook(const OpdsEntry& book);
+  // openAfter: go straight to the reader once the EPUB is verified.
+  void downloadBook(const OpdsEntry& book, bool openAfter);
+  void openBook(const std::string& path);
   void openPublicationDetail(const OpdsEntry& entry);
   static void fillDetailInfo(const OpdsPublication& publication, DetailsSpec& spec);
   // Download the publication's cover art to an SD temp for the details page.
