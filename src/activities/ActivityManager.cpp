@@ -70,6 +70,16 @@ void ActivityManager::begin() {
   assert(renderTaskHandle != nullptr && "Failed to create render task");
 }
 
+/**
+ * Get underlying activity (most recently pushed back activity)
+ */
+Activity* ActivityManager::getUnderlyingActivity() const {
+  if (stackActivities.empty()) {
+    return nullptr;
+  }
+  return stackActivities.back().get();
+}
+
 void ActivityManager::renderTaskTrampoline(void* param) {
   auto* self = static_cast<ActivityManager*>(param);
   self->renderTaskLoop();
