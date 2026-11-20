@@ -90,6 +90,8 @@ class HomeActivity final : public Activity {
   void loadGridCover(RecentBook& book, int height, bool& showingLoading, Rect& popupRect);
 
  public:
+  bool lastRenderInverted = false;
+  bool renderPolarityKnown = false;
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE, bool cleanInitialRefresh = false)
       : Activity("Home", renderer, mappedInput),

@@ -484,9 +484,21 @@ void HomeActivity::render(RenderLock&&) {
   const Rect content = UITheme::getInstance().getContentArea(renderer);
 
   renderer.clearScreen();
+
+  // Invalidate cache if prev mode != current mode (e.g: Normal mode -> Night mode)
   if (coverGridUi) {
+    bool cacheValidity = true;
+    const bool currentInverted = display.isInverted();
+    if (!renderPolarityKnown || lastRenderInverted != currentInverted) {
+      coverRendered = false;
+      lastRenderInverted = currentInverted;
+      renderPolarityKnown = true;  // polarity change detected
+      cacheValidity = false;
+    }
+
     const auto drawGrid = [&] {
       renderer.clearScreen();
+      coverGridUi->setCacheValidity(&cacheValidity);
       coverGridUi->setSelection(selectorIndex);
       UITheme::getInstance().drawCoverGridHome(*coverGridUi);
       // Front Left/Right walk the tabs, so their hints read Left/Right; the
