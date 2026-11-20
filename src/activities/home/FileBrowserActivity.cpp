@@ -387,10 +387,15 @@ void FileBrowserActivity::showEntryActions() {
     return;
   }
 
-  const bool isDirectory = files[nav.selected].back() == '/';
-  static constexpr StrId FILE_OPTIONS[] = {StrId::STR_OPEN, StrId::STR_DELETE, StrId::STR_RENAME};
-  static constexpr StrId DIRECTORY_OPTIONS[] = {StrId::STR_OPEN, StrId::STR_DELETE};
-  optionPopup.show(StrId::STR_FILENAME, isDirectory ? DIRECTORY_OPTIONS : FILE_OPTIONS, isDirectory ? 2 : 3, 0,
+  const std::string& entry = files[nav.selected];
+  const bool isDirectory = entry.back() == '/';
+  const int nameLength = static_cast<int>(isDirectory ? entry.size() - 1 : entry.size());
+  snprintf(fileNameBuffer.get(), NAME_BUFFER_SIZE, "%.*s", nameLength, entry.c_str());
+  utf8ComposeNfcInPlace(fileNameBuffer.get());
+
+  const char* fileActionOptions[] = {tr(STR_OPEN), tr(STR_DELETE), tr(STR_RENAME)};
+  RenderLock lock(*this);
+  optionPopup.show("", fileNameBuffer.get(), fileActionOptions, isDirectory ? 2 : 3, /*currentIndex=*/0,
                    [this](const int index) {
                      if (index == 0) {
                        activateSelected();
@@ -400,6 +405,7 @@ void FileBrowserActivity::showEntryActions() {
                        startRename();
                      }
                    });
+  lock.unlock();
   requestUpdate();
 }
 
