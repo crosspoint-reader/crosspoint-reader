@@ -167,6 +167,35 @@ bool ReaderActivity::handleBackNavigation() {
                                            {this, [](void* ctx) { static_cast<ReaderActivity*>(ctx)->onGoHome(); }});
 }
 
+bool ReaderActivity::handleEndOfBookReached() {
+  if (!isAtEndOfBook()) {
+    readerEndEmitted = false;
+    return false;
+  }
+  if (readerEndEmitted) return false;
+  readerEndEmitted = true;
+
+  if (pluginevents::anySubscriber(pluginevents::Event::ReaderEnd)) {
+    const ScreenshotInfo info = getScreenshotInfo();
+    char percent[8];
+    char endPercent[8];
+    snprintf(percent, sizeof(percent), "%d", info.progressPercent);
+    snprintf(endPercent, sizeof(endPercent), "%d", info.endProgressPercent);
+    const pluginevents::Var vars[] = {{"book", bookPath.c_str()}, {"percent", percent}, {"end_percent", endPercent}};
+    pluginevents::emit(pluginevents::Event::ReaderEnd, vars, 3);
+  }
+
+  // Full takeover: the launch-mode emit above armed the replacer app. Step back
+  // off the EOB state so the firmware menu never renders and the app opens over
+  // the last page; paging to the end again re-triggers it.
+  if (pluginevents::anyEndOfBookReplacer()) {
+    onReturnFromEndOfBook();
+    requestUpdate();
+    return true;
+  }
+  return false;
+}
+
 void ReaderActivity::clearEndOfBookOptionsIfNeeded() {
   if (isAtEndOfBook() || !endOfBookOptionsReady.load(std::memory_order_acquire)) return;
 
@@ -224,6 +253,7 @@ bool ReaderActivity::handleEndOfBookPageTurn(const bool prevTriggered, const boo
 void ReaderActivity::loop() {
   rememberBookOnceRendered();
   clearEndOfBookOptionsIfNeeded();
+  if (handleEndOfBookReached()) return;
   if (handleEndOfBookMenu()) return;
   if (handleFormatInput()) return;
   if (handleBackNavigation()) return;

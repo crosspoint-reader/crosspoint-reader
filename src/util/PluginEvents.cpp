@@ -20,7 +20,7 @@
 namespace {
 
 constexpr const char* EVENT_NAMES[] = {"reader.open", "reader.exit", "reader.session", "book.downloaded",
-                                       "sleep.enter"};
+                                       "sleep.enter", "reader.end"};
 static_assert(sizeof(EVENT_NAMES) / sizeof(EVENT_NAMES[0]) == static_cast<size_t>(pluginevents::Event::COUNT),
               "event name table out of sync");
 
@@ -50,6 +50,7 @@ struct Subscriber {
   uint8_t connectMask = 0;  // events whose handler declares "connect": true
   uint8_t appMask = 0;      // events whose handler routes to a dessen app ("app")
   uint8_t launchMask = 0;   // app events with "mode": "launch" (open the app now)
+  bool replacesEob = false; // reader.end handler marked "replaces": "end of book"
   // Hash of each handler's "require_meta" key, 0 = unfiltered. A hash keeps
   // emit() free of manifest reads; a collision only queues an extra event.
   uint32_t metaKeyHash[static_cast<size_t>(pluginevents::Event::COUNT)] = {};
@@ -118,6 +119,7 @@ void refreshSubscriptions() {
     uint8_t connectMask = 0;
     uint8_t appMask = 0;
     uint8_t launchMask = 0;
+    bool replacesEob = false;
     uint32_t metaHashes[static_cast<size_t>(Event::COUNT)] = {};
     for (JsonPairConst kv : doc["events"].as<JsonObjectConst>()) {
       const int e = eventFromName(kv.key().c_str());
@@ -136,7 +138,12 @@ void refreshSubscriptions() {
       // or launches it (launch mode) instead of a network request/download.
       if (kv.value()["app"].is<const char*>()) {
         appMask |= static_cast<uint8_t>(1u << e);
-        if (strcmp(kv.value()["mode"] | "read", "launch") == 0) launchMask |= static_cast<uint8_t>(1u << e);
+        const bool replaceEob = e == static_cast<int>(Event::ReaderEnd) &&
+                                strcmp(kv.value()["replaces"] | "", "end of book") == 0;
+        // Replacing the EOB screen means opening the app at the last page, so it
+        // implies launch mode even if the manifest omits it.
+        if (replaceEob || strcmp(kv.value()["mode"] | "read", "launch") == 0) launchMask |= static_cast<uint8_t>(1u << e);
+        if (replaceEob) replacesEob = true;
       }
       if (kv.value()["connect"] | false) connectMask |= static_cast<uint8_t>(1u << e);
       const char* requiredMeta = requireMeta | "";
@@ -155,6 +162,7 @@ void refreshSubscriptions() {
     sub.connectMask = connectMask;
     sub.appMask = appMask;
     sub.launchMask = launchMask;
+    sub.replacesEob = replacesEob;
     memcpy(sub.metaKeyHash, metaHashes, sizeof(metaHashes));
     LOG_DBG("PEVT", "%s subscribes mask=0x%02x", sub.name, sub.mask);
   }
@@ -163,6 +171,13 @@ void refreshSubscriptions() {
 bool anySubscriber(const Event e) {
   for (const auto& sub : subscribers) {
     if (sub.name[0] != '\0' && (sub.mask & eventBit(e))) return true;
+  }
+  return false;
+}
+
+bool anyEndOfBookReplacer() {
+  for (const auto& sub : subscribers) {
+    if (sub.name[0] != '\0' && sub.replacesEob) return true;
   }
   return false;
 }

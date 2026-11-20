@@ -66,6 +66,11 @@ class ReaderActivity : public Activity {
   virtual bool inputOverPage() const { return endOfBookMenuActive(); }
   bool handleEndOfBookMenu(bool suppressConfirmRelease = false);
   bool handleEndOfBookPageTurn(bool prevTriggered, bool nextTriggered);
+  // Fires reader.end once on reaching the last page (and, when a plugin replaces
+  // the EOB screen, steps back off EOB so the armed app opens over the last page
+  // instead of the firmware menu). True when it took over this frame.
+  bool handleEndOfBookReached();
+  bool readerEndEmitted = false;  // one-shot guard for the reader.end emit
   void clearEndOfBookOptionsIfNeeded();
   void disableFastInitialRefresh();
   void notePageTurn(bool forward, bool succeeded);

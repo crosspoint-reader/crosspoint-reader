@@ -18,8 +18,13 @@ namespace fui = freeink::ui;
 namespace {
 constexpr unsigned long FORCE_QUIT_HOLD_MS = 1000;
 // Instruction budget per render pass, so a busy app still yields to the UI.
+// A compute-heavy app advances STEP_BUDGET*MAX_STEPS_PER_RENDER instructions per
+// render pass; passes are separated by the ~10ms UI-loop tick, so fewer, larger
+// passes mean less wall-clock spent waiting between them. Force-quit (the Back
+// long-press) is checked in loop() before the render lock, so raising this does
+// not slow it. ponytail: tuned by eye; raise if a heavy app's first frame drags.
 constexpr uint32_t STEP_BUDGET = 200000;
-constexpr int MAX_STEPS_PER_RENDER = 8;
+constexpr int MAX_STEPS_PER_RENDER = 16;
 
 bool hasEvent(const fui::InputSnapshot& s) {
   return s.confirm || s.back || s.prev || s.next || (s.touchReleased && s.touchX >= 0);

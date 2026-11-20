@@ -30,6 +30,10 @@ class GfxRenderer;
 //                      the app reads/clears that file itself next time it runs
 //                      (default); or
 //   "mode": "launch" — same queue, and the event opens the app full-screen now.
+// A "reader.end" app handler may also set "replaces": "end of book": reaching
+// the last page then opens the app full-screen IN PLACE OF the firmware's
+// end-of-book menu (implies launch). The app owns that screen and offers its
+// own actions (it can launch another book or exit via syscalls).
 // App events never touch the network outbox, so drain() neither delivers nor
 // deletes them.
 // "require_meta": "<key>" queues an event for that handler only when the
@@ -60,6 +64,7 @@ enum class Event : uint8_t {
   ReaderSession,   // "reader.session"   vars: book, document, active-session summary
   BookDownloaded,  // "book.downloaded"  vars: path, title, plugin
   SleepEnter,      // "sleep.enter"      vars: book, percent, end_percent when sleeping from a reader, else none
+  ReaderEnd,       // "reader.end"       vars: book, percent, end_percent — fired once when the last page is reached
   COUNT
 };
 
@@ -76,6 +81,11 @@ void refreshSubscriptions();
 
 // True when at least one plugin subscribes to `e` (a few string compares).
 bool anySubscriber(Event e);
+
+// True when some plugin's "reader.end" handler is marked "replaces": "end of
+// book" — the reader then launches that app at the last page instead of drawing
+// the firmware end-of-book menu. Reflects the last refreshSubscriptions().
+bool anyEndOfBookReplacer();
 
 // Bit per Event the named plugin subscribes to (0 = none), for disclosing
 // what leaves the device. Reflects the last refreshSubscriptions().
