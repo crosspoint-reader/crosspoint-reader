@@ -22,10 +22,28 @@ assert "const int16_t strip = HEADER_STATUS_HEIGHT;" in base
 assert "if (SETTINGS.clockShowInHeader &&" in base
 assert "metrics.headerShowsClock &&" not in base
 assert "status.clockCentered = metrics.headerClockCentered" not in base
-assert "std::max(HEADER_STATUS_TOP, top)" in base
+assert "std::max(BaseTheme::HEADER_STATUS_TOP, top)" in base
 assert "static_cast<int16_t>(rect.height - offset)" in base
 assert "headerBatterySide = 0" in rounded_metrics
 assert "headerClockCentered = false" in lyra_metrics
+
+# The title compensates half of the *same* top-edge move as headerBand,
+# including device offsets. Combining before division prevents two odd
+# halves from being rounded independently.
+assert "const int topOffset = BoardConfig::ACTIVE.headerOffsetY + headerBandTopShift(renderer);" in base
+assert "props.titleOffsetY = static_cast<int16_t>(strip / 2 + topOffset / 2);" in base
+assert "const int16_t shift = static_cast<int16_t>(headerBandTopShift(renderer));" in base
+assert base.count("headerBandTopShift(renderer)") == 2
+for top, padding, board_offset in ((0, 5, 0), (0, 13, 0), (9, 13, 3),
+                                   (11, 13, 0), (15, 10, 2), (9, 13, -1)):
+    shift = max(10, top) - padding
+    total = board_offset + shift
+    # C++ integer division truncates toward zero, including negative totals.
+    half = int(total / 2)
+    title_offset = 20 // 2 + half
+    assert title_offset == 10 + int((board_offset + shift) / 2)
+    if total % 2 == 0:
+        assert 2 * (title_offset - 10) == total
 
 # RoundedRaff's Home screen must not suppress the shared status line when
 # it draws a header without a book title.
