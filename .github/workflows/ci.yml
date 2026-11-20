@@ -83,6 +83,9 @@ jobs:
             rm -f "${PKG}"
           fi
 
+      - name: Check Arduino build policy
+        run: python -m unittest discover -s test -p test_arduino_build_policy.py
+
       - name: Run cppcheck
         run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 
