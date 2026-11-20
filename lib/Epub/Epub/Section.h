@@ -120,6 +120,9 @@ class Section {
   void suspendBuild();
   // True when a partial file was loaded: pageCount is a watermark, not the chapter total.
   bool isPartial() const { return partial_; }
+  // Whether spine's section file on disk is a finished layout of exactly `pageCount` pages: not a
+  // partial or missing one, and not one left from other render settings while a rebuild runs.
+  static bool hasFinalFile(const std::string& cachePath, int spineIndex, uint16_t pageCount);
 
   // Unified page read: from the active build if it has reached the page, otherwise from
   // the on-disk file (finalized section, or a partial the rebuild hasn't caught up to).

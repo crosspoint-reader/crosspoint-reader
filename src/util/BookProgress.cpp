@@ -1,6 +1,7 @@
 #include "BookProgress.h"
 
 #include <Epub.h>
+#include <Epub/Section.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -8,6 +9,8 @@
 #include <Xtc.h>
 
 #include <algorithm>
+
+#include "BookEnd.h"
 
 namespace {
 uint32_t readLe32(const uint8_t* p) {
@@ -36,8 +39,12 @@ int loadBookProgress(const std::string& path) {
     if (epub->getSpineItemsCount() <= 0 || epub->getBookSize() == 0) return -1;
     if (spine == epub->getSpineItemsCount()) return 100;
     if (spine > epub->getSpineItemsCount()) return -1;
-    const float fraction = total > 0 && page != UINT16_MAX ? std::clamp(float(page) / total, 0.0f, 1.0f) : 0;
-    return std::clamp(static_cast<int>(epub->calculateProgress(spine, fraction) * 100 + 0.5f), 0, 100);
+    const bool pageKnown = total > 0 && page != UINT16_MAX;
+    // Measured at the end of the saved page, like the reader's status bar.
+    const float fraction = pageKnown ? std::clamp(float(page + 1) / total, 0.0f, 1.0f) : 0;
+    const bool atEnd = pageKnown && isLastPageOfBook(spine, epub->getSpineItemsCount(), page, total, true) &&
+                       Section::hasFinalFile(epub->getCachePath(), spine, static_cast<uint16_t>(total));
+    return bookPercentAtPageEnd(epub->calculateProgress(spine, fraction), atEnd);
   }
   if (FsHelpers::hasXtcExtension(path)) {
     auto xtc = makeUniqueNoThrow<Xtc>(path, "/.crosspoint");

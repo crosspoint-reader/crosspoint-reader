@@ -24,6 +24,7 @@
 #include <iterator>
 #include <limits>
 
+#include "../../util/BookEnd.h"
 #include "../../util/BookmarkFile.h"
 #include "BookmarkEntry.h"
 #include "ChapterBuildGate.h"
@@ -2546,7 +2547,9 @@ void EpubReaderActivity::renderStatusBar() const {
   const int currentPage = section ? section->currentPage + 1 : 1;
   const float pageCount = section ? section->estimatedTotalPages() : 1;
   const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;
-  const float bookProgress = epub ? (epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100) : 0;
+  const float bookProgress = !epub     ? 0
+                             : section ? static_cast<float>(pageEndPercent())
+                                       : epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 
   std::string title;
   int textYOffset = 0;
@@ -2824,7 +2827,7 @@ void EpubReaderActivity::renderOverlay() {
         pageCount > 0 ? static_cast<float>(section->currentPage + 1) / static_cast<float>(pageCount) : 0.0f;
     const float bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress);
     pageInfo = std::to_string(section->currentPage + 1) + "/" + std::to_string(pageCount) + "   " +
-               std::to_string(clampPercent(static_cast<int>(bookProgress * 100.0f + 0.5f))) + "%";
+               std::to_string(pageEndPercent()) + "%";
     model.chapterTitle = chapterTitle.c_str();
     model.pageInfo = pageInfo.c_str();
     model.progressPermille = static_cast<int>(bookProgress * 1000.0f + 0.5f);
@@ -3521,15 +3524,29 @@ ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
       info.progressPercent = bookPercentFor(position);
       // 100 only on the last page of a fully laid-out chapter: rounding must not
       // report a long book finished early. Without the section that is unknown.
-      const bool lastPage = section && currentSpineIndex == epub->getSpineItemsCount() - 1 && !section->isBuilding() &&
-                            !section->isPartial() && position.displayPage() >= position.totalPages;
-      const float chapterEnd = static_cast<float>(position.displayPage()) / static_cast<float>(position.totalPages);
-      const int endPct = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterEnd) * 100.0f);
-      info.endProgressPercent = lastPage ? 100 : std::clamp(endPct, 0, 99);
+      const float chapterEnd =
+          std::clamp(static_cast<float>(position.displayPage()) / static_cast<float>(position.totalPages), 0.0f, 1.0f);
+      info.endProgressPercent =
+          bookPercentAtPageEnd(epub->calculateProgress(currentSpineIndex, chapterEnd), onLastPageOfBook());
     }
   }
   if (isAtEndOfBook()) info.endProgressPercent = 100;
   return info;
+}
+
+bool EpubReaderActivity::onLastPageOfBook() const {
+  return epub && section &&
+         isLastPageOfBook(currentSpineIndex, epub->getSpineItemsCount(), section->currentPage,
+                          section->estimatedTotalPages(), !section->isBuilding() && !section->isPartial());
+}
+
+int EpubReaderActivity::pageEndPercent() const {
+  if (!epub || !section) return 0;
+  const int total = section->estimatedTotalPages();
+  const float chapterEnd =
+      total > 0 ? std::clamp(static_cast<float>(section->currentPage + 1) / static_cast<float>(total), 0.0f, 1.0f)
+                : 0.0f;
+  return bookPercentAtPageEnd(epub->calculateProgress(currentSpineIndex, chapterEnd), onLastPageOfBook());
 }
 
 int EpubReaderActivity::getProgressBasisPoints() const {
@@ -3537,6 +3554,7 @@ int EpubReaderActivity::getProgressBasisPoints() const {
   if (!epub || !section || epub->getBookSize() == 0) return getProgressPercent() * 100;
   const int totalPages = section->estimatedTotalPages();
   if (totalPages <= 0) return getProgressPercent() * 100;
+  if (onLastPageOfBook()) return 10000;
   const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(totalPages);
   const int basisPoints =
       static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 10000.0f + 0.5f);
