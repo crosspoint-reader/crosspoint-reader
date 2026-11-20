@@ -22,7 +22,14 @@ assert "const int16_t strip = HEADER_STATUS_HEIGHT;" in base
 assert "if (SETTINGS.clockShowInHeader &&" in base
 assert "metrics.headerShowsClock &&" not in base
 assert "status.clockCentered = metrics.headerClockCentered" not in base
-assert "std::max(BaseTheme::HEADER_STATUS_TOP, top)" in base
+# Guard the complete shift expression, including subtraction of the theme's
+# top padding. A reversed sign would displace RoundedRaff's negative shift.
+shift_helper = base.split("int headerBandTopShift(", 1)[1].split("}  // namespace", 1)[0]
+assert re.search(
+    r"return\s+std::max\(BaseTheme::HEADER_STATUS_TOP,\s*top\)\s*-\s*"
+    r"UITheme::getInstance\(\)\.getMetrics\(\)\.topPadding\s*;",
+    shift_helper,
+)
 assert "static_cast<int16_t>(rect.height - offset)" in base
 assert "headerBatterySide = 0" in rounded_metrics
 assert "headerClockCentered = false" in lyra_metrics
