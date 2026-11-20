@@ -424,7 +424,7 @@ void KOReaderSyncActivity::performUpload() {
   }
 
   // Drop the radio while user reads the result; full teardown happens at silent reboot.
-  esp_wifi_stop();
+  wifiStopped = esp_wifi_stop() == ESP_OK;
 
   if (result != KOReaderSyncClient::OK) {
     {
@@ -479,7 +479,7 @@ void KOReaderSyncActivity::onExit() {
   Activity::onExit();
 
   if (wifiActivated) {
-    WiFi.disconnect(false);
+    if (!wifiStopped) WiFi.disconnect(false);
     delay(30);
     silentRestartToReader();
   }
