@@ -111,6 +111,8 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Browse Files](#33-browse-files-screen)**, the **[Library](#34-library-screen)**, **[File Transfer](#35-file-transfer-screen)**, or **[Settings](#36-settings)**.
 
+When saved reading progress is available, Lyra shows the percentage and a progress bar below the book title and author.
+
 ### 3.2 Reading Mode
 
 See [Reading Mode](#4-reading-mode) below for more information.
