@@ -58,8 +58,3 @@ const LanguageHyphenator* getLanguageHyphenatorForPrimaryTag(const std::string& 
                                [&primaryTag](const LanguageEntry& entry) { return primaryTag == entry.primaryTag; });
   return (it != allEntries.end()) ? it->hyphenator : nullptr;
 }
-
-LanguageEntryView getLanguageEntries() {
-  const auto& allEntries = entries();
-  return LanguageEntryView{allEntries.data(), allEntries.size()};
-}

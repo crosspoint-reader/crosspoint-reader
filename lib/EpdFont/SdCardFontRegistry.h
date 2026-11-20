@@ -75,7 +75,6 @@ class SdCardFontRegistry {
 
   const std::vector<SdCardFontFamilyInfo>& getFamilies() const { return families_; }
   const SdCardFontFamilyInfo* findFamily(const std::string& name) const;
-  int getFamilyIndex(const std::string& name) const;
   int getFamilyCount() const { return static_cast<int>(families_.size()); }
 
 #if CROSSPOINT_VECTOR_FONTS

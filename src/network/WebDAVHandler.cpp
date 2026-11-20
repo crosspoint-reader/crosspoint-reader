@@ -405,6 +405,7 @@ void WebDAVHandler::handlePut(WebServer& s) {
   }
 
   clearBookCache(path.c_str());
+  sleepImageChanged(path.c_str());
   if (library::isLibraryBookFile(path.c_str())) library::markLibraryIndexDirty();
   s.send(_putExisted ? 204 : 201);
   LOG_DBG("DAV", "PUT complete: %s", path.c_str());
@@ -568,6 +569,7 @@ void WebDAVHandler::handleMove(WebServer& s) {
 
   if (success) {
     moveBookData(srcPath.c_str(), dstPath.c_str());
+    if (!dstExists) sleepImageChanged(dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     s.send(500, "text/plain", "Move failed");
@@ -665,6 +667,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   dstFile.close();
 
   if (copyOk) {
+    sleepImageChanged(dstPath.c_str());
     // Even without dstExists: a book deleted from a PC leaves its data behind.
     clearBookData(dstPath.c_str(), srcPath.c_str());
     if (library::isLibraryBookFile(dstPath.c_str())) library::markLibraryIndexDirty();
