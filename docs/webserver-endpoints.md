@@ -572,12 +572,15 @@ contracts are below. Outbound TLS is encrypted but the peer is not verified
 
 ### `GET /api/plugins`
 
-Installed plugins that ship a `plugin.js`:
-`[{"name":"<folder>","dir":"<root>/<folder>","title":"<title>","mount":"settings"}, ...]`.
-`dir` is where the plugin is installed (plugins keep their own files there);
-`title` and `mount` come from the plugin's `manifest.json` when present.
-Mount `settings` (the default) shows the card on the Plugins page (`/plugins`);
-mount `files` shows it in the File Manager.
+All installed plugins, including those without browser settings:
+`[{"name":"<folder>","dir":"<root>/<folder>","title":"<title>","mount":"settings","hasPluginJs":true}, ...]`.
+`dir` is the installed folder. `title`, `mount`, optional `version` and
+`author` are read from `manifest.json` and overridden by `device.json` when
+present. `hasPluginJs` tells browser hosts whether the plugin provides a script.
+The Plugins page (`/plugins`) lists every installed plugin and can jump to
+its section. Browser settings render there when `mount` is `settings`
+(the default); `files` plugins render in the File Manager. Native-only
+plugins have an informational card without loading a browser script.
 
 ### `GET /plugin?name=<plugin>&file=<file>`
 
