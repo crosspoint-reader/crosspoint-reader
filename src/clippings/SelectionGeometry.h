@@ -31,10 +31,25 @@ inline bool nearerWord(const Rect candidate, const Rect current, const int x, co
 }
 
 inline Rect actions(const Rect safe, const int textTop, const int height, const int gap, const int preferredWidth = 0,
-                    const int anchorX = 0) {
+                    const int anchorX = 0, const int textBottom = 0, const int wordHeight = 0, const int handleSize = 0,
+                    const int firstWordY = -1) {
   const int width = preferredWidth > 0 ? std::min(safe.width, preferredWidth) : safe.width;
-  return Rect{std::clamp(anchorX, safe.x, safe.x + safe.width - width), std::max(safe.y, textTop - height - gap), width,
-              height};
+  int popupY = textTop - height - gap;
+  if (popupY < safe.y) {
+    if (textBottom > 0) {
+      const int startY = firstWordY >= 0 ? firstWordY : textTop;
+      popupY = startY + wordHeight + handleSize + gap;
+      const int below = textBottom + handleSize + gap;
+      if (popupY + height + gap > textBottom - wordHeight && below + height <= safe.y + safe.height) {
+        popupY = below;
+      }
+      popupY = std::min(popupY, safe.y + safe.height - height);
+    } else {
+      popupY = safe.y;
+    }
+  }
+  popupY = std::max(safe.y, popupY);
+  return Rect{std::clamp(anchorX, safe.x, safe.x + safe.width - width), popupY, width, height};
 }
 
 inline Rect button(const Rect actions, const int index, const int padding, const int count = 3) {

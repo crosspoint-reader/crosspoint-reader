@@ -678,8 +678,6 @@ bool pair(const char* addr, const char* name) {
   return true;
 }
 
-void disconnect() { port::disconnect(); }
-
 bool forget(const char* addr) {
   port::forget(addr);
   // Forgetting a device forgets its button table too.

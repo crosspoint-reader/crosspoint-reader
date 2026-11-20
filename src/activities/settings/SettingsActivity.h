@@ -24,7 +24,6 @@ enum class SettingAction {
   Bluetooth,
   ClearCache,
   RefreshLibrary,
-  DisplayRefresh,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,

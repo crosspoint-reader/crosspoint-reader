@@ -71,9 +71,6 @@ class CrossPointWebServer {
   // Returning true drops the client: the upload aborts and its partial file is removed.
   void setUploadCancelCheck(std::function<bool()> check) { uploadCancelCheck = std::move(check); }
 
-  // Get the port number
-  uint16_t getPort() const { return port; }
-
  private:
   std::unique_ptr<WebServer> server = nullptr;
   std::unique_ptr<WebSocketsServer> wsServer = nullptr;

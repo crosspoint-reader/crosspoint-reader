@@ -41,7 +41,6 @@
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "util/PluginEvents.h"
-#include "util/TaskWatchdog.h"
 
 namespace fui = freeink::ui;
 
@@ -209,7 +208,6 @@ void SettingsActivity::rebuildSettings() {
     addAction(SettingsSection::General, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
     addAction(SettingsSection::General, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
   }
-  addAction(SettingsSection::General, StrId::STR_DISPLAY_REFRESH, SettingAction::DisplayRefresh);
   addAction(SettingsSection::General, StrId::STR_ABOUT, SettingAction::About);
   rebuildRowItems();
 }
@@ -462,23 +460,6 @@ void SettingsActivity::toggleSelectedSetting() {
         if (!ok) LOG_ERR("SET", "library index build failed");
         GUI.drawPopup(renderer, ok ? tr(STR_LIBRARY_REBUILD_DONE) : tr(STR_LIBRARY_REBUILD_FAILED));
         delay(1000);
-        requestUpdate();
-        break;
-      }
-      case SettingAction::DisplayRefresh: {
-        // Alternate full black and white refreshes to clear image retention.
-        // Back stops after the next white pass, so the screen always ends white.
-        constexpr int kCycles = 10;
-        RenderLock lock;
-        for (int cycle = 0; cycle < kCycles; ++cycle) {
-          renderer.clearScreen(0x00);
-          renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-          renderer.clearScreen(0xFF);
-          renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-          resetTaskWatchdogIfSubscribed();
-          mappedInput.update(true);
-          if (mappedInput.wasPressed(MappedInputManager::Button::Back)) break;
-        }
         requestUpdate();
         break;
       }

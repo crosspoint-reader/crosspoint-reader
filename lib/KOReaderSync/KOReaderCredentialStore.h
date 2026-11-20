@@ -80,9 +80,6 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Check if credentials are set
   bool hasCredentials() const;
 
-  // Clear credentials
-  void clearCredentials();
-
   // Server URL management
   void setServerUrl(const std::string& url);
   const std::string& getServerUrl() const { return serverUrl; }

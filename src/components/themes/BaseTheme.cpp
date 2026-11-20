@@ -35,9 +35,6 @@ void BaseTheme::setCheckboxRow(freeink::ui::ListItem& item, const bool checked) 
 
 // Internal constants
 namespace {
-constexpr int homeMenuMargin = 20;
-constexpr int homeMarginTop = 30;
-constexpr int subtitleY = 738;
 constexpr int bookmarkStatusIconWidth = 16;
 constexpr int bookmarkStatusIconHeight = 14;
 constexpr int bookmarkStatusIconGap = 4;
