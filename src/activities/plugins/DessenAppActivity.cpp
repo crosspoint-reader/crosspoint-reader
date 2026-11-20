@@ -61,7 +61,7 @@ bool DessenAppActivity::loadApp() {
   }
   host.setRandom(esp_random);
   // appDir = the plugin folder; appName = its basename. These scope the app's
-  // device id, key store, and secure_wrap blobs.
+  // device id and key store.
   const size_t slash = appPath.find_last_of('/');
   const std::string appDir = slash == std::string::npos ? "/" : appPath.substr(0, slash);
   const size_t nameSlash = appDir.find_last_of('/');
@@ -72,7 +72,6 @@ bool DessenAppActivity::loadApp() {
     return false;
   }
   host.setServices(services.get());
-  services->setFontContext(&renderer, &uiTarget);  // lets font_load bind the custom font slot
   return true;
 }
 

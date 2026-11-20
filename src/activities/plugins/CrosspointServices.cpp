@@ -19,8 +19,6 @@
 #include <LibraryText.h>
 #include <Logging.h>
 #include <Memory.h>
-#include <SdCardFontManager.h>
-#include <SdCardFontRegistry.h>
 #include <Utf8.h>
 #include <WiFi.h>
 #include <WifiCredentialStore.h>
@@ -28,7 +26,6 @@
 #include <sdk/dessen_abi.h>
 #include <strings.h>
 #include <time.h>
-#include <wolfssl/wolfcrypt/aes.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -183,10 +180,7 @@ struct CrosspointServices::ShelfOverlap {
 
 CrosspointServices::CrosspointServices(std::string appName, std::string appDir)
     : appName_(std::move(appName)), appDir_(std::move(appDir)), crypto_(new WolfsslCrypto()) {}
-CrosspointServices::~CrosspointServices() {
-  // Drop the app's custom font from the renderer before the manager frees it.
-  if (renderer_ && fontManager_ && customFontLoaded_) fontManager_->unloadFont(*renderer_, kCustomFontId);
-}
+CrosspointServices::~CrosspointServices() = default;
 
 // ---- core ----
 uint32_t CrosspointServices::timeNow() {
@@ -480,47 +474,6 @@ int CrosspointServices::bookCover(const char* path, uint32_t height, uint8_t* ou
 #endif
 }
 
-// Load a .cpfont from the app's folder at `size` and bind it to the custom font
-// slot (DSN_FONT_CUSTOM). One per app; a second call replaces the first. Uses
-// the family-variant loader — the same path the global SD font uses, including
-// its C3 heap guards (it skips a variant when the free block is too small).
-//
-// The app ships a flat <appdir>/<name>.cpfont; we describe it as a one-file
-// "loose" family so filePath() resolves to exactly that path. Untested on device.
-int CrosspointServices::fontLoad(const char* path, int size) {
-  if (!renderer_ || !target_) return DSN_ERR_UNAVAILABLE;
-  if (size < 4 || size > 255) return DSN_ERR_INVALID;
-  std::string full;
-  if (int e = resolve(path, full)) return e;
-
-  const size_t slash = full.find_last_of('/');
-  const std::string dir = full.substr(0, slash);  // valid for the whole call
-  const std::string file = full.substr(slash + 1);
-
-  if (!fontManager_) fontManager_.reset(new SdCardFontManager());
-  if (customFontLoaded_) {
-    fontManager_->unloadFont(*renderer_, kCustomFontId);
-    customFontLoaded_ = false;
-  }
-
-  SdCardFontFamilyInfo fam;
-  fam.name = "app";
-  fam.root = dir.c_str();
-  fam.loose = true;    // file sits directly under root (no family directory)
-  fam.vector = false;  // bitmap .cpfont
-  SdCardFontFileInfo fi;
-  fi.name.reset(new char[file.size() + 1]);
-  memcpy(fi.name.get(), file.c_str(), file.size() + 1);
-  fi.pointSize = static_cast<uint8_t>(size);
-  fi.style = 0;
-  fam.files.push_back(std::move(fi));
-
-  if (!fontManager_->loadFamilyVariant(fam, *renderer_, static_cast<uint8_t>(size), kCustomFontId)) return DSN_ERR_IO;
-  customFontLoaded_ = true;
-  target_->setFont(freeink::ui::GfxRendererTarget::FONT_LABEL, kCustomFontId);  // slot 3 = DSN_FONT_CUSTOM
-  return DSN_FONT_CUSTOM;
-}
-
 // ---- crypto ----
 int CrosspointServices::hash(int algo, const uint8_t* data, uint32_t n, uint8_t* out, uint32_t cap) {
   if (algo == DSN_HASH_SHA1) {
@@ -611,51 +564,6 @@ int CrosspointServices::pkcs12Parse(const uint8_t* p12, uint32_t n, const char* 
   memcpy(out + 2, key.data(), key.size());
   memcpy(out + 2 + key.size(), cert.data(), cert.size());
   return static_cast<int>(total);
-}
-
-bool CrosspointServices::deviceKek(uint8_t out[32]) const {
-  uint8_t secret[32];
-  if (!deviceSecret(secret)) return false;
-  // Bind the wrap key to this app so another app's blobs will not unwrap.
-  uint8_t input[32 + 64];
-  const size_t nameLen = appName_.size() > 64 ? 64 : appName_.size();
-  memcpy(input, secret, 32);
-  memcpy(input + 32, appName_.data(), nameLen);
-  crypto_->sha256(input, 32 + nameLen, out);
-  return true;
-}
-
-int CrosspointServices::secureWrap(const uint8_t* data, uint32_t n, uint8_t* out, uint32_t cap) {
-  if (2u + 12 + n + 16 > cap) return DSN_ERR_TOO_BIG;  // ver+reserved+nonce+ct+tag
-  uint8_t kek[32];
-  if (!deviceKek(kek)) return DSN_ERR_UNAVAILABLE;
-  out[0] = 1;
-  out[1] = 0;
-  uint8_t* nonce = out + 2;
-  crypto_->randomBytes(nonce, 12);
-  uint8_t* ct = out + 14;
-  Aes aes;
-  if (wc_AesInit(&aes, nullptr, INVALID_DEVID) != 0) return DSN_ERR_IO;
-  const bool ok =
-      wc_AesGcmSetKey(&aes, kek, 32) == 0 && wc_AesGcmEncrypt(&aes, ct, data, n, nonce, 12, ct + n, 16, out, 2) == 0;
-  wc_AesFree(&aes);
-  return ok ? static_cast<int>(2 + 12 + n + 16) : DSN_ERR_IO;
-}
-
-int CrosspointServices::secureUnwrap(const uint8_t* blob, uint32_t n, uint8_t* out, uint32_t cap) {
-  if (n < 2u + 12 + 16 || blob[0] != 1) return DSN_ERR_INVALID;
-  const uint32_t ctn = n - 2 - 12 - 16;
-  if (ctn > cap) return DSN_ERR_TOO_BIG;
-  uint8_t kek[32];
-  if (!deviceKek(kek)) return DSN_ERR_UNAVAILABLE;
-  const uint8_t* nonce = blob + 2;
-  const uint8_t* ct = blob + 14;
-  Aes aes;
-  if (wc_AesInit(&aes, nullptr, INVALID_DEVID) != 0) return DSN_ERR_IO;
-  const bool ok = wc_AesGcmSetKey(&aes, kek, 32) == 0 &&
-                  wc_AesGcmDecrypt(&aes, out, ct, ctn, nonce, 12, ct + ctn, 16, blob, 2) == 0;
-  wc_AesFree(&aes);
-  return ok ? static_cast<int>(ctn) : DSN_ERR_INVALID;  // auth failure -> INVALID
 }
 
 // ---- board ----

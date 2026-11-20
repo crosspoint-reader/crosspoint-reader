@@ -7,14 +7,9 @@
 #include <memory>
 #include <string>
 
-class GfxRenderer;
-class SdCardFontManager;
 namespace freeink {
 namespace content {
 class Crypto;
-}
-namespace ui {
-class GfxRendererTarget;
 }
 }  // namespace freeink
 
@@ -53,15 +48,8 @@ class CrosspointServices : public dessen::Services {
   int recentShelf(uint32_t first, uint32_t count, char* out, uint32_t cap) override;
   int bookProgress(const char* path) override;
   int bookCover(const char* path, uint32_t height, uint8_t* out, uint32_t cap) override;
-  int fontLoad(const char* path, int size) override;
   int wifiConnectStart() override;
 
-  // DessenAppActivity wires the renderer + its text target so fontLoad can
-  // register the app's custom font and bind it to the custom font slot.
-  void setFontContext(GfxRenderer* renderer, freeink::ui::GfxRendererTarget* target) {
-    renderer_ = renderer;
-    target_ = target;
-  }
   // ---- crypto (all wrap freeink::content::Crypto) ----
   int hash(int algo, const uint8_t* data, uint32_t n, uint8_t* out, uint32_t cap) override;
   int aesCbc(int flags, const uint8_t* keyiv, const uint8_t* data, uint32_t n, uint8_t* out, uint32_t cap) override;
@@ -72,8 +60,6 @@ class CrosspointServices : public dessen::Services {
   int rsaSign(int algo, const uint8_t* priv, uint32_t pn, const uint8_t* digest, uint32_t dn, uint8_t* out,
               uint32_t cap) override;
   int pkcs12Parse(const uint8_t* p12, uint32_t n, const char* pass, uint8_t* out, uint32_t cap) override;
-  int secureWrap(const uint8_t* data, uint32_t n, uint8_t* out, uint32_t cap) override;
-  int secureUnwrap(const uint8_t* blob, uint32_t n, uint8_t* out, uint32_t cap) override;
   // ---- board ----
   int backlightSet(int brightness, int warm) override;
   int backlightGet() override;
@@ -102,19 +88,11 @@ class CrosspointServices : public dessen::Services {
   enum class Op : uint8_t { None, Net, Fetch, Keygen, TextInput, WifiStart, WifiConnecting };
 
   int resolve(const char* path, std::string& out, uint32_t maxLen = 255) const;  // app "/x" -> real SD path
-  bool deviceKek(uint8_t out[32]) const;                                         // secure_wrap key
 
   std::string appName_, appDir_;
   std::unique_ptr<freeink::content::Crypto> crypto_;
   struct ShelfOverlap;
   std::unique_ptr<ShelfOverlap> shelfOverlap_;
-  // The one custom font an app may load (replacing any previous one). The
-  // manager owns the loaded font; unloadFont() unregisters it from the renderer.
-  GfxRenderer* renderer_ = nullptr;
-  freeink::ui::GfxRendererTarget* target_ = nullptr;
-  std::unique_ptr<SdCardFontManager> fontManager_;
-  bool customFontLoaded_ = false;
-  static constexpr int kCustomFontId = 0x7F00;  // app font slot in the renderer's font map
 
   // Single outstanding async op. Buffers point into guest memory (valid while
   // the VM is parked). Request strings from the syscall stack are copied.
