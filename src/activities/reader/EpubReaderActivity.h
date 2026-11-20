@@ -251,6 +251,10 @@ class EpubReaderActivity final : public ReaderActivity {
   std::string getBookAuthor() const override { return epub ? epub->getAuthor() : ""; }
   std::string getBookThumbBmpPath() const override { return epub ? epub->getThumbBmpPath() : ""; }
   int getProgressBasisPoints() const override;
+  // On the book's last page, with its chapter fully laid out (see isLastPageOfBook()).
+  bool onLastPageOfBook() const;
+  // The book percent at the end of the current page: what the status bar, toolbar and Home show.
+  int pageEndPercent() const;
   void renderBook() override;
   void onEndOfBookRendered() override;
 

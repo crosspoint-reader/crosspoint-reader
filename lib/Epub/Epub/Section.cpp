@@ -186,6 +186,33 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for visible-offset LUT (patched later)
 }
 
+bool Section::hasFinalFile(const std::string& cachePath, const int spineIndex, const uint16_t pageCount) {
+  HalFile f;
+  const std::string path = cachePath + "/sections/" + std::to_string(spineIndex) + ".bin";
+  if (!Storage.exists(path.c_str()) || !Storage.openFileForRead("SCT", path, f)) return false;
+  // The header in writeSectionFileHeader() order, up to the page count.
+  uint8_t version = 0;
+  ReaderRenderSpec spec;
+  uint16_t filePageCount = 0;
+  serialization::readPod(f, version);
+  if (version != SECTION_FILE_VERSION) return false;
+  serialization::readPod(f, spec.fontId);
+  serialization::readPod(f, spec.lineCompression);
+  serialization::readPod(f, spec.extraParagraphSpacing);
+  serialization::readPod(f, spec.paragraphIndentSpaces);
+  serialization::readPod(f, spec.paragraphAlignment);
+  serialization::readPod(f, spec.viewportWidth);
+  serialization::readPod(f, spec.viewportHeight);
+  serialization::readPod(f, spec.hyphenationEnabled);
+  serialization::readPod(f, spec.embeddedStyle);
+  serialization::readPod(f, spec.imageRendering);
+  serialization::readPod(f, spec.focusReadingEnabled);
+  serialization::readPod(f, spec.characterSpacing);
+  serialization::readPod(f, spec.wordSpacingPercent);
+  serialization::readPod(f, filePageCount);
+  return filePageCount == pageCount;
+}
+
 bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return false;
