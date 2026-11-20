@@ -34,10 +34,10 @@
 #include "util/FrontlightPanelActivity.h"
 #if CROSSPOINT_DESSEN_APPS
 #include "plugins/DessenAppActivity.h"
+#include "util/PluginEvents.h"
 #include "util/PluginLocations.h"
 #endif
 #include "util/FullScreenMessageActivity.h"
-#include "util/PluginEvents.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
