@@ -182,6 +182,18 @@ void DessenAppActivity::loop() {
       case dessen::Launch::Reader:
         if (!activityManager.goToReader(host.launchPath())) leaveApp();
         break;
+      case dessen::Launch::App: {
+        // A home launcher (or any app) opening another dessen app as a shortcut.
+        // Replace this activity like open_book does: when the opened app exits,
+        // the stack empties and goHome() re-runs the launcher.
+        std::string target = host.launchPath();
+        auto app = Storage.exists(target.c_str())
+                       ? makeUniqueNoThrow<DessenAppActivity>(renderer, mappedInput, std::move(target))
+                       : nullptr;
+        if (app) activityManager.replaceActivity(std::move(app));
+        else leaveApp();  // missing binary / OOM: fall back home
+        break;
+      }
       case dessen::Launch::Settings:
         activityManager.goToSettings();
         break;
