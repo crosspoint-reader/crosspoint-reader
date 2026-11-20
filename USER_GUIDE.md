@@ -257,7 +257,7 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   
   - "Classic" - The original Crosspoint theme
   - "Lyra" - The new theme for Crosspoint featuring rounded elements and menu icons
-  - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
+  - "Lyra Extended" - Lyra, but displays up to 10 recent books on the **[Home Screen](#31-home-screen)**, three at a time. The page changes as you move the selection through the books.
   - "RoundedRaff" - A rounded theme with additional visual styling
 
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
