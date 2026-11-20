@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 class GfxRenderer;
 
@@ -22,8 +23,15 @@ class GfxRenderer;
 //     }
 //   }
 //
-// A handler is either a "request" (response discarded; an acknowledgement) or
-// a "download" (response streamed to `dest` on SD, e.g. a sleep image).
+// A handler is a "request" (response discarded; an acknowledgement), a
+// "download" (response streamed to `dest` on SD, e.g. a sleep image), or an
+// "app" (a dessen app). An app handler declares "app": "<bin>" plus
+//   "mode": "read"   — the event is queued to <plugin dir>/app-events.jsonl and
+//                      the app reads/clears that file itself next time it runs
+//                      (default); or
+//   "mode": "launch" — same queue, and the event opens the app full-screen now.
+// App events never touch the network outbox, so drain() neither delivers nor
+// deletes them.
 // "require_meta": "<key>" queues an event for that handler only when the
 // event's book ("book", or "path" for book.downloaded) has a sidecar with a
 // non-empty value for the key.
@@ -92,5 +100,10 @@ void emit(Event e, const Var* vars, size_t varCount);
 // non-null, a handler's "toast" template is shown via the standard popup after
 // its request succeeds.
 void drain(GfxRenderer* renderer, size_t maxEvents = 4);
+
+// Path to the app.bin a launch-mode handler ("mode": "launch") just armed, or
+// "" if none. The UI loop calls this each tick and opens the app; one launch is
+// buffered at a time, and sleep.enter never arms one (no UI then).
+std::string takePendingLaunch();
 
 }  // namespace pluginevents

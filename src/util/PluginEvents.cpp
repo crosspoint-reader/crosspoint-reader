@@ -25,6 +25,11 @@ static_assert(sizeof(EVENT_NAMES) / sizeof(EVENT_NAMES[0]) == static_cast<size_t
               "event name table out of sync");
 
 constexpr const char* OUTBOX_NAME = "/events.jsonl";
+// A dessen-app handler ("app" in device.json) routes its events here instead of
+// the network outbox: the app reads and clears this file itself next time it
+// runs (read mode) or when the event launches it (launch mode). drain() only
+// touches OUTBOX_NAME, so an app's queue is never delivered or deleted by it.
+constexpr const char* APP_OUTBOX_NAME = "/app-events.jsonl";
 // Drop-oldest wholesale: a plugin that is never drained must not grow a file
 // forever, and by the time 4KB of events piled up the old ones describe stale
 // state anyway.
@@ -43,11 +48,18 @@ struct Subscriber {
   char dir[64] = {0};       // "<root>/<name>"
   uint8_t mask = 0;         // bit per Event
   uint8_t connectMask = 0;  // events whose handler declares "connect": true
+  uint8_t appMask = 0;      // events whose handler routes to a dessen app ("app")
+  uint8_t launchMask = 0;   // app events with "mode": "launch" (open the app now)
   // Hash of each handler's "require_meta" key, 0 = unfiltered. A hash keeps
   // emit() free of manifest reads; a collision only queues an extra event.
   uint32_t metaKeyHash[static_cast<size_t>(pluginevents::Event::COUNT)] = {};
 };
 Subscriber subscribers[MAX_EVENT_PLUGINS];
+
+// Armed by a launch-mode emit, consumed by the UI loop (ActivityManager), which
+// opens the app. One launch is buffered: a second before the first is consumed
+// wins, and the earlier app's events simply wait in its queue for a later run.
+std::string pendingLaunchPath;
 
 uint8_t eventBit(const pluginevents::Event e) { return static_cast<uint8_t>(1u << static_cast<uint8_t>(e)); }
 
@@ -59,6 +71,7 @@ int eventFromName(const char* name) {
 }
 
 std::string outboxPath(const Subscriber& sub) { return std::string(sub.dir) + OUTBOX_NAME; }
+std::string appOutboxPath(const Subscriber& sub) { return std::string(sub.dir) + APP_OUTBOX_NAME; }
 
 // FNV-1a, never 0 (0 marks an unfiltered handler).
 uint32_t metaKeyHash(const char* key) {
@@ -103,6 +116,8 @@ void refreshSubscriptions() {
     if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) continue;
     uint8_t mask = 0;
     uint8_t connectMask = 0;
+    uint8_t appMask = 0;
+    uint8_t launchMask = 0;
     uint32_t metaHashes[static_cast<size_t>(Event::COUNT)] = {};
     for (JsonPairConst kv : doc["events"].as<JsonObjectConst>()) {
       const int e = eventFromName(kv.key().c_str());
@@ -117,6 +132,12 @@ void refreshSubscriptions() {
         continue;
       }
       mask |= static_cast<uint8_t>(1u << e);
+      // "app": "<bin>" routes the event to a dessen app's own queue (read mode)
+      // or launches it (launch mode) instead of a network request/download.
+      if (kv.value()["app"].is<const char*>()) {
+        appMask |= static_cast<uint8_t>(1u << e);
+        if (strcmp(kv.value()["mode"] | "read", "launch") == 0) launchMask |= static_cast<uint8_t>(1u << e);
+      }
       if (kv.value()["connect"] | false) connectMask |= static_cast<uint8_t>(1u << e);
       const char* requiredMeta = requireMeta | "";
       if (requiredMeta[0] != '\0') metaHashes[e] = metaKeyHash(requiredMeta);
@@ -132,6 +153,8 @@ void refreshSubscriptions() {
     strncpy(sub.dir, entry.dir.c_str(), sizeof(sub.dir) - 1);
     sub.mask = mask;
     sub.connectMask = connectMask;
+    sub.appMask = appMask;
+    sub.launchMask = launchMask;
     memcpy(sub.metaKeyHash, metaHashes, sizeof(metaHashes));
     LOG_DBG("PEVT", "%s subscribes mask=0x%02x", sub.name, sub.mask);
   }
@@ -219,7 +242,7 @@ void emit(const Event e, const Var* vars, const size_t varCount) {
       }
       if (!matched) continue;
     }
-    const std::string path = outboxPath(sub);
+    const std::string path = (sub.appMask & eventBit(e)) ? appOutboxPath(sub) : outboxPath(sub);
     HalFile file = Storage.open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND);
     if (!file || !file.isOpen()) {
       LOG_ERR("PEVT", "%s: outbox open failed", sub.name);
@@ -241,7 +264,18 @@ void emit(const Event e, const Var* vars, const size_t varCount) {
       file.truncate(before);
     }
     file.flush();
+    // Launch mode: the event is now in the app's queue; ask the UI loop to open
+    // the app. Not for sleep.enter (no UI as the chip powers down). First wins.
+    if ((sub.launchMask & eventBit(e)) && e != Event::SleepEnter && pendingLaunchPath.empty()) {
+      pendingLaunchPath = std::string(sub.dir) + "/app.bin";
+    }
   }
+}
+
+std::string takePendingLaunch() {
+  std::string p;
+  p.swap(pendingLaunchPath);
+  return p;
 }
 
 namespace {

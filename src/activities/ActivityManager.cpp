@@ -37,6 +37,7 @@
 #include "util/PluginLocations.h"
 #endif
 #include "util/FullScreenMessageActivity.h"
+#include "util/PluginEvents.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -108,6 +109,22 @@ void ActivityManager::renderTaskLoop() {
 
 void ActivityManager::loop() {
   if (mappedInput.consumeSuppressedRelease()) return;
+
+#if CROSSPOINT_DESSEN_APPS
+  // A launch-mode plugin-event handler asked to open its app (see PluginEvents).
+  // Only when idle between screen changes, so it stacks cleanly over whatever is
+  // on top; the app's queued event(s) wait in its app-events.jsonl to be read.
+  if (pendingAction == PendingAction::None && SETTINGS.pluginsEnabled) {
+    std::string launch = pluginevents::takePendingLaunch();
+    if (!launch.empty() && Storage.exists(launch.c_str())) {
+      if (auto app = makeUniqueNoThrow<DessenAppActivity>(renderer, mappedInput, std::move(launch))) {
+        pushActivity(std::move(app));
+        return;
+      }
+      LOG_ERR("DSN", "OOM: event-launch app");
+    }
+  }
+#endif
 
   if (currentActivity && currentActivity->requiresExclusiveStorageLoop()) {
     currentActivity->loop();
