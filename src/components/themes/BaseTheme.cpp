@@ -316,10 +316,16 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   }
 }
 
-// Slightly inside the side padding: the battery's boxed glyph and the clock
-// digits read wider than text/cover ink on the same line, so flush placement
-// looks like it overhangs the content columns.
-int BaseTheme::headerStatusInset() { return UITheme::getInstance().getMetrics().headerSidePadding + 4; }
+namespace {
+// headerBand preserves the bottom edge while moving the top by this amount.
+int headerBandTopShift(const GfxRenderer& renderer) {
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  return std::max(BaseTheme::HEADER_STATUS_TOP, top) - UITheme::getInstance().getMetrics().topPadding;
+}
+}  // namespace
+
+int BaseTheme::headerStatusInset() { return HEADER_STATUS_EDGE_INSET; }
 
 void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::HeaderProps& props) {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
@@ -341,15 +347,14 @@ void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::Head
     snprintf(percentText, sizeof(percentText), "%u%%", static_cast<unsigned>(percentage));
     status.battery.label = percentText;
   }
-  status.battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
-  status.battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
+  status.battery.glyphWidth = 16;
+  status.battery.glyphHeight = 12;
   status.battery.gap = batteryPercentSpacing;
-  status.batteryLeft = metrics.headerBatterySide == 1;
+  status.batteryLeft = false;
   status.edgeInset = static_cast<int16_t>(headerStatusInset());
 
-  // Header chrome geometry. Status lives on the theme's thin top strip in
-  // fixed corners — battery top-right, a corner clock (headerClockCentered =
-  // false) top-left, a centered clock top-center — and never repositions.
+  // Header chrome geometry uses Lyra's fixed status strip: battery top-right,
+  // clock top-left. Themes cannot reposition either indicator.
   // The content row (title, back arrow, trailing action buttons) centers on
   // the region between the strip and the band bottom, so its padding reads
   // as balanced under the status line rather than against the full band.
@@ -359,7 +364,7 @@ void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::Head
   // the boxes are invisible and minTouchSize pads the tap target.
   constexpr int16_t headerButtonSize = 48;
   const int16_t bandHeight = static_cast<int16_t>(metrics.headerHeight);
-  const int16_t strip = static_cast<int16_t>(metrics.batteryBarHeight);
+  const int16_t strip = HEADER_STATUS_HEIGHT;
   const int titleFontId = uiScaleSpec().titleFontId;
   const int16_t opticalDrop =
       static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
@@ -367,19 +372,18 @@ void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::Head
   props.trailingSize = headerButtonSize;
   props.leadingStyles = freeink::ui::plainStyles(freeink::ui::Paint::solid(freeink::ui::Color::Black));
   props.actionOffsetY = static_cast<int16_t>(strip + (bandHeight - strip - headerButtonSize) / 2 - 4 + opticalDrop);
-  // Shift the title's band-centered box down by half the strip: its center
-  // lands on the below-strip region's midline with the buttons.
-  // headerBand lowers only the band's top edge, which moves a centered title
-  // half as far as the buttons; the second half keeps the title on their line.
-  props.titleOffsetY = static_cast<int16_t>(strip / 2 + BoardConfig::ACTIVE.headerOffsetY / 2);
+  // The bottom edge stays fixed as headerBand lowers the top by the board
+  // offset plus the status clearance. Compensate half the total movement
+  // so the centered title stays aligned with top-relative action buttons.
+  // Divide once to round odd offsets consistently.
+  const int topOffset = BoardConfig::ACTIVE.headerOffsetY + headerBandTopShift(renderer);
+  props.titleOffsetY = static_cast<int16_t>(strip / 2 + topOffset / 2);
   status.stripHeight = strip;
-  status.clockCentered = metrics.headerClockCentered;
+  status.clockCentered = false;
 
-  // Header clock, opposite the battery, on every screen that draws this band
-  // (SETTINGS.clockShowInHeader). Themes whose title layout has no room for
-  // the clock's left reserve opt out via headerShowsClock.
+  // The user's setting alone controls the clock; themes cannot hide or center it.
   static char clockText[10];
-  if (metrics.headerShowsClock && SETTINGS.clockShowInHeader && halClock.isAvailable() &&
+  if (SETTINGS.clockShowInHeader && halClock.isAvailable() &&
       halClock.formatTime(clockText, sizeof(clockText), SETTINGS.clockFormat == 1)) {
     status.clockText = clockText;
   }
@@ -391,9 +395,11 @@ freeink::ui::Rect BaseTheme::headerBand(const GfxRenderer& renderer, const freei
   renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
   const auto l = static_cast<int16_t>(left);
   const auto r = static_cast<int16_t>(right);
-  const int16_t offset = BoardConfig::ACTIVE.headerOffsetY;
+  // Move the top edge to Lyra's status clearance without moving the header's
+  // bottom edge or changing the available content area below it.
+  const int16_t shift = static_cast<int16_t>(headerBandTopShift(renderer));
+  const int16_t offset = static_cast<int16_t>(BoardConfig::ACTIVE.headerOffsetY + shift);
   props.bleed = freeink::ui::Insets{0, r, 0, l};
-  // Only the status line sits up in the rounded corners; it alone gets their clearance.
   const int corner = BoardConfig::ACTIVE.cornerRadius;
   props.status.edgeInset = static_cast<int16_t>(props.status.edgeInset + std::max(0, corner - std::min(left, right)));
   return freeink::ui::Rect{static_cast<int16_t>(rect.x + l), static_cast<int16_t>(rect.y + offset),

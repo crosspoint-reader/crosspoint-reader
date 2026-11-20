@@ -7,8 +7,8 @@ class GfxRenderer;
 namespace RoundedRaffMetrics {
 constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .batteryHeight = 12,
-                                 // Fit the 23px SMALL_FONT_ID line box and lift it one pixel while
-                                 // keeping the 12px battery glyph at y=19, aligned with Lyra.
+                                 // Keep RoundedRaff's own title/content sizing while the firmware
+                                 // places the battery and clock in Lyra's status slot.
                                  .topPadding = 13,
                                  .batteryBarHeight = 24,
                                  .headerHeight = 84,
@@ -30,8 +30,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .headerUnderlineSize = 0,
                                  .headerTitleAlign = 0,  // left
                                  .headerBatterySide = 0,
-                                 // A centered clock needs no left title reserve, so RoundedRaff
-                                 // can show one after all.
+                                 // The header clock always stays in Lyra's top-left slot; RoundedRaff
+                                 // keeps its own title styling below that slot.
                                  .headerShowsClock = true,
                                  .menuRowHeight = 42,  // not authoritative: getMenuRowHeight() derives the drawn height
                                  .menuSpacing = 6,
