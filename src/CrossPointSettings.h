@@ -301,6 +301,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+  // EEGO A4 and X4 Pro: waking with the power button needs a hold, whatever a short click does.
+  uint8_t longPressWake = 0;
   // Power double click (see hasPowerDoubleClick()); Ignore disables the
   // single-click delay.
   uint8_t doublePwrBtn = defaultDoublePwrBtn();
