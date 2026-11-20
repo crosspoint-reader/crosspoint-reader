@@ -439,11 +439,11 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
 void FrontlightPanelActivity::render(RenderLock&&) {
   bool curIsInverted = display.isInverted();
   const bool inversionChanged = !inversionStateKnown || curIsInverted != prevIsInverted;
-
+  inversionStateKnown = true;
   if (inversionChanged) {
-    renderer.clearScreen();
     Activity* activity = activityManager.getUnderlyingActivity();
     if (activity && activity->isHomeActivity()) {
+      renderer.clearScreen();
       static_cast<HomeActivity*>(activity)->drawHomeContent();
     }
     prevIsInverted = curIsInverted;
