@@ -443,8 +443,8 @@ void FrontlightPanelActivity::render(RenderLock&&) {
   if (inversionChanged) {
     renderer.clearScreen();
     Activity* activity = activityManager.getUnderlyingActivity();
-    if (auto* home = dynamic_cast<HomeActivity*>(activityManager.getUnderlyingActivity())) {
-      home->drawHomeContent();
+    if (activity && activity->isHomeActivity()) {
+      static_cast<HomeActivity*>(activity)->drawHomeContent();
     }
     prevIsInverted = curIsInverted;
   }
