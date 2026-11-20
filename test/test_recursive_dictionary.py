@@ -60,7 +60,7 @@ definition_result = block(lookup_source, "[this](const ActivityResult& result)")
 reader_source = (ROOT / "src/activities/reader/EpubReaderActivity.cpp").read_text()
 return_selection_for = block(reader_source, "ClipSelectionActivity::Selection lookupReturnSelectionFor")
 lookup_result = block(reader_source.split("startActivityForResult(std::move(lookup)", 1)[1],
-                      "[this](const ActivityResult& result)")
+                      "[this, mode](const ActivityResult& result)")
 reader_constants = (ROOT / "src/activities/reader/ReaderUtils.h").read_text().split("namespace ReaderUtils {", 1)[1].split(
     "constexpr unsigned long SKIP_HOLD_MS", 1
 )[0]
@@ -199,6 +199,7 @@ struct Dictionary {
   std::string lastQuery;
 };
 struct ClipSelectionActivity {
+  enum class Mode { Clip, Lookup, DefinitionLookup, Select };
 ''' + selection + r'''
   template<typename... Args> explicit ClipSelectionActivity(Args&&...) {}
 };
@@ -225,6 +226,8 @@ struct DictionaryDefinitionActivity {
   bool messageVisible = false;
   bool finished = false;
   bool selectionOpened = false;
+  bool clipSelectionOpened = false;
+  ClipSelectionActivity::Mode mode = ClipSelectionActivity::Mode::Lookup;
   ClipSelectionActivity::Selection pendingLookupSelection;
   ClipSelectionActivity::Selection lookupReturnSelection;
   ActivityResult result;
@@ -236,9 +239,10 @@ struct DictionaryDefinitionActivity {
   void finish() { finished = true; }
   void setResult(ActivityResult&& next) { result = std::move(next); }
   void openDictionaryWordSelect() { selectionOpened = true; }
+  void startClipSelection(int, int, ClipSelectionActivity::Mode) { clipSelectionOpened = true; }
   void handleBack() { ''' + back_handler + r''' }
   void onDefinitionResult(const ActivityResult& child) { (''' + definition_result + r''')(child); }
-  void onLookupResult(const ActivityResult& child) { (''' + lookup_result + r''')(child); }
+  void onLookupResult(const ActivityResult& child) { const auto mode = this->mode; (''' + lookup_result + r''')(child); }
   void startActivityForResult(std::unique_ptr<ClipSelectionActivity> next, ActivityResultHandler handler) {
     child = std::move(next);
     callback = std::move(handler);
@@ -466,6 +470,15 @@ int main() {
         }
       }
     }
+  }
+  // Select mode returns to Select (not Look up) so the user can choose Look up or Clip again.
+  {
+    DictionaryDefinitionActivity lookupParent, bookReader;
+    ActivityResult exitResult;
+    lookupParent.onDefinitionResult(exitResult);
+    bookReader.mode = ClipSelectionActivity::Mode::Select;
+    bookReader.onLookupResult(lookupParent.result);
+    assert(bookReader.clipSelectionOpened && !bookReader.selectionOpened);
   }
   // A clipping that spans pages cannot be restored; a single-page one keeps its word range.
   ClippingResult multiPage;
