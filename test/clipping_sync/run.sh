@@ -1,9 +1,9 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/../.."
-build_dir="${TMPDIR:-/tmp}/crosspoint-clipping-sync-tests"
+build_dir=$(mktemp -d "${TMPDIR:-/tmp}/crosspoint-clipping-sync-tests.XXXXXX")
+trap 'rm -rf "$build_dir"' EXIT
 json_dir="${ARDUINOJSON_DIR:-.pio/libdeps/default/ArduinoJson/src}"
-mkdir -p "$build_dir"
 for chip in ESP32C3 ESP32S3; do
   c++ -std=c++20 -Wall -Wextra -Werror -Wno-unused-parameter -fno-exceptions \
     "-DCONFIG_IDF_TARGET_$chip=1" -I"$json_dir" \
