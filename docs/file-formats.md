@@ -780,6 +780,31 @@ make a real book disappear.
 `selfSize` is the expected file size. Comparing it against the real one is a free
 truncation guard: a build cut short by a power failure cannot pass.
 
+## `.cpfont` — SD-card bitmap font (`/.fonts/<Family>/<Family>_<pt>.cpfont`)
+
+Version 4 (`CPFONT\0\0`, `version = 4`). Each file starts with a 32-byte little-endian
+header followed by `styleCount` 32-byte table-of-contents entries (`styleId` `0..3`:
+regular, bold, italic, bold italic), each style's intervals, `EpdGlyph` entries,
+packed kerning class tables, dense kerning matrix, ligature pairs, packed glyph
+bitmaps, and an optional trailing shaping section (`shapingOffset` at TOC byte
+offset `28`; see below).
+
+Header `flags` (`uint16_t` at byte offset `10`) selects the glyph bitmap bit depth
+(orthogonal to optional per-style shaping sections):
+
+| `flags` | Encoding | Packed bytes per glyph |
+|---|---|---|
+| `0x0000` | 1-bit monochrome, MSB-first (`0` = background, `1` = ink) | `(width * height + 7) / 8` |
+| `0x0001` | 2-bit grayscale (4 levels, `0` = background .. `3` = black), MSB-first (`fontconvert_sdcard.py` default / `--2bit`) | `(width * height + 3) / 4` |
+| `0x0002` | 4-bit grayscale (16 levels, `0` = background .. `15` = black), MSB-nibble-first (`fontconvert_sdcard.py --4bit`) | `(width * height + 1) / 2` |
+
+Unknown flag bits or setting both `0x0001` and `0x0002` is invalid and rejected on
+load. Older firmware versions without 4-bit `.cpfont` support treat `flags = 0x0002`
+glyphs as corrupt, drawing blank text and reporting `"Damaged font file"`. 4-bit
+`.cpfont` files and direct `.ttf`/`.otf`/`.ttc` reader faces render in 4-level
+grayscale when **Text Anti-Aliasing** is enabled and supported in the active display
+mode (most panels disable grayscale in **Night Mode**), or in monochrome otherwise.
+
 ## `.cpfont` shaping section
 
 A style that shapes an Indic script carries a shaping section after every

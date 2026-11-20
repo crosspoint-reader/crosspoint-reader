@@ -4,8 +4,9 @@
 Font licenses and copyright notices are in licenses/fonts.txt.
 
 Outputs binary .cpfont files containing glyph metadata and uncompressed
-2-bit bitmaps, matching the EpdFontData/EpdGlyph/EpdUnicodeInterval struct
-layout on the ESP32-C3 (little-endian, RISC-V).
+2-bit (default, flags=0x0001) or 4-bit (--4bit, flags=0x0002) bitmaps,
+matching the EpdFontData/EpdGlyph/EpdUnicodeInterval struct layout on the
+ESP32-C3 (little-endian, RISC-V).
 
 Usage:
     # Single file with specific presets
@@ -26,6 +27,7 @@ Usage:
 
 from __future__ import annotations
 
+import ctypes
 import struct
 import sys
 import os
@@ -36,6 +38,9 @@ from collections import namedtuple
 
 from cpfont_version import CPFONT_VERSION
 import shaping_blob
+
+CPFONT_FLAG_2BIT = 0x0001
+CPFONT_FLAG_4BIT = 0x0002
 
 # --- Unicode interval presets ---
 
@@ -582,70 +587,639 @@ def extract_ligatures_fonttools(font_path, codepoints):
     return pairs
 
 
-def _pack_loaded_glyph(slot, data_offset, code_point):
-    """Convert FreeType's rendered glyph slot to (GlyphProps, packed 2-bit bitmap)."""
+
+def build_quant_lut(bpp: int, gamma: float = 1.0, halo_clip: bool = False) -> bytes:
+    """Build 256-entry 8-bit -> {2bpp (0..3) | 4bpp (0..15)} quantization LUT.
+
+    At gamma == 1.0 and halo_clip == False, 2bpp keeps the legacy 64/128/192
+    thresholds so default 2-bit .cpfont output stays byte-identical; 4bpp and
+    non-unity gamma use reflectance-space mapping 1 - (1 - a/255)**gamma.
+    When halo_clip is True, coverage <= 15/255 clips to 0 (and >= 240/255 clips
+    to 15 in 4bpp mode).
+    """
+    if bpp not in (2, 4):
+        raise ValueError(f"Unsupported bpp: {bpp}")
+    if gamma <= 0.0 or not math.isfinite(gamma):
+        raise ValueError(f"gamma must be finite and positive, got {gamma}")
+    if bpp == 2 and gamma == 1.0:
+        return bytes(0 if i < 64 else 1 if i < 128 else 2 if i < 192 else 3 for i in range(256))
+    max_level = (1 << bpp) - 1
+    out = bytearray(256)
+    for i in range(1, 256):
+        if halo_clip and i <= 15:
+            out[i] = 0
+            continue
+        if halo_clip and bpp == 4 and i >= 240:
+            out[i] = max_level
+            continue
+        lum_mapped = round(255.0 * (1.0 - ((1.0 - i / 255.0) ** gamma)))
+        lum_mapped = max(0, min(255, lum_mapped))
+        out[i] = (lum_mapped * max_level + 127) // 255
+    return bytes(out)
+
+
+def pack_bitmap_4b(buf, width: int, rows: int, pitch: int, lut4: bytes,
+                   counter_guard: bool = False) -> bytes:
+    """Pack 8-bit FreeType bitmap into contiguous MSB-nibble-first 4bpp: (width * rows + 1) // 2 bytes."""
+    total = width * rows
+    if total == 0:
+        return b""
+    abs_pitch = abs(pitch)
+    vals = bytearray(total + (total & 1))
+    idx = 0
+    for y in range(rows):
+        row_off = y * abs_pitch if pitch >= 0 else (rows - 1 - y) * abs_pitch
+        for x in range(width):
+            vals[idx] = lut4[buf[row_off + x]]
+            idx += 1
+    if counter_guard and ((width >= 3 and rows >= 2) or (width >= 2 and rows >= 3)):
+        orig = bytes(vals[:total])
+        for y in range(rows):
+            r_off = y * width
+            for x in range(width):
+                p = r_off + x
+                if 0 < orig[p] <= 2:
+                    dark = (
+                        (1 if x > 0 and orig[p - 1] >= 10 else 0)
+                        + (1 if x + 1 < width and orig[p + 1] >= 10 else 0)
+                        + (1 if y > 0 and orig[p - width] >= 10 else 0)
+                        + (1 if y + 1 < rows and orig[p + width] >= 10 else 0)
+                    )
+                    if dark >= 3:
+                        vals[p] = 0
+    out = bytearray(len(vals) >> 1)
+    mv = memoryview(vals)
+    for j, i in enumerate(range(0, len(vals), 2)):
+        out[j] = (mv[i] << 4) | mv[i + 1]
+    return bytes(out)
+
+
+def pack_bitmap_2b(buf, width: int, rows: int, pitch: int, lut2: bytes) -> bytes:
+    """Pack 8-bit FreeType bitmap into contiguous MSB-first 2bpp: (width * rows + 3) // 4 bytes."""
+    total = width * rows
+    if total == 0:
+        return b""
+    abs_pitch = abs(pitch)
+    rem = total & 3
+    vals = bytearray(total + ((4 - rem) if rem else 0))
+    idx = 0
+    for y in range(rows):
+        row_off = y * abs_pitch if pitch >= 0 else (rows - 1 - y) * abs_pitch
+        for x in range(width):
+            vals[idx] = lut2[buf[row_off + x]]
+            idx += 1
+    out = bytearray(len(vals) >> 2)
+    mv = memoryview(vals)
+    for j, i in enumerate(range(0, len(vals), 4)):
+        out[j] = (mv[i] << 6) | (mv[i + 1] << 4) | (mv[i + 2] << 2) | mv[i + 3]
+    return bytes(out)
+
+
+def _pwl_interp(val: int, anchors: list[tuple[float, float]]) -> int:
+    if not anchors:
+        return val
+    if val <= anchors[0][0]:
+        return int(round(val + (anchors[0][1] - anchors[0][0])))
+    if val >= anchors[-1][0]:
+        return int(round(val + (anchors[-1][1] - anchors[-1][0])))
+    for i in range(len(anchors) - 1):
+        x0, y0 = anchors[i]
+        x1, y1 = anchors[i + 1]
+        if x0 <= val <= x1:
+            if x1 <= x0 + 1e-6:
+                return int(round(0.5 * (y0 + y1)))
+            return int(round(y0 + ((val - x0) / (x1 - x0)) * (y1 - y0)))
+    return val
+
+
+MAX_STEM_ANCHOR_CONTOURS = 12
+MAX_STEM_ANCHOR_POINTS = 200
+MAX_CHAIN_SEARCH_STEPS = 512
+MIN_COUNTER_GAP_26_6 = 96.0   # 1.5 px minimum inter-leg white counter floor in 26.6 units
+MIN_COUNTER_GAP_RATIO = 0.75  # Never narrow an inter-leg counter below 75% of original gap
+
+
+def _median_float(vals: list[int | float]) -> float:
+    s = sorted(vals)
+    mid = len(s) >> 1
+    if len(s) & 1:
+        return float(s[mid])
+    return 0.5 * (s[mid - 1] + s[mid])
+
+
+def _is_italic_face(face) -> bool:
+    """Return True if FreeType face is Italic or Oblique (via style_flags or SFNT post.italicAngle)."""
+    cached = getattr(face, "_cpfont_is_italic", None)
+    if cached is not None:
+        return cached
+
+    import freetype
+
+    italic_flag = freetype.FT_STYLE_FLAGS.get("FT_STYLE_FLAG_ITALIC", getattr(freetype, "FT_STYLE_FLAG_ITALIC", 1))
+    is_ital = bool(getattr(face, "style_flags", 0) & italic_flag) or abs(getattr(face, "italic_angle", 0)) > 0
+    if not is_ital and hasattr(face, "_FT_Face"):
+        tag_post = 0x706F7374  # 'post'
+        buf = (ctypes.c_ubyte * 16)()
+        length = freetype.FT_ULong(16)
+        try:
+            err = freetype.raw.FT_Load_Sfnt_Table(face._FT_Face, tag_post, 0, buf, ctypes.byref(length))
+            if err == 0 and length.value >= 8:
+                italic_fixed = struct.unpack(">i", bytes(buf[4:8]))[0]
+                if italic_fixed != 0:
+                    is_ital = True
+        except Exception:
+            pass
+
+    try:
+        setattr(face, "_cpfont_is_italic", is_ital)
+    except Exception:
+        pass
+    return is_ital
+
+
+def _is_bicameral_stem_anchor_cp(cp: int) -> bool:
+    """Return True for bicameral Latin/Greek/Cyrillic/IPA/ligature codepoints suited to x/cap-height zones."""
+    return (
+        (0x0020 <= cp <= 0x058F)
+        or (0x10A0 <= cp <= 0x10FF)
+        or (0x1E00 <= cp <= 0x218F)
+        or (0x2C60 <= cp <= 0x2C7F)
+        or (0x2D00 <= cp <= 0x2D2F)
+        or (0xA720 <= cp <= 0xA7FF)
+        or (0xAB30 <= cp <= 0xAB6F)
+        or (0xFB00 <= cp <= 0xFB06)
+    )
+
+
+def _probe_stem_anchor_zones(face, load_flags: int) -> dict[str, int]:
+    def y_bounds(ch: str):
+        gi = face.get_char_index(ord(ch))
+        if gi == 0:
+            return None
+        face.load_glyph(gi, load_flags)
+        ol = face.glyph.outline
+        if ol.n_contours <= 0 or ol.n_points <= 0:
+            return None
+        ys = [pt[1] for pt in ol.points]
+        return min(ys), max(ys)
+
+    cap_f = [b for b in (y_bounds(c) for c in "BEHTZ") if b is not None]
+    x_f = [b for b in (y_bounds(c) for c in "wxyz") if b is not None]
+    return {
+        "base_flat": int(round(_median_float([b for b, _ in cap_f]) / 64.0) * 64) if cap_f else 0,
+        "cap_flat": int(round(_median_float([t for _, t in cap_f]) / 64.0) * 64) if cap_f else 0,
+        "x_flat": int(round(_median_float([t for _, t in x_f]) / 64.0) * 64) if x_f else 0,
+    }
+
+
+def _min_allowed_counter_gap(orig_gap: float) -> float:
+    if orig_gap <= 0.0:
+        return orig_gap
+    target = max(MIN_COUNTER_GAP_26_6, MIN_COUNTER_GAP_RATIO * orig_gap)
+    return min(orig_gap, target)
+
+
+def _counter_gaps_ok(stems: list, ds: list[int | float]) -> bool:
+    for k in range(1, len(stems)):
+        orig_gap = stems[k][0] - stems[k - 1][1]
+        new_gap = (stems[k][0] + round(ds[k])) - (stems[k - 1][1] + round(ds[k - 1]))
+        if new_gap + 1e-6 < _min_allowed_counter_gap(orig_gap):
+            return False
+    return True
+
+
+def apply_stem_anchor_pass(face, ppem: float, zones: dict[str, int], snap_x: bool = True) -> None:
+    """Apply one-edge integer stem anchoring + multi-stem pitch lock + <44/64px Y overshoot snap."""
+    import freetype
+
+    if face.glyph.format != freetype.FT_GLYPH_FORMAT_OUTLINE:
+        return
+    ol = face.glyph.outline
+    if (
+        ol.n_contours <= 0
+        or ol.n_points <= 0
+        or ol.n_contours > MAX_STEM_ANCHOR_CONTOURS
+        or ol.n_points > MAX_STEM_ANCHOR_POINTS
+    ):
+        return
+
+    raw_ol = ol._FT_Outline
+    n_pts = ol.n_points
+    pts = [(raw_ol.points[i].x, raw_ol.points[i].y) for i in range(n_pts)]
+    on_curve = [bool(raw_ol.tags[i] & 1) for i in range(n_pts)]
+    contours = [raw_ol.contours[c] for c in range(ol.n_contours)]
+    adv_26_6 = int(round(face.glyph.linearHoriAdvance / 1024.0))
+    xh_26_6 = zones["x_flat"] if zones["x_flat"] > 0 else int(round(ppem * 0.511 * 64))
+    orient = freetype.raw.FT_Outline_Get_Orientation(ctypes.byref(raw_ol))
+    left_sgn = -1 if orient == 1 else 1
+    top_sgn = -1 if orient == 1 else 1
+
+    new_x = [p[0] for p in pts]
+    new_y = [p[1] for p in pts]
+
+    do_snap_x = bool(snap_x) and not _is_italic_face(face)
+    if do_snap_x and adv_26_6 > 0:
+        vsegs = []
+        start = 0
+        for end in contours:
+            n = end - start + 1
+            edges = []
+            for k in range(n):
+                i0, i1 = start + k, start + ((k + 1) % n)
+                x0, y0 = pts[i0]
+                x1, y1 = pts[i1]
+                dy = y1 - y0
+                adx, ady = abs(x1 - x0), abs(dy)
+                max_dx = min(10, max(4, int(0.018 * ady)))
+                if ady >= 24 and adx <= max_dx:
+                    is_on_on = on_curve[i0] and on_curve[i1] and ady >= 48
+                    is_cu2qu_inflect = (not on_curve[i0]) and (not on_curve[i1]) and adx <= 3 and ady >= 128
+                    edges.append((k, i0, i1, x0, y0, x1, y1, 1 if dy > 0 else -1, is_on_on or is_cu2qu_inflect))
+
+            used_k = set()
+            by_k = {e[0]: e for e in edges}
+            for e in edges:
+                k, i0, i1, x0, y0, x1, y1, sgn, is_seed = e
+                if not is_seed or k in used_k:
+                    continue
+                x_ref = 0.5 * (x0 + x1)
+                chain = [e]
+                used_k.add(k)
+                kp = (k - 1) % n
+                while kp in by_k and kp not in used_k:
+                    ep = by_k[kp]
+                    if ep[7] == sgn and abs(0.5 * (ep[3] + ep[5]) - x_ref) <= 8:
+                        chain.insert(0, ep)
+                        used_k.add(kp)
+                        kp = (kp - 1) % n
+                    else:
+                        break
+                kn = (k + 1) % n
+                while kn in by_k and kn not in used_k:
+                    en = by_k[kn]
+                    if en[7] == sgn and abs(0.5 * (en[3] + en[5]) - x_ref) <= 8:
+                        chain.append(en)
+                        used_k.add(kn)
+                        kn = (kn + 1) % n
+                    else:
+                        break
+                cy0 = min(min(c[4], c[6]) for c in chain)
+                cy1 = max(max(c[4], c[6]) for c in chain)
+                if cy1 - cy0 >= 64:
+                    w_sum = sum(abs(c[6] - c[4]) for c in chain)
+                    x_avg = sum(0.5 * (c[3] + c[5]) * abs(c[6] - c[4]) for c in chain) / max(w_sum, 1)
+                    idxs = []
+                    for c in chain:
+                        idxs.extend([c[1], c[2]])
+                    vsegs.append((x_avg, cy0, cy1, sgn, idxs))
+            start = end + 1
+
+        vsegs.sort(key=lambda s: (s[3], s[0], s[1]))
+        merged = []
+        for x, y0, y1, sgn, idxs in vsegs:
+            if merged and merged[-1][3] == sgn and abs(merged[-1][0] - x) <= 8:
+                px, py0, py1, _, pidxs, pspans = merged[-1]
+                wp = sum(b - a for a, b in pspans)
+                wc = y1 - y0
+                merged[-1] = [
+                    (px * wp + x * wc) / max(wp + wc, 1),
+                    min(py0, y0),
+                    max(py1, y1),
+                    sgn,
+                    pidxs + idxs,
+                    pspans + [(y0, y1)],
+                ]
+            else:
+                merged.append([x, y0, y1, sgn, list(idxs), [(y0, y1)]])
+
+        def _spans_overlap(sp_a: list[tuple[float, float]], sp_b: list[tuple[float, float]]) -> float:
+            tot = 0.0
+            for a0, a1 in sp_a:
+                for b0, b1 in sp_b:
+                    ov = min(a1, b1) - max(a0, b0)
+                    if ov > 0.0:
+                        tot += ov
+            return tot
+
+        def _spans_len(sp: list[tuple[float, float]]) -> float:
+            return sum(b - a for a, b in sp)
+
+        lefts = sorted([m for m in merged if m[3] == left_sgn], key=lambda m: m[0])
+        rights = sorted([m for m in merged if m[3] == -left_sgn], key=lambda m: m[0])
+        w_min, w_max = max(48.0, 0.045 * ppem * 64.0), 0.250 * ppem * 64.0
+        ov_std, ov_tall = 0.30 * xh_26_6, 0.20 * xh_26_6
+        raw_stems, used_r = [], set()
+        for lx, ly0, ly1, _, l_i, l_sp in lefts:
+            l_len = _spans_len(l_sp)
+            for ri, (rx, ry0, ry1, _, r_i, r_sp) in enumerate(rights):
+                if ri in used_r:
+                    continue
+                w = rx - lx
+                if w < w_min:
+                    continue
+                if w > w_max:
+                    break
+                req_ov = ov_tall if max(l_len, _spans_len(r_sp)) >= 0.70 * xh_26_6 else ov_std
+                if _spans_overlap(l_sp, r_sp) >= req_ov:
+                    if not any(
+                        (lx + 6 < ox < rx - 6) and (_spans_overlap(l_sp, o_sp) >= req_ov)
+                        for ox, _, _, _, _, o_sp in lefts
+                    ):
+                        used_r.add(ri)
+                        raw_stems.append((lx, rx, l_i, r_i, min(ly0, ry0), max(ly1, ry1)))
+                        break
+
+        raw_stems.sort(key=lambda s: s[0])
+        stems = []
+        for s in raw_stems:
+            if not stems or s[0] >= stems[-1][1] + 16:
+                stems.append(s)
+
+        if stems:
+            l0, r0 = stems[0][0], stems[0][1]
+            dl0 = round(l0 / 64.0) * 64.0 - l0
+            dr0 = round(r0 / 64.0) * 64.0 - r0
+            d0_p = dl0 if abs(dl0) <= abs(dr0) else dr0
+            d0_a = dr0 if abs(dl0) <= abs(dr0) else dl0
+            snapped = []
+            if len(stems) == 1:
+                dk_int = int(round(d0_p))
+                snapped = [(l0, l0 + dk_int, r0, r0 + dk_int, dk_int, stems[0][2], stems[0][3], stems[0][4], stems[0][5])]
+            else:
+                gaps = [stems[k][0] - stems[k - 1][0] for k in range(1, len(stems))]
+                eq_pitch = len(gaps) >= 2 and (max(gaps) - min(gaps) <= 20.0)
+                best_ds = None
+                if eq_pitch:
+                    ms = (stems[-1][0] - l0) / (len(stems) - 1)
+                    s_lo = math.floor(ms / 64.0) * 64.0
+                    cands = []
+                    for dc in (d0_p, d0_a):
+                        if abs(dc) <= 32.0:
+                            for stp in (s_lo, s_lo + 64.0):
+                                ds = [int(round((l0 + dc + k * stp) - stems[k][0])) for k in range(len(stems))]
+                                if max(abs(d) for d in ds) <= 36 and _counter_gaps_ok(stems, ds):
+                                    cands.append((max(abs(d) for d in ds), abs(dc), ds))
+                    if cands:
+                        best_ds = min(cands)[2]
+                else:
+                    best_cand: tuple[int, int, list[int]] | None = None
+                    search_steps = 0
+                    search_aborted = False
+
+                    def _search_chain(idx_k: int, dc_val: int, cur_ds: list[int], cur_max: int) -> None:
+                        nonlocal best_cand, search_steps, search_aborted
+                        search_steps += 1
+                        if search_steps > MAX_CHAIN_SEARCH_STEPS:
+                            search_aborted = True
+                            return
+                        if idx_k == len(stems):
+                            cand = (cur_max, abs(dc_val), list(cur_ds))
+                            if best_cand is None or cand < best_cand:
+                                best_cand = cand
+                            return
+                        lk = stems[idx_k][0]
+                        rp = (lk - l0) / 64.0
+                        pn = round(rp) * 64.0
+                        pa = math.floor(rp) * 64.0 if pn > rp * 64.0 else math.ceil(rp) * 64.0
+                        step_opts: list[float] = []
+                        for p_cand in (pn, pa, pn + 64.0):
+                            if p_cand not in step_opts:
+                                step_opts.append(p_cand)
+                        orig_gap = lk - stems[idx_k - 1][1]
+                        req_gap = _min_allowed_counter_gap(orig_gap)
+                        prev_r_new = stems[idx_k - 1][1] + cur_ds[-1]
+                        for p_cand in step_opts:
+                            dk_c = int(round((l0 + dc_val + p_cand) - lk))
+                            limit = 36 if p_cand > rp * 64.0 else 32
+                            if abs(dk_c) <= limit and (lk + dk_c) - prev_r_new + 1e-6 >= req_gap:
+                                cur_ds.append(dk_c)
+                                _search_chain(idx_k + 1, dc_val, cur_ds, max(cur_max, abs(dk_c)))
+                                cur_ds.pop()
+                                if search_aborted:
+                                    return
+
+                    for dc in (d0_p, d0_a):
+                        if abs(dc) > 32.0:
+                            continue
+                        dc_int = int(round(dc))
+                        _search_chain(1, dc_int, [dc_int], abs(dc_int))
+                        if search_aborted:
+                            break
+                    if best_cand is not None and not search_aborted:
+                        best_ds = best_cand[2]
+
+                for k, (lk, rk, l_i, r_i, sy0, sy1) in enumerate(stems):
+                    if best_ds is not None:
+                        dk_int = int(round(best_ds[k]))
+                    else:
+                        dlk, drk = round(lk / 64.0) * 64.0 - lk, round(rk / 64.0) * 64.0 - rk
+                        dk_p = int(round(dlk if abs(dlk) <= abs(drk) else drk))
+                        dk_a = int(round(drk if abs(dlk) <= abs(drk) else dlk))
+                        if not snapped:
+                            dk_int = dk_p
+                        else:
+                            orig_gap = lk - stems[k - 1][1]
+                            req_gap = _min_allowed_counter_gap(orig_gap)
+                            prev_r_new = snapped[-1][3]
+                            if (lk + dk_p) - prev_r_new + 1e-6 >= req_gap:
+                                dk_int = dk_p
+                            elif abs(dk_a) <= 36 and (lk + dk_a) - prev_r_new + 1e-6 >= req_gap:
+                                dk_int = dk_a
+                            else:
+                                # Rigidly co-shift with previous stem to preserve 100% of original counter gap
+                                dk_int = int(snapped[-1][4])
+                    snapped.append((lk, lk + dk_int, rk, rk + dk_int, dk_int, l_i, r_i, sy0, sy1))
+
+            touched_x, touched_c = {}, set()
+            pt_c = [0] * n_pts
+            cs = 0
+            for ci, ce in enumerate(contours):
+                for idx in range(cs, ce + 1):
+                    pt_c[idx] = ci
+                cs = ce + 1
+            for lk, lk_n, rk, rk_n, dk_int, l_i, r_i, _, _ in snapped:
+                for idx in l_i + r_i:
+                    touched_x[idx] = pts[idx][0] + dk_int
+                    touched_c.add(pt_c[idx])
+
+            x_anc = []
+            if snapped[0][0] > 4.0 and snapped[0][1] > 2.0:
+                x_anc.append((0.0, 0.0))
+            for lk, lk_n, rk, rk_n, _, _, _, _, _ in snapped:
+                x_anc.extend([(lk, lk_n), (rk, rk_n)])
+            if snapped[-1][2] < adv_26_6 - 4.0 and snapped[-1][3] < adv_26_6 - 2.0:
+                x_anc.append((float(adv_26_6), float(adv_26_6)))
+
+            cs = 0
+            for ci, ce in enumerate(contours):
+                c_rng = range(cs, ce + 1)
+                if ci not in touched_c:
+                    c_xs = [pts[idx][0] for idx in c_rng]
+                    c_ys = [pts[idx][1] for idx in c_rng]
+                    c_mid = 0.5 * (min(c_xs) + max(c_xs))
+                    near = min(snapped, key=lambda s: abs(c_mid - 0.5 * (s[0] + s[2])))
+                    vert_disjoint = min(c_ys) >= near[8] - 32.0 or max(c_ys) <= near[7] + 32.0
+                    if (
+                        vert_disjoint
+                        and (max(c_xs) - min(c_xs)) <= 0.55 * adv_26_6
+                        and abs(c_mid - 0.5 * (near[0] + near[2])) <= 0.28 * ppem * 64.0
+                    ):
+                        dk_d = int(near[4])
+                        for idx in c_rng:
+                            new_x[idx] = pts[idx][0] + dk_d
+                        cs = ce + 1
+                        continue
+                for idx in c_rng:
+                    if idx in touched_x:
+                        new_x[idx] = touched_x[idx]
+                    elif pts[idx][0] <= 0 and x_anc[0][0] == 0.0:
+                        new_x[idx] = pts[idx][0]
+                    elif pts[idx][0] >= adv_26_6 and x_anc[-1][0] == float(adv_26_6):
+                        new_x[idx] = pts[idx][0]
+                    else:
+                        new_x[idx] = _pwl_interp(pts[idx][0], x_anc)
+                cs = ce + 1
+
+    # Y-zone <44/64px overshoot collapse + one-edge crossbar snap
+    bf, xf, cf = zones["base_flat"], zones["x_flat"], zones["cap_flat"]
+    hsegs = []
+    start = 0
+    min_hl = max(96, int(0.14 * ppem * 64))
+    for end in contours:
+        n = end - start + 1
+        for k in range(n):
+            i0, i1 = start + k, start + ((k + 1) % n)
+            if on_curve[i0] and on_curve[i1]:
+                x0, y0 = pts[i0]
+                x1, y1 = pts[i1]
+                if abs(y1 - y0) <= 4 and abs(x1 - x0) >= min_hl:
+                    hsegs.append((0.5 * (y0 + y1), min(x0, x1), max(x0, x1), 1 if x1 > x0 else -1, [i0, i1]))
+        start = end + 1
+
+    hsegs.sort(key=lambda s: (s[3], s[0], s[1]))
+    hm = []
+    for y, x0, x1, sgn, idxs in hsegs:
+        if hm and hm[-1][3] == sgn and abs(hm[-1][0] - y) <= 6:
+            py, px0, px1, _, pidxs = hm[-1]
+            hm[-1] = [0.5 * (py + y), min(px0, x0), max(px1, x1), sgn, pidxs + idxs]
+        else:
+            hm.append([y, x0, x1, sgn, list(idxs)])
+
+    bots = sorted([m for m in hm if m[3] == -top_sgn], key=lambda m: m[0])
+    tops = sorted([m for m in hm if m[3] == top_sgn], key=lambda m: m[0])
+    crossbars, used_t = [], set()
+    for by, bx0, bx1, _, b_i in bots:
+        if by <= bf + 48:
+            continue
+        for ti, (ty, tx0, tx1, _, t_i) in enumerate(tops):
+            if ti in used_t:
+                continue
+            h = ty - by
+            if h < 0.035 * ppem * 64.0:
+                continue
+            if h > 0.160 * ppem * 64.0:
+                break
+            if cf > 0 and ty >= cf - 24 and by > xf + 32:
+                continue
+            if min(bx1, tx1) - max(bx0, tx0) >= 0.14 * ppem * 64.0:
+                used_t.add(ti)
+                db, dt = round(by / 64.0) * 64.0 - by, round(ty / 64.0) * 64.0 - ty
+                dy = db if abs(db) <= abs(dt) else dt
+                if xf > 0 and (ty + dy) > 0.665 * xf and len(contours) >= 2:
+                    cs_k = 0
+                    for ce_k in contours:
+                        if any(cs_k <= idx <= ce_k for idx in t_i):
+                            c_ys = [pts[idx][1] for idx in range(cs_k, ce_k + 1)]
+                            if min(c_ys) >= ty - 6 and max(c_ys) <= xf + 32:
+                                dy -= 64.0
+                                break
+                        cs_k = ce_k + 1
+                crossbars.append((by, by + dy, ty, ty + dy, dy, b_i, t_i))
+                break
+
+    bot_ys, x_ys, cap_ys = [], [], []
+    start = 0
+    for end in contours:
+        n = end - start + 1
+        if n >= 3:
+            ys = [pts[start + k][1] for k in range(n)]
+            for k in range(n):
+                yk = ys[k]
+                p, steps = (k - 1) % n, 0
+                while steps < n and ys[p] == yk:
+                    p, steps = (p - 1) % n, steps + 1
+                if steps == n:
+                    continue
+                q, steps = (k + 1) % n, 0
+                while steps < n and ys[q] == yk:
+                    q, steps = (q + 1) % n, steps + 1
+                if yk < ys[p] and yk < ys[q] and (bf - 44 < yk < bf):
+                    bot_ys.append(yk)
+                elif yk > ys[p] and yk > ys[q]:
+                    if xf > 0 and (xf < yk < xf + 44):
+                        x_ys.append(yk)
+                    elif cf > xf + 64 and (cf < yk < cf + 44):
+                        cap_ys.append(yk)
+        start = end + 1
+
+    if crossbars or bot_ys or x_ys or cap_ys:
+        ys_all = [p[1] for p in pts]
+        ymin_g, ymax_g = min(ys_all), max(ys_all)
+        raw_ya = []
+        if ymin_g < bf - 44:
+            raw_ya.append((float(ymin_g), float(ymin_g)))
+        if bot_ys:
+            raw_ya.append((float(min(bot_ys)), float(bf)))
+            if any(p[1] == bf for p in pts):
+                raw_ya.append((float(bf), float(bf)))
+        else:
+            raw_ya.append((float(bf), float(bf)))
+        for by, by_n, ty, ty_n, _, _, _ in sorted(crossbars, key=lambda c: c[0]):
+            raw_ya.extend([(by, by_n), (ty, ty_n)])
+        if xf > 0:
+            raw_ya.append((float(max(x_ys)), float(xf)) if x_ys else (float(xf), float(xf)))
+        if cf > xf + 64:
+            if cap_ys:
+                raw_ya.append((float(max(cap_ys)), float(cf)))
+            elif ymax_g >= cf - 8:
+                raw_ya.append((float(cf), float(cf)))
+        if ymax_g > max(cf, xf) + 44:
+            raw_ya.append((float(ymax_g), float(ymax_g)))
+
+        raw_ya.sort(key=lambda a: (a[0], a[1]))
+        y_anc = []
+        for oy, ny in raw_ya:
+            if not y_anc or (oy >= y_anc[-1][0] and ny >= y_anc[-1][1] and (oy, ny) != y_anc[-1]):
+                y_anc.append((oy, ny))
+
+        touched_y = {}
+        for _, _, _, _, dy, b_i, t_i in crossbars:
+            for idx in b_i + t_i:
+                touched_y[idx] = int(round(pts[idx][1] + dy))
+        for i in range(n_pts):
+            new_y[i] = touched_y[i] if i in touched_y else _pwl_interp(pts[i][1], y_anc)
+
+    for i in range(n_pts):
+        raw_ol.points[i].x = int(new_x[i])
+        raw_ol.points[i].y = int(new_y[i])
+
+
+def _pack_loaded_glyph(slot, data_offset, code_point, quant_lut=None, four_bit=False, halo_clip=False):
+    """Convert FreeType's rendered glyph slot to (GlyphProps, packed 2-bit or 4-bit bitmap)."""
+    if quant_lut is None:
+        quant_lut = build_quant_lut(4 if four_bit else 2, 1.0, halo_clip=halo_clip)
     bitmap = slot.bitmap
 
-    # Build 4-bit greyscale bitmap (same logic as fontconvert.py).
-    #
-    # FreeType returns the buffer with bitmap.pitch as the row stride
-    # in bytes, which can be negative when the bitmap is stored
-    # bottom-up. Iterating bitmap.buffer linearly assumes
-    # pitch == width and a top-down layout — that holds in the common
-    # case but breaks on padded or flipped bitmaps and corrupts the
-    # output. Walk by (row, col) using the real pitch instead.
-    #
-    # Cache bitmap.buffer in a local — ctypes struct field access
-    # creates a new Python wrapper object each time, so re-evaluating
-    # it per pixel is catastrophically slow.
-    pixels4g = []
-    px = 0
+    # FreeType returns bitmap.pitch as the signed row stride in bytes
+    # (negative when stored bottom-up). Cache bitmap.buffer in a local
+    # so ctypes does not allocate a wrapper object per pixel, then pack
+    # bit-contiguous MSB-first 2bpp or MSB-nibble-first 4bpp.
     buf = bitmap.buffer
-    abs_pitch = abs(bitmap.pitch)
-    for y in range(bitmap.rows):
-        row_offset = y * abs_pitch if bitmap.pitch >= 0 else (bitmap.rows - 1 - y) * abs_pitch
-        for x in range(bitmap.width):
-            v = buf[row_offset + x]
-            if x % 2 == 0:
-                px = (v >> 4)
-            else:
-                px = px | (v & 0xF0)
-                pixels4g.append(px)
-                px = 0
-        if bitmap.width % 2 > 0:
-            pixels4g.append(px)
-            px = 0
-
-    # Downsample to 2-bit bitmap
-    pixels2b = []
-    px = 0
-    pitch = (bitmap.width // 2) + (bitmap.width % 2)
-    for y in range(bitmap.rows):
-        for x in range(bitmap.width):
-            px = px << 2
-            bm = pixels4g[y * pitch + (x // 2)]
-            bm = (bm >> ((x % 2) * 4)) & 0xF
-
-            if bm >= 12:
-                px += 3
-            elif bm >= 8:
-                px += 2
-            elif bm >= 4:
-                px += 1
-
-            if (y * bitmap.width + x) % 4 == 3:
-                pixels2b.append(px)
-                px = 0
-    if (bitmap.width * bitmap.rows) % 4 != 0:
-        # Outer parens are for clarity: in Python `*` binds tighter
-        # than `<<`, so the original `px << (4 - … % 4) * 2` already
-        # evaluates as `px << ((4 - … % 4) * 2)`. Match the explicit
-        # bracketing here so the shift width is obvious at a glance,
-        # mirroring the inner-loop style in fontconvert.py.
-        px = px << ((4 - (bitmap.width * bitmap.rows) % 4) * 2)
-        pixels2b.append(px)
-
-    packed = bytes(pixels2b)
+    if four_bit:
+        packed = pack_bitmap_4b(buf, bitmap.width, bitmap.rows, bitmap.pitch, quant_lut,
+                                counter_guard=halo_clip)
+    else:
+        packed = pack_bitmap_2b(buf, bitmap.width, bitmap.rows, bitmap.pitch, quant_lut)
     glyph = GlyphProps(
         width=bitmap.width,
         height=bitmap.rows,
@@ -659,7 +1233,8 @@ def _pack_loaded_glyph(slot, data_offset, code_point):
     return glyph, packed
 
 
-def rasterize_shaping_glyphs(fontfile, size, load_flags, first_offset, scripts):
+def rasterize_shaping_glyphs(fontfile, size, load_flags, first_offset, scripts,
+                             quant_lut=None, four_bit=False, halo_clip=False):
     """Rasterize every glyph a complex-script shaper can emit for this font
     when shaping the named scripts.
 
@@ -668,6 +1243,9 @@ def rasterize_shaping_glyphs(fontfile, size, load_flags, first_offset, scripts):
     """
     import freetype
     import tempfile
+
+    if quant_lut is None:
+        quant_lut = build_quant_lut(4 if four_bit else 2, 1.0, halo_clip=halo_clip)
 
     render_bytes, layout_bytes, glyph_count = shaping_blob.build(fontfile, scripts)
     with tempfile.NamedTemporaryFile(suffix=".ttf", delete=False) as tmp:
@@ -679,7 +1257,10 @@ def rasterize_shaping_glyphs(fontfile, size, load_flags, first_offset, scripts):
         offset = first_offset
         for gid in range(glyph_count):
             face.load_glyph(gid, load_flags)
-            glyph, packed = _pack_loaded_glyph(face.glyph, offset, shaping_blob.GLYPH_TOKEN_BASE + gid)
+            glyph, packed = _pack_loaded_glyph(
+                face.glyph, offset, shaping_blob.GLYPH_TOKEN_BASE + gid,
+                quant_lut=quant_lut, four_bit=four_bit, halo_clip=halo_clip,
+            )
             offset += len(packed)
             glyphs.append((glyph, packed))
     finally:
@@ -690,7 +1271,8 @@ def rasterize_shaping_glyphs(fontfile, size, load_flags, first_offset, scripts):
 
 
 def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=False,
-                         fallback_fontfile=None, shaping=True):
+                         fallback_fontfile=None, four_bit=False, gamma=1.0,
+                         stem_anchor=False, halo_clip=False, shaping=True):
     """Rasterize all glyphs for one font style. Returns StyleRasterData."""
     import freetype
 
@@ -709,21 +1291,52 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
         fallback_face = freetype.Face(fallback_fontfile)
         fallback_face.set_char_size(size << 6, size << 6, 150, 150)
 
-    load_flags = freetype.FT_LOAD_RENDER
-    if force_autohint:
-        load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
+    ppem = size * 150.0 / 72.0
+    if stem_anchor:
+        outline_flags = freetype.FT_LOAD_DEFAULT | freetype.FT_LOAD_TARGET_LIGHT
+        if force_autohint:
+            outline_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
+        direct_render_flags = outline_flags | freetype.FT_LOAD_RENDER
+        primary_zones = _probe_stem_anchor_zones(face, outline_flags)
+        fallback_zones = _probe_stem_anchor_zones(fallback_face, outline_flags) if fallback_face else None
+        primary_snap_x = style_id in (0, 1) and not _is_italic_face(face)
+        fallback_snap_x = (
+            style_id in (0, 1)
+            and fallback_face is not None
+            and not _is_italic_face(fallback_face)
+        )
+    else:
+        load_flags = freetype.FT_LOAD_RENDER
+        if force_autohint:
+            load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
 
     def load_glyph(code_point):
         glyph_index = face.get_char_index(code_point)
         if glyph_index == 0:
             glyph_index = ligature_glyph_indices.get(code_point, 0)
         if glyph_index > 0:
-            face.load_glyph(glyph_index, load_flags)
+            if stem_anchor:
+                if _is_bicameral_stem_anchor_cp(code_point):
+                    face.load_glyph(glyph_index, outline_flags)
+                    apply_stem_anchor_pass(face, ppem, primary_zones, snap_x=primary_snap_x)
+                    face.glyph.render(freetype.FT_RENDER_MODE_NORMAL)
+                else:
+                    face.load_glyph(glyph_index, direct_render_flags)
+            else:
+                face.load_glyph(glyph_index, load_flags)
             return face
         if fallback_face:
             fallback_glyph_index = fallback_face.get_char_index(code_point)
             if fallback_glyph_index > 0:
-                fallback_face.load_glyph(fallback_glyph_index, load_flags)
+                if stem_anchor:
+                    if _is_bicameral_stem_anchor_cp(code_point):
+                        fallback_face.load_glyph(fallback_glyph_index, outline_flags)
+                        apply_stem_anchor_pass(fallback_face, ppem, fallback_zones, snap_x=fallback_snap_x)
+                        fallback_face.glyph.render(freetype.FT_RENDER_MODE_NORMAL)
+                    else:
+                        fallback_face.load_glyph(fallback_glyph_index, direct_render_flags)
+                else:
+                    fallback_face.load_glyph(fallback_glyph_index, load_flags)
                 return fallback_face
         return None
 
@@ -752,6 +1365,8 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     # Rasterize all glyphs
     total_bitmap_size = 0
     all_glyphs = []
+    bpp = 4 if four_bit else 2
+    quant_lut = build_quant_lut(bpp, gamma, halo_clip=halo_clip)
 
     for i_start, i_end in intervals:
         for code_point in range(i_start, i_end + 1):
@@ -761,7 +1376,10 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
                 all_glyphs.append((glyph, b''))
                 continue
 
-            glyph, packed = _pack_loaded_glyph(f.glyph, total_bitmap_size, code_point)
+            glyph, packed = _pack_loaded_glyph(
+                f.glyph, total_bitmap_size, code_point,
+                quant_lut=quant_lut, four_bit=four_bit, halo_clip=halo_clip,
+            )
             total_bitmap_size += len(packed)
             all_glyphs.append((glyph, packed))
 
@@ -773,8 +1391,11 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
         unsupported = ", ".join(name for name in requested if name not in scripts)
         print(f"  [{style_label}] Shaping: font has no GSUB for {unsupported}, skipped", file=sys.stderr)
     if scripts:
+        shaping_load_flags = direct_render_flags if stem_anchor else load_flags
         shaped_glyphs, shaped_count, shaping_section = rasterize_shaping_glyphs(
-            fontfile, size, load_flags, total_bitmap_size, scripts)
+            fontfile, size, shaping_load_flags, total_bitmap_size, scripts,
+            quant_lut=quant_lut, four_bit=four_bit, halo_clip=halo_clip,
+        )
         all_glyphs.extend(shaped_glyphs)
         total_bitmap_size += sum(len(packed) for _, packed in shaped_glyphs)
         base = shaping_blob.GLYPH_TOKEN_BASE
@@ -900,16 +1521,22 @@ def style_sections_total_size(sections):
 # --- File writers ---
 
 def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
-                               force_autohint=False, fallback_style_fonts=None, shaping=True):
+                               force_autohint=False, fallback_style_fonts=None,
+                               four_bit=False, gamma=1.0,
+                               stem_anchor=False, halo_clip=False, shaping=True):
     """Generate a multi-style v4 .cpfont file.
 
     style_fonts: dict of {style_id: fontfile_path} e.g. {0: "Regular.ttf", 2: "Italic.ttf"}
     fallback_style_fonts: optional dict of {style_id: fallback_fontfile_path}
+    four_bit: when True, emit 4-bit (16-level, flags=0x0002) bitmaps instead of 2-bit (flags=0x0001)
+    gamma: reflectance-space quantization gamma (default 1.0)
+    stem_anchor: opt-in one-edge integer stem anchoring & <44/64px Y overshoot collapse (default False)
+    halo_clip: opt-in <=15/255 outer-halo dead-zone clip & tight-counter guard (default False)
     """
     MAGIC = b"CPFONT\x00\x00"
     HEADER_SIZE = 32
     STYLE_TOC_ENTRY_SIZE = 32
-    flags = 1  # always 2-bit greyscale
+    flags = CPFONT_FLAG_4BIT if four_bit else CPFONT_FLAG_2BIT
     style_count = len(style_fonts)
 
     # Rasterize each style
@@ -923,6 +1550,10 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
             fontfile, size, intervals, style_id=style_id,
             force_autohint=force_autohint,
             fallback_fontfile=fallback_fontfile,
+            four_bit=four_bit,
+            gamma=gamma,
+            stem_anchor=stem_anchor,
+            halo_clip=halo_clip,
             shaping=shaping)
 
     # Pack binary sections for each style
@@ -993,7 +1624,8 @@ def generate_cpfont_multistyle(style_fonts, size, intervals, output_path,
         total_file_size = f.tell()
 
     # Print summary
-    print(f"  Output: {output_path} (v4, {style_count} styles)", file=sys.stderr)
+    depth_label = "4-bit" if four_bit else "2-bit"
+    print(f"  Output: {output_path} (v4, {depth_label}, {style_count} styles)", file=sys.stderr)
     print(f"    Header+TOC: {HEADER_SIZE + len(toc_data)} bytes", file=sys.stderr)
     for style_id in sorted(raster_data.keys()):
         sd = raster_data[style_id]
@@ -1030,6 +1662,17 @@ def main():
                         help="Font family name for output filenames (default: derived from font filename).")
     parser.add_argument("--force-autohint", dest="force_autohint", action="store_true",
                         help="Force FreeType auto-hinter instead of native font hinting.")
+    depth_group = parser.add_mutually_exclusive_group()
+    depth_group.add_argument("-2", "--2bit", dest="two_bit", action="store_true",
+                             help="Emit 2-bit (4-level) glyph bitmaps, flags=0x0001 (default).")
+    depth_group.add_argument("-4", "--4bit", dest="four_bit", action="store_true",
+                             help="Emit 4-bit (16-level, MSB-nibble-first) glyph bitmaps, flags=0x0002.")
+    parser.add_argument("--gamma", type=float, default=1.0,
+                        help="Reflectance-space quantization gamma (default: 1.0; e.g. 1.10 with build-sd-fonts.py --4bit).")
+    parser.add_argument("--stem-anchor", dest="stem_anchor", action="store_true",
+                        help="Opt-in one-edge integer stem anchoring, pitch lock, and <44/64px Y overshoot collapse.")
+    parser.add_argument("--halo-clip", dest="halo_clip", action="store_true",
+                        help="Opt-in <=15/255 outer-halo dead-zone clip (and 4bpp >=240/255 clip + tight-counter guard).")
     parser.add_argument("-o", "--output", dest="output",
                         help="Output file path (for single-size mode).")
     parser.add_argument("--output-dir", dest="output_dir",
@@ -1065,6 +1708,9 @@ def main():
             total = sum(e - s + 1 for s, e in ranges)
             print(f"  {name:15s}  {len(ranges)} range(s), ~{total} codepoints")
         sys.exit(0)
+
+    if args.gamma <= 0.0 or not math.isfinite(args.gamma):
+        parser.error("--gamma must be finite and greater than 0")
 
     # Detect multi-style mode
     style_fonts = {}
@@ -1151,11 +1797,17 @@ def main():
         else:
             filename = f"{font_name}_{sz}.cpfont"
             output_path = os.path.join(output_dir, filename)
-        print(f"Generating {output_path} (size {sz}, {len(style_fonts)} style(s), v4)...", file=sys.stderr)
+        depth_label = "4-bit" if args.four_bit else "2-bit"
+        print(f"Generating {output_path} (size {sz}, {len(style_fonts)} style(s), v4, {depth_label})...",
+              file=sys.stderr)
         total_size += generate_cpfont_multistyle(
             style_fonts, sz, intervals, output_path,
             force_autohint=args.force_autohint,
             fallback_style_fonts=fallback_style_fonts,
+            four_bit=args.four_bit,
+            gamma=args.gamma,
+            stem_anchor=args.stem_anchor,
+            halo_clip=args.halo_clip,
             shaping=args.shaping)
     print(f"\nTotal: {len(sizes)} files, {total_size / 1024 / 1024:.2f} MB", file=sys.stderr)
 

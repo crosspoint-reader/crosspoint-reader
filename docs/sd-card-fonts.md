@@ -82,10 +82,12 @@ file in the same family folder takes priority over TTF/OTF/TTC files, so keep
 the two formats in separate folders. If both font roots contain the same family
 name, the copy in `/.fonts/` takes priority.
 
-Direct fonts use the standard reader sizes: 12, 14, 16, and 18 pt. The **Fonts**
-tab in File Transfer accepts `.cpfont` files only. Copy direct fonts to the SD
-card instead. To remove a loose font file, delete that file from the SD card.
-The Fonts page can delete families stored in subfolders.
+Direct fonts use the standard reader sizes: 12, 14, 16, and 18 pt. Reader text
+renders in 4-level grayscale when **Text Anti-Aliasing** is on and supported in
+the current display mode, or in monochrome otherwise. The **Fonts** tab in File
+Transfer accepts `.cpfont` files only. Copy direct fonts to the SD card
+instead. To remove a loose font file, delete that file from the SD card. The
+Fonts page can delete families stored in subfolders.
 
 ## Non-Latin Scripts Fallback in the User Interface
 
@@ -297,6 +299,27 @@ To list all presets with codepoint counts:
 
 ### Additional options
 
-`--force-autohint` — force FreeType's auto-hinter instead of the font's native hinting (useful when a font's built-in hints produce poor results at small sizes).
+- `--force-autohint` — force FreeType's auto-hinter instead of the font's native hinting (useful when a font's built-in hints produce poor results at small sizes).
+- `-4`, `--4bit` — emit 4-bit (16-level, MSB-nibble-first) glyph bitmaps (`flags = 0x0002`) instead of the default 2-bit (`-2`, `--2bit`, `flags = 0x0001`).
+- `--gamma <value>` — apply reflectance-space quantization gamma `1 - (1 - a/255)^gamma` (`fontconvert_sdcard.py` defaults to `1.0`, leaving standard 2-bit output unchanged; `build-sd-fonts.py --4bit` defaults to `1.10`).
+- `--stem-anchor` — opt-in outline pass before rasterization (`FT_LOAD_TARGET_LIGHT`) that snaps upright vertical stems (including multi-stem pitch on glyphs like `m`) and horizontal crossbars to one integer pixel edge and collapses baseline, x-height, and cap-height overshoots smaller than `44/64` px. Italic styles keep unshifted X coordinates and only apply the vertical zone pass.
+- `--halo-clip` — opt-in dead-zone pass that clips faint outer-halo coverage (`<= 15/255`) to `0`; in `--4bit` mode it also clips near-black core coverage (`>= 240/255`) to `15` and clears faint (`1..2`) pixels enclosed on at least three sides by dark stem pixels (`>= 10`) inside tight counters.
+
+### 4-bit (16-level) `.cpfont` files
+
+Pass `--4bit` (optionally with `--gamma`, `--stem-anchor`, and `--halo-clip`) to `fontconvert_sdcard.py` to build 4-bit `.cpfont` v4 files (`flags = 0x0002`; see [file-formats.md](file-formats.md)):
+
+    python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
+      --regular MyFont-Regular.ttf \
+      --bold MyFont-Bold.ttf \
+      --italic MyFont-Italic.ttf \
+      --bolditalic MyFont-BoldItalic.ttf \
+      --intervals latin-ext \
+      --sizes 12,14,16,18 \
+      --4bit --gamma 1.10 --stem-anchor --halo-clip \
+      --name MyFont \
+      --output-dir ./MyFont/
+
+`build-sd-fonts.py --4bit` enables `--4bit --stem-anchor --halo-clip --gamma 1.10` across configured families automatically (with optional `--gamma`, `--stem-anchor`/`--no-stem-anchor`, `--halo-clip`/`--no-halo-clip`, `--families`, and `--sizes` overrides). Older firmware versions without 4-bit `.cpfont` support treat `flags = 0x0002` glyphs as corrupt, drawing blank text and reporting `"Damaged font file"`.
 
 Install custom fonts via the web interface or manual SD card copy.
