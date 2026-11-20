@@ -27,7 +27,8 @@ add_test(NAME PatchAnimatedGif COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/t
 
 add_executable(GifBmpTest GifBmpTest.cpp
   ${REPO_ROOT}/lib/GifToBmpConverter/GifToBmpConverter.cpp
-  ${REPO_ROOT}/lib/GfxRenderer/BitmapHelpers.cpp)
+  ${REPO_ROOT}/lib/GfxRenderer/BitmapHelpers.cpp
+  ${REPO_ROOT}/lib/GfxRenderer/BmpStreamWriter.cpp)
 target_include_directories(GifBmpTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/stubs
   ${REPO_ROOT}/test/chapter_html_slim_parser/stubs

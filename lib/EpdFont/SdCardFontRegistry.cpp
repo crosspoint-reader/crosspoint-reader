@@ -516,10 +516,3 @@ const SdCardFontFamilyInfo* SdCardFontRegistry::findFamily(const std::string& na
   }
   return nullptr;
 }
-
-int SdCardFontRegistry::getFamilyIndex(const std::string& name) const {
-  for (int i = 0; i < static_cast<int>(families_.size()); i++) {
-    if (families_[i].name == name) return i;
-  }
-  return -1;
-}
