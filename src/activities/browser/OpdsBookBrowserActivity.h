@@ -121,7 +121,12 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   void promptLcpPassphrase(bool retry);
   // Decodes the /unlock response ({content_key: b64, expires: epoch}).
   static bool parseUnlockResponse(const std::string& response, LcpWrappedKey* wrapped, int64_t* expiresAt);
+  // Folder downloads are saved in ("" = SD root).
+  const char* downloadFolder() const;
+  // Where a download would be saved, creating nothing: that folder if it exists, else SD root ("").
+  const char* existingDownloadFolder() const;
   std::string downloadDestination(const OpdsEntry& book) const;
+  static std::string bookPathIn(const char* folder, const OpdsEntry& book);
   bool verifyAndRegisterEpub(const std::string& filename);
   // Fulfilled LCP book awaiting its passphrase (path + parsed license).
   freeink::content::LcpLicense pendingLcpLicense;
@@ -133,7 +138,9 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   void releaseEntries();
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
-  void downloadBook(const OpdsEntry& book);
+  // openAfter: go straight to the reader once the EPUB is verified.
+  void downloadBook(const OpdsEntry& book, bool openAfter);
+  void openBook(const std::string& path);
   void openPublicationDetail(const OpdsEntry& entry);
   static void fillDetailInfo(const OpdsPublication& publication, DetailsSpec& spec);
   // Download the publication's cover art to an SD temp for the details page.
