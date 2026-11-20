@@ -48,10 +48,8 @@ int coverWidth = 0;
 
 void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
                                   const bool backButton) const {
-  // Home screen header is custom-rendered in drawRecentBookCover.
-  if (title == nullptr) {
-    return;
-  }
+  // Keep the status indicators on Home as well as titled screens. The
+  // RoundedRaff cover and menu still own only the area below this band.
   BaseTheme::drawHeader(renderer, rect, title, subtitle, backButton);
 }
 
