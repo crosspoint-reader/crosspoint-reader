@@ -7,6 +7,8 @@
 #include <fstream>
 #include <vector>
 
+#include "test/ScopedTempDir.h"
+
 namespace {
 // Original Pillow-encoded gray pattern, with palette entry 3 transparent.
 std::vector<uint8_t> image() {
@@ -38,17 +40,10 @@ uint32_t le32(const std::vector<uint8_t>& bytes, size_t at) {
 
 class GifBmpTest : public ::testing::Test {
  protected:
-  std::filesystem::path path;
+  ScopedTempDir tempDir;
+  const std::filesystem::path path = tempDir.path() / "input.gif";
   HalFile file;
-  void SetUp() override {
-    path = std::filesystem::temp_directory_path() /
-           (std::string("crosspoint-gif-bmp-") + ::testing::UnitTest::GetInstance()->current_test_info()->name());
-    open(image());
-  }
-  void TearDown() override {
-    file.close();
-    std::filesystem::remove(path);
-  }
+  void SetUp() override { open(image()); }
   void open(const std::vector<uint8_t>& bytes) {
     file.close();
     {

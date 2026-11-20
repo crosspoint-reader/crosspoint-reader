@@ -3,21 +3,20 @@
 
 #include <filesystem>
 
+#include "test/ScopedTempDir.h"
+
 namespace {
 class PixelCacheTest : public ::testing::Test {
  protected:
-  std::string path;
+  ScopedTempDir tempDir;
+  const std::string path = (tempDir.path() / "pixels.bin").string();
   void SetUp() override {
-    path = (std::filesystem::temp_directory_path() /
-            (std::string("crosspoint-pixel-cache-") + ::testing::UnitTest::GetInstance()->current_test_info()->name()))
-               .string();
     HalFileTest::failNextWrite = false;
     HalFileTest::failNextClose = false;
   }
   void TearDown() override {
     HalFileTest::failNextWrite = false;
     HalFileTest::failNextClose = false;
-    Storage.remove(path);
   }
 };
 TEST_F(PixelCacheTest, PublishesCompleteCache) {
