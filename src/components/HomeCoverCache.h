@@ -33,6 +33,7 @@ class HomeCoverCache {
   size_t coverCacheCapacity = 0;
   size_t coverCacheUsed = 0;
   int coverCacheOrientation = -1;
+  bool coverCacheInverted = false;
 
   HalFile coverFile;
   Bitmap coverBitmap{coverFile};

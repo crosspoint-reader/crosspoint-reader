@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include "util/HomeButtonInput.h"
+#include "util/PowerButtonInput.h"
 
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
@@ -300,8 +301,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
-  // X4 Pro double click; Ignore disables the single-click delay.
-  uint8_t doublePwrBtn = PWR_FRONTLIGHT;
+  // Power double click (see hasPowerDoubleClick()); Ignore disables the
+  // single-click delay.
+  uint8_t doublePwrBtn = defaultDoublePwrBtn();
   uint8_t homeButtonTapAction = static_cast<uint8_t>(HomeButtonAction::Home);
   uint8_t homeButtonDoubleTapAction = static_cast<uint8_t>(HomeButtonAction::ToggleFrontlight);
   uint8_t homeButtonLongPressAction = static_cast<uint8_t>(HomeButtonAction::ReaderMenu);
@@ -389,6 +391,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Show the title and author read from inside each book rather than its
   // filename. Users can disable this to make index rebuilds skip EPUB parsing.
   uint8_t libraryUseMetadata = 1;
+  // Library Recent tab lists only opened books, without the by-arrival list below them (0 = off, 1 = on)
+  uint8_t libraryRecentOpenedOnly = 0;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
@@ -447,8 +451,20 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   SdFontIdResolver sdFontIdResolver = nullptr;
   void* sdFontResolverCtx = nullptr;
 
+  // Every board offers a power double-click action except those whose power
+  // button is also Confirm.
+  static bool hasPowerDoubleClick() {
+    return BoardConfig::ACTIVE.inputStyle != BoardConfig::InputStyle::DigitalConfirmPowerHold;
+  }
+  // Frontlight toggle where it shipped enabled; off elsewhere, so a single
+  // click has no double-click wait unless the user picks an action.
+  static uint8_t defaultDoublePwrBtn() {
+    return (BoardConfig::isX4Pro() || BoardConfig::isEegoA4()) ? PWR_FRONTLIGHT : IGNORE;
+  }
   uint16_t getPowerButtonDuration() const {
-    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
+    if (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) return 10;
+    // EEGO A4: the hold must last 400 ms longer.
+    return PowerButtonInput::LONG_PRESS_MS + (BoardConfig::isEegoA4() ? 400 : 0);
   }
   int getReaderFontId() const;
 

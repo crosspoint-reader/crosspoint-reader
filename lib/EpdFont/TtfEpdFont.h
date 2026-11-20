@@ -48,6 +48,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "ComplexShaper.h"
 #include "EpdFont.h"
 #include "EpdFontData.h"
 #include "EpdFontFamily.h"
@@ -75,11 +76,16 @@ class TtfEpdFont {
 
   EpdFontFamily family() const;
 
-  // Per-scope reset (mirrors SdCardFont::clearCache): drop every face's cached
-  // page glyphs but KEEP the allocations (byte arena + vector capacity), so a
-  // page turn re-faults into buffers already sized to the book and stops touching
-  // the allocator once converged. Driven by FontCacheManager::clearCache() /
-  // PrewarmScope, symmetrically with the SD fonts.
+  // Identifies the configured sources' content: each file's size and sfnt
+  // table directory, whose table checksums, offsets and lengths font tools
+  // rewrite when a table changes (renumbered glyphs included). Page caches
+  // store shaped glyph IDs, so a replaced file must not reuse their pages.
+  uint32_t contentKey() const;
+
+  // Per-scope reset (mirrors SdCardFont::clearCache): retains resident glyph
+  // data across PrewarmScopes so build() faults only missing glyphs against
+  // f.cps and serves page turns from idle-prewarmed glyphs with zero FreeType
+  // rasterizations. Full release still happens via releaseResidentCaches().
   void clearCache();
 
   // Heap-critical teardown (mirrors SdCardFont::releaseResidentCaches): free
@@ -90,7 +96,9 @@ class TtfEpdFont {
   // transitions (WiFi + web server, image decode, dictionary, sleep).
   void releaseResidentCaches();
 
-  // Optional batch pre-warm of a face (defaults to regular; styles fault lazily).
+  // Batch pre-warm of a face for a render scope (defaults to regular; styles fault lazily).
+  // Retains existing glyph coverage and accumulates across scopes until capacity is
+  // reached, topping up any earlier codepoints of the page if a flush occurs mid-pass.
   bool build(const char* utf8, uint8_t style = 0);
   bool addCoverage(const char* utf8, uint8_t style = 0);
 
@@ -110,18 +118,31 @@ class TtfEpdFont {
     TtfEpdFont* owner = nullptr;
     freeink::font::FtFont ftStorage_;
     freeink::font::FtFont* ft = &ftStorage_;
-    freeink::font::PsramVector<uint8_t> bmp;
-    size_t used = 0;
+    freeink::font::PsramVector<uint8_t> coreBmp;
+    size_t coreUsed = 0;
+    size_t coreCap = 0;
+    uint16_t maxCoreGlyphs = 0;
+    uint16_t coreCount = 0;
+    bool coreFull = false;
+
+    freeink::font::PsramVector<uint8_t> tailBmp;
+    size_t tailUsed = 0;
+    size_t tailCap = 0;
+    uint16_t maxTailGlyphs = 0;
+
     size_t cap = 0;
     uint16_t maxGlyphs = 0;
     bool twoBit = true;
     uint16_t sizePx = 0;
-    uint8_t srcIndex = 0;      // which Source this face initializes from
-    int weight = 400;          // design weight requested (wght axis / faux bold)
-    bool wantItalic = false;   // request italic from the source (axis or oblique)
-    bool inited = false;       // init attempted (lazy)
-    bool ready = false;        // FreeType face live
-    uint8_t initFailures = 0;  // consecutive failed initFace attempts
+    uint8_t srcIndex = 0;           // which Source this face initializes from
+    int weight = 400;               // design weight requested (wght axis / faux bold)
+    bool wantItalic = false;        // request italic from the source (axis or oblique)
+    bool inited = false;            // init attempted (lazy)
+    bool ready = false;             // FreeType face live
+    bool miniMetadataOnly = false;  // bitmap allocation failed: advance-only glyph inserted
+    bool flushed = false;           // flushFace() or trimTail() ran during the current pass
+    bool faultFailed = false;       // face init or table grow failed (no corrupt glyph inserted)
+    uint8_t initFailures = 0;       // consecutive failed initFace attempts
     // GSUB 'liga' resolution (fi fl ff ffi ffl), resolved once at initFace():
     // ligGid[i] is the raw glyph ID for U+FB00+i (0 = none), and ligPairs is
     // the EpdFont pair table (sorted by key) that routes applyLigatures() to
@@ -147,14 +168,26 @@ class TtfEpdFont {
   static const uint8_t* bitmapThunk(void* ctx, const EpdGlyph* glyph);
   static bool coverageThunk(void* ctx, uint32_t codepoint);
   static int8_t kernThunk(void* ctx, uint32_t leftCp, uint32_t rightCp);
+  static bool shapeThunk(void* ctx, const char* utf8, std::string* out);
+  // ComplexShaper::AdvanceSource over a Face (ctx = Face*).
+  static int32_t advanceThunk(void* ctx, uint32_t glyph);
+  // ComplexShaper::TableLoader over a Source (ctx = const Source*).
+  static uint8_t* loadTable(void* ctx, uint32_t tag, uint32_t* length);
+  // Reads `count` bytes at `offset`; a failed streamed read in range notes
+  // the shaping source unavailable when `noteFailure`.
+  static bool readSource(const Source& src, uint32_t offset, uint8_t* buffer, uint32_t count, bool noteFailure);
+  // The offset of the sfnt table directory (a collection is read through its
+  // first font, the face FreeType renders) and the header found there.
+  static bool readSfntHeader(const Source& src, bool noteFailure, uint32_t* base, uint8_t (&header)[12]);
 
   void resolveFaces();             // map the 4 faces onto the configured sources
   void initFace(Face& f);          // lazy: create the FT face on first use
   void setupFace(Face& f);         // wire data handlers + metrics
   void resolveLigatures(Face& f);  // query GSUB once, build ligGid/ligPairs
-  const EpdGlyph* faultGlyph(Face& f, uint32_t codepoint);
+  const EpdGlyph* faultGlyph(Face& f, uint32_t codepoint, bool allowFlush = true);
   int8_t faultKern(Face& f, uint32_t leftCp, uint32_t rightCp);
   static void flushFace(Face& f);
+  static void trimTail(Face& f);
 
   struct FaceLock {
     FaceLock(TtfEpdFont* font, const size_t idx) : font_(font), idx_(idx) {
@@ -172,6 +205,8 @@ class TtfEpdFont {
     size_t idx_;
   };
 
+  ComplexShaper shapers_[4];
+  uint8_t shapingCoverage_[4] = {};
   Source sources_[4];                    // indexed by Style role
   Face faces_[4];                        // 0=regular 1=bold 2=italic 3=bold-italic
   TtfEpdFont* master_ = nullptr;         // if non-null, this is a variant borrowing master's FT faces
