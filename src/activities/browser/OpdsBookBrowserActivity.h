@@ -34,7 +34,8 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   // so buildBrowsingScreen() reuses it on every repaint instead of rebuilding
   // a ListItem vector per render.
   std::vector<freeink::ui::ListItem> rowItems;
-  void rebuildRowItems();
+  // Bit i of `downloaded` (from findDownloaded()) = entries[i] gets the downloaded mark.
+  void rebuildRowItems(uint64_t downloaded);
   std::vector<std::string> navigationHistory;
   std::string currentPath;
   // The active search query. While browsing its results the header shows it
@@ -127,6 +128,13 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   const char* existingDownloadFolder() const;
   std::string downloadDestination(const OpdsEntry& book) const;
   static std::string bookPathIn(const char* folder, const OpdsEntry& book);
+  static std::string bookFilename(const OpdsEntry& book);
+  // Free, direct download: not a purchase, loan or LCP book.
+  static bool isPlainDownload(const OpdsEntry& book);
+  // Path of the plain download's file where a download would save it, or "" if not there.
+  std::string localCopyPath(const OpdsEntry& book) const;
+  // Which of the feed's first 64 entries are plain downloads already where a download would save them.
+  uint64_t findDownloaded(const std::vector<OpdsEntry>& feed) const;
   bool verifyAndRegisterEpub(const std::string& filename);
   // Fulfilled LCP book awaiting its passphrase (path + parsed license).
   freeink::content::LcpLicense pendingLcpLicense;
