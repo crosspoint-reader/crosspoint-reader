@@ -19,6 +19,8 @@
 #include <WiFi.h>
 #include <WolfsslCrypto.h>
 
+#include <algorithm>
+#include <cstring>
 #include <iterator>
 
 #include "BookKey.h"
@@ -31,6 +33,7 @@
 #include "activities/util/DetailsActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "components/icons/listIcons.h"
 #include "components/icons/opdsIcons.h"
 #include "network/HttpDownloader.h"
 #include "network/LcpDevice.h"
@@ -48,6 +51,20 @@ constexpr int16_t PAGE_FIRST = 0;
 constexpr int16_t PAGE_PREV = 1;
 constexpr int16_t PAGE_NEXT = 2;
 constexpr int16_t PAGE_LAST = 3;
+// Directory entry names are read into this; the file browser uses the same bound.
+constexpr size_t NAME_BUFFER_SIZE = 500;
+
+// FNV-1a over the name with ASCII letters folded, because FAT matches names without case.
+// Only A-Z fold: a copy whose name differs from ours only in non-ASCII case gets no mark
+// (the details page's exists() still finds it). Files this firmware downloads match exactly.
+uint32_t foldedNameHash(const char* name) {
+  uint32_t hash = 2166136261u;
+  for (const char* p = name; *p; ++p) {
+    hash ^= static_cast<uint8_t>((*p >= 'A' && *p <= 'Z') ? *p + 32 : *p);
+    hash *= 16777619u;
+  }
+  return hash;
+}
 
 // Accept-Language from the reader's UI language, so servers that localize the
 // catalog (e.g. Lirtuel) return it translated. Primary subtag plus an English
@@ -348,6 +365,12 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     return;
   }
 
+  // The SD scan runs before the lock so it never holds up a repaint.
+  auto feedEntries = parser.takeEntries();
+  const unsigned long scanStart = millis();
+  const uint64_t downloaded = findDownloaded(feedEntries);
+  LOG_DBG("OPDS", "Download folder scan: %lu ms", millis() - scanStart);
+
   // Everything the render task reads (header, pagination bar, entries, rows, state) changes under
   // the lock: a repaint that started before beginLoading() may still be drawing the old feed.
   RenderLock lock;
@@ -374,7 +397,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   // entry under only an empty() guard, and the new feed can be shorter than
   // the old selection.
   nav.reset();
-  entries = parser.takeEntries();
+  entries = std::move(feedEntries);
 
   // Pagination is a bottom tab bar (buildPaginationBar), not list rows.
   auto facetRows = parser.takeFacetEntries();
@@ -416,8 +439,9 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     LOG_INF("OPDS", "Feed truncated to fit memory");
   }
 
-  // Rows first: the render task reads rowItems once the state is BROWSING.
-  rebuildRowItems();
+  // Rows first: the render task reads rowItems once the state is BROWSING. Facet and
+  // account rows were appended after the feed's entries, so bit i still means entries[i].
+  rebuildRowItems(downloaded);
   state = entries.empty() ? State::ERROR : State::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
   lock.unlock();
@@ -427,7 +451,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 // Derives rowItems from entries. Called whenever entries changes
 // (fetchFeed()/releaseEntries()) so buildBrowsingScreen() reuses the cached
 // rows on every repaint instead of rebuilding them per render.
-void OpdsBookBrowserActivity::rebuildRowItems() {
+void OpdsBookBrowserActivity::rebuildRowItems(const uint64_t downloaded) {
   rowItems.clear();
   rowItems.reserve(entries.size());
   for (const auto& entry : entries) {
@@ -440,6 +464,13 @@ void OpdsBookBrowserActivity::rebuildRowItems() {
     if (entry.type == OpdsEntryType::NAVIGATION) item.value = entry.detail.empty() ? ">" : entry.detail.c_str();
     // Purchases show their price in the value column.
     if (entry.type == OpdsEntryType::BOOK && entry.purchase && !entry.detail.empty()) item.value = entry.detail.c_str();
+    // A book already in the download folder (found by findDownloaded()) gets a mark in the value slot.
+    const size_t row = rowItems.size();
+    if (!item.value && row < OpdsLimits::MAX_ENTRIES && ((downloaded >> row) & 1u)) {
+      // valueIcon is a pointer that must outlive list(): one mark shared by every row.
+      static const fui::BitmapRef downloadedMark = fui::bitmapFromIcon(icon_download_24);
+      item.valueIcon = &downloadedMark;
+    }
     item.actionValue = static_cast<int16_t>(rowItems.size());
     rowItems.push_back(item);
   }
@@ -507,6 +538,59 @@ std::string OpdsBookBrowserActivity::downloadDestination(const OpdsEntry& book) 
   return bookPathIn(existingDownloadFolder(), book);
 }
 
+bool OpdsBookBrowserActivity::isPlainDownload(const OpdsEntry& book) {
+  return book.type == OpdsEntryType::BOOK && !book.purchase && !book.indirect && !book.lcpLicense;
+}
+
+std::string OpdsBookBrowserActivity::localCopyPath(const OpdsEntry& book) const {
+  if (!isPlainDownload(book)) return {};
+  std::string path = bookPathIn(existingDownloadFolder(), book);
+  if (!Storage.exists(path.c_str())) return {};
+  return path;
+}
+
+// Bit i set = feed[i] is a plain download whose file is already where a download would save it.
+// Reads the folder once instead of calling exists() per row: on FAT a lookup that misses
+// reads the whole folder, and most rows in a remote catalog miss. The list goes by the
+// feed's acquisition flags; the details page decides again from the publication document.
+uint64_t OpdsBookBrowserActivity::findDownloaded(const std::vector<OpdsEntry>& feed) const {
+  static_assert(OpdsLimits::MAX_ENTRIES <= 64, "one mask bit per entry");
+  const size_t count = std::min(feed.size(), OpdsLimits::MAX_ENTRIES);
+  uint32_t hashes[OpdsLimits::MAX_ENTRIES];  // 248 B of stack; no heap copy of the names
+  uint64_t wanted = 0;
+  for (size_t i = 0; i < count; ++i) {
+    if (!isPlainDownload(feed[i])) continue;
+    hashes[i] = foldedNameHash(bookFilename(feed[i]).c_str());
+    wanted |= uint64_t{1} << i;
+  }
+  if (wanted == 0) return 0;  // nothing to look for: leave the SD card alone
+
+  const char* folder = existingDownloadFolder();
+  HalFile dir = Storage.open(folder[0] != '\0' ? folder : "/");
+  if (!dir || !dir.isDirectory()) return 0;
+  const auto name = makeUniqueNoThrow<char[]>(NAME_BUFFER_SIZE);
+  if (!name) {  // the marks are optional; the details page still checks its book
+    LOG_ERR("OPDS", "OOM: %d bytes", static_cast<int>(NAME_BUFFER_SIZE));
+    dir.close();
+    return 0;
+  }
+  uint64_t found = 0;
+  for (HalFile file = dir.openNextFile(); file && found != wanted; file = dir.openNextFile()) {
+    if (file.isDirectory() || file.getName(name.get(), NAME_BUFFER_SIZE) == 0) continue;
+    const uint32_t hash = foldedNameHash(name.get());
+    for (size_t i = 0; i < count; ++i) {
+      const uint64_t bit = uint64_t{1} << i;
+      if (!(wanted & bit) || (found & bit) || hashes[i] != hash) continue;
+      // Same hash: compare the names, so a collision can't mark the wrong book.
+      if (strcasecmp(bookFilename(feed[i]).c_str(), name.get()) == 0) {
+        found |= bit;
+      }
+    }
+  }
+  dir.close();
+  return found;
+}
+
 // Path of `book` inside `folder` ("" = SD root); creates nothing.
 std::string OpdsBookBrowserActivity::bookPathIn(const char* folder, const OpdsEntry& book) {
   // Titles are unbounded (a fixed char[] would truncate). Cold path (a
@@ -515,8 +599,13 @@ std::string OpdsBookBrowserActivity::bookPathIn(const char* folder, const OpdsEn
   filename.reserve(96);
   filename += folder;
   filename += '/';
-  filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
+  filename += bookFilename(book);
   return filename;
+}
+
+// On-disk name of `book` under the filename format setting.
+std::string OpdsBookBrowserActivity::bookFilename(const OpdsEntry& book) {
+  return opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
 }
 
 // A purchase link (or any misbehaving endpoint) can answer 200 with an HTML
@@ -938,9 +1027,9 @@ void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
 
   // A plain download can be read in place: Read when this book's file is already where a
   // download would save it, else download and read. Purchases and loans keep one button.
-  const bool plainDownload = !detailBook.purchase && !detailBook.indirect && !detailBook.lcpLicense;
-  std::string localPath = plainDownload ? bookPathIn(existingDownloadFolder(), detailBook) : std::string();
-  const bool onDevice = plainDownload && Storage.exists(localPath.c_str());
+  const bool plainDownload = isPlainDownload(detailBook);
+  std::string localPath = localCopyPath(detailBook);
+  const bool onDevice = !localPath.empty();
   if (onDevice) {
     spec.status = tr(STR_OPDS_ON_DEVICE);  // the local copy matters more than catalog availability
     spec.actionLabel = tr(STR_READ);
