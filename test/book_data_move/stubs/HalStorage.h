@@ -3,9 +3,11 @@
 #include <common/FsUtf.h>
 #include <common/upcase.h>
 
+#include <algorithm>
 #include <cstring>
 #include <map>
 #include <string>
+#include <vector>
 
 namespace fake {
 
@@ -34,9 +36,30 @@ inline bool within(const std::string& path, const std::string& dir) {
 
 }  // namespace fake
 
+// Mirrors the real HalFile surface BookCacheUtils uses; an open file is a snapshot of its direct children.
 struct HalFile {
+  bool valid = false;
   bool directory = false;
-  bool isDirectory() const { return directory; }
+  std::string path;
+  std::vector<std::string> children;  // absolute paths of direct children
+  size_t next = 0;
+
+  bool isDirectory() const { return valid && directory; }
+  explicit operator bool() const { return valid; }
+  bool close() {
+    valid = false;
+    return true;
+  }
+  size_t getName(char* name, size_t len) const {
+    if (!len) return 0;
+    const size_t slash = path.rfind('/');
+    const std::string base = slash == std::string::npos ? path : path.substr(slash + 1);
+    const size_t n = std::min(base.size(), len - 1);
+    memcpy(name, base.data(), n);
+    name[n] = '\0';
+    return n;
+  }
+  HalFile openNextFile();
 };
 
 class HalStorage {
@@ -47,7 +70,18 @@ class HalStorage {
   }
   HalFile open(const char* path) const {
     const auto it = fake::files.find(path);
-    return {it != fake::files.end() && it->second == fake::kDir};
+    if (it == fake::files.end()) return {};
+    HalFile file{true, it->second == fake::kDir, it->first, {}, 0};
+    if (file.directory) {
+      const std::u16string prefix = fake::fold(file.path + "/");
+      for (const auto& entry : fake::files) {
+        const std::u16string folded = fake::fold(entry.first);
+        if (folded.starts_with(prefix) && folded.find(u'/', prefix.size()) == std::u16string::npos) {
+          file.children.push_back(entry.first);
+        }
+      }
+    }
+    return file;
   }
   bool exists(const char* path) const { return fake::files.count(path) != 0; }
   bool remove(const char* path) { return fake::files.erase(path) != 0; }
@@ -70,5 +104,14 @@ class HalStorage {
     return true;
   }
 };
+
+inline HalFile HalFile::openNextFile() {
+  if (!isDirectory()) return {};
+  while (next < children.size()) {
+    const std::string child = children[next++];
+    if (fake::files.count(child)) return HalStorage::getInstance().open(child.c_str());
+  }
+  return {};
+}
 
 #define Storage HalStorage::getInstance()

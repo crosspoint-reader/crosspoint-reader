@@ -2,6 +2,7 @@
 #include <HalStorage.h>
 #include <gtest/gtest.h>
 
+#include "util/BookCacheUtils.h"
 #include "util/BookDataMove.h"
 #include "util/BookmarkUtil.h"
 
@@ -71,4 +72,19 @@ TEST(BookDataMove, MoveDropsRenderedPagesButKeepsPosition) {
   EXPECT_EQ(fake::files.at(newCache + "/progress.bin"), "position");
   EXPECT_TRUE(Storage.exists((newCache + "/book.bin").c_str()));
   EXPECT_TRUE(Storage.exists((newCache + "/img_0_0.jpg").c_str()));
+}
+
+TEST(BookDataMove, SleepImageChangeClearsOnlyCachedSleepBitmaps) {
+  fake::files = {{"/.crosspoint", fake::kDir},
+                 {"/.crosspoint/sleep_ab12.bmp", "bmp"},
+                 {"/.crosspoint/sleep_frame.bin", "frame"},
+                 {"/.crosspoint/epub_1", fake::kDir},
+                 {"/.crosspoint/epub_1/sleep_x.bmp", "nested"}};
+  sleepImageChanged("/sleep.bmp");
+  EXPECT_FALSE(Storage.exists("/.crosspoint/sleep_ab12.bmp"));
+  EXPECT_TRUE(Storage.exists("/.crosspoint/sleep_frame.bin"));
+  EXPECT_TRUE(Storage.exists("/.crosspoint/epub_1/sleep_x.bmp"));
+  fake::files["/.crosspoint/sleep_cd34.bmp"] = "bmp";
+  sleepImageChanged("/Books/a.epub");
+  EXPECT_TRUE(Storage.exists("/.crosspoint/sleep_cd34.bmp"));
 }
