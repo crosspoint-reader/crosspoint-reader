@@ -782,7 +782,8 @@ TEST_F(ChapterHtmlSlimParserTest, PagebreakListItemIsSkipped) {
 // An empty block marker adds no line and no spacing.
 TEST_F(ChapterBlockDecorationTest, EmptyBlockPagebreakMarkersAddNoSpace) {
   const XML_Char* marker[] = {"epub:type", "pagebreak", "title", "5", nullptr};
-  const char* markerTags[] = {nullptr, "p", "blockquote", "h2"};
+  // The first two lines have no marker between them: their gap is the control.
+  const char* markerTags[] = {nullptr, nullptr, "p", "blockquote", "h2"};
   for (const char* tag : markerTags) {
     if (tag) {
       ChapterHtmlSlimParser::startElement(&parser, tag, marker);
@@ -793,11 +794,12 @@ TEST_F(ChapterBlockDecorationTest, EmptyBlockPagebreakMarkersAddNoSpace) {
     close("p");
   }
   const auto lines = elementsWithTag(TAG_PageLine);
-  ASSERT_EQ(lines.size(), 4u);
+  ASSERT_EQ(lines.size(), 5u);
   const int gap = lines[1]->yPos - lines[0]->yPos;
   EXPECT_GT(gap, 0);
-  EXPECT_EQ(lines[2]->yPos - lines[1]->yPos, gap);
-  EXPECT_EQ(lines[3]->yPos - lines[2]->yPos, gap);
+  for (size_t i = 2; i < lines.size(); i++) {
+    EXPECT_EQ(lines[i]->yPos - lines[i - 1]->yPos, gap);
+  }
 }
 
 // Inline and other markers keep develop's behavior: the whole subtree is skipped,
