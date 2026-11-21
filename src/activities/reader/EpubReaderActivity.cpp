@@ -58,6 +58,7 @@
 #include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "sync/SyncEngine.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
@@ -175,9 +176,10 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     return;
   }
 
-  // Protected-book sidecars travel with the book; a protected book separated
-  // from its key no longer opens, so a failed move rolls everything back.
-  static constexpr const char* SIDECARS[] = {".key", ".rights"};
+  // Sidecars travel with the book: a protected book separated from its key no
+  // longer opens, and sync reads the plugin metadata next to the book. A failed
+  // move rolls everything back.
+  static constexpr const char* SIDECARS[] = {".key", ".rights", ".meta.json"};
   for (size_t i = 0; i < std::size(SIDECARS); i++) {
     const std::string from = srcPath + SIDECARS[i];
     if (!Storage.exists(from.c_str())) continue;
@@ -202,7 +204,17 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     }
   }
 
+  // Bookmarks are stored under the book's path. Like the cache, a failed move
+  // is not fatal: the book is already in place.
+  const std::string oldBookmarkPath = BookmarkUtil::getBookmarkPath(srcPath);
+  const std::string newBookmarkPath = BookmarkUtil::getBookmarkPath(dstPath);
+  if (Storage.exists(oldBookmarkPath.c_str()) &&
+      (Storage.exists(newBookmarkPath.c_str()) || !Storage.rename(oldBookmarkPath.c_str(), newBookmarkPath.c_str()))) {
+    LOG_ERR("ERS", "Failed to move bookmarks %s -> %s (non-fatal)", oldBookmarkPath.c_str(), newBookmarkPath.c_str());
+  }
+
   RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, cacheMoved ? newCachePath : oldCachePath);
+  syncEngine::sleepBookMoved(srcPath, dstPath);
   if (APP_STATE.openEpubPath == srcPath) {
     APP_STATE.openEpubPath = dstPath;
     APP_STATE.saveToFile();
@@ -1449,6 +1461,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
     }
     // The destructor can no longer save the back-stack once epub is gone.
     if (footnoteDepth > 0) saveLinkStack();
+    rememberBookOnceRendered();
     epub.reset();
   }
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
@@ -1864,6 +1877,9 @@ void EpubReaderActivity::renderBook() {
             if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
               showBuildPopup(renderer, pagesUntilFullRefresh);
             }
+            // The render lock is held for the whole build, so the main loop
+            // cannot power the EEGO A4 panel down; left powered it fuzzes.
+            if (BoardConfig::isEegoA4()) display.controllerIdle();
             if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
               LOG_ERR("ERS", "Failed during incremental section build");
               section.reset();
@@ -2171,6 +2187,12 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   } ditherScope{renderer};
   renderer.setDitherImagesInBw(!imageGrayscale);
   const bool pageHasImages = imageGrayscale && page->hasImages();
+  // Images keep every gray level on panels that otherwise render the text
+  // overlay with fewer.
+  struct FullToneScope {
+    ~FullToneScope() { display.setOverlayFullTone(false); }
+  } fullToneScope;
+  display.setOverlayFullTone(pageHasImages);
   const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
   const bool manualRefreshPending = forcedRefreshPending;
   forcedRefreshPending = false;
@@ -2425,8 +2447,8 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
       const char* text = block->wordText(i);
       if (!clippingText::hasVisibleText(text)) continue;
       const auto style = static_cast<EpdFontFamily::Style>(block->wordStyle(i) & ~EpdFontFamily::UNDERLINE);
-      const int width = renderer.getTextAdvanceX(clippingWordFont(renderer, fontId, *block, i), text, style,
-                                                 block->getBlockStyle().characterSpacing);
+      const int width = renderer.getTextAdvanceX(clippingWordFont(renderer, fontId, *block, i), block->laidOutWord(i),
+                                                 style, block->getBlockStyle().characterSpacing);
       if (width <= 0) continue;
       const uint16_t index = wordIndex++;
       const Rect rect =
@@ -2497,7 +2519,7 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
       const char* text = block->wordText(i);
       if (!clippingText::hasVisibleText(text)) continue;
       const auto style = static_cast<EpdFontFamily::Style>(block->wordStyle(i) & ~EpdFontFamily::UNDERLINE);
-      int width = renderer.getTextAdvanceX(clippingWordFont(renderer, fontId, *block, i), text, style,
+      int width = renderer.getTextAdvanceX(clippingWordFont(renderer, fontId, *block, i), block->laidOutWord(i), style,
                                            block->getBlockStyle().characterSpacing);
       if (width <= 0) continue;
       const uint16_t wordIndex = pageWordIndex++;
@@ -3414,6 +3436,21 @@ void EpubReaderActivity::restoreSavedPosition() {
     section.reset();
   }
   requestUpdate();
+}
+
+void EpubReaderActivity::prepareForSleep() {
+  ReaderActivity::prepareForSleep();
+  if (!epub || !KOREADER_STORE.getSyncOnSleep() || !KOREADER_STORE.hasCredentials()) return;
+  // Sync On Sleep runs after this activity is gone, so hand over the position now.
+  // ActivityManager already holds the render lock here; taking it again would deadlock.
+  CrossPointPosition position = getCurrentPosition();
+  if (isAtEndOfBook() && epub->getSpineItemsCount() > 0) {
+    // The finished screen sits one past the last chapter, which has no size or XPath.
+    // Hand over the end of the last chapter instead.
+    position = {epub->getSpineItemsCount() - 1, 1, 2};
+    position.hasResolvedSpineIndex = true;
+  }
+  syncEngine::noteSleepBook(epub->getPath(), position);
 }
 
 void EpubReaderActivity::loadCachedBookmarks() {
