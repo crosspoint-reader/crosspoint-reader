@@ -668,7 +668,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   // family. applyUiFont() re-points the UI font slots above, or keeps the built-in.
 #if CROSSPOINT_VECTOR_FONTS
   sdFontSystem.setBuiltinUiFonts(&smallFontFamily, &ui10FontFamily, &ui12FontFamily);
-  sdFontSystem.applyUiFont(renderer);
+  sdFontSystem.applyUiFont(renderer, SETTINGS.uiFontFamilyName);
 #endif
 
   LOG_DBG("MAIN", "Fonts setup");

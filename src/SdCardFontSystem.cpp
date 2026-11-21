@@ -290,8 +290,7 @@ int SdCardFontSystem::variantFontId(const int readerFontId, const uint8_t pointS
 
 void SdCardFontSystem::releaseForStorage(GfxRenderer& renderer) {
 #if CROSSPOINT_VECTOR_FONTS
-  unloadUiTtf(renderer);
-  restoreBuiltinUiFonts(renderer);
+  applyUiFont(renderer, "");
   unloadTtf(renderer);
 #endif
   renderer.clearFallbackFonts();
@@ -620,12 +619,13 @@ bool SdCardFontSystem::loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer
   return true;
 }
 
-bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer) {
+bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer, const char* want) {
   unloadUiTtf(renderer);
-  const char* want = SETTINGS.uiFontFamilyName;
+  activeUiFontName_[0] = '\0';
   if (want[0] != '\0') {
     const SdCardFontFamilyInfo* family = registry_.findFamily(want);
     if (family != nullptr && loadUiTtf(*family, renderer)) {
+      snprintf(activeUiFontName_, sizeof(activeUiFontName_), "%s", want);
       LOG_DBG("SDFS", "UI font: %s", want);
       return true;
     }
@@ -634,7 +634,7 @@ bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer) {
   }
 
   restoreBuiltinUiFonts(renderer);
-  return false;
+  return want[0] == '\0';
 }
 
 void SdCardFontSystem::restoreBuiltinUiFonts(GfxRenderer& renderer) {

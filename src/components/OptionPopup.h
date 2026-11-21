@@ -84,8 +84,7 @@ class OptionPopup {
         if (event && event.action == ACTION_OPTION) {
           // Tap released on an option: select it, fire, dismiss.
           selectedIndex = event.value;
-          active = false;
-          if (onSelectCallback) onSelectCallback(selectedIndex.load());
+          confirmSelection();
           haptic_feedback::touchAction();
           requestUpdate();
           return true;
@@ -149,8 +148,7 @@ class OptionPopup {
       requestUpdate();
       return true;
     } else if (confirm) {
-      active = false;
-      if (onSelectCallback) onSelectCallback(selectedIndex.load());
+      confirmSelection();
       requestUpdate();
       return true;
     } else if (back) {
@@ -310,6 +308,13 @@ class OptionPopup {
   static constexpr size_t INTERACTION_CAPACITY = MAX_VISIBLE_OPTIONS + 1;
   static constexpr freeink::ui::ActionId ACTION_OPTION = 1;
   static constexpr freeink::ui::ActionId ACTION_CHROME = 2;
+
+  void confirmSelection() {
+    active = false;
+    // A selection can open another popup, for example to display an error.
+    auto callback = std::move(onSelectCallback);
+    if (callback) callback(selectedIndex.load());
+  }
 
   void activate(int currentIndex, std::function<void(int)> onSelect) {
     const int count = static_cast<int>(ownedStrings.size());

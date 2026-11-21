@@ -44,12 +44,11 @@ class SdCardFontSystem {
   /// can restore them when no SD UI font is selected. Call once at boot.
   void setBuiltinUiFonts(EpdFontFamily* small, EpdFontFamily* ui10, EpdFontFamily* ui12);
 
-  /// Bind the UI font slots (SMALL_FONT_ID/UI_10/UI_12) to the vector family
-  /// named by SETTINGS.uiFontFamilyName, rasterized at each UI size; otherwise
-  /// restore the built-in UI fonts. The whole UI (menus, home)
-  /// draws through these slots. PSRAM boards only. Call at boot and whenever
-  /// the setting changes. Returns true if an SD UI font was applied.
-  bool applyUiFont(GfxRenderer& renderer);
+  /// Bind the UI font to an installed family or the built-ins (empty name).
+  /// Returns false on failure, with the built-ins restored. The caller holds
+  /// RenderLock after startup.
+  bool applyUiFont(GfxRenderer& renderer, const char* name);
+  const char* activeUiFontName() const { return activeUiFontName_; }
 #endif
 
   /// Release SD font handles and restore built-ins before storage leaves firmware control.
@@ -150,6 +149,7 @@ class SdCardFontSystem {
   EpdFontFamily* builtinUiSmall_ = nullptr;
   EpdFontFamily* builtinUi10_ = nullptr;
   EpdFontFamily* builtinUi12_ = nullptr;
+  char activeUiFontName_[32] = "";
 
   // One style source file. SMALL files are read fully into `bytes` (resident,
   // PSRAM when present); LARGE files stream from `file` (kept open) so a multi-MB

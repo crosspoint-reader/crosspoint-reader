@@ -517,22 +517,24 @@ void SettingsActivity::toggleSelectedSetting() {
           if (fam.name.size() >= sizeof(SETTINGS.uiFontFamilyName)) continue;
           names.push_back(fam.name);
           options.push_back(fam.name);
-          if (fam.name == SETTINGS.uiFontFamilyName) current = static_cast<int>(names.size());
+          if (fam.name == sdFontSystem.activeUiFontName()) current = static_cast<int>(names.size());
         }
         optionPopup.show(StrId::STR_UI_FONT, options, current, [this, names](const int idx) {
-          if (idx <= 0 || idx > static_cast<int>(names.size())) {
-            SETTINGS.uiFontFamilyName[0] = '\0';
-          } else {
-            strncpy(SETTINGS.uiFontFamilyName, names[idx - 1].c_str(), sizeof(SETTINGS.uiFontFamilyName) - 1);
-            SETTINGS.uiFontFamilyName[sizeof(SETTINGS.uiFontFamilyName) - 1] = '\0';
-          }
+          const char* name = idx == 0 ? "" : names[idx - 1].c_str();
+          bool applied;
           {
-            // applyUiFont rebinds the renderer's fonts; hold the RenderLock for
-            // the swap only (see TextSettingsActivity::applyFamily), then write
-            // and rebuild outside it.
             RenderLock lock;
-            sdFontSystem.applyUiFont(renderer);
+            char previous[sizeof(SETTINGS.uiFontFamilyName)];
+            snprintf(previous, sizeof(previous), "%s", sdFontSystem.activeUiFontName());
+            applied = sdFontSystem.applyUiFont(renderer, name);
+            if (!applied && previous[0] != '\0') sdFontSystem.applyUiFont(renderer, previous);
           }
+          if (!applied) {
+            const char* const options[] = {tr(STR_OK_BUTTON)};
+            optionPopup.showMessage("", tr(STR_UI_FONT_LOAD_FAILED), options, 1, 0, nullptr);
+            return;
+          }
+          snprintf(SETTINGS.uiFontFamilyName, sizeof(SETTINGS.uiFontFamilyName), "%s", name);
           SETTINGS.saveToFile();
           rebuildSettings();
         });
