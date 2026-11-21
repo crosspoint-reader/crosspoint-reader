@@ -96,6 +96,7 @@ add_subdirectory(bmp_to_bmp)
 
 add_subdirectory(sd_card_font)
 add_subdirectory(sd_font_registry)
+add_subdirectory(book_font)
 add_subdirectory(clipping_preview)
 add_subdirectory(glyph_bitmap)
 add_subdirectory(bmp_stream_writer)

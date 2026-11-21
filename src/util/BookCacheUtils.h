@@ -6,6 +6,9 @@
 // (EPUB, XTC, or TXT). Does nothing for other file types.
 void clearBookCache(const std::string& path);
 
+// The book's cache directory (as Epub and Xtc name it), or "" for other files.
+std::string bookCachePath(const std::string& path);
+
 // Call after the file at `path` is replaced or removed. If it is a custom sleep
 // image (/sleep.bmp, or a file in /sleep or /.sleep), removes the converted
 // copies in /.crosspoint so the next sleep converts it again.
