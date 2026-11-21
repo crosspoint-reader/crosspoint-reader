@@ -508,7 +508,7 @@ void SettingsActivity::toggleSelectedSetting() {
         const auto& families = sdFontSystem.registry().getFamilies();
         std::vector<std::string> options;
         std::vector<std::string> names;  // family name for each option after "Default"
-        options.emplace_back("Default (built-in)");
+        options.emplace_back(tr(STR_DEFAULT_VALUE));
         int current = 0;
         for (const auto& fam : families) {
           if (!fam.vector) continue;
