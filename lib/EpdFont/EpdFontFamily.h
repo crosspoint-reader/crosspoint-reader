@@ -34,9 +34,10 @@ class EpdFontFamily {
   void getTextDimensions(const char* string, int* w, int* h, Style style = REGULAR) const;
   const EpdFontData* getData(Style style = REGULAR) const;
   const EpdGlyph* getGlyph(uint32_t cp, Style style = REGULAR) const;
-  const EpdGlyph* getGlyphMetrics(uint32_t cp, EpdGlyph& solidFallback, Style style = REGULAR) const {
-    return getFont(style)->getGlyphMetrics(cp, solidFallback);
-  }
+  const EpdGlyph* getGlyphMetrics(uint32_t cp, EpdGlyph& solidFallback, Style style = REGULAR,
+                                  const EpdFontData** glyphData = nullptr) const;
+  void setGlyphFallback(const EpdFontFamily* fallback) { glyphFallback = fallback; }
+  bool hasGlyphFallback() const { return glyphFallback != nullptr; }
   /// Returns true if the resolved style's font can render `cp` directly
   /// (interval coverage only — see EpdFont::hasCodepoint).
   bool hasCodepoint(uint32_t cp, Style style = REGULAR) const;
@@ -52,6 +53,10 @@ class EpdFontFamily {
   const EpdFont* italic;
   const EpdFont* boldItalic;
   float sizeInPixels;
+  const EpdFontFamily* glyphFallback = nullptr;
+
+  const EpdFont* fallbackFont(Style style) const;
+  const EpdFont* glyphFont(uint32_t cp, Style style) const;
 
   const EpdFont* getFont(Style style) const;
 };

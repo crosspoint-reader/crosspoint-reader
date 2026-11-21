@@ -611,7 +611,10 @@ bool SdCardFontSystem::loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer
   for (size_t i = 0; i < std::size(uiTtf_); ++i) {
     const int id = kUiFontSizes[i].fontId;
     renderer.removeFont(id);
-    renderer.insertFont(id, uiTtf_[i]->family());
+    auto font = uiTtf_[i]->family();
+    const EpdFontFamily* const builtins[] = {builtinUiSmall_, builtinUi10_, builtinUi12_};
+    font.setGlyphFallback(builtins[i]);
+    renderer.insertFont(id, font);
     renderer.registerTtfFont(id, uiTtf_[i].get());
   }
   return true;

@@ -2,15 +2,19 @@
 #include "EpdFontData.h"
 
 class EpdFont {
-  void getTextBounds(const char* string, int startX, int startY, int* minX, int* minY, int* maxX, int* maxY) const;
+  void getTextBounds(const char* string, int startX, int startY, int* minX, int* minY, int* maxX, int* maxY,
+                     const EpdFont* fallback) const;
 
  public:
   const EpdFontData* data;
   explicit EpdFont(const EpdFontData* data) : data(data) {}
   ~EpdFont() = default;
-  void getTextDimensions(const char* string, int* w, int* h) const;
+  void getTextDimensions(const char* string, int* w, int* h, const EpdFont* fallback = nullptr) const;
 
   const EpdGlyph* getGlyph(uint32_t cp) const;
+
+  // With an explicit fallback, omit characters that neither font covers.
+  const EpdFont* fontForCodepoint(uint32_t cp, const EpdFont* fallback) const;
 
   /// Like getGlyph(), but supplies metrics for missing solid block symbols.
   /// If the returned pointer is &solidFallback, draw a filled rectangle;
