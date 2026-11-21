@@ -256,6 +256,17 @@ int CrosspointServices::fsRead(const char* path, uint8_t* out, uint32_t cap) {
   return got == static_cast<int>(size) ? static_cast<int>(size) : DSN_ERR_IO;
 }
 
+int CrosspointServices::fsReadAt(const char* path, uint32_t offset, uint8_t* out, uint32_t cap) {
+  std::string full;
+  if (int e = resolve(path, full)) return e;
+  HalFile f;
+  if (!Storage.openFileForRead("DSN", full, f)) return DSN_ERR_IO;
+  if (offset >= f.fileSize()) return 0;
+  if (!f.seek(offset)) return DSN_ERR_IO;
+  const int got = f.read(out, cap);
+  return got < 0 ? DSN_ERR_IO : got;
+}
+
 int CrosspointServices::fsWrite(const char* path, const uint8_t* data, uint32_t n) {
   std::string full;
   if (int e = resolve(path, full)) return e;
