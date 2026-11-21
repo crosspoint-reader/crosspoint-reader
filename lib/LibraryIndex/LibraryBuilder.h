@@ -76,8 +76,8 @@ const char* libraryIndexPath();
 bool markLibraryIndexDirty();
 bool isLibraryIndexDirty();
 
-// Whether `path` (a full path or a bare name) passes the walk's name filter: a
-// book extension, and no hidden or system folder or file name.
+// Whether `path` passes the walk's filter: a book extension, and no hidden,
+// system, or root-level generated file. Bare names are treated as root files.
 bool isLibraryBookFile(std::string_view path);
 
 }  // namespace library

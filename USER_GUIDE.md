@@ -134,7 +134,7 @@ The Library indexes up to 4,096 supported books on the SD card and shows their t
 - **Title** groups books by the first letter of the title. Up sorts A-Z and down sorts Z-A. Titles beginning with numbers or punctuation appear under `#`; letters from non-English scripts, including Hebrew, have their own groups.
 - **Author** groups books by author. Up sorts A-Z and down sorts Z-A.
 
-`My Clippings.txt` and `crash_report.txt` are not listed in the Library. They remain available in the file browser.
+`My Clippings.txt` and `crash_report.txt` at the root of the SD card are not listed in the Library. They remain available in the file browser.
 
 On a button-only device:
 

@@ -207,21 +207,25 @@ std::string_view normalizeLibraryRootAliases(std::string_view path) {
   return path;
 }
 
-// ASCII case-insensitive match against an already lower-case name (FAT names
-// are case-insensitive).
-bool equalsLowerAscii(const std::string_view name, const std::string_view lower) {
-  return std::equal(name.begin(), name.end(), lower.begin(), lower.end(), [](const char a, const char b) {
-    return (a >= 'A' && a <= 'Z' ? static_cast<char>(a + ('a' - 'A')) : a) == b;
-  });
-}
-
-bool isLibrarySkipped(const std::string_view path, bool isNormalizedPath = false) {
-  // Library-only exclusions: these directories must remain accessible in file managers.
-  constexpr std::string_view ROOTS[] = {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"};
+bool isLibrarySkipped(const std::string_view path, const bool isDirectory, const bool isNormalizedPath = false) {
+  // Library-only exclusions: these paths must remain accessible in file managers.
+  constexpr std::string_view skippedDirectories[] = {"fonts", "dictionaries", "plugins", "sleep", "sleep-overlay"};
+  constexpr std::string_view skippedFiles[] = {"my clippings.txt", "crash_report.txt"};
   const std::string_view relativePath = isNormalizedPath ? path : normalizeLibraryRootAliases(path);
-  const std::string_view name = relativePath.substr(0, relativePath.find('/'));
-  for (const auto root : ROOTS) {
-    if (equalsLowerAscii(name, root)) return true;
+  const size_t slash = relativePath.find('/');
+  if (isDirectory || slash != std::string_view::npos) {
+    const std::string_view name = relativePath.substr(0, slash);
+    for (const auto skippedDirectory : skippedDirectories) {
+      if (FsHelpers::equalsIgnoreAsciiCase(name, skippedDirectory)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  for (const auto skippedFile : skippedFiles) {
+    if (FsHelpers::equalsIgnoreAsciiCase(relativePath, skippedFile)) {
+      return true;
+    }
   }
   return false;
 }
@@ -471,7 +475,7 @@ struct DedupFrame {
 
 void walk(WalkState& st, const std::string& path, const int depth) {
   if (st.failed || depth > LIBRARY_MAX_DEPTH || st.books >= CLIX_MAX_RECORDS) return;
-  if (isLibrarySkipped(path)) return;
+  if (isLibrarySkipped(path, /*isDirectory=*/true)) return;
 
   const uint16_t dedupBase = st.activeDedupCount;
   const DedupFrame dedupFrame{st, dedupBase};
@@ -533,7 +537,8 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       }
       continue;
     }
-    if (!isLibraryBookFile(name)) continue;
+    const std::string fullPath = joinLibraryPath(path, name);
+    if (!isLibraryBookFile(fullPath)) continue;
 
     // A zero-length book is a dangling directory entry: the name enumerates but
     // the contents do not exist. Counted rather than silently dropped.
@@ -587,7 +592,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       st.folderId++;
       folderEmitted = true;
     }
-    if (!stageRecord(st, name, size, myFolderId, joinLibraryPath(path, name), modificationTime)) break;
+    if (!stageRecord(st, name, size, myFolderId, fullPath, modificationTime)) break;
   }
   dir.close();
 }
@@ -1092,18 +1097,13 @@ const char* libraryIndexPath() { return INDEX_PATH; }
 bool isLibraryBookFile(const std::string_view path) {
   // Match the walk's exclusions in every path component. A lone "." names the folder itself.
   const std::string_view relativePath = normalizeLibraryRootAliases(path);
-  if (isLibrarySkipped(relativePath, true)) return false;
+  if (isLibrarySkipped(relativePath, /*isDirectory=*/false, /*isNormalizedPath=*/true)) return false;
   size_t start = 0;
   while (start < relativePath.size()) {
     const size_t slash = relativePath.find('/', start);
     const std::string_view name = relativePath.substr(start, slash - start);
     if (name != "." && isHiddenOrSidecar(name)) return false;
-    if (slash == std::string_view::npos) {
-      // Firmware-written text files are not books. They stay reachable from
-      // the file browser.
-      if (equalsLowerAscii(name, "my clippings.txt") || equalsLowerAscii(name, "crash_report.txt")) return false;
-      break;
-    }
+    if (slash == std::string_view::npos) break;
     start = slash + 1;
   }
   return FsHelpers::checkFileExtension(path, ".epub") || FsHelpers::checkFileExtension(path, ".txt") ||
