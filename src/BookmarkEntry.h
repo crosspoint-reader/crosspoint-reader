@@ -21,4 +21,7 @@ struct BookmarkEntry {
   // font/margin/orientation. Absent (hasVisibleTextOffset == false) for pre-offset bookmarks.
   bool hasVisibleTextOffset = false;
   uint32_t visibleTextOffset = 0;
+
+  // The sync server already holds this bookmark, so only its removal needs uploading.
+  bool synced = false;
 };

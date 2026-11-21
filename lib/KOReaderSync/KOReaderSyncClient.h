@@ -72,6 +72,9 @@ struct KOReaderProgress {
  */
 class KOReaderSyncClient {
  public:
+  // Every CrossPoint reader reports this id; the server scopes device data by account and id.
+  static constexpr char DEVICE_ID[] = "crosspoint-reader";
+
   enum Error {
     OK = 0,
     NO_CREDENTIALS,

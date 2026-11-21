@@ -70,13 +70,17 @@ for size in ${UI_FONT_SIZES[@]}; do
 done
 
 # The small UI face is Ubuntu too, so UI text stays in one family at every size.
+# At this size the stem of "1" sits across a pixel boundary and comes out 3 px
+# wide next to the 2 px strokes of the other digits; a quarter-pixel nudge
+# lands it on two pixels.
 python fontconvert.py ubuntu_8_regular 8 \
   ../builtinFonts/source/Ubuntu/Ubuntu-Regular.ttf \
   ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf \
   ../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-Regular.ttf \
   ../builtinFonts/source/NotoSansArabic/NotoSansArabic-Regular.ttf \
   ../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-Regular.ttf \
-  --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/ubuntu_8_regular.h
+  --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" \
+  --glyph-x-nudge 0x31,16 > ../builtinFonts/ubuntu_8_regular.h
 
 echo ""
 echo "Running compression verification..."

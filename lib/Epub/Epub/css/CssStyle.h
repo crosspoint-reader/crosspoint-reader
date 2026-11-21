@@ -15,9 +15,6 @@ struct CssLength {
   CssLength() = default;
   CssLength(const float v, const CssUnit u) : value(v), unit(u) {}
 
-  // Convenience constructor for pixel values (most common case)
-  explicit CssLength(const float pixels) : value(pixels) {}
-
   // Returns true if this length can be resolved to pixels with the given context.
   // Percentage units require a non-zero containerWidth to resolve.
   [[nodiscard]] bool isResolvable(const float containerWidth = 0) const {
