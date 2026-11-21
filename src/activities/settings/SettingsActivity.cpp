@@ -25,6 +25,9 @@
 #include "KOReaderSettingsActivity.h"
 #include "KeyboardLayoutsActivity.h"
 #include "LanguageSelectActivity.h"
+#if CROSSPOINT_DESSEN_APPS
+#include "util/HomeApps.h"
+#endif
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
@@ -138,6 +141,12 @@ void SettingsActivity::rebuildSettings() {
   // Language leads so a user stuck in an unfamiliar language finds it first.
   addAction(SettingsSection::General, StrId::STR_LANGUAGE, SettingAction::Language);
   addAction(SettingsSection::General, StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts);
+#if CROSSPOINT_DESSEN_APPS
+  addAction(SettingsSection::Display, StrId::STR_HOME_LAUNCHER, SettingAction::HomeApp);
+#endif
+#if CROSSPOINT_VECTOR_FONTS
+  addAction(SettingsSection::Display, StrId::STR_UI_FONT, SettingAction::UiFont);
+#endif
   addAction(SettingsSection::Reader, StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings);
   addAction(SettingsSection::Reader, StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts);
   if (section == SettingsSection::Controls) {
@@ -494,6 +503,71 @@ void SettingsActivity::toggleSelectedSetting() {
                                  rebuildSettings();
                                });
         break;
+#if CROSSPOINT_DESSEN_APPS
+      case SettingAction::HomeApp: {
+        const std::vector<HomeApp> apps = scanHomeApps();
+        std::vector<std::string> options;
+        options.reserve(apps.size() + 1);
+        options.emplace_back("Default (CrossPoint)");
+        int current = 0;
+        for (size_t i = 0; i < apps.size(); i++) {
+          options.push_back(apps[i].title);
+          if (apps[i].appPath == SETTINGS.customHomeApp) current = static_cast<int>(i) + 1;
+        }
+        optionPopup.show(StrId::STR_HOME_LAUNCHER, options, current, [this, apps](const int idx) {
+          if (idx <= 0 || idx > static_cast<int>(apps.size())) {
+            SETTINGS.customHomeApp[0] = '\0';
+          } else {
+            strncpy(SETTINGS.customHomeApp, apps[idx - 1].appPath.c_str(), sizeof(SETTINGS.customHomeApp) - 1);
+            SETTINGS.customHomeApp[sizeof(SETTINGS.customHomeApp) - 1] = '\0';
+          }
+          SETTINGS.saveToFile();
+          rebuildSettings();
+        });
+        requestUpdate();
+        return;
+      }
+#endif
+#if CROSSPOINT_VECTOR_FONTS
+      case SettingAction::UiFont: {
+        // Only vector families can back the whole-UI font: they rasterize at
+        // any UI size (see SdCardFontSystem::applyUiFont). "Default" is the
+        // built-in, and selecting it just clears the setting.
+        const auto& families = sdFontSystem.registry().getFamilies();
+        std::vector<std::string> options;
+        std::vector<std::string> names;  // family name for each option after "Default"
+        options.emplace_back("Default (built-in)");
+        int current = 0;
+        for (const auto& fam : families) {
+          if (!fam.vector) continue;
+          // Only offer names that fit the setting exactly: a truncated name would
+          // neither match here (current-selection) nor in applyUiFont.
+          if (fam.name.size() >= sizeof(SETTINGS.uiFontFamilyName)) continue;
+          names.push_back(fam.name);
+          options.push_back(fam.name);
+          if (fam.name == SETTINGS.uiFontFamilyName) current = static_cast<int>(names.size());
+        }
+        optionPopup.show(StrId::STR_UI_FONT, options, current, [this, names](const int idx) {
+          if (idx <= 0 || idx > static_cast<int>(names.size())) {
+            SETTINGS.uiFontFamilyName[0] = '\0';
+          } else {
+            strncpy(SETTINGS.uiFontFamilyName, names[idx - 1].c_str(), sizeof(SETTINGS.uiFontFamilyName) - 1);
+            SETTINGS.uiFontFamilyName[sizeof(SETTINGS.uiFontFamilyName) - 1] = '\0';
+          }
+          {
+            // applyUiFont rebinds the renderer's fonts; hold the RenderLock for
+            // the swap only (see TextSettingsActivity::applyFamily), then write
+            // and rebuild outside it.
+            RenderLock lock;
+            sdFontSystem.applyUiFont(renderer);
+          }
+          SETTINGS.saveToFile();
+          rebuildSettings();
+        });
+        requestUpdate();
+        return;
+      }
+#endif
       case SettingAction::Plugins: {
         static constexpr StrId OPTIONS[] = {StrId::STR_ENABLED, StrId::STR_DISABLED, StrId::STR_CANCEL};
         optionPopup.show(StrId::STR_PLUGINS, OPTIONS, 3, SETTINGS.pluginsEnabled ? 0 : 1, [this](const int idx) {
@@ -581,6 +655,15 @@ void SettingsActivity::openSleepTimeoutPicker() {
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
   if (setting.action == SettingAction::Plugins) return SETTINGS.pluginsEnabled ? tr(STR_ENABLED) : tr(STR_DISABLED);
+#if CROSSPOINT_DESSEN_APPS
+  if (setting.action == SettingAction::HomeApp) {
+    const std::string p = SETTINGS.customHomeApp;
+    if (p.empty()) return "Default";
+    const size_t slash = p.find_last_of('/');  // ".../plugins/<name>/app.bin" -> <name>
+    const size_t prev = slash == std::string::npos ? std::string::npos : p.find_last_of('/', slash - 1);
+    return (slash != std::string::npos && prev != std::string::npos) ? p.substr(prev + 1, slash - prev - 1) : "Custom";
+  }
+#endif
   if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Guard like the valueGetter branch below: a corrupt/migrated settings
     // byte must not index past the enum table.

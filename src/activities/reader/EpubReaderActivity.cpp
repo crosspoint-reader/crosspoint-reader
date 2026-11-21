@@ -61,6 +61,7 @@
 #include "sync/SyncEngine.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
+#include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -814,16 +815,21 @@ void EpubReaderActivity::loop() {
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
   clearEndOfBookOptionsIfNeeded();
 
+  // A plugin-replaced end-of-book finish latches `bookFinished`: the handoff
+  // stepped back off the end, so without the latch the finished-book handling
+  // below would skip (or undo) on the very next pass.
+  const bool finished = atEndOfBook || bookFinished;
+
   if (SETTINGS.removeReadBooksFromRecents) {
-    if (atEndOfBook && !recentsEntryRemoved) {
+    if (finished && !recentsEntryRemoved) {
       recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath());
-    } else if (!atEndOfBook && recentsEntryRemoved) {
+    } else if (!finished && recentsEntryRemoved) {
       RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
       recentsEntryRemoved = false;
     }
   }
 
-  if (atEndOfBook) {
+  if (finished) {
     pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
   } else {
     pendingReadFolderMove = false;
@@ -927,6 +933,10 @@ void EpubReaderActivity::loop() {
   // -- a hold there must not drop a bookmark onto the suggestion screen or paint the
   // dictionary word picker over it. Anything the menu does not handle (long-press Back to
   // the file browser, say) still falls through to the regular handlers.
+  // reader.end fires here (and a replacer app takes over the end-of-book screen).
+  if (handleEndOfBookReached()) {
+    return;
+  }
   if (handleEndOfBookMenu()) {
     return;
   }
@@ -1546,6 +1556,12 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     } else {
       currentSpineIndex = epub->getSpineItemsCount();
       lastPageTurnTime = millis();
+      // A plugin replaces the end-of-book screen: hand over now, before the
+      // firmware menu is drawn; the last page stays on screen under the app.
+      if (pluginevents::anyEndOfBookReplacer()) {
+        handleEndOfBookReached();
+        return false;
+      }
       return true;
     }
   } else {
@@ -1685,6 +1701,20 @@ void EpubReaderActivity::onReturnFromEndOfBook() {
     nextPageNumber = 0;
     pendingPageJump = std::numeric_limits<uint16_t>::max();
   }
+}
+
+void EpubReaderActivity::onEndOfBookReplaced() {
+  // The plugin takes over the end screen and onReturnFromEndOfBook() steps back
+  // off the end, so the atEndOfBook-driven finished handling (see update loop)
+  // would otherwise never run. Latch "finished" and commit the handling now, in
+  // case the reader is suspended/destroyed behind the app before the loop runs;
+  // the latch then keeps the loop from undoing it.
+  bookFinished = true;
+  if (!epub) return;
+  if (SETTINGS.removeReadBooksFromRecents && !recentsEntryRemoved) {
+    recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath());
+  }
+  pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
 }
 
 // A started build runs to the end of the chapter, one bounded step per idle loop frame, so the

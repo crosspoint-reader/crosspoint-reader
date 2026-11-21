@@ -25,6 +25,7 @@
 #include <type_traits>
 
 #include "CrossPointSettings.h"
+#include "DessenAppActivity.h"
 #include "MappedInputManager.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"  // plain-text README viewer
 #include "activities/settings/PluginHubInstallActivity.h"
@@ -268,6 +269,10 @@ std::vector<PluginRef> discoverPlugins() {
     if (e.hasDevice) ref.manifestPath = e.dir + "/device.json";
     const std::string readmePath = e.dir + "/README.md";
     if (Storage.exists(readmePath.c_str())) ref.readmePath = readmePath;
+#if CROSSPOINT_DESSEN_APPS
+    const std::string appPath = e.dir + "/app.bin";
+    if (Storage.exists(appPath.c_str())) ref.appPath = appPath;
+#endif
     // manifest.json first, then device.json overrides (on-device authority).
     if (e.hasManifest) readPluginMetadata(e.dir + "/manifest.json", ref);
     if (e.hasDevice) readPluginMetadata(ref.manifestPath, ref, true);
@@ -564,9 +569,9 @@ void PluginCatalogActivity::enterPluginPicker() {
   pluginevents::refreshSubscriptions();
   // Disclose which device events each plugin receives (and so what reading
   // activity it can send off the device). Events precede the optional summary.
-  static constexpr StrId EVENT_LABELS[] = {StrId::STR_EVENT_BOOK_OPEN, StrId::STR_EVENT_BOOK_CLOSE,
+  static constexpr StrId EVENT_LABELS[] = {StrId::STR_EVENT_BOOK_OPEN,       StrId::STR_EVENT_BOOK_CLOSE,
                                            StrId::STR_EVENT_READING_SESSION, StrId::STR_EVENT_DOWNLOAD,
-                                           StrId::STR_EVENT_SLEEP};
+                                           StrId::STR_EVENT_SLEEP,           StrId::STR_EVENT_BOOK_FINISHED};
   static_assert(sizeof(EVENT_LABELS) / sizeof(EVENT_LABELS[0]) == static_cast<size_t>(pluginevents::Event::COUNT));
   for (auto& plugin : installedPlugins) {
     const uint8_t mask = pluginevents::subscriptionMask(plugin.name.c_str());
@@ -1608,6 +1613,19 @@ void PluginCatalogActivity::activateIndex(const int index) {
     }
     const int syntheticHubRows = showPluginHubInstallRow ? 1 : 0;
     const PluginRef& plugin = installedPlugins[index - syntheticHubRows];
+#if CROSSPOINT_DESSEN_APPS
+    // A plugin that ships an app binary runs it; this wins over its catalog or README.
+    if (!plugin.appPath.empty()) {
+      auto appActivity = makeUniqueNoThrow<DessenAppActivity>(renderer, mappedInput, plugin.appPath);
+      if (!appActivity) {
+        LOG_ERR("PCAT", "OOM: app activity");
+        return;
+      }
+      app.clearTapFlash();
+      startActivityForResult(std::move(appActivity), [](const ActivityResult&) {});
+      return;
+    }
+#endif
     const auto action = PluginLocations::pickerAction(plugin.deviceKind, !plugin.readmePath.empty());
     if (action == PluginLocations::PickerAction::Readme) {
       // A plain paged text view, not the book reader: viewing instructions must
@@ -1951,6 +1969,14 @@ void PluginCatalogActivity::rebuildRowItems() {
       //   Catalog    -> browsable, own description, chevron
       //   Background -> events-only, own description, chevron only with a readme
       const char* subtitle = plugin.description.empty() ? nullptr : plugin.description.c_str();
+#if CROSSPOINT_DESSEN_APPS
+      // An on-device app is launchable whatever else the plugin ships, so it
+      // is never labelled web-only.
+      if (!plugin.appPath.empty()) {
+        addRow(plugin.title.c_str(), subtitle, ">");
+        continue;
+      }
+#endif
       switch (plugin.deviceKind) {
         case PluginLocations::DeviceKind::None:
           addRow(plugin.title.c_str(), tr(STR_PLUGIN_WEB_ONLY), plugin.readmePath.empty() ? nullptr : ">");

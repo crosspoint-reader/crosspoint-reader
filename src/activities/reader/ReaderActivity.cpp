@@ -177,6 +177,36 @@ bool ReaderActivity::handleBackNavigation() {
                                            {this, [](void* ctx) { static_cast<ReaderActivity*>(ctx)->onGoHome(); }});
 }
 
+bool ReaderActivity::handleEndOfBookReached() {
+  if (!isAtEndOfBook()) {
+    readerEndEmitted = false;
+    return false;
+  }
+  if (readerEndEmitted) return false;
+  readerEndEmitted = true;
+
+  bool replacementArmed = false;
+  if (pluginevents::anySubscriber(pluginevents::Event::ReaderEnd)) {
+    const ScreenshotInfo info = getScreenshotInfo();
+    char percent[8];
+    char endPercent[8];
+    snprintf(percent, sizeof(percent), "%d", info.progressPercent);
+    snprintf(endPercent, sizeof(endPercent), "%d", info.endProgressPercent);
+    const pluginevents::Var vars[] = {{"book", bookPath.c_str()}, {"percent", percent}, {"end_percent", endPercent}};
+    replacementArmed = pluginevents::emit(pluginevents::Event::ReaderEnd, vars, 3);
+  }
+
+  // Full takeover: only when a "replaces: end of book" handler actually armed
+  // (passed metadata filtering), not merely because one is subscribed. If
+  // filtering left no replacement, fall through so the firmware menu still draws.
+  if (replacementArmed) {
+    onEndOfBookReplaced();    // the book is finished; commit finished-book handling (subclass)
+    onReturnFromEndOfBook();  // no redraw: the app covers the screen, and the reader repaints when it closes
+    return true;
+  }
+  return false;
+}
+
 void ReaderActivity::clearEndOfBookOptionsIfNeeded() {
   if (isAtEndOfBook() || !endOfBookOptionsReady.load(std::memory_order_acquire)) return;
 
@@ -234,6 +264,7 @@ bool ReaderActivity::handleEndOfBookPageTurn(const bool prevTriggered, const boo
 void ReaderActivity::loop() {
   rememberBookOnceRendered();
   clearEndOfBookOptionsIfNeeded();
+  if (handleEndOfBookReached()) return;
   if (handleEndOfBookMenu()) return;
   if (handleFormatInput()) return;
   if (handleBackNavigation()) return;

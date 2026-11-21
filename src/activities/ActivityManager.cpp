@@ -32,6 +32,11 @@
 #include "settings/SettingsListActivity.h"
 #include "util/BmpViewerActivity.h"
 #include "util/FrontlightPanelActivity.h"
+#if CROSSPOINT_DESSEN_APPS
+#include "plugins/DessenAppActivity.h"
+#include "util/PluginEvents.h"
+#include "util/PluginLocations.h"
+#endif
 #include "util/FullScreenMessageActivity.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
@@ -104,6 +109,23 @@ void ActivityManager::renderTaskLoop() {
 
 void ActivityManager::loop() {
   if (mappedInput.consumeSuppressedRelease()) return;
+
+#if CROSSPOINT_DESSEN_APPS
+  // A launch-mode plugin-event handler asked to open its app (see PluginEvents).
+  // Only when idle between screen changes, so it stacks cleanly over whatever is
+  // on top; the app's queued event(s) wait in its app-events.jsonl to be read.
+  if (pendingAction == PendingAction::None && SETTINGS.pluginsEnabled &&
+      !(currentActivity && currentActivity->requiresExclusiveStorageLoop())) {
+    std::string launch = pluginevents::takePendingLaunch();
+    if (!launch.empty() && Storage.exists(launch.c_str())) {
+      if (auto app = makeUniqueNoThrow<DessenAppActivity>(renderer, mappedInput, std::move(launch))) {
+        pushActivity(std::move(app));
+        return;
+      }
+      LOG_ERR("DSN", "OOM: event-launch app");
+    }
+  }
+#endif
 
   if (currentActivity && currentActivity->requiresExclusiveStorageLoop()) {
     currentActivity->loop();
@@ -302,13 +324,14 @@ void ActivityManager::goToFileBrowser(std::string path) {
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 
-void ActivityManager::goToLibrary() {
+bool ActivityManager::goToLibrary() {
   auto activity = makeUniqueNoThrow<LibraryListActivity>(renderer, mappedInput);
   if (!activity) {
     LOG_ERR("ACT", "OOM: library activity");
-    return;
+    return false;
   }
   replaceActivity(std::move(activity));
+  return true;
 }
 
 void ActivityManager::goToBrowser() {
@@ -325,26 +348,26 @@ void ActivityManager::goToPlugins() {
   replaceActivity(std::make_unique<PluginCatalogActivity>(renderer, mappedInput, /*rootMode=*/true));
 }
 
-void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
+bool ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
   if (path.empty()) {
     goToFileBrowser("/");
-    return;
+    return true;
   }
 
   if (FsHelpers::hasImageExtension(path)) {
     auto activity = makeUniqueNoThrow<BmpViewerActivity>(renderer, mappedInput, std::move(path));
     if (!activity) {
       LOG_ERR("ACT", "OOM: bitmap viewer activity");
-      return;
+      return false;
     }
     replaceActivity(std::move(activity));
-    return;
+    return true;
   }
 
   auto activity = ReaderActivity::create(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
-  if (activity) {
-    replaceActivity(std::move(activity));
-  }
+  if (!activity) return false;
+  replaceActivity(std::move(activity));
+  return true;
 }
 
 void ActivityManager::goToSleep(bool fromTimeout) {
@@ -359,7 +382,7 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
   replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
 }
 
-void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh) {
+void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh, bool forceDefaultHome) {
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
     const auto& activityName = currentActivity->name;
     if (activityName == "FileBrowser") {
@@ -379,6 +402,26 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
   // EEGO A4: after a gray reader page, a fast refresh leaves the page ghosting
   // in Home's dithered areas.
   if (BoardConfig::isEegoA4() && isReaderActivity()) cleanInitialRefresh = true;
+#if CROSSPOINT_DESSEN_APPS
+  if (!forceDefaultHome && SETTINGS.pluginsEnabled && SETTINGS.customHomeApp[0] != '\0') {
+    std::string path = SETTINGS.customHomeApp;
+    const size_t fileSlash = path.find_last_of('/');
+    if (fileSlash != std::string::npos && fileSlash > 0 &&
+        path.compare(fileSlash, std::string::npos, "/app.bin") == 0) {
+      const std::string dir = path.substr(0, fileSlash);
+      const std::string name = dir.substr(dir.find_last_of('/') + 1);
+      if (!name.empty() && name.front() != '.' && PluginLocations::findPluginDir(name.c_str()) == dir &&
+          Storage.exists((dir + "/manifest.json").c_str()) && Storage.exists(path.c_str())) {
+        if (auto launcher =
+                makeUniqueNoThrow<DessenAppActivity>(renderer, mappedInput, std::move(path), /*homeLauncher=*/true)) {
+          replaceActivity(std::move(launcher));
+          return;
+        }
+        LOG_ERR("DSN", "OOM: home launcher");
+      }
+    }
+  }
+#endif
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }

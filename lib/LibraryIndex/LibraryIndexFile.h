@@ -89,6 +89,13 @@ class LibraryIndexFile {
   // Absolute path of the book, rebuilt from its folder record.
   bool readPath(const ClixRecord& record, std::string& out);
 
+  struct FolderLookup {
+    uint16_t id;
+    char path[256];
+  };
+  // Fill folder paths in request order. Unknown IDs give empty paths.
+  bool readFolders(FolderLookup* folders, size_t count);
+
  private:
   bool openImpl(const char* path, bool acceptStaleFold);
   bool readAt(uint32_t offset, void* dst, size_t len);
