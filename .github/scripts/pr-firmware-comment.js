@@ -46,6 +46,7 @@ module.exports = async ({github, context, core}) => {
     { env: 'metalio_eink4', name: 'firmware-metalio_eink4.bin', device: 'MetalIO EInk4' },
     { env: 'eego_a4', name: 'firmware-eego_a4.bin', device: 'EEGO A4' },
     { env: 'picco', name: 'firmware-picco.bin', device: 'BOOX Picco' },
+    { env: 'onepage', name: 'firmware-onepage.bin', device: 'OnePage' },
   ];
   const artifactResponse =
     await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
