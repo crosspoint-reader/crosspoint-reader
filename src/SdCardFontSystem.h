@@ -52,6 +52,10 @@ class SdCardFontSystem {
   bool applyUiFont(GfxRenderer& renderer);
 #endif
 
+  /// Release SD font handles and restore built-ins before storage leaves firmware control.
+  /// The caller holds RenderLock.
+  void releaseForStorage(GfxRenderer& renderer);
+
   /// Resolve an SD card font ID from family name + reader point size.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
   int resolveFontId(const char* familyName, uint8_t pointSize) const;
@@ -73,6 +77,10 @@ class SdCardFontSystem {
   }
 
  private:
+#if CROSSPOINT_VECTOR_FONTS
+  void restoreBuiltinUiFonts(GfxRenderer& renderer);
+#endif
+
   // Load the active SD family at the built-in UI point sizes and register each
   // as a size-matched script fallback for the corresponding UI font, so book
   // titles/list rows in scripts the built-ins lack (CJK, Greek, Cyrillic, ...)

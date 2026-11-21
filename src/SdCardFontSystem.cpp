@@ -288,6 +288,16 @@ int SdCardFontSystem::variantFontId(const int readerFontId, const uint8_t pointS
   return id != 0 ? id : 1;
 }
 
+void SdCardFontSystem::releaseForStorage(GfxRenderer& renderer) {
+#if CROSSPOINT_VECTOR_FONTS
+  unloadUiTtf(renderer);
+  restoreBuiltinUiFonts(renderer);
+  unloadTtf(renderer);
+#endif
+  renderer.clearFallbackFonts();
+  unloadCpfonts(renderer);
+}
+
 void SdCardFontSystem::unloadCpfonts(GfxRenderer& renderer) {
   cpfontVariants_.clear();  // the manager owns and frees the fonts themselves
   manager_.unloadAll(renderer);
@@ -620,7 +630,11 @@ bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer) {
     unloadUiTtf(renderer);  // drop a partial load
   }
 
-  // Built-in UI fonts: the default, and the recovery path.
+  restoreBuiltinUiFonts(renderer);
+  return false;
+}
+
+void SdCardFontSystem::restoreBuiltinUiFonts(GfxRenderer& renderer) {
   if (builtinUiSmall_ && builtinUi10_ && builtinUi12_) {
     renderer.removeFont(SMALL_FONT_ID);
     renderer.removeFont(UI_10_FONT_ID);
@@ -629,7 +643,6 @@ bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer) {
     renderer.insertFont(UI_10_FONT_ID, *builtinUi10_);
     renderer.insertFont(UI_12_FONT_ID, *builtinUi12_);
   }
-  return false;
 }
 
 void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
