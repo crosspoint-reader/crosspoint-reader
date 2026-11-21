@@ -4,6 +4,7 @@
 #include <FreeInkUICore.h>
 #include <GfxRenderer.h>
 #include <HalHaptics.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -16,6 +17,7 @@ namespace fui = freeink::ui;
 
 void MappedInputManager::update(const bool deferHomeButtonAction) const {
   remoteInput.reset();
+  replayButtons = false;
   gpio.update();
   const bool powerHeld = gpio.isPressed(HalGPIO::BTN_POWER);
   const bool powerReleased = gpio.wasReleased(HalGPIO::BTN_POWER);
@@ -26,6 +28,16 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
   powerButtonInput.update(isPowerHeld(), powerReleased || sharedConfirmRelease,
                           (powerHeld || powerReleased) ? gpio.getPowerButtonHeldTime() : 0,
                           SETTINGS.getPowerButtonDuration());
+  auto buttons = sampleButtons();
+  if (wasPowerReleaseConsumed()) {
+    // A shared Confirm click emits both edges on release.
+    const auto mask = 1u << (sharedConfirmRelease ? HalGPIO::BTN_CONFIRM : HalGPIO::BTN_POWER);
+    buttons.pressed &= ~mask;
+    buttons.released &= ~mask;
+  }
+  if (!buttonBuffer.capture(buttons, bufferButtons && !deferHomeButtonAction)) {
+    LOG_ERR("INPUT", "Button queue overflow; discarding input until release");
+  }
   const bool pagePressed =
       SETTINGS.vibration == CrossPointSettings::VIBRATION_TOUCH_PAGE && gpio.wasCapacitivePagePressed();
   HalHaptics::feedback(SETTINGS.vibration != CrossPointSettings::VIBRATION_OFF, pagePressed, SETTINGS.hapticIntensity);
@@ -124,9 +136,85 @@ void MappedInputManager::update(const bool deferHomeButtonAction) const {
     homeAction = deferredHomeAction;
     deferredHomeAction = HomeButtonAction::Ignore;
   }
-  for (uint8_t value = 0; value <= static_cast<uint8_t>(Button::ScreenDown); ++value) {
-    if (!isPressed(static_cast<Button>(value))) longPressFiredButtons &= ~(1u << value);
+  if (!bufferButtons) {
+    for (uint8_t value = 0; value <= static_cast<uint8_t>(Button::ScreenDown); ++value) {
+      if (!isPressed(static_cast<Button>(value))) longPressFiredButtons &= ~(1u << value);
+    }
   }
+}
+
+bool MappedInputManager::wasPowerSingleClick() const {
+  // Power qualification belongs to the live GPIO sample, even during replay.
+  const bool classifyPower =
+      CrossPointSettings::hasPowerDoubleClick() && SETTINGS.doublePwrBtn != CrossPointSettings::IGNORE;
+  return powerSingleClickFrame || (!classifyPower && wasShortPowerReleased());
+}
+
+ButtonInputBuffer::Frame MappedInputManager::sampleButtons() const {
+  ButtonInputBuffer::Frame frame;
+  frame.heldMs = gpio.getHeldTime();
+  for (uint8_t button = HalGPIO::BTN_BACK; button <= HalGPIO::BTN_POWER; ++button) {
+    const uint8_t bit = 1u << button;
+    if (gpio.wasPressed(button)) frame.pressed |= bit;
+    if (gpio.wasReleased(button)) frame.released |= bit;
+    if (gpio.isPressed(button)) frame.held |= bit;
+  }
+  return frame;
+}
+
+void MappedInputManager::resetButtonBuffer(bool enabled) const {
+  // Touch keeps its existing snapshot/gesture protocol.
+  enabled = enabled && !hasTouch();
+  if (bufferButtons || enabled) {
+    buttonBuffer.reset(sampleButtons().held & ~(1u << HalGPIO::BTN_POWER));
+    // Physical suppression now owns the old contact, including its release.
+    longPressFiredButtons = 0;
+    suppressedReleaseButtons = 0;
+  }
+  bufferButtons = enabled;
+  replayButtons = false;
+}
+
+uint8_t MappedInputManager::navigationButtonMask() const {
+  const uint8_t directions = (1u << SETTINGS.frontButtonLeft) | (1u << SETTINGS.frontButtonRight) |
+                             (1u << HalGPIO::BTN_UP) | (1u << HalGPIO::BTN_DOWN);
+  return directions &
+         ~((1u << SETTINGS.frontButtonBack) | (1u << SETTINGS.frontButtonConfirm) | (1u << HalGPIO::BTN_POWER));
+}
+
+bool MappedInputManager::beginBufferedButtons() const {
+  if (buttonBuffer.dropping()) return false;
+  if (!buttonBuffer.pop(buttonFrame)) buttonFrame = buttonBuffer.current();
+  replayButtons = true;
+  for (uint8_t value = 0; value <= static_cast<uint8_t>(Button::ScreenDown); ++value) {
+    const auto button = static_cast<Button>(value);
+    if (mapButton(button, &HalGPIO::wasPressed) ||
+        (!mapButton(button, &HalGPIO::isPressed) && !mapButton(button, &HalGPIO::wasReleased))) {
+      longPressFiredButtons &= ~(1u << value);
+    }
+  }
+  return true;
+}
+
+bool MappedInputManager::bufferedNavigationOnly() const {
+  return replayButtons && !hasRemoteClick() && homeAction == HomeButtonAction::Ignore && !wasPowerSingleClick() &&
+         buttonFrame.navigationOnly(navigationButtonMask());
+}
+
+bool MappedInputManager::nextBufferedNavigationOnly() const {
+  const auto* next = buttonBuffer.front();
+  return next && next->navigationOnly(navigationButtonMask());
+}
+
+bool MappedInputManager::readButton(uint8_t button, bool (HalGPIO::*fn)(uint8_t) const) const {
+  if (fn == &HalGPIO::isCapacitivePagePressed) return (gpio.*fn)(button);
+  if (replayButtons) {
+    const uint8_t mask = fn == &HalGPIO::wasPressed    ? buttonFrame.pressed
+                         : fn == &HalGPIO::wasReleased ? buttonFrame.released
+                                                       : buttonFrame.held;
+    return (mask & (1u << button)) != 0;
+  }
+  return (buttonBuffer.blocked() & (1u << button)) == 0 && (gpio.*fn)(button);
 }
 
 bool MappedInputManager::isNavDirectionSwapped() const {
@@ -186,34 +274,34 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   switch (button) {
     case Button::Back:
       // Logical Back maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonBack);
+      return readButton(SETTINGS.frontButtonBack, fn);
     case Button::Confirm:
       // Logical Confirm maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonConfirm);
+      return readButton(SETTINGS.frontButtonConfirm, fn);
     case Button::Left:
       // Logical Left maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonLeft);
+      return readButton(SETTINGS.frontButtonLeft, fn);
     case Button::Right:
       // Logical Right maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonRight);
+      return readButton(SETTINGS.frontButtonRight, fn);
     case Button::Up:
       // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_UP);
+      return readButton(HalGPIO::BTN_UP, fn);
     case Button::Down:
       // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_DOWN);
+      return readButton(HalGPIO::BTN_DOWN, fn);
     case Button::Power:
       // Power button bypasses remapping.
-      return (gpio.*fn)(HalGPIO::BTN_POWER);
+      return readButton(HalGPIO::BTN_POWER, fn);
     case Button::PageBack:
       // Reader page navigation uses side buttons and can be swapped via settings.
       switch (sideLayout) {
         case CrossPointSettings::PREV_NEXT:
-          return (gpio.*fn)(areSidePageButtonsSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
+          return readButton(areSidePageButtonsSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP, fn);
         case CrossPointSettings::NEXT_PREV:
-          return (gpio.*fn)(areSidePageButtonsSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
+          return readButton(areSidePageButtonsSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN, fn);
         case CrossPointSettings::PREV_PREV:
-          return (gpio.*fn)(HalGPIO::BTN_UP) || (gpio.*fn)(HalGPIO::BTN_DOWN);
+          return readButton(HalGPIO::BTN_UP, fn) || readButton(HalGPIO::BTN_DOWN, fn);
         case CrossPointSettings::NEXT_NEXT:
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
@@ -223,11 +311,11 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       // Reader page navigation uses side buttons and can be swapped via settings.
       switch (sideLayout) {
         case CrossPointSettings::PREV_NEXT:
-          return (gpio.*fn)(areSidePageButtonsSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
+          return readButton(areSidePageButtonsSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN, fn);
         case CrossPointSettings::NEXT_PREV:
-          return (gpio.*fn)(areSidePageButtonsSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
+          return readButton(areSidePageButtonsSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP, fn);
         case CrossPointSettings::NEXT_NEXT:
-          return (gpio.*fn)(HalGPIO::BTN_UP) || (gpio.*fn)(HalGPIO::BTN_DOWN);
+          return readButton(HalGPIO::BTN_UP, fn) || readButton(HalGPIO::BTN_DOWN, fn);
         case CrossPointSettings::PREV_PREV:
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
@@ -448,7 +536,8 @@ bool MappedInputManager::wasPowerConfirmClick() const {
 #endif
 
 bool MappedInputManager::injectRemoteClick(const RemoteButton button) {
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || isPressed(Button::Confirm) || isPressed(Button::Back))
+  if (buttonBuffer.front() || gpio.wasAnyPressed() || gpio.wasAnyReleased() || isPressed(Button::Confirm) ||
+      isPressed(Button::Back))
     return false;
   return remoteInput.click(button);
 }
@@ -472,6 +561,8 @@ bool MappedInputManager::wasReleased(const Button button) const {
       SETTINGS.doublePwrBtn != CrossPointSettings::IGNORE) {
     return false;  // Classified clicks are dispatched once through homeAction.
   }
+  // A delayed release can already have fired its long action in this dispatch.
+  if (replayButtons && (longPressFiredButtons & (1u << static_cast<uint8_t>(button))) != 0) return false;
   if (button == Button::Confirm && remoteInput.button == RemoteButton::Confirm) return true;
   if (button == Button::Back && remoteInput.button == RemoteButton::Back) return true;
   if ((button == Button::NavNext || button == Button::Right) && remoteInput.button == RemoteButton::Next) return true;
@@ -486,11 +577,13 @@ bool MappedInputManager::wasReleased(const Button button) const {
 }
 
 bool MappedInputManager::wasLongPressed(const Button button, const unsigned long thresholdMs) const {
-  if (!isPressed(button)) return false;
+  // A complete hold may have arrived while rendering owned the activity.
+  const bool queuedRelease = replayButtons && mapButton(button, &HalGPIO::wasReleased);
+  if (!isPressed(button) && !queuedRelease) return false;
   const uint16_t bit = 1u << static_cast<uint8_t>(button);
   if ((longPressFiredButtons & bit) != 0 || getHeldTime() < thresholdMs) return false;
   longPressFiredButtons |= bit;
-  suppressNextRelease(button);
+  if (!queuedRelease) suppressNextRelease(button);
   if (mapButton(button, &HalGPIO::isCapacitivePagePressed)) {
     HalHaptics::longPress(SETTINGS.vibration == CrossPointSettings::VIBRATION_TOUCH_PAGE, SETTINGS.hapticIntensity);
   }
@@ -518,6 +611,7 @@ bool MappedInputManager::isPressed(const Button button) const { return mapButton
 unsigned long MappedInputManager::getHeldTime() const {
   // A mapped action has its own meaning, independent of the contact duration.
   if (hasRemoteClick() || homeAction != HomeButtonAction::Ignore) return 0;
+  if (replayButtons) return buttonFrame.heldMs;
   if (!gpio.wasAnyPressed() && !gpio.wasAnyReleased() && touchHeldOverrideValid &&
       millis() - touchHeldOverrideAt <= TOUCH_HELD_OVERRIDE_WINDOW_MS) {
     return touchHeldOverrideMs;

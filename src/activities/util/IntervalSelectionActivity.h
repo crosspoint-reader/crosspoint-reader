@@ -20,6 +20,7 @@ class IntervalSelectionActivity final : public Activity, private UiAppHost {
 
   void onEnter() override;
   void loop() override;
+  bool buffersButtons() const override { return true; }
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return readerActivity; }
 
