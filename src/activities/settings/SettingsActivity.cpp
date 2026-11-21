@@ -97,14 +97,16 @@ bool belongsToControlsGroup(const SettingInfo& setting, ControlsGroup group) {
              field == &CrossPointSettings::sideButtonFollowOrientation;
     case ControlsGroup::Touch:
       return field == &CrossPointSettings::touchReaderControls || field == &CrossPointSettings::pageTurnGesture ||
-             field == &CrossPointSettings::previousPageGesture || field == &CrossPointSettings::showReaderMenu ||
-             field == &CrossPointSettings::cornerTopLeftTap || field == &CrossPointSettings::cornerTopLeftHold ||
+             field == &CrossPointSettings::previousPageGesture || field == &CrossPointSettings::showReaderMenu;
+    case ControlsGroup::Corner:
+      return field == &CrossPointSettings::cornerTopLeftTap || field == &CrossPointSettings::cornerTopLeftHold ||
              field == &CrossPointSettings::cornerTopRightTap || field == &CrossPointSettings::cornerTopRightHold;
     case ControlsGroup::Root:
       return !belongsToControlsGroup(setting, ControlsGroup::Power) &&
              !belongsToControlsGroup(setting, ControlsGroup::Front) &&
              !belongsToControlsGroup(setting, ControlsGroup::Side) &&
-             !belongsToControlsGroup(setting, ControlsGroup::Touch);
+             !belongsToControlsGroup(setting, ControlsGroup::Touch) &&
+             !belongsToControlsGroup(setting, ControlsGroup::Corner);
   }
   return false;
 }
@@ -185,6 +187,14 @@ void SettingsActivity::rebuildSettings() {
     }
   }
 
+  // Last row of Taps and gestures: the four corner shortcuts share their own
+  // screen so the tap and gesture settings above stay short.
+#if FREEINK_CAP_TOUCH
+  if (section == SettingsSection::Controls && controlsGroup == ControlsGroup::Touch) {
+    addAction(section, StrId::STR_CORNER_ACTIONS, SettingAction::ControlsCorner);
+  }
+#endif
+
   // Clock configuration only exists where the RTC probe found hardware.
   if (halClock.isAvailable()) {
     addAction(SettingsSection::General, StrId::STR_CLOCK, SettingAction::ClockSettings);
@@ -255,6 +265,8 @@ const char* SettingsActivity::headerTitle() const {
       return tr(STR_SIDE_BUTTONS);
     case ControlsGroup::Touch:
       return tr(STR_TAPS_AND_GESTURES);
+    case ControlsGroup::Corner:
+      return tr(STR_CORNER_ACTIONS);
     case ControlsGroup::Root:
       break;
   }
@@ -362,7 +374,8 @@ void SettingsActivity::toggleSelectedSetting() {
       case SettingAction::ControlsPower:
       case SettingAction::ControlsFront:
       case SettingAction::ControlsSide:
-      case SettingAction::ControlsTouch: {
+      case SettingAction::ControlsTouch:
+      case SettingAction::ControlsCorner: {
         ControlsGroup group = ControlsGroup::Root;
         switch (setting.action) {
           case SettingAction::ControlsPower:
@@ -377,8 +390,11 @@ void SettingsActivity::toggleSelectedSetting() {
           case SettingAction::ControlsTouch:
             group = ControlsGroup::Touch;
             break;
+          case SettingAction::ControlsCorner:
+            group = ControlsGroup::Corner;
+            break;
           default:
-            break;  // Only the four group actions reach this branch.
+            break;  // Only the group actions reach this branch.
         }
         // The activity stack owns the child until Back returns to this menu.
         auto activity = makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, SettingsSection::Controls, group);

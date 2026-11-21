@@ -680,6 +680,7 @@ STR_POWER_BUTTON: "Power button"
 STR_FRONT_BUTTONS: "Front buttons"
 STR_SIDE_BUTTONS: "Side buttons"
 STR_TAPS_AND_GESTURES: "Taps and gestures"
+STR_CORNER_ACTIONS: "Corner actions"
 STR_PAGE_TURN_LONG_PRESS: "Page turn long press"
 
 STR_POWER_DOUBLE_CLICK: "Double click"

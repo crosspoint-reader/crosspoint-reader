@@ -320,4 +320,66 @@ with tempfile.TemporaryDirectory() as directory:
         check=True,
     )
     subprocess.run([str(tmp / "corner")], check=True)
-print("Passed: corner geometry, bindings, and tap dispatch during render contention and expired auto-turn")
+
+# The Controls menu groups: the four corner settings must live on their own
+# Corner screen, not on the Taps and gestures screen.
+settings_activity = (ROOT / "src/activities/settings/SettingsActivity.cpp").read_text()
+group_fn_start = settings_activity.index("bool belongsToControlsGroup(")
+group_fn = settings_activity[group_fn_start:settings_activity.index("\n}", group_fn_start) + 2]
+
+GROUPS_HARNESS = r"""
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+
+enum class ControlsGroup : uint8_t { Root, Power, Front, Side, Touch, Corner };
+struct CrossPointSettings {
+  uint8_t longPressButtonBehavior = 0, pwrBtnFootnoteBack = 0, frontButtonFollowOrientation = 0,
+          backShortToFileBrowser = 0, sideButtonLayout = 0, sideButtonFollowOrientation = 0,
+          touchReaderControls = 0, pageTurnGesture = 0, previousPageGesture = 0, showReaderMenu = 0,
+          cornerTopLeftTap = 0, cornerTopLeftHold = 0, cornerTopRightTap = 0, cornerTopRightHold = 0,
+          unrelated = 0;
+};
+struct SettingInfo {
+  uint8_t CrossPointSettings::* valuePtr = nullptr;
+  const char* key = nullptr;
+};
+
+""" + group_fn + r"""
+
+int main() {
+  const SettingInfo corners[] = {{&CrossPointSettings::cornerTopLeftTap}, {&CrossPointSettings::cornerTopLeftHold},
+                                 {&CrossPointSettings::cornerTopRightTap}, {&CrossPointSettings::cornerTopRightHold}};
+  for (const SettingInfo& setting : corners) {
+    assert(belongsToControlsGroup(setting, ControlsGroup::Corner));   // on the Corner screen
+    assert(!belongsToControlsGroup(setting, ControlsGroup::Touch));   // not cluttering Taps and gestures
+    assert(!belongsToControlsGroup(setting, ControlsGroup::Root));    // and not at the Controls root
+  }
+  const SettingInfo gestures[] = {{&CrossPointSettings::touchReaderControls}, {&CrossPointSettings::pageTurnGesture},
+                                  {&CrossPointSettings::previousPageGesture}, {&CrossPointSettings::showReaderMenu}};
+  for (const SettingInfo& setting : gestures) {
+    assert(belongsToControlsGroup(setting, ControlsGroup::Touch));
+    assert(!belongsToControlsGroup(setting, ControlsGroup::Corner));
+  }
+  const SettingInfo shared{&CrossPointSettings::longPressButtonBehavior};  // appears in both button groups
+  assert(belongsToControlsGroup(shared, ControlsGroup::Front));
+  assert(belongsToControlsGroup(shared, ControlsGroup::Side));
+  assert(!belongsToControlsGroup(shared, ControlsGroup::Touch));
+  const SettingInfo power{nullptr, "shortPwrBtn"};
+  assert(belongsToControlsGroup(power, ControlsGroup::Power));
+  assert(!belongsToControlsGroup(power, ControlsGroup::Root));
+  const SettingInfo other{&CrossPointSettings::unrelated};
+  assert(belongsToControlsGroup(other, ControlsGroup::Root));
+  assert(!belongsToControlsGroup(other, ControlsGroup::Corner));
+}
+"""
+
+with tempfile.TemporaryDirectory() as directory:
+    tmp = Path(directory)
+    (tmp / "groups.cpp").write_text(GROUPS_HARNESS)
+    subprocess.run(
+        ["c++", "-std=c++20", "-Wall", "-Wextra", "-Werror", str(tmp / "groups.cpp"), "-o", str(tmp / "groups")],
+        check=True,
+    )
+    subprocess.run([str(tmp / "groups")], check=True)
+print("Passed: corner geometry, bindings, tap dispatch, and the Corner actions menu group")

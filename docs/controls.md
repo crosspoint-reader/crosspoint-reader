@@ -9,8 +9,9 @@ options depend on the device.
   long-press settings at the bottom.
 - **Side buttons** contains the reader layout, orientation, and page-turn long press.
 - **Taps and gestures** contains **Touch controls while reading**, the page/menu
-  gestures, and the four **top-corner shortcuts** (**Top left tap**, **Top left
-  long press**, **Top right tap**, **Top right long press**).
+  gestures, and a **Corner actions** screen. **Corner actions** holds the four
+  **top-corner shortcuts** (**Top left tap**, **Top left long press**, **Top
+  right tap**, **Top right long press**).
 
 **Top-corner shortcuts** run while reading an EPUB, TXT, or Markdown book (XTC
 books do not use them). Each corner gesture is assigned independently; the
