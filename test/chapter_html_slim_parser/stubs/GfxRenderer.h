@@ -18,9 +18,12 @@ enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
 
 enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 0x0A, Black = 0x10 };
 
+class FontCacheManager;
+
 class GfxRenderer {
  public:
   int boldGlyphAdvance = 8;
+  FontCacheManager* getFontCacheManager() const { return nullptr; }
   mutable size_t fontPreparations = 0;
   std::function<void()> onFontPrepare;
   enum class TextMeasureMode { Layout, Rendered };

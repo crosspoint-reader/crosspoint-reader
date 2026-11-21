@@ -2245,14 +2245,17 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const LaidOutText& text, cons
 int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, const bool shapedText,
                                    const EpdFontFamily::Style style, const int8_t tracking,
                                    const TextMeasureMode mode) const {
-  // Advance table fast-path for SD card fonts during layout.
-  // Snap each advance like drawText. Kerning/ligature data is not resident
-  // during layout, so kerned-pair steps can still differ.
+  // Advance table fast-path for SD card fonts during layout. Snap each advance
+  // plus its kerning when positive (drawText applies all kerning), so with the
+  // style's kern table loaded a word never measures narrower than drawn.
+  // Ligature data is not resident during layout, so steps around a ligature
+  // can still differ.
   auto sdIt = sdCardFonts_.find(resolvedFontId);
   if (mode == TextMeasureMode::Layout && sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
     int widthPx = 0;
     int32_t prevAdvanceFP = 0;
     uint32_t prevCp = 0;
+    uint8_t prevKernLeftClass = 0;
     const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
     const uint8_t styleIdx = resolveSdCardStyle(*sdIt->second, style);
     const auto fontIt = fontMap.find(resolvedFontId);
@@ -2272,6 +2275,7 @@ int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, c
         }
         prevAdvanceFP = isSupSub ? (advFP + 1) / 2 : advFP;
         prevCp = cp;
+        prevKernLeftClass = 0;  // drawText does not kern next to a shaped glyph
         continue;
       }
       // RTL vowel marks (niqqud/harakat) and combining marks are zero-advance overlays in drawText.
@@ -2281,17 +2285,24 @@ int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, c
       const uint32_t smallCapCp = (style & EpdFontFamily::SMALL_CAPS) ? utf8SmallCapsUpper(cp) : cp;
       const bool isSmallCap = smallCapCp != cp;
       cp = smallCapCp;
-      int32_t advFP = sdIt->second->getAdvance(cp, styleIdx);
+      const SdCardFont::LayoutMetrics metrics = sdIt->second->getLayoutMetrics(cp, styleIdx);
+      int32_t advFP = metrics.advanceX;
       if (advFP == 0 || (syntheticGlyph::isSolid(cp) && !font.hasCodepoint(cp, style))) {
         EpdGlyph solidFallback;
         const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
         advFP = glyph ? glyph->advanceX : 0;
       }
       if (prevCp != 0) {
-        widthPx += fp4::toPixel(prevAdvanceFP) + trackingBetween(prevCp, cp, tracking);
+        // EpdFont::getKerning, which drawText uses, never kerns CJK.
+        const int32_t kernFP =
+            utf8IsCjkBreakable(prevCp) || utf8IsCjkBreakable(cp)
+                ? 0
+                : sdIt->second->getLayoutKerning(styleIdx, prevKernLeftClass, metrics.kernRightClass);
+        widthPx += fp4::toPixel(prevAdvanceFP + kernFP) + trackingBetween(prevCp, cp, tracking);
       }
       prevAdvanceFP = isSupSub ? (advFP + 1) / 2 : (isSmallCap ? scaleSmallCapAdvance(advFP) : advFP);
       prevCp = cp;
+      prevKernLeftClass = metrics.kernLeftClass;
     }
     widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
     return widthPx;

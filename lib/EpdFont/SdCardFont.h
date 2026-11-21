@@ -87,6 +87,20 @@ class SdCardFont {
   // Returns the 12.4 fixed-point advance, or 0 if not found.
   uint16_t getAdvance(uint32_t codepoint, uint8_t style) const;
 
+  // LayoutMetrics is a codepoint's advance-table entry: its 12.4 fixed-point
+  // advance (0 if not found) and its left and right kern class IDs (0 = none).
+  struct LayoutMetrics {
+    uint16_t advanceX = 0;
+    uint8_t kernLeftClass = 0;
+    uint8_t kernRightClass = 0;
+  };
+  LayoutMetrics getLayoutMetrics(uint32_t codepoint, uint8_t style) const;
+
+  // Returns the 4.4 fixed-point kerning between two kern classes from
+  // getLayoutMetrics when drawing widens that pair, and 0 otherwise: when the
+  // kerning is negative, either class is 0, or the style's kern table was not loaded.
+  int8_t getLayoutKerning(uint8_t style, uint8_t leftClass, uint8_t rightClass) const;
+
   // Returns true if advance table is populated for at least one style.
   bool hasAdvanceTable() const;
 
@@ -95,14 +109,18 @@ class SdCardFont {
   // previously fetched metrics.
   void clearCache();
 
-  // Drop the persistent advance cache. Call when unloading the SD font or
-  // when font/size/family/glyph-table state changes, or to recover a failed bitmap allocation.
+  // Drop the persistent advance cache and layout kern tables. Call when
+  // unloading the SD font or when font/size/family/glyph-table state changes,
+  // or to recover a failed bitmap allocation.
   void clearPersistentCache();
+
+  // Free the layout kern tables. The next layout pass reads them again.
+  void releaseLayoutKernTables();
 
   // Release every rebuildable cache while keeping the font loaded and usable:
   // mini glyph/kern arenas, ligature tables, the overflow ring, and
-  // the persistent advance tables. Coverage intervals stay so hasCodepoint()
-  // and reloads keep working; glyphs fault back in on demand and the next
+  // the persistent advance and layout kern tables. Coverage intervals stay so
+  // hasCodepoint() and reloads keep working; glyphs fault back in on demand and the next
   // prewarm rebuilds the arenas. For heap-critical transitions (e.g. starting
   // WiFi + the web server), where retained font data is the difference between
   // a clean start and an OOM abort.
@@ -312,12 +330,15 @@ class SdCardFont {
   uint32_t overflowCount_ = 0;
   uint32_t overflowNext_ = 0;
 
-  // Compact advance-only table for layout measurement (per-style).
-  // Built by buildAdvanceTable(), queried by getAdvance().
+  // Compact advance and kern-class table for layout measurement (per-style).
+  // Built by buildAdvanceTable(), queried by getAdvance() and getLayoutMetrics().
   struct AdvanceEntry {
     uint32_t codepoint;
     uint16_t advanceX;  // 12.4 fixed-point
+    uint8_t kernLeftClass;
+    uint8_t kernRightClass;
   };
+  static_assert(sizeof(AdvanceEntry) == 8, "kern classes must fit in the entry's padding");
   // Per-style advance table. Sorted by codepoint for binary lookup.
   // Bounded to ADVANCE_CACHE_LIMIT entries; persists across layout passes
   // (across calls to clearCache()) so repeated indexing of the same font
@@ -328,6 +349,7 @@ class SdCardFont {
   // Allocated entries. Merges fill spare capacity in place, and growth doubles it,
   // so a table moves a few times per section instead of on every layout pass.
   uint32_t advanceTableCapacity_[MAX_STYLES] = {};
+  const AdvanceEntry* advanceTableFind(uint8_t styleIdx, uint32_t codepoint) const;
   bool advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16_t* outAdvance) const;
   // Merge sortedNew (sorted by codepoint, no overlap with existing) into the
   // advance table for styleIdx, preserving sort order; cap-truncates the tail.
@@ -335,6 +357,27 @@ class SdCardFont {
   void mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount);
   // Ensures room for `needed` entries, at least doubling the capacity when it grows.
   bool growAdvanceTable(uint8_t styleIdx, uint32_t needed);
+
+  // Each style's positive kern class cells in sparse form, loaded for layout so
+  // a word never measures narrower than drawn. Negative cells are dropped: that
+  // keeps the table small, and a negatively kerned pair just measures a little
+  // wide. Row L's cells are [offsets[L-1], offsets[L]) of the column and value
+  // arrays, with columns ascending; one allocation holds all three. A table over
+  // LAYOUT_KERN_LIMIT bytes is not kept, and that style measures unkerned.
+  // Freed by releaseLayoutKernTables or clearPersistentCache.
+  static constexpr uint32_t LAYOUT_KERN_LIMIT = 16384;
+  enum class LayoutKern : uint8_t { NotLoaded, Loaded, Unavailable };
+  struct LayoutKernTable {
+    uint8_t* storage = nullptr;  // offsets, then columns, then values
+    const uint16_t* rowOffsets = nullptr;
+    const uint8_t* cols = nullptr;  // right class - 1
+    const int8_t* values = nullptr;
+  };
+  LayoutKernTable layoutKern_[MAX_STYLES] = {};
+  LayoutKern layoutKernState_[MAX_STYLES] = {};
+  void loadLayoutKernTable(uint8_t styleIdx);
+  // Sets the kern classes of `entries`, sorted by codepoint. `file` is the open .cpfont.
+  void fetchLayoutKernClasses(uint8_t styleIdx, HalFile& file, AdvanceEntry* entries, uint32_t count);
 
   Stats stats_;
   uint32_t contentHash_ = 0;
@@ -354,6 +397,8 @@ class SdCardFont {
   void freeStyleMiniKern(PerStyle& s);
   bool loadStyleLigatures(PerStyle& s);
   bool buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, uint32_t cpCount);
+  static bool readStyleKernClasses(PerStyle& s, HalFile& file, const uint32_t* codepoints, uint32_t cpCount,
+                                   uint8_t* leftClasses, uint8_t* rightClasses, EpdKernClassEntry* block);
   void applyKernLigaturePointers(PerStyle& s, EpdFontData& data) const;
   void applyGlyphMissCallback(uint8_t styleIdx);
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
