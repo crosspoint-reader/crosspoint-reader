@@ -51,7 +51,7 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - **Customization**: night mode, multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes including transparent overlays, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
-- **Localization**: 34 UI languages and counting, including CJK font fallback and RTL support.
+- **Localization**: 36 UI languages and counting, including CJK font fallback and RTL support.
 
 - **SD card plugins**: install plugins for book catalogs, downloads, and tools in the device's web interface. Enable Plugins under Settings → Connectivity to show them on Home. On-device plugins use existing firmware screens and operations. JavaScript runs in a browser on your phone or computer, and its page must stay open while it works. Plugins follow [CrossPoint's reading-focused scope](SCOPE.md#out-of-scope). See the [plugin guide](docs/sd-plugins.md).
 
