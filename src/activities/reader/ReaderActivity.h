@@ -48,8 +48,19 @@ class ReaderActivity : public Activity {
   virtual int getProgressBasisPoints() const { return getProgressPercent() * 100; }
 
   virtual bool handleFormatInput() { return false; }
-  virtual bool pageTurn(bool isForward) = 0;
-  virtual bool skipPages(int amount) { return pageTurn(amount > 0); }
+
+  bool pageTurn(bool isForward) {
+    const bool succeeded = performPageTurn(isForward);
+    notePageTurn(isForward, succeeded);
+    return succeeded;
+  }
+  virtual bool performPageTurn(bool isForward) = 0;
+  bool skipPages(int amount) {
+    const bool succeeded = performSkipPages(amount);
+    notePageTurn(false, succeeded);
+    return succeeded;
+  }
+  virtual bool performSkipPages(int amount) { return performPageTurn(amount > 0); }
   // A Bluetooth remote asks for the reader menu (true) or a new clipping (false).
   virtual bool remoteShortcut(bool /*readerMenu*/) { return false; }
   virtual bool isAtEndOfBook() const = 0;
