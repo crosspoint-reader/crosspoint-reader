@@ -88,7 +88,8 @@ namespace {
 //      marks, in the book's language; reordered vowel signs for fonts without shaping
 //      data), and TextBlocks store each complex-script word's drawn form so page turns
 //      never shape.
-constexpr uint8_t SECTION_FILE_VERSION = 76;
+// v77: Knuth-Plass DP paragraph layout, 2/3 English hyphenation, Bresenham justification, and optical margins.
+constexpr uint8_t SECTION_FILE_VERSION = 77;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

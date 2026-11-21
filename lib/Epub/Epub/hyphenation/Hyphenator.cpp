@@ -58,7 +58,8 @@ const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
 void appendFallbackIndexes(const std::vector<CodepointInfo>& cps, const size_t minPrefix, const size_t minSuffix,
                            std::vector<size_t>& out) {
   for (size_t idx = minPrefix; idx + minSuffix <= cps.size(); ++idx) {
-    if (idx == 0 || indic::syllableBreakAllowed(cps[idx - 1].value, cps[idx].value)) out.push_back(idx);
+    const uint32_t a = idx ? cps[idx - 1].value : 0, b = cps[idx].value;
+    if (!idx || (a != 0x2011 && b != 0x2011 && indic::syllableBreakAllowed(a, b))) out.push_back(idx);
   }
 }
 
@@ -83,7 +84,7 @@ std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<Cod
 
   for (size_t i = 1; i + 1 < cps.size(); ++i) {
     const uint32_t cp = cps[i].value;
-    if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i - 1].value) || !isAlphabetic(cps[i + 1].value)) {
+    if (!isExplicitHyphen(cp) || cp == 0x2011 || !isAlphabetic(cps[i - 1].value) || !isAlphabetic(cps[i + 1].value)) {
       continue;
     }
     // Offset points to the next codepoint so rendering starts after the hyphen marker.
@@ -192,7 +193,7 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   // Detect apostrophe-like separators early; used by both branches below.
   bool hasApostropheLikeSeparator = false;
   for (const auto& cp : cps) {
-    if (isApostrophe(cp.value)) {
+    if (isApostrophe(cp.value) || cp.value == 0x2011) {
       hasApostropheLikeSeparator = true;
       break;
     }
