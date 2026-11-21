@@ -818,8 +818,8 @@ void EpubReaderActivity::loop() {
   // A plugin-replaced end-of-book finish latches `bookFinished`: the handoff
   // stepped back off the end, so without the latch the finished-book handling
   // below would skip (or undo) on the very next pass. Leaving the last chapter
-  // (or paging back, see pageTurn/skipPages) resumes reading and drops it; a
-  // jump to an earlier page inside the last chapter keeps it.
+  // (or paging back or a percent jump, see pageTurn/skipPages/jumpToPercent)
+  // resumes reading and drops it.
   if (bookFinished && currentSpineIndex < epub->getSpineItemsCount() - 1) bookFinished = false;
   const bool finished = atEndOfBook || bookFinished;
 
@@ -1176,6 +1176,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   {
     RenderLock lock;
     clearDeferredReposition();
+    bookFinished = false;  // an explicit jump resumes reading, even inside the last chapter
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
     pendingPercentJump = true;
