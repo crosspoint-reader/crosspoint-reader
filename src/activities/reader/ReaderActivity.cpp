@@ -199,8 +199,7 @@ bool ReaderActivity::handleEndOfBookReached() {
   // off the EOB state so the firmware menu never renders and the app opens over
   // the last page; paging to the end again re-triggers it.
   if (pluginevents::anyEndOfBookReplacer()) {
-    onReturnFromEndOfBook();
-    requestUpdate();
+    onReturnFromEndOfBook();  // no redraw: the app covers the screen, and the reader repaints when it closes
     return true;
   }
   return false;

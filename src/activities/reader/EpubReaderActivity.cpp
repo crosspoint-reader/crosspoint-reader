@@ -1,4 +1,5 @@
 #include "EpubReaderActivity.h"
+#include "util/PluginEvents.h"
 
 #include <BlePageTurner.h>
 #include <Epub/Page.h>
@@ -927,6 +928,10 @@ void EpubReaderActivity::loop() {
   // -- a hold there must not drop a bookmark onto the suggestion screen or paint the
   // dictionary word picker over it. Anything the menu does not handle (long-press Back to
   // the file browser, say) still falls through to the regular handlers.
+  // reader.end fires here (and a replacer app takes over the end-of-book screen).
+  if (handleEndOfBookReached()) {
+    return;
+  }
   if (handleEndOfBookMenu()) {
     return;
   }
@@ -1546,6 +1551,12 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     } else {
       currentSpineIndex = epub->getSpineItemsCount();
       lastPageTurnTime = millis();
+      // A plugin replaces the end-of-book screen: hand over now, before the
+      // firmware menu is drawn; the last page stays on screen under the app.
+      if (pluginevents::anyEndOfBookReplacer()) {
+        handleEndOfBookReached();
+        return false;
+      }
       return true;
     }
   } else {
