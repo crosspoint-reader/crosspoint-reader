@@ -54,14 +54,8 @@ bool showOnDevice(const SettingInfo& setting) {
   if (setting.valuePtr == &CrossPointSettings::fadingFix && !CrossPointSettings::fadingFixSupported()) return false;
   // Merged into the Text Settings screen.
   if (setting.category == StrId::STR_CAT_READER && setting.inTextSettings) return false;
-  if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
-      SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
-      !(CrossPointSettings::hasPowerDoubleClick() && SETTINGS.doublePwrBtn == CrossPointSettings::FOOTNOTES)) {
-    return false;
-  }
   return true;
 }
-
 // End = not a row here: other categories (KOReader Sync, Status Bar, ...)
 // only group the web UI; their rows live on their own sub-screens.
 SettingsSection sectionFor(const SettingInfo& setting) {
@@ -88,7 +82,7 @@ bool belongsToControlsGroup(const SettingInfo& setting, ControlsGroup group) {
   const bool shared = field == &CrossPointSettings::longPressButtonBehavior;
   switch (group) {
     case ControlsGroup::Power:
-      return power || field == &CrossPointSettings::pwrBtnFootnoteBack;
+      return power;
     case ControlsGroup::Front:
       return shared || menu || field == &CrossPointSettings::frontButtonFollowOrientation ||
              field == &CrossPointSettings::backShortToFileBrowser;
