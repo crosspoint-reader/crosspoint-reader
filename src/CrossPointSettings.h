@@ -193,6 +193,23 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 
+  // Action bound to a top-corner tap or hold while reading an EPUB. Ordinals may
+  // still be renumbered before this ships; once released, append only, never
+  // reuse a retired value (map it to Disabled), and keep Disabled at 0.
+  enum CORNER_ACTION : uint8_t {
+    CORNER_ACTION_DISABLED = 0,
+    CORNER_ACTION_TOGGLE_BOOKMARK = 1,
+    CORNER_ACTION_BOOKMARKS = 2,
+    CORNER_ACTION_SELECT_CHAPTER = 3,
+    CORNER_ACTION_READER_MENU = 4,
+    CORNER_ACTION_DICTIONARY = 5,
+    CORNER_ACTION_FOOTNOTES = 6,
+    CORNER_ACTION_NIGHT_MODE = 7,
+    CORNER_ACTION_GO_TO_PERCENT = 8,
+    CORNER_ACTION_SYNC = 9,
+    CORNER_ACTION_COUNT
+  };
+
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
 
@@ -412,6 +429,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // up-swipe). Only surfaced on home-key boards, where Home is the capacitive
   // key and the bottom edge is free; elsewhere it stays at the Tap default.
   uint8_t showReaderMenu = READER_MENU_TAP;
+  // Top-corner touch shortcuts while reading (CORNER_ACTION). Each gesture is
+  // independent; Disabled leaves that corner to the normal tap zones.
+  // The top-left corner starts disabled: an upgrade keeps the previous tap
+  // behavior and still starts word selection on a hold there.
+  uint8_t cornerTopLeftTap = CORNER_ACTION_DISABLED;
+  uint8_t cornerTopLeftHold = CORNER_ACTION_DISABLED;
+  uint8_t cornerTopRightTap = CORNER_ACTION_TOGGLE_BOOKMARK;
+  uint8_t cornerTopRightHold = CORNER_ACTION_BOOKMARKS;
   // Frontlight quick-panel state. Category-less SettingsList entries persist
   // these without adding them to the regular Settings screen.
   uint8_t frontlightBrightness = 60;

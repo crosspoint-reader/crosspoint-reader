@@ -42,6 +42,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [Chapter Navigation](#chapter-navigation)
     - [Auto Page Turn](#auto-page-turn)
     - [Tilt Page Turn (X3 only)](#tilt-page-turn-x3-only)
+    - [Top-corner shortcuts (touch devices)](#top-corner-shortcuts-touch-devices)
     - [Links and footnotes](#links-and-footnotes)
     - [Dictionary Lookup](#dictionary-lookup)
     - [System Navigation](#system-navigation)
@@ -680,6 +681,30 @@ Auto Page Turn automatically advances pages at a set interval, useful for hands-
 ### Tilt Page Turn (X3 only)
 
 On the **Xteink X3**, the gyroscope can be used to turn pages by tilting the device. This feature is available in the Controls settings.
+
+### Top-corner shortcuts (touch devices)
+
+On a touch device, the two top corners can run shortcuts while reading an EPUB,
+TXT, or Markdown book (XTC books are not affected):
+
+| Gesture | Default action |
+| --- | --- |
+| Tap the top-left corner | Disabled (keeps the normal tap behavior) |
+| Press and hold the top-left corner | Disabled (starts word selection) |
+| Tap the top-right corner | Toggle Bookmark |
+| Press and hold the top-right corner | Bookmarks |
+
+Each corner gesture is assigned independently in **Settings → Controls → Taps
+and gestures**. The top-left corner starts disabled, so an upgrade keeps the
+normal tap behavior and word selection there. A bound tap no longer turns the
+page, and a bound long press replaces word selection in that corner: set that
+gesture to **Disabled** to restore its normal meaning. Tap and long press are
+separate, so a corner can run its shortcut on a tap and still start word
+selection on a long press (or the reverse). The target is a small square (15%
+of the shorter screen side) in each top corner, so holding a word elsewhere on
+the page still starts word selection. A link directly under the corner keeps
+priority on a tap, and the shortcuts follow **Touch controls while reading**.
+An action the device cannot perform falls back to the normal zone behavior.
 
 ### Links and footnotes
 

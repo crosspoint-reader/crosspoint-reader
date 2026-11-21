@@ -97,7 +97,9 @@ bool belongsToControlsGroup(const SettingInfo& setting, ControlsGroup group) {
              field == &CrossPointSettings::sideButtonFollowOrientation;
     case ControlsGroup::Touch:
       return field == &CrossPointSettings::touchReaderControls || field == &CrossPointSettings::pageTurnGesture ||
-             field == &CrossPointSettings::previousPageGesture || field == &CrossPointSettings::showReaderMenu;
+             field == &CrossPointSettings::previousPageGesture || field == &CrossPointSettings::showReaderMenu ||
+             field == &CrossPointSettings::cornerTopLeftTap || field == &CrossPointSettings::cornerTopLeftHold ||
+             field == &CrossPointSettings::cornerTopRightTap || field == &CrossPointSettings::cornerTopRightHold;
     case ControlsGroup::Root:
       return !belongsToControlsGroup(setting, ControlsGroup::Power) &&
              !belongsToControlsGroup(setting, ControlsGroup::Front) &&

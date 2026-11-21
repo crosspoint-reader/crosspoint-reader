@@ -204,6 +204,10 @@ class EpubReaderActivity final : public ReaderActivity {
   void activateMoreRow(int row);
   void openFootnoteSelect(bool reopenMenuOnCancel);
   void openDictionaryWordSelect();
+  // Top-corner shortcuts (touch boards only; compiled out elsewhere).
+  bool runCornerTapAction(bool endOfBook);
+  bool runCornerHoldAction(int x, int y);
+  bool runCornerAction(uint8_t action);
   // Selection to restore when returning from a dictionary lookup.
   ClipSelectionActivity::Selection pendingLookupSelection;
   ClipSelectionActivity::Selection lookupReturnSelection;

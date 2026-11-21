@@ -44,6 +44,7 @@
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderActivity.h"
+#include "ReaderCornerUtils.h"
 #include "ReaderFontSizes.h"
 #include "ReaderLineSpacing.h"
 #include "ReaderToolbarUi.h"
@@ -61,7 +62,9 @@
 #include "sync/SyncEngine.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
+#include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
+#include "util/SlideSwitch.h"
 
 namespace {
 // The X4 Pro and X4 Classic carry the X4's panel but sit outside isXteinkDevice()
@@ -871,6 +874,10 @@ void EpubReaderActivity::loop() {
   if (!atEndOfBook && SETTINGS.touchReaderControls && mappedInput.wasScreenLongPress(selectionX, selectionY)) {
     automaticPageTurnActive = false;
     pendingManualTurn = 0;
+#if FREEINK_CAP_TOUCH
+    // A configured top-corner hold runs its shortcut instead of word selection.
+    if (runCornerHoldAction(selectionX, selectionY)) return;
+#endif
     startClipSelection(selectionX, selectionY);
     return;
   }
@@ -1015,6 +1022,12 @@ void EpubReaderActivity::loop() {
       }
     }
   }
+
+#if FREEINK_CAP_TOUCH
+  // A configured top-corner tap runs its shortcut instead of the page-turn and
+  // reader-menu zones. Link taps above keep priority.
+  if (runCornerTapAction(atEndOfBook)) return;
+#endif
 
   const bool touchMenu = ReaderUtils::isTouchMenuGesture(renderer, mappedInput);
   if (confirmReleased || touchMenu) {
@@ -3597,3 +3610,146 @@ CrossPointPosition EpubReaderActivity::getCurrentPosition() const {
   }
   return localPos;
 }
+
+// ---------------------------------------------------------------------------
+// Top-corner shortcuts
+// ---------------------------------------------------------------------------
+// Kept separate from the reader-menu paths so the menu keeps its own cancel
+// behavior (return to the menu) while a corner gesture returns to the page.
+
+#if FREEINK_CAP_TOUCH
+namespace {
+// Same availability rule as the reader menu's Sync row: credentials or a
+// plugin subscriber. Without either, launching sync would power the radio for
+// no work.
+bool readerHasSyncWork() {
+  if (KOREADER_STORE.hasCredentials()) return true;
+  for (size_t event = 0; event < static_cast<size_t>(pluginevents::Event::COUNT); ++event) {
+    if (pluginevents::anySubscriber(static_cast<pluginevents::Event>(event))) return true;
+  }
+  return false;
+}
+}  // namespace
+
+bool EpubReaderActivity::runCornerAction(const uint8_t action) {
+  switch (action) {
+    case CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK:
+      // Same debounce as the Home-key bookmark action: a second tap inside the
+      // message window must not silently remove the bookmark it just added.
+      if (!showBookmarkMessage) {
+        addBookmark();
+        showBookmarkMessage = true;
+        bookmarkMessageTime = millis();
+        requestUpdate();
+      }
+      return true;
+    case CrossPointSettings::CORNER_ACTION_BOOKMARKS:
+      startActivityForResult(
+          std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath()),
+          [this](const ActivityResult& result) {
+            loadCachedBookmarks();
+            if (result.isCancelled) {
+              requestUpdate();
+            } else {
+              applyProgressChange(std::get<ProgressChangeResult>(result.data));
+            }
+          });
+      return true;
+    case CrossPointSettings::CORNER_ACTION_SELECT_CHAPTER: {
+      int tocIndex;
+      // Release the section while the chapter list is up: the list needs the
+      // heap, and picking a chapter resets the section anyway.
+      {
+        RenderLock lock;
+        tocIndex = currentTocIndex();
+        if (section) {
+          rememberCurrentContentOffset();
+          cachedSpineIndex = currentSpineIndex;
+          cachedChapterTotalPageCount = section->pageCount;
+          nextPageNumber = section->currentPage;
+        }
+        section.reset();
+      }
+      startActivityForResult(
+          std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, tocIndex),
+          [this](const ActivityResult& result) {
+            if (result.isCancelled) {
+              requestUpdate();
+              return;
+            }
+            const auto& chapterResult = std::get<ChapterResult>(result.data);
+            RenderLock lock;
+            clearDeferredReposition();
+            currentSpineIndex = chapterResult.spineIndex;
+            pendingAnchor = chapterResult.anchor;
+            nextPageNumber = 0;
+            section.reset();
+            requestUpdate();
+          });
+      return true;
+    }
+    case CrossPointSettings::CORNER_ACTION_READER_MENU:
+      if (usesToolbarMenu() && section) {
+        openOverlay(Overlay::Toolbar);
+      } else {
+        openReaderMenu();
+      }
+      return true;
+    case CrossPointSettings::CORNER_ACTION_DICTIONARY:
+      // Without a dictionary, or before the section is loaded, there is nothing
+      // to look up: fall through so the gesture keeps its normal meaning.
+      if (SETTINGS.dictionaryName[0] == '\0' || !section) return false;
+      openDictionaryWordSelect();
+      return true;
+    case CrossPointSettings::CORNER_ACTION_FOOTNOTES:
+      if (!section || currentPageFootnotes.empty()) return false;
+      openFootnoteSelect(false);
+      return true;
+    case CrossPointSettings::CORNER_ACTION_NIGHT_MODE:
+      if (slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE)) return false;
+      SETTINGS.screenInverted = SETTINGS.screenInverted == 0 ? 1 : 0;
+      SETTINGS.saveToFile();
+      requestUpdate();
+      return true;
+    case CrossPointSettings::CORNER_ACTION_GO_TO_PERCENT: {
+      const int initialPercent = bookPercentFor(chapterPosition());
+      startActivityForResult(
+          std::make_unique<EpubReaderPercentSelectionActivity>(renderer, mappedInput, initialPercent),
+          [this](const ActivityResult& result) {
+            if (result.isCancelled) {
+              requestUpdate();
+            } else {
+              jumpToPercent(std::get<PercentResult>(result.data).percent);
+            }
+          });
+      return true;
+    }
+    case CrossPointSettings::CORNER_ACTION_SYNC:
+      if (!readerHasSyncWork()) return false;
+      launchKOReaderSync();
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool EpubReaderActivity::runCornerHoldAction(const int x, const int y) {
+  const uint8_t action = ReaderCornerUtils::cornerActionAt(renderer, x, y, /*hold=*/true);
+  if (action == CrossPointSettings::CORNER_ACTION_DISABLED || !runCornerAction(action)) return false;
+  haptic_feedback::touchAction(true);
+  return true;
+}
+
+bool EpubReaderActivity::runCornerTapAction(const bool endOfBook) {
+  if (endOfBook || !SETTINGS.touchReaderControls || !mappedInput.hasTouch()) return false;
+  int x = 0;
+  int y = 0;
+  if (!mappedInput.wasScreenTapped(x, y)) return false;
+  const uint8_t action = ReaderCornerUtils::cornerActionAt(renderer, x, y, /*hold=*/false);
+  if (action == CrossPointSettings::CORNER_ACTION_DISABLED || !runCornerAction(action)) return false;
+  automaticPageTurnActive = false;
+  pendingManualTurn = 0;
+  haptic_feedback::touchAction();
+  return true;
+}
+#endif  // FREEINK_CAP_TOUCH
