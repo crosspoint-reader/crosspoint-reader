@@ -171,13 +171,9 @@ void SettingsActivity::rebuildSettings() {
     if (section == SettingsSection::Controls && setting.valuePtr == &CrossPointSettings::longPressButtonBehavior) {
       setting.nameId = StrId::STR_PAGE_TURN_LONG_PRESS;
     }
-#if CROSSPOINT_VECTOR_FONTS
     const bool isUiTheme = setting.nameId == StrId::STR_UI_THEME;
-#endif
     settings.push_back(std::move(setting));
-#if CROSSPOINT_VECTOR_FONTS
     if (isUiTheme) addAction(SettingsSection::Display, StrId::STR_UI_FONT, SettingAction::UiFont);
-#endif
   }
 
   if (section == SettingsSection::Controls && controlsGroup == ControlsGroup::Front) {
@@ -500,27 +496,19 @@ void SettingsActivity::toggleSelectedSetting() {
                                  rebuildSettings();
                                });
         break;
-#if CROSSPOINT_VECTOR_FONTS
       case SettingAction::UiFont: {
-        // Only vector families can back the whole-UI font: they rasterize at
-        // any UI size (see SdCardFontSystem::applyUiFont). "Default" is the
-        // built-in, and selecting it just clears the setting.
         const auto& families = sdFontSystem.registry().getFamilies();
         std::vector<std::string> options;
-        std::vector<std::string> names;  // family name for each option after "Default"
+        options.reserve(families.size() + 1);
         options.emplace_back(tr(STR_DEFAULT_VALUE));
         int current = 0;
         for (const auto& fam : families) {
-          if (!fam.vector) continue;
-          // Only offer names that fit the setting exactly: a truncated name would
-          // neither match here (current-selection) nor in applyUiFont.
-          if (fam.name.size() >= sizeof(SETTINGS.uiFontFamilyName)) continue;
-          names.push_back(fam.name);
+          if (!SdCardFontSystem::supportsUiFont(fam)) continue;
+          if (fam.name == sdFontSystem.activeUiFontName()) current = static_cast<int>(options.size());
           options.push_back(fam.name);
-          if (fam.name == sdFontSystem.activeUiFontName()) current = static_cast<int>(names.size());
         }
-        optionPopup.show(StrId::STR_UI_FONT, options, current, [this, names](const int idx) {
-          const char* name = idx == 0 ? "" : names[idx - 1].c_str();
+        optionPopup.show(StrId::STR_UI_FONT, std::move(options), current, [this](const int idx) {
+          const char* name = idx == 0 ? "" : optionPopup.optionLabel(idx);
           bool applied;
           {
             RenderLock lock;
@@ -530,12 +518,14 @@ void SettingsActivity::toggleSelectedSetting() {
             snprintf(previous, sizeof(previous), "%s", sdFontSystem.activeUiFontName());
             applied = sdFontSystem.applyUiFont(renderer, name);
             if (!applied && previous[0] != '\0') sdFontSystem.applyUiFont(renderer, previous);
+            resetUi();
+            if (!applied) {
+              const char* const errorOptions[] = {tr(STR_OK_BUTTON)};
+              optionPopup.showMessage("", tr(STR_UI_FONT_LOAD_FAILED), errorOptions, 1, 0, nullptr);
+              redrawFontPopupBackground = true;
+            }
           }
-          if (!applied) {
-            const char* const options[] = {tr(STR_OK_BUTTON)};
-            optionPopup.showMessage("", tr(STR_UI_FONT_LOAD_FAILED), options, 1, 0, nullptr);
-            return;
-          }
+          if (!applied) return;
           if (strcmp(name, SETTINGS.uiFontFamilyName) != 0) {
             snprintf(SETTINGS.uiFontFamilyName, sizeof(SETTINGS.uiFontFamilyName), "%s", name);
             SETTINGS.saveToFile();
@@ -545,7 +535,6 @@ void SettingsActivity::toggleSelectedSetting() {
         requestUpdate();
         return;
       }
-#endif
       case SettingAction::Plugins: {
         static constexpr StrId OPTIONS[] = {StrId::STR_ENABLED, StrId::STR_DISABLED, StrId::STR_CANCEL};
         optionPopup.show(StrId::STR_PLUGINS, OPTIONS, 3, SETTINGS.pluginsEnabled ? 0 : 1, [this](const int idx) {
@@ -632,12 +621,10 @@ void SettingsActivity::openSleepTimeoutPicker() {
 }
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
-#if CROSSPOINT_VECTOR_FONTS
   if (setting.action == SettingAction::UiFont) {
     const char* name = sdFontSystem.activeUiFontName();
     return name[0] == '\0' ? tr(STR_DEFAULT_VALUE) : name;
   }
-#endif
   if (setting.action == SettingAction::Plugins) return SETTINGS.pluginsEnabled ? tr(STR_ENABLED) : tr(STR_DISABLED);
   if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Guard like the valueGetter branch below: a corrupt/migrated settings
@@ -724,6 +711,11 @@ void SettingsActivity::drawFooter() {
 }
 
 void SettingsActivity::render(RenderLock&& lock) {
+  if (std::exchange(redrawFontPopupBackground, false) && optionPopup.isActive()) {
+    renderer.clearScreen();
+    drawChrome();
+    renderUi();
+  }
   if (optionPopup.processRender(renderer, mappedInput)) return;
   UiListActivity::render(std::move(lock));
 }

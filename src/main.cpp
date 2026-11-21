@@ -661,10 +661,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
 
-#if CROSSPOINT_VECTOR_FONTS
-  sdFontSystem.setBuiltinUiFonts(&smallFontFamily, &ui10FontFamily, &ui12FontFamily);
-#endif
-  sdFontSystem.begin(renderer);
+  sdFontSystem.begin(renderer, smallFontFamily, ui10FontFamily, ui12FontFamily);
 
   LOG_DBG("MAIN", "Fonts setup");
 }

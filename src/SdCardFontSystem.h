@@ -32,23 +32,21 @@ class SdCardFontSystem {
   SdCardFontSystem(const SdCardFontSystem&) = delete;
   SdCardFontSystem& operator=(const SdCardFontSystem&) = delete;
   /// Discover SD card fonts and load user's saved selection. Call once during setup.
-  void begin(GfxRenderer& renderer);
+  void begin(GfxRenderer& renderer, const EpdFontFamily& small, const EpdFontFamily& ui10, const EpdFontFamily& ui12);
 
   /// Ensure the correct SD font family is loaded for the current settings.
   /// Call before entering the reader or after settings change.
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).
   void ensureLoaded(GfxRenderer& renderer);
 
-#if CROSSPOINT_VECTOR_FONTS
-  /// Remember the built-in UI font families (SMALL/UI_10/UI_12) so applyUiFont()
-  /// can restore them when no SD UI font is selected. Call once at boot.
-  void setBuiltinUiFonts(EpdFontFamily* small, EpdFontFamily* ui10, EpdFontFamily* ui12);
+  static bool supportsUiFont(const SdCardFontFamilyInfo& family);
 
   /// Bind the UI font to an installed family or the built-ins (empty name).
   /// Returns false on failure, with the built-ins restored. The caller holds
   /// RenderLock after startup.
   bool applyUiFont(GfxRenderer& renderer, const char* name);
-  const char* activeUiFontName() const { return uiTtfFailed() ? "" : activeUiFontName_; }
+  const char* activeUiFontName() const;
+#if CROSSPOINT_VECTOR_FONTS
   bool uiTtfFailed() const { return uiTtfFailed_.load(std::memory_order_relaxed); }
   void recoverUiFont(GfxRenderer& renderer);
 #endif
@@ -56,6 +54,7 @@ class SdCardFontSystem {
   /// Release SD font handles and restore built-ins before storage leaves firmware control.
   /// The caller holds RenderLock.
   void releaseForStorage(GfxRenderer& renderer);
+  /// Re-scan after file transfers, including writes outside the font-specific routes.
   /// The caller holds RenderLock.
   void reloadUiFontFromCard(GfxRenderer& renderer);
 
@@ -80,9 +79,9 @@ class SdCardFontSystem {
   }
 
  private:
-#if CROSSPOINT_VECTOR_FONTS
+  bool loadUiCpfonts(const SdCardFontFamilyInfo& family, GfxRenderer& renderer);
   void restoreBuiltinUiFonts(GfxRenderer& renderer);
-#endif
+  void clearCpfontUiFallbacks(GfxRenderer& renderer);
 
   // Load the active SD family at the built-in UI point sizes and register each
   // as a size-matched script fallback for the corresponding UI font, so book
@@ -97,7 +96,8 @@ class SdCardFontSystem {
   // Load/refresh the selected TTF family at the current reader size, register
   // it with the renderer, and track it so ensureSdCardFontReady() rebuilds its
   // glyph set per page. registryWasDirty forces a reload even if unchanged.
-  void loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, bool registryWasDirty);
+  void loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, bool registryWasDirty,
+                     bool setupFallbacks = true);
   // Unregister + free the active TTF font (and its UI-size fallbacks), if any.
   void unloadTtf(GfxRenderer& renderer);
   // Register the loaded TTF at each built-in UI size as a script fallback, so UI
@@ -106,7 +106,7 @@ class SdCardFontSystem {
   void setupTtfUiFallbacks(GfxRenderer& renderer);
   void clearTtfUiFallbacks(GfxRenderer& renderer);
   // Style source arrays hold 4 entries: 0=regular (required), 1=bold,
-  // 2=italic, 3=bold-italic. The reader family and the UI font each own one.
+  // 2=italic, 3=bold-italic. The reader and UI can share the same slot.
   struct TtfSource;
   // Open one style source file (resident if small, streamed if large).
   // Returns false on open/read failure.
@@ -147,15 +147,13 @@ class SdCardFontSystem {
 
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
+  SdCardFontManager uiCpfonts_;
+  int cpfontUiIds_[3] = {};
+  const EpdFontFamily* builtinUiFonts_[3] = {};
+  char activeUiFontName_[SdCardFontRegistry::FAMILY_NAME_CAPACITY] = "";
   std::atomic<bool> registryDirty_{false};
 
 #if CROSSPOINT_VECTOR_FONTS
-  // Built-in UI font families, remembered via setBuiltinUiFonts() so applyUiFont()
-  // can restore them when SETTINGS.uiFontFamilyName is empty.
-  EpdFontFamily* builtinUiSmall_ = nullptr;
-  EpdFontFamily* builtinUi10_ = nullptr;
-  EpdFontFamily* builtinUi12_ = nullptr;
-  char activeUiFontName_[32] = "";
   std::atomic<bool> uiTtfFailed_{false};
 
   // One style source file. SMALL files are read fully into `bytes` (resident,
@@ -169,12 +167,13 @@ class SdCardFontSystem {
     bool streamed = false;
     unsigned long size = 0;
     bool present = false;
+    std::atomic<bool>* uiReadFailed = nullptr;
   };
 
-  // Active TTF font (at most one reader-size vector family loaded at a time).
-  std::unique_ptr<TtfEpdFont> ttf_;
-  // Up to 4 style sources: 0=regular (required), 1=bold, 2=italic, 3=bold-italic.
+  // Sources outlive the FreeType faces that borrow them. The reader and UI
+  // can each use a slot or share one slot when both use the same family.
   TtfSource sourceSlots_[2][4];
+  std::unique_ptr<TtfEpdFont> ttf_;
   TtfSource* ttfSources_ = nullptr;
   std::string ttfFamily_;     // loaded vector family name ("" = none)
   int ttfFontId_ = 0;         // renderer font id for ttf_ (0 = none)

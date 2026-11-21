@@ -64,11 +64,10 @@ class OptionPopup {
     message = messageStr ? messageStr : "";
   }
 
-  void show(StrId titleId, const std::vector<std::string>& options, int currentIndex,
-            std::function<void(int)> onSelect) {
+  void show(StrId titleId, std::vector<std::string> options, int currentIndex, std::function<void(int)> onSelect) {
     title = I18N.get(titleId);
     headline.clear();
-    ownedStrings = options;
+    ownedStrings = std::move(options);
     activate(currentIndex, std::move(onSelect));
   }
 
@@ -294,6 +293,7 @@ class OptionPopup {
   }
 
   bool isActive() const { return active; }
+  const char* optionLabel(int index) const { return ownedStrings[index].c_str(); }
 
   // Close without firing the callback (the surface under the popup is going
   // away, e.g. its host screen closes from outside the popup's own input).

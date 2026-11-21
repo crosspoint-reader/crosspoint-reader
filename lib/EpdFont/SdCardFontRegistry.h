@@ -54,6 +54,7 @@ struct SdCardFontFamilyInfo {
 class SdCardFontRegistry {
  public:
   static constexpr int MAX_SD_FAMILIES = 128;
+  static constexpr size_t FAMILY_NAME_CAPACITY = 128;
   // Two top-level roots are scanned at discovery time. Hidden is preferred
   // when creating new installs; both are read from if present.
   static constexpr const char* FONTS_DIR_HIDDEN = "/.fonts";

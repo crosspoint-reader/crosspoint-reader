@@ -394,7 +394,7 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
     return;
   }
 
-  char nameBuffer[128];
+  char nameBuffer[FAMILY_NAME_CAPACITY];
   while (true) {
     HalFile entry = root.openNextFile();
     if (!entry) break;
