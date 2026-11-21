@@ -82,9 +82,6 @@ struct AugmentedWord {
   int32_t byteToCharIndex[MAX_WORD_BYTES];
   size_t byteLen = 0;
   size_t charCount_ = 0;
-
-  bool empty() const { return byteLen == 0; }
-  size_t charCount() const { return charCount_; }
 };
 
 // Encode a single Unicode codepoint into UTF-8 and append to word.bytes[].
