@@ -58,17 +58,51 @@ toggle_start = activity.index("bool EpubReaderActivity::addBookmark(")
 capture_start = activity.index("    RenderLock lock;", toggle_start)
 capture = activity[capture_start:activity.index("    const int pageCount", capture_start)]
 case_start = activity.index("    case CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK:", activity.index(
-    "bool EpubReaderActivity::runCornerAction("))
+    "bool EpubReaderActivity::runCornerActionAt("))
 bookmark_case = activity[case_start:activity.index("    case CrossPointSettings::CORNER_ACTION_BOOKMARKS:", case_start)]
+dict_start = activity.index("    case CrossPointSettings::CORNER_ACTION_DICTIONARY:", case_start)
+dictionary_case = activity[dict_start:activity.index("    case CrossPointSettings::CORNER_ACTION_FOOTNOTES:", dict_start)]
+corner_feedback = activity[activity.index("  if (!hold)", dict_start):activity.index("\n}", dict_start)]
+selection_start = activity.index("bool selectionWindowHasText(")
+selection_text = activity[selection_start:activity.index("\n}", selection_start) + 2]
 
 HARNESS = r"""
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <set>
 #include <utility>
+#include <vector>
 #define FREEINK_CAP_TOUCH 1
+
+// Minimal page model so the real selectionWindowHasText() can be compiled and
+// exercised; the reader's Page/PageLine provide the same getTag/valid/wordCount.
+enum PageElementTag { TAG_PageLine, TAG_PageImage };
+struct TextBlock {
+  bool valid_ = true;
+  int words = 1;
+  bool valid() const { return valid_; }
+  uint16_t wordCount() const { return static_cast<uint16_t>(words); }
+};
+struct PageElement {
+  virtual ~PageElement() = default;
+  virtual PageElementTag getTag() const = 0;
+};
+struct PageLine : PageElement {
+  TextBlock block;
+  PageElementTag getTag() const override { return TAG_PageLine; }
+  const TextBlock* getBlock() const { return &block; }
+};
+struct PageImage : PageElement {
+  PageElementTag getTag() const override { return TAG_PageImage; }
+};
+struct Page {
+  std::vector<std::unique_ptr<PageElement>> elements;
+};
+
+""" + selection_text + r"""
 
 struct GfxRenderer {
   int w = 480;
@@ -79,6 +113,7 @@ struct GfxRenderer {
 
 struct CrossPointSettings {
   bool touchReaderControls = true;
+  char dictionaryName[2] = "d";
 """ + enum_block + "\n" + default_fields + r"""
 };
 static CrossPointSettings SETTINGS;
@@ -109,7 +144,7 @@ struct RenderLock {
   static bool peek() { return busy; }
 };
 namespace ReaderUtils { bool isTouchMenuGesture(GfxRenderer&, MappedInputManager&) { return false; } }
-namespace haptic_feedback { void touchAction() { ++haptics; } }
+namespace haptic_feedback { void touchAction(bool = false) { ++haptics; } }
 struct Link { const char* href; } currentPageLinks{"#note"};
 constexpr int currentPageLinkMarginLeft = 0, currentPageLinkMarginTop = 0;
 namespace EpubReaderUtils {
@@ -119,9 +154,9 @@ const Link* linkAtPoint(const Link& link, int x, int y, int, int) {
 }
 }
 void navigateToHref(const std::string& href, bool) { assert(!locked && href == "#note"); ++linksFollowed; }
-bool runCornerTapAction(int x, int y) {
+bool runCornerActionAt(int x, int y, bool hold) {
   assert(!locked);
-  if (!cornerActionAt(renderer, x, y, false)) return false;
+  if (!cornerActionAt(renderer, x, y, hold)) return false;
   ++cornersRun;
   return true;
 }
@@ -130,6 +165,12 @@ void tapWithTimerDue() {
 }
 
 struct BookmarkReader {
+  enum class SelectionResult { Unavailable, Consumed, Opened };
+  struct ClipSelectionActivity { enum class Mode { Lookup }; };
+  SelectionResult lookup = SelectionResult::Unavailable;
+  SelectionResult startClipSelection(int, int, ClipSelectionActivity::Mode) { return lookup; }
+  bool automaticPageTurnActive = true;
+  int pendingManualTurn = 1;
   struct { int currentPage = 0; } loaded;
   decltype(loaded)* section = &loaded;
   bool epub = true, showBookmarkMessage = false;
@@ -146,11 +187,12 @@ struct BookmarkReader {
     showBookmarkMessage = showConfirmation;
     return true;
   }
-  bool tap() {
-    switch (CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK) {
-""" + bookmark_case + r"""
+  bool tap(int action = CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK, bool hold = false) {
+    switch (action) {
+""" + bookmark_case + dictionary_case + r"""
     default: return false;
     }
+""" + corner_feedback + r"""
   }
 };
 
@@ -164,6 +206,44 @@ int main() {
   assert(reader.tap() && reader.bookmarks.count({1, 1}));  // same page number in another chapter
   reader.showBookmarkMessage = false;
   assert(reader.tap() && reader.tap() && !reader.bookmarks.count({1, 1}));  // repeat after removal
+  for (bool hold : {false, true}) {
+    BookmarkReader dictionary;
+    const int before = haptics;
+    const int action = CrossPointSettings::CORNER_ACTION_DICTIONARY;
+    assert(!dictionary.tap(action, hold));  // unavailable: allow normal fallback
+    dictionary.lookup = BookmarkReader::SelectionResult::Consumed;
+    assert(dictionary.tap(action, hold) && dictionary.automaticPageTurnActive && haptics == before);
+    dictionary.lookup = BookmarkReader::SelectionResult::Opened;
+    assert(dictionary.tap(action, hold) && haptics == before + 1);
+    assert(dictionary.automaticPageTurnActive == hold);
+  }
+  haptics = 0;
+
+  // Corner Look Up must not report success when the window has nothing to
+  // select: the picker would cancel on entry.
+  {
+    std::vector<std::unique_ptr<Page>> window;
+    assert(!selectionWindowHasText(window));  // empty window
+    window.push_back(std::make_unique<Page>());  // page with no elements
+    assert(!selectionWindowHasText(window));
+    window.back()->elements.push_back(std::make_unique<PageImage>());
+    assert(!selectionWindowHasText(window));  // image-only page
+    auto line = std::make_unique<PageLine>();
+    line->block.valid_ = false;
+    line->block.words = 5;
+    window.back()->elements.push_back(std::move(line));
+    assert(!selectionWindowHasText(window));  // invalid block
+    line = std::make_unique<PageLine>();
+    line->block.words = 0;
+    window.back()->elements.push_back(std::move(line));
+    assert(!selectionWindowHasText(window));  // empty line
+    auto second = std::make_unique<Page>();  // text on a later page in the window
+    auto words = std::make_unique<PageLine>();
+    words->block.words = 2;
+    second->elements.push_back(std::move(words));
+    window.push_back(std::move(second));
+    assert(selectionWindowHasText(window));
+  }
 
   // The target is 15% of the shorter dimension, identical in both orientations.
   GfxRenderer x4{480, 800};

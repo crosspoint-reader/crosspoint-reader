@@ -103,6 +103,20 @@ Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, const PageL
               width, renderer.getLineHeight(wordFont)};
 }
 
+// True when at least one page in the window can produce a word selection. The
+// picker cancels on an empty selection, so callers that give success feedback
+// (the corner Look Up shortcut) check first instead of trusting the launch.
+bool selectionWindowHasText(const std::vector<std::unique_ptr<Page>>& pages) {
+  for (const auto& page : pages) {
+    for (const auto& element : page->elements) {
+      if (element->getTag() != TAG_PageLine) continue;
+      const auto* block = static_cast<const PageLine&>(*element).getBlock();
+      if (block && block->valid() && block->wordCount() > 0) return true;
+    }
+  }
+  return false;
+}
+
 int clampPercent(int percent) {
   if (percent < 0) {
     return 0;
@@ -548,11 +562,13 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   startClipSelection(-1, -1, ClipSelectionActivity::Mode::Lookup);
 }
 
-void EpubReaderActivity::startClipSelection(const int initialX, const int initialY,
-                                            const ClipSelectionActivity::Mode mode) {
+EpubReaderActivity::SelectionResult EpubReaderActivity::startClipSelection(const int initialX, const int initialY,
+                                                                           const ClipSelectionActivity::Mode mode) {
   const auto restoreSelection = pendingLookupSelection;
   pendingLookupSelection = {};
-  if (!section || !epub || section->currentPage < 0 || section->currentPage >= section->pageCount) return;
+  RenderLock pageLock;
+  if (!section || !epub || section->currentPage < 0 || section->currentPage >= section->pageCount)
+    return SelectionResult::Unavailable;
 
   const int pageNumber = section->currentPage;
   const uint16_t pageCount = section->pageCount;
@@ -564,7 +580,6 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
     auto page = section->loadPage(pageNumber + pageOffset);
     if (!page) break;
     if (pageOffset == 0 && initialX >= 0 && CLIPPINGS.hasClippings()) {
-      RenderLock lock;
       const int clippingIndex = clippingAtPoint(*page, initialX, initialY);
       if (clippingIndex >= 0) {
         const bool removed = CLIPPINGS.removeClippingAt(static_cast<size_t>(clippingIndex));
@@ -573,7 +588,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         showClippingMessage = true;
         clippingMessageTime = millis();
         requestUpdate();
-        return;
+        return SelectionResult::Consumed;
       }
     }
     pages.push_back(std::move(page));
@@ -581,13 +596,21 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
   if (pages.empty()) {
     LOG_ERR("CLIP", "Failed to load page %d for clipping selection", pageNumber);
     requestUpdate();
-    return;
+    return SelectionResult::Consumed;
+  }
+
+  // A page with no selectable text (for example a full-page image) makes the
+  // picker cancel on entry; report the failure now so the corner shortcut
+  // consumes the tap without claiming success or disabling auto-turn.
+  if (!selectionWindowHasText(pages)) {
+    LOG_DBG("CLIP", "No selectable text on page %d for clipping selection", pageNumber);
+    return SelectionResult::Consumed;
   }
 
   if (buildViewportWidth == 0 || buildViewportHeight == 0) {
     LOG_ERR("CLIP", "Cannot anchor clipping before the reader viewport is initialized");
     requestUpdate();
-    return;
+    return SelectionResult::Consumed;
   }
   const uint32_t layoutSignature =
       readerRenderSpecSignature(SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight));
@@ -602,6 +625,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
   if (tocIndex >= 0) chapterTitle = epub->getTocItem(tocIndex).title;
   std::string bookTitle = epub->getTitle();
   std::string author = epub->getAuthor();
+  pageLock.unlock();
 
   auto activity = makeUniqueNoThrow<ClipSelectionActivity>(renderer, mappedInput, std::move(pages), marginLeft,
                                                            marginTop, initialX, initialY, mode);
@@ -609,7 +633,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
   if (!activity) {
     LOG_ERR("CLIP", "Failed to allocate clipping selection activity");
     requestUpdate();
-    return;
+    return SelectionResult::Consumed;
   }
   startActivityForResult(std::move(activity), [this, spineIndex, pageNumber, pageCount, layoutSignature,
                                                bookTitle = std::move(bookTitle), author = std::move(author),
@@ -700,6 +724,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
     clippingMessageTime = millis();
     requestUpdate();
   });
+  return SelectionResult::Opened;
 }
 
 bool EpubReaderActivity::openFootnoteSelect(const bool reopenMenuOnCancel) {
@@ -887,7 +912,7 @@ void EpubReaderActivity::loop() {
     pendingManualTurn = 0;
 #if FREEINK_CAP_TOUCH
     // A configured top-corner hold runs its shortcut instead of word selection.
-    if (runCornerHoldAction(selectionX, selectionY)) return;
+    if (runCornerActionAt(selectionX, selectionY, /*hold=*/true)) return;
 #endif
     startClipSelection(selectionX, selectionY);
     return;
@@ -928,7 +953,7 @@ void EpubReaderActivity::loop() {
         return;
       }
 #if FREEINK_CAP_TOUCH
-      if (runCornerTapAction(touchX, touchY)) return;
+      if (runCornerActionAt(touchX, touchY, /*hold=*/false)) return;
 #endif
     }
   }
@@ -3472,6 +3497,8 @@ void EpubReaderActivity::prepareForSleep() {
 }
 
 void EpubReaderActivity::loadCachedBookmarks() {
+  RenderLock lock;
+  showBookmarkMessage = false;
   cachedBookmarks.clear();
   if (!epub) {
     currentPageBookmarked = false;
@@ -3512,8 +3539,8 @@ bool EpubReaderActivity::addBookmark(const bool showConfirmation) {
       entry.computedSpineIndex = position.spineIndex;
       entry.computedChapterPageCount = position.totalPages;
       entry.computedChapterProgress = position.pageNumber;
-      entry.hasVisibleTextOffset = currentPageVisibleOffset.has_value() || position.hasVisibleTextOffset;
-      entry.visibleTextOffset = currentPageVisibleOffset.value_or(position.visibleTextOffset);
+      entry.hasVisibleTextOffset = position.hasVisibleTextOffset;
+      entry.visibleTextOffset = position.visibleTextOffset;
     }
   }
   if (!removedBookmark) {
@@ -3639,7 +3666,8 @@ bool readerHasSyncWork() {
 }
 }  // namespace
 
-bool EpubReaderActivity::runCornerAction(const uint8_t action) {
+bool EpubReaderActivity::runCornerActionAt(const int x, const int y, const bool hold) {
+  const uint8_t action = ReaderCornerUtils::cornerActionAt(renderer, x, y, hold);
   switch (action) {
     case CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK:
       if (showBookmarkMessage) {
@@ -3647,9 +3675,10 @@ bool EpubReaderActivity::runCornerAction(const uint8_t action) {
         if (!section) return false;
         if (bookmarkMessagePosition.spineIndex == currentSpineIndex &&
             bookmarkMessagePosition.pageNumber == section->currentPage)
-          return true;
+          break;
       }
-      return addBookmark(/*showConfirmation=*/true);
+      if (!addBookmark(/*showConfirmation=*/true)) return false;
+      break;
     case CrossPointSettings::CORNER_ACTION_BOOKMARKS:
       startActivityForResult(
           std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath()),
@@ -3661,7 +3690,7 @@ bool EpubReaderActivity::runCornerAction(const uint8_t action) {
               applyProgressChange(std::get<ProgressChangeResult>(result.data));
             }
           });
-      return true;
+      break;
     case CrossPointSettings::CORNER_ACTION_SELECT_CHAPTER: {
       int tocIndex;
       // Release the section while the chapter list is up: the list needs the
@@ -3693,7 +3722,7 @@ bool EpubReaderActivity::runCornerAction(const uint8_t action) {
             section.reset();
             requestUpdate();
           });
-      return true;
+      break;
     }
     case CrossPointSettings::CORNER_ACTION_READER_MENU:
       if (usesToolbarMenu() && section) {
@@ -3701,25 +3730,35 @@ bool EpubReaderActivity::runCornerAction(const uint8_t action) {
       } else {
         openReaderMenu();
       }
-      return true;
+      break;
     case CrossPointSettings::CORNER_ACTION_DICTIONARY:
-      // Without a dictionary, or before the section is loaded, there is nothing
-      // to look up: fall through so the gesture keeps its normal meaning.
-      if (SETTINGS.dictionaryName[0] == '\0' || !section) return false;
-      openDictionaryWordSelect();
-      return true;
+      if (SETTINGS.dictionaryName[0] == '\0') return false;
+      switch (startClipSelection(-1, -1, ClipSelectionActivity::Mode::Lookup)) {
+        case SelectionResult::Unavailable:
+          return false;
+        case SelectionResult::Consumed:
+          return true;  // Don't retry a failed lookup as a page turn or word selection.
+        case SelectionResult::Opened:
+          break;
+      }
+      break;
     case CrossPointSettings::CORNER_ACTION_FOOTNOTES:
       // openFootnoteSelect() reports whether it acted: no footnotes, or a render
       // holding the lock, falls through to the normal gesture meaning.
-      return openFootnoteSelect(false);
+      if (!openFootnoteSelect(false)) return false;
+      break;
     case CrossPointSettings::CORNER_ACTION_NIGHT_MODE:
       if (slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE)) return false;
       SETTINGS.screenInverted = SETTINGS.screenInverted == 0 ? 1 : 0;
       SETTINGS.saveToFile();
       requestUpdate();
-      return true;
+      break;
     case CrossPointSettings::CORNER_ACTION_GO_TO_PERCENT: {
-      const int initialPercent = bookPercentFor(chapterPosition());
+      int initialPercent;
+      {
+        RenderLock lock;
+        initialPercent = bookPercentFor(chapterPosition());
+      }
       startActivityForResult(
           std::make_unique<EpubReaderPercentSelectionActivity>(renderer, mappedInput, initialPercent),
           [this](const ActivityResult& result) {
@@ -3729,30 +3768,20 @@ bool EpubReaderActivity::runCornerAction(const uint8_t action) {
               jumpToPercent(std::get<PercentResult>(result.data).percent);
             }
           });
-      return true;
+      break;
     }
     case CrossPointSettings::CORNER_ACTION_SYNC:
       if (!readerHasSyncWork()) return false;
       launchKOReaderSync();
-      return true;
+      break;
     default:
       return false;
   }
-}
-
-bool EpubReaderActivity::runCornerHoldAction(const int x, const int y) {
-  const uint8_t action = ReaderCornerUtils::cornerActionAt(renderer, x, y, /*hold=*/true);
-  if (action == CrossPointSettings::CORNER_ACTION_DISABLED || !runCornerAction(action)) return false;
-  haptic_feedback::touchAction(true);
-  return true;
-}
-
-bool EpubReaderActivity::runCornerTapAction(const int x, const int y) {
-  const uint8_t action = ReaderCornerUtils::cornerActionAt(renderer, x, y, /*hold=*/false);
-  if (action == CrossPointSettings::CORNER_ACTION_DISABLED || !runCornerAction(action)) return false;
-  automaticPageTurnActive = false;
-  pendingManualTurn = 0;
-  haptic_feedback::touchAction();
+  if (!hold) {
+    automaticPageTurnActive = false;
+    pendingManualTurn = 0;
+  }
+  haptic_feedback::touchAction(hold);
   return true;
 }
 #endif  // FREEINK_CAP_TOUCH

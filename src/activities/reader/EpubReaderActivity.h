@@ -211,14 +211,13 @@ class EpubReaderActivity final : public ReaderActivity {
   bool openFootnoteSelect(bool reopenMenuOnCancel);
   void openDictionaryWordSelect();
   // Top-corner shortcuts (touch boards only; compiled out elsewhere).
-  bool runCornerTapAction(int x, int y);
-  bool runCornerHoldAction(int x, int y);
-  bool runCornerAction(uint8_t action);
+  bool runCornerActionAt(int x, int y, bool hold);
   // Selection to restore when returning from a dictionary lookup.
   ClipSelectionActivity::Selection pendingLookupSelection;
   ClipSelectionActivity::Selection lookupReturnSelection;
-  void startClipSelection(int initialX = -1, int initialY = -1,
-                          ClipSelectionActivity::Mode mode = ClipSelectionActivity::Mode::Clip);
+  enum class SelectionResult { Unavailable, Consumed, Opened };
+  SelectionResult startClipSelection(int initialX = -1, int initialY = -1,
+                                     ClipSelectionActivity::Mode mode = ClipSelectionActivity::Mode::Clip);
   int clippingAtPoint(const Page& page, int x, int y) const;
   void openClippings();
   void applyProgressChange(const ProgressChangeResult& progress);
