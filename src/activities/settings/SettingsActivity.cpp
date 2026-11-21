@@ -138,9 +138,6 @@ void SettingsActivity::rebuildSettings() {
   // Language leads so a user stuck in an unfamiliar language finds it first.
   addAction(SettingsSection::General, StrId::STR_LANGUAGE, SettingAction::Language);
   addAction(SettingsSection::General, StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts);
-#if CROSSPOINT_VECTOR_FONTS
-  addAction(SettingsSection::Display, StrId::STR_UI_FONT, SettingAction::UiFont);
-#endif
   addAction(SettingsSection::Reader, StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings);
   addAction(SettingsSection::Reader, StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts);
   if (section == SettingsSection::Controls) {
@@ -174,7 +171,13 @@ void SettingsActivity::rebuildSettings() {
     if (section == SettingsSection::Controls && setting.valuePtr == &CrossPointSettings::longPressButtonBehavior) {
       setting.nameId = StrId::STR_PAGE_TURN_LONG_PRESS;
     }
+#if CROSSPOINT_VECTOR_FONTS
+    const bool isUiTheme = setting.nameId == StrId::STR_UI_THEME;
+#endif
     settings.push_back(std::move(setting));
+#if CROSSPOINT_VECTOR_FONTS
+    if (isUiTheme) addAction(SettingsSection::Display, StrId::STR_UI_FONT, SettingAction::UiFont);
+#endif
   }
 
   if (section == SettingsSection::Controls && controlsGroup == ControlsGroup::Front) {
