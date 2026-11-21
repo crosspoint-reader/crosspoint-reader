@@ -408,6 +408,7 @@ Downloading and reading from a catalog:
 
 - Selecting a book opens its details page. For a free download, **Download & Read** downloads the book and opens it; **Download** saves it and returns you to the catalog, so you can download several books in a row.
 - If the book is already in your download folder (found by the current download folder and filename format settings), the page shows **On this device** and offers **Read**, which opens your copy without downloading it, and **Redownload**. Redownload asks you to confirm first, because it replaces your copy and resets its reading position.
+- If the download folder doesn't exist yet, the page looks for the book at the SD card root, where downloads are saved when the folder can't be created. Redownload then creates the folder and saves the new copy there, so the copy at the root stays as it was.
 - Opening a book from a catalog restarts the device into the book to free the memory Wi-Fi used, so a short loading screen appears first.
 - Purchases, library loans, and passphrase-protected (LCP) books keep their single **Buy**, **Borrow**, **Place Hold**, or **Download** button.
 
