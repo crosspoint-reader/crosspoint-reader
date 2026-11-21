@@ -660,3 +660,7 @@ STR_KOREADER_CUSTOM_HEADER_1_NAME: "Nom de la capçalera personalitzada 1 del KO
 STR_KOREADER_CUSTOM_HEADER_1_VALUE: "Valor de la capçalera personalitzada 1 del KOReader"
 STR_KOREADER_CUSTOM_HEADER_2_NAME: "Nom de la capçalera personalitzada 2 del KOReader"
 STR_KOREADER_CUSTOM_HEADER_2_VALUE: "Valor de la capçalera personalitzada 2 del KOReader"
+STR_CORNER_TOP_LEFT_TAP: "Pulsació superior esquerra"
+STR_CORNER_TOP_LEFT_HOLD: "Pulsació llarga superior esquerra"
+STR_CORNER_TOP_RIGHT_TAP: "Pulsació superior dreta"
+STR_CORNER_TOP_RIGHT_HOLD: "Pulsació llarga superior dreta"
