@@ -705,6 +705,7 @@ of the shorter screen side) in each top corner, so holding a word elsewhere on
 the page still starts word selection. A link directly under the corner keeps
 priority on a tap, and the shortcuts follow **Touch controls while reading**.
 An action the device cannot perform falls back to the normal zone behavior.
+If a tap during a page refresh does nothing, tap again after the page is drawn.
 
 ### Links and footnotes
 
@@ -776,7 +777,7 @@ Accessible by selecting **Chapters** from the Reader Menu.
 
 Bookmarks can be created to quickly save and restore your place in a book.
 
-To create a bookmark, hold **Confirm** for about half a second while inside a book. A popup will appear letting you know a bookmark was created. The popup message will automatically disappear in a couple of seconds.
+In an EPUB, TXT, or Markdown book, the default top-right tap on a touch device toggles a bookmark. On a button device, hold **Confirm** if its long-press action is set to **Bookmark**. After the change is saved to the SD card, a brief popup confirms that the bookmark was added or removed.
 
 To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for about 0.7 seconds, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
 

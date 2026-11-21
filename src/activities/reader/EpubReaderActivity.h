@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BoardConfig.h>
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
 #include <Epub/PageLink.h>
@@ -105,7 +106,9 @@ class EpubReaderActivity final : public ReaderActivity {
   std::vector<EpubReaderMenuActivity::MenuItem> moreItems;
   EpubReaderMenuActivity::MenuAction selectedMenuAction = EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER;
 
-  // Footnote support
+  // Footnote and link support. renderBook() rebuilds these on the render task;
+  // the tap/corner readers snapshot them under the render lock. Some older menu
+  // readers still read them without it.
   std::vector<FootnoteEntry> currentPageFootnotes;
   std::vector<PageLink> currentPageLinks;
   int currentPageLinkMarginLeft = 0;
@@ -114,6 +117,9 @@ class EpubReaderActivity final : public ReaderActivity {
     int spineIndex;
     int pageNumber;
   };
+#if FREEINK_CAP_TOUCH
+  SavedPosition bookmarkMessagePosition{};
+#endif
   static constexpr int MAX_FOOTNOTE_DEPTH = 3;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
@@ -202,10 +208,10 @@ class EpubReaderActivity final : public ReaderActivity {
   std::string moreRowName(int row) const;
   std::string moreRowValue(int row) const;
   void activateMoreRow(int row);
-  void openFootnoteSelect(bool reopenMenuOnCancel);
+  bool openFootnoteSelect(bool reopenMenuOnCancel);
   void openDictionaryWordSelect();
   // Top-corner shortcuts (touch boards only; compiled out elsewhere).
-  bool runCornerTapAction(bool endOfBook);
+  bool runCornerTapAction(int x, int y);
   bool runCornerHoldAction(int x, int y);
   bool runCornerAction(uint8_t action);
   // Selection to restore when returning from a dictionary lookup.
@@ -220,7 +226,7 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();
-  void addBookmark();
+  bool addBookmark(bool showConfirmation = false);
   void updateBookmarkFlag();
 
   void navigateToHref(const std::string& href, bool savePosition = false);
