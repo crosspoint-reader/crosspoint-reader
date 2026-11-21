@@ -245,16 +245,8 @@ int CrosspointServices::locale(char* out, uint32_t cap) {
 }
 
 // ---- storage ----
-int CrosspointServices::resolve(const char* path, std::string& out, uint32_t maxLen) {
-  // The binding already enforced the path rules; map the app root to the SD
-  // card. Apps are user-installed from the owner's own card (whole-card policy).
-  if (!path || path[0] != '/' || strlen(path) > maxLen) return DSN_ERR_INVALID;
-  out = path;
-  return 0;
-}
-
-// Validate-only form: the path is already the full SD path (whole-card policy),
-// so most callers need no std::string copy and pass `path` straight through.
+// The binding already enforced the path rules. App paths are SD paths as-is:
+// apps are user-installed from the owner's own card (whole-card policy).
 int CrosspointServices::resolve(const char* path, uint32_t maxLen) {
   if (!path || path[0] != '/' || strlen(path) > maxLen) return DSN_ERR_INVALID;
   return 0;
@@ -317,10 +309,9 @@ int CrosspointServices::fsAppDir(char* out, uint32_t cap) {
 }
 
 int CrosspointServices::keystore(const char* path, const uint8_t* key, uint32_t n, uint32_t expires) {
-  std::string full;
-  if (int e = resolve(path, full)) return e;
+  if (int e = resolve(path)) return e;
   if (n > bookkey::MAX_KEY_LEN) return DSN_ERR_INVALID;
-  return bookkey::write(full, key, n, expires ? static_cast<int64_t>(expires) : 0) ? 0 : DSN_ERR_IO;
+  return bookkey::write(path, key, n, expires ? static_cast<int64_t>(expires) : 0) ? 0 : DSN_ERR_IO;
 }
 
 // ---- launcher / home ----
@@ -421,9 +412,8 @@ int CrosspointServices::recentShelf(uint32_t first, uint32_t count, char* out, u
 }
 
 int CrosspointServices::bookProgress(const char* path) {
-  std::string full;
-  if (resolve(path, full, DSN_BOOK_PATH_MAX)) return -1;
-  return loadBookProgress(full);
+  if (resolve(path, DSN_BOOK_PATH_MAX)) return -1;
+  return loadBookProgress(path);
 }
 
 // The firmware's fallback cover (drawCoverPlaceholder) as a 1-bit bitmap: a
@@ -467,8 +457,8 @@ int CrosspointServices::bookCover(const char* path, uint32_t height, uint8_t* ou
   (void)path, (void)height, (void)out, (void)cap;
   return DSN_ERR_UNAVAILABLE;  // covers need PSRAM for the decode/scale buffers
 #else
-  std::string full;
-  if (resolve(path, full, DSN_BOOK_PATH_MAX)) return DSN_ERR_INVALID;
+  if (resolve(path, DSN_BOOK_PATH_MAX)) return DSN_ERR_INVALID;
+  const std::string full(path);
   if (height < 16 || height > 512) return DSN_ERR_INVALID;
   const int ph = static_cast<int>(height), pw = ph * 2 / 3;  // placeholder size (book aspect)
   if (!FsHelpers::hasReflowableBookExtension(full)) return packPlaceholderCover(out, cap, pw, ph);

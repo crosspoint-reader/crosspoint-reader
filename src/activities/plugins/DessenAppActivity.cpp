@@ -93,9 +93,12 @@ void DessenAppActivity::onEnter() {
 }
 
 void DessenAppActivity::leaveApp() {
-  if (frameStored) {
-    renderer.discardStoredBwBuffer();  // release the app's last frame before the next screen runs
-    frameStored = false;
+  {
+    RenderLock lock;  // render() also stores/restores this frame
+    if (frameStored) {
+      renderer.discardStoredBwBuffer();  // release the app's last frame before the next screen runs
+      frameStored = false;
+    }
   }
   if (homeLauncher) {
     activityManager.goHome(HomeMenuItem::NONE, /*cleanInitialRefresh=*/false, /*forceDefaultHome=*/true);

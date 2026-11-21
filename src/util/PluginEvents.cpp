@@ -146,16 +146,22 @@ void refreshSubscriptions() {
         // Replacing the EOB screen means opening the app at the last page, so it
         // implies launch mode even if the manifest omits it.
         if (replaceEob || strcmp(kv.value()["mode"] | "read", "launch") == 0) {
-          launchMask |= static_cast<uint8_t>(1u << e);
           // Honour the declared binary; keep it a bare in-dir filename so it can
-          // not traverse out of the plugin. Last launch handler wins.
+          // not traverse out of the plugin.
           const char* bin = kv.value()["app"] | "";
-          if (bin[0] && !strpbrk(bin, "/\\") && strcmp(bin, ".") && strcmp(bin, "..") &&
-              strlen(bin) < sizeof(launchBin)) {
-            strncpy(launchBin, bin, sizeof(launchBin) - 1);
+          const bool bare = bin[0] && !strpbrk(bin, "/\\") && strcmp(bin, ".") && strcmp(bin, "..") &&
+                            strlen(bin) < sizeof(launchBin);
+          const char* want = bare ? bin : "";
+          // One launch binary per plugin (saves a per-event table): a handler
+          // naming a different one is not launched instead of opening the wrong app.
+          if (launchMask && strcmp(want, launchBin) != 0) {
+            LOG_ERR("PEVT", "%s: %s launches a second binary; launch ignored", entry.name.c_str(), kv.key().c_str());
+          } else {
+            launchMask |= static_cast<uint8_t>(1u << e);
+            strncpy(launchBin, want, sizeof(launchBin) - 1);
+            if (replaceEob) replacesEob = true;
           }
         }
-        if (replaceEob) replacesEob = true;
       }
       if (kv.value()["connect"] | false) connectMask |= static_cast<uint8_t>(1u << e);
       const char* requiredMeta = requireMeta | "";
@@ -299,7 +305,14 @@ bool emit(const Event e, const Var* vars, const size_t varCount) {
     // would open the app with no event to read). Not for sleep.enter (no UI as
     // the chip powers down). First wins.
     if (appended && (sub.launchMask & eventBit(e)) && e != Event::SleepEnter && pendingLaunchPath.empty()) {
-      pendingLaunchPath = std::string(sub.dir) + "/" + (sub.launchBin[0] ? sub.launchBin : "app.bin");
+      std::string target = std::string(sub.dir) + "/" + (sub.launchBin[0] ? sub.launchBin : "app.bin");
+      // A missing binary must not take the handoff: the event stays queued, but
+      // the firmware's own end-of-book handling runs.
+      if (!Storage.exists(target.c_str())) {
+        LOG_ERR("PEVT", "%s: launch target %s missing", sub.name, target.c_str());
+        continue;
+      }
+      pendingLaunchPath = std::move(target);
       // An EOB replacement really took the handoff (replacesEob is a plugin-wide
       // flag, so also require this to be the reader.end event).
       if (sub.replacesEob && e == Event::ReaderEnd) armedReplacer = true;

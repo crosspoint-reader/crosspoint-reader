@@ -817,7 +817,10 @@ void EpubReaderActivity::loop() {
 
   // A plugin-replaced end-of-book finish latches `bookFinished`: the handoff
   // stepped back off the end, so without the latch the finished-book handling
-  // below would skip (or undo) on the very next pass.
+  // below would skip (or undo) on the very next pass. Leaving the last chapter
+  // (or paging back, see pageTurn/skipPages) resumes reading and drops it; a
+  // jump to an earlier page inside the last chapter keeps it.
+  if (bookFinished && currentSpineIndex < epub->getSpineItemsCount() - 1) bookFinished = false;
   const bool finished = atEndOfBook || bookFinished;
 
   if (SETTINGS.removeReadBooksFromRecents) {
@@ -1565,6 +1568,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       return true;
     }
   } else {
+    bookFinished = false;  // paging back resumes reading
     if (section->currentPage > 0) {
       section->currentPage--;
       lastPageTurnTime = millis();
@@ -1592,6 +1596,7 @@ bool EpubReaderActivity::skipPages(int amount) {
     section.reset();
     return true;
   } else {
+    bookFinished = false;  // skipping back resumes reading
     if (section->currentPage > 0) {
       section->currentPage = 0;
       return true;
