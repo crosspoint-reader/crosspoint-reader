@@ -60,6 +60,7 @@
 #include "html/js/jszip_minJs.generated.h"
 #include "html/js/plugin_hostJs.generated.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookDataMove.h"
 #include "util/DictionaryRegistry.h"
 #include "util/FirmwareIdentity.h"
 #include "util/PluginHttp.h"
@@ -1335,11 +1336,11 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  clearBookCache(itemPath.c_str());
   file.close();
   const bool success = ClippingStore::moveBook(itemPath.c_str(), newPath.c_str());
 
   if (success) {
+    moveBookData(itemPath.c_str(), newPath.c_str());
     sleepImageChanged(newPath.c_str());
     LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Renamed successfully");
@@ -1434,11 +1435,11 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  clearBookCache(itemPath.c_str());
   file.close();
   const bool success = ClippingStore::moveBook(itemPath.c_str(), newPath.c_str());
 
   if (success) {
+    moveBookData(itemPath.c_str(), newPath.c_str());
     sleepImageChanged(newPath.c_str());
     LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Moved successfully");

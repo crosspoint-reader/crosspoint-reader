@@ -9,6 +9,7 @@
 #include "ClippingStore.h"
 #include "ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookDataMove.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -563,11 +564,11 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  clearBookCache(srcPath.c_str());
   file.close();
   const bool success = ClippingStore::moveBook(srcPath.c_str(), dstPath.c_str());
 
   if (success) {
+    moveBookData(srcPath.c_str(), dstPath.c_str());
     if (!dstExists) sleepImageChanged(dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
@@ -667,7 +668,8 @@ void WebDAVHandler::handleCopy(WebServer& s) {
 
   if (copyOk) {
     sleepImageChanged(dstPath.c_str());
-    if (dstExists) clearBookCache(dstPath.c_str());  // the old book's cache does not match the new content
+    // Even without dstExists: a book deleted from a PC leaves its data behind.
+    clearBookData(dstPath.c_str(), srcPath.c_str());
     if (library::isLibraryBookFile(dstPath.c_str())) library::markLibraryIndexDirty();
     s.send(dstExists ? 204 : 201);
   } else {
