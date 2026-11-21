@@ -70,29 +70,40 @@ std::string encodeUnsafeUrlChars(const std::string& url) {
   return out;
 }
 
-std::string buildUrl(const std::string& serverUrl, const std::string& path) {
-  // If path is already an absolute URL (has protocol), use it directly
-  if (path.find("://") != std::string::npos) {
-    return encodeUnsafeUrlChars(path);
-  }
+std::string buildUrl(const std::string& serverUrl, const std::string& path) { return buildUrl(serverUrl, path, {}); }
+
+std::string buildUrl(const std::string& serverUrl, const std::string& path, const std::vector<std::string>& getVars) {
   const std::string urlWithProtocol = ensureProtocol(serverUrl);
-  if (path.empty()) {
-    return encodeUnsafeUrlChars(urlWithProtocol);
+  const size_t getPos = serverUrl.find('?');
+  std::string allGetVars = "?";
+
+  if (getPos != std::string::npos) {
+    if (allGetVars.size() > 1) {
+      allGetVars += "&";
+    }
+    allGetVars += serverUrl.substr(getPos);
   }
-  if (path[0] == '/') {
-    // Absolute path - use just the host
-    return encodeUnsafeUrlChars(extractHost(urlWithProtocol) + path);
+  for (auto var : getVars) {
+    if (allGetVars.size() > 1 && allGetVars.back() != '&') {
+      allGetVars += "&";
+    }
+    allGetVars += var;
   }
+
   // Relative path - strip query string from base before appending
   std::string base = urlWithProtocol;
+  if (path.empty() || path[0] == '/') {
+    // Absolute path - use just the host
+    return encodeUnsafeUrlChars(extractHost(urlWithProtocol) + (path.empty() ? "/" : path) + allGetVars);
+  }
   const size_t queryPos = base.find('?');
   if (queryPos != std::string::npos) {
     base.resize(queryPos);
   }
   if (base.back() == '/') {
-    return encodeUnsafeUrlChars(base + path);
+    return encodeUnsafeUrlChars(base + path + allGetVars);
   }
-  return encodeUnsafeUrlChars(base + "/" + path);
+  return encodeUnsafeUrlChars(base + "/" + path + allGetVars);
 }
 
 bool resolveServerPath(std::string& path, const std::string& requestUrl) {

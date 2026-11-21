@@ -7,6 +7,23 @@ namespace {
 using UrlUtils::isForeignHost;
 using UrlUtils::resolveServerPath;
 
+TEST(BuildUrl, AppendsGetVarsToExistingQuery) {
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "/catalog?page=2", {"size=15", "sort=title"}),
+            "https://example.com/catalog?page=2&size=15&sort=title");
+}
+
+TEST(BuildUrl, PreservesBaseQueryWhenJoiningPath) {
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com?size=15", "/catalog?page=2", {"sort=title"}),
+            "https://example.com/catalog?page=2&size=15&sort=title");
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds?size=15", "catalog?page=2", {"sort=title"}),
+            "https://example.com/opds/catalog?page=2&size=15&sort=title");
+}
+
+TEST(BuildUrl, AppendsGetVarsBeforeFragment) {
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com", "https://other.example/catalog?page=2", {"size=15"}),
+            "https://other.example/catalog?page=2&size=15");
+}
+
 std::string resolved(std::string path, const std::string& requestUrl) {
   resolveServerPath(path, requestUrl);
   return path;
