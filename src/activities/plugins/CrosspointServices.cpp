@@ -11,6 +11,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalFrontlight.h>  // declares the `Frontlight` singleton
+#include <HalGPIO.h>  // declares the `gpio` singleton (USB/charge detection)
 #include <HalHaptics.h>
 #include <HalPowerManager.h>  // declares the `powerManager` singleton
 #include <HalStorage.h>
@@ -592,7 +593,18 @@ int CrosspointServices::backlightGet() {
 int CrosspointServices::battery() {
   const uint16_t pct = powerManager.getBatteryPercentage();
   if (pct > 100) return DSN_ERR_UNAVAILABLE;
-  return (pct & 0xff) | DSN_PWR_UNKNOWN << 8;  // charging state not exposed here
+  // Second byte: power state, from the same external-power signal the status bar
+  // uses (board-aware: USB-detect pin, charger IC, or charging state). Some
+  // boards read "not connected" at charge termination, so a full battery there
+  // reports BATTERY — matching the status bar, which drops its bolt the same way.
+  uint8_t state;
+  if (!gpio.isUsbConnected())
+    state = DSN_PWR_BATTERY;
+  else if (pct >= 100)
+    state = DSN_PWR_FULL;
+  else
+    state = DSN_PWR_CHARGING;
+  return (pct & 0xff) | state << 8;
 }
 
 int CrosspointServices::haptic(int ms, int intensity) {
@@ -644,11 +656,10 @@ int CrosspointServices::keygenStart(uint32_t bits, uint8_t* pub, uint32_t pubCap
   return dessen::kPending;
 }
 
-int CrosspointServices::textInputStart(const char* prompt, int flags, char* out, uint32_t cap) {
+int CrosspointServices::textInputStart(const char* prompt, char* out, uint32_t cap) {
   pending_ = Op::TextInput;
   done_ = false;
   prompt_ = prompt;
-  inputFlags_ = flags;
   out_ = reinterpret_cast<uint8_t*>(out);
   outCap_ = cap;
   return dessen::kPending;

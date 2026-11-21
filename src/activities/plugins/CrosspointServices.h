@@ -71,16 +71,15 @@ class CrosspointServices : public dessen::Services {
   int keygenStart(uint32_t bits, uint8_t* pub, uint32_t pubCap, uint8_t* priv, uint32_t privCap) override;
   int netStart(const char* head, const uint8_t* body, uint32_t bn, uint8_t* resp, uint32_t cap) override;
   int fetchStart(const char* url, const char* dest) override;
-  int textInputStart(const char* prompt, int flags, char* out, uint32_t cap) override;
+  int textInputStart(const char* prompt, char* out, uint32_t cap) override;
   int poll() override;
 
   // ---- loop-task side, driven by DessenAppActivity ----
   bool wantsKeyboard() const { return pending_ == Op::TextInput && !done_; }
   // Run work on the loop task. True when render can resume the VM.
   bool serviceAsyncWork();
-  // The keyboard prompt the app asked for, and whether to mask it.
+  // The keyboard prompt the app asked for.
   const std::string& keyboardPrompt() const { return prompt_; }
-  bool keyboardMasked() const { return inputFlags_ & 1; }
   // DessenAppActivity delivers the keyboard result (or cancellation) here.
   void deliverText(const char* text);
   void cancelText();
@@ -109,7 +108,6 @@ class CrosspointServices : public dessen::Services {
   uint32_t privCap_ = 0;
   uint32_t bits_ = 0;
   unsigned long wifiStart_ = 0;
-  int inputFlags_ = 0;
 };
 
 #endif  // CROSSPOINT_DESSEN_APPS
