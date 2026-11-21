@@ -229,10 +229,10 @@ int CrosspointServices::deviceId(char* out, uint32_t cap) {
     memcpy(input + 32, appName_.data(), appName_.size());
     nameLen = appName_.size();
   }
-  uint8_t hash[32];
-  crypto_->sha256(input, 32 + nameLen, hash);
+  uint8_t digest[32];
+  crypto_->sha256(input, 32 + nameLen, digest);
   if (65 > cap) return DSN_ERR_TOO_BIG;
-  for (size_t i = 0; i < 32; i++) snprintf(out + 2 * i, 3, "%02x", hash[i]);
+  for (size_t i = 0; i < 32; i++) snprintf(out + 2 * i, 3, "%02x", digest[i]);
   return 64;
 }
 
@@ -245,7 +245,7 @@ int CrosspointServices::locale(char* out, uint32_t cap) {
 }
 
 // ---- storage ----
-int CrosspointServices::resolve(const char* path, std::string& out, uint32_t maxLen) const {
+int CrosspointServices::resolve(const char* path, std::string& out, uint32_t maxLen) {
   // The binding already enforced the path rules; map the app root to the SD
   // card. Apps are user-installed from the owner's own card (whole-card policy).
   if (!path || path[0] != '/' || strlen(path) > maxLen) return DSN_ERR_INVALID;
@@ -778,9 +778,8 @@ bool CrosspointServices::serviceAsyncWork() {
     }
     case Op::Fetch: {
       size_t bytes = 0;
-      if (strncasecmp(url_.c_str(), "https:", 6) == 0 &&
-          (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
-           ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC)) {
+      if (strncasecmp(url_.c_str(), "https:", 6) == 0 && (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
+                                                          ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC)) {
         result_ = DSN_ERR_IO;
         break;
       }

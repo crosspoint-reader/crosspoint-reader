@@ -88,7 +88,7 @@ class CrosspointServices : public dessen::Services {
  private:
   enum class Op : uint8_t { None, Net, Fetch, Keygen, TextInput, WifiStart, WifiConnecting };
 
-  int resolve(const char* path, std::string& out, uint32_t maxLen = 255) const;  // app "/x" -> real SD path
+  static int resolve(const char* path, std::string& out, uint32_t maxLen = 255);  // app "/x" -> real SD path
 
   std::string appName_, appDir_;
   std::unique_ptr<freeink::content::Crypto> crypto_;
