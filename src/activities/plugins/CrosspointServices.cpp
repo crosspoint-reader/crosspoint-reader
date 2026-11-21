@@ -218,9 +218,17 @@ int CrosspointServices::deviceId(char* out, uint32_t cap) {
   uint8_t secret[32];
   if (!deviceSecret(secret)) return DSN_ERR_UNAVAILABLE;
   uint8_t input[32 + 64];
-  const size_t nameLen = appName_.size() > 64 ? 64 : appName_.size();
   memcpy(input, secret, 32);
-  memcpy(input + 32, appName_.data(), nameLen);
+  size_t nameLen;
+  if (appName_.size() > 64) {
+    // Fold a long name to its full-name digest so names sharing the first 64
+    // bytes still get distinct ids (plain truncation would collide them).
+    crypto_->sha256(reinterpret_cast<const uint8_t*>(appName_.data()), appName_.size(), input + 32);
+    nameLen = 32;
+  } else {
+    memcpy(input + 32, appName_.data(), appName_.size());
+    nameLen = appName_.size();
+  }
   uint8_t hash[32];
   crypto_->sha256(input, 32 + nameLen, hash);
   if (65 > cap) return DSN_ERR_TOO_BIG;
@@ -273,8 +281,8 @@ int CrosspointServices::fsWrite(const char* path, const uint8_t* data, uint32_t 
   HalFile f;
   if (!Storage.openFileForWrite("DSN", full, f)) return DSN_ERR_IO;
   const size_t wrote = f.write(data, n);
-  f.close();
-  return wrote == n ? 0 : DSN_ERR_IO;
+  const bool closed = f.close();  // close flushes buffered data; its failure means a short write
+  return (wrote == n && closed) ? 0 : DSN_ERR_IO;
 }
 
 int CrosspointServices::fsList(const char* path, char* out, uint32_t cap) {
@@ -321,9 +329,11 @@ int CrosspointServices::recents(char* out, uint32_t cap) {
     snprintf(pct, sizeof pct, "%d", loadBookProgress(b.path));  // -1 when unknown
     acc += b.path;
     acc += '\t';
-    acc += b.title;
+    // Normalize control chars to space (as writeShelfRow does) so a title or
+    // author with an embedded tab/newline cannot forge columns or rows.
+    for (char c : b.title) acc += shelfControl(c) ? ' ' : c;
     acc += '\t';
-    acc += b.author;
+    for (char c : b.author) acc += shelfControl(c) ? ' ' : c;
     acc += '\t';
     acc += pct;
     acc += '\n';
@@ -486,7 +496,10 @@ int CrosspointServices::bookCover(const char* path, uint32_t height, uint8_t* ou
   static const uint8_t BAYER[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
   std::vector<uint8_t> gray(w), rowbuf(static_cast<size_t>(w) * 4 + 16);
   for (int y = 0; y < h; ++y) {
-    if (bmp.readRowGray(y, gray.data(), rowbuf.data()) != BmpReaderError::Ok) break;
+    // A mid-image row failure would otherwise return a half-zeroed bitmap as
+    // complete; fall back to the placeholder like every other failure here.
+    if (bmp.readRowGray(y, gray.data(), rowbuf.data()) != BmpReaderError::Ok)
+      return packPlaceholderCover(out, cap, pw, ph);
     uint8_t* line = px + static_cast<uint32_t>(y) * stride;
     for (int x = 0; x < w; ++x)
       if (gray[x] < BAYER[y & 3][x & 3] * 16 + 8) line[x >> 3] |= 0x80 >> (x & 7);  // dark -> black bit
@@ -739,6 +752,15 @@ bool CrosspointServices::serviceAsyncWork() {
       }
       if (result_ < 0) break;
 
+      // TLS needs a healthy heap; refuse up front rather than OOM mid-handshake
+      // (same thresholds as CatalogActivity / FontDownloadActivity).
+      if (url.size() >= 6 && strncasecmp(url.data(), "https:", 6) == 0 &&
+          (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
+           ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC)) {
+        result_ = DSN_ERR_IO;
+        break;
+      }
+
       BoundedOutput response(outCap_ - 4);
       const int status =
           HttpDownloader::request(method.c_str(), std::string(url), headers, body_, bodySize_,
@@ -756,6 +778,12 @@ bool CrosspointServices::serviceAsyncWork() {
     }
     case Op::Fetch: {
       size_t bytes = 0;
+      if (strncasecmp(url_.c_str(), "https:", 6) == 0 &&
+          (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
+           ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC)) {
+        result_ = DSN_ERR_IO;
+        break;
+      }
       const auto error = HttpDownloader::downloadToFile(url_, dest_, nullptr, nullptr, "", "", {}, false, &bytes,
                                                         dessen::kPending - 1);
       result_ = error == HttpDownloader::OK        ? static_cast<int>(bytes)

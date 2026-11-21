@@ -100,7 +100,10 @@ bool wantsConnectAny();
 // Appends the event to each subscribing plugin's outbox. No-op without
 // subscribers. An outbox over the size cap is dropped wholesale first (the
 // newest events carry the current state; stale ones are worthless by then).
-void emit(Event e, const Var* vars, size_t varCount);
+// Returns true only when a "reader.end" "replaces": "end of book" handler
+// actually fired (passed metadata filtering) and armed its launch — the caller
+// uses this to take over the end-of-book screen, versus merely being subscribed.
+bool emit(Event e, const Var* vars, size_t varCount);
 
 // Replays queued events through their manifest handlers. Call only while WiFi
 // is connected; requests run synchronously on the calling task. At most

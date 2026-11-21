@@ -540,6 +540,9 @@ void SettingsActivity::toggleSelectedSetting() {
         int current = 0;
         for (const auto& fam : families) {
           if (!fam.vector) continue;
+          // Only offer names that fit the setting exactly: a truncated name would
+          // neither match here (current-selection) nor in applyUiFont.
+          if (fam.name.size() >= sizeof(SETTINGS.uiFontFamilyName)) continue;
           names.push_back(fam.name);
           options.push_back(fam.name);
           if (fam.name == SETTINGS.uiFontFamilyName) current = static_cast<int>(names.size());
@@ -551,7 +554,13 @@ void SettingsActivity::toggleSelectedSetting() {
             strncpy(SETTINGS.uiFontFamilyName, names[idx - 1].c_str(), sizeof(SETTINGS.uiFontFamilyName) - 1);
             SETTINGS.uiFontFamilyName[sizeof(SETTINGS.uiFontFamilyName) - 1] = '\0';
           }
-          sdFontSystem.applyUiFont(renderer);
+          {
+            // applyUiFont rebinds the renderer's fonts; hold the RenderLock for
+            // the swap only (see TextSettingsActivity::applyFamily), then write
+            // and rebuild outside it.
+            RenderLock lock;
+            sdFontSystem.applyUiFont(renderer);
+          }
           SETTINGS.saveToFile();
           rebuildSettings();
         });

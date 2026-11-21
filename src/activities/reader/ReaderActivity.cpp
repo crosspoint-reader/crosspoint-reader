@@ -185,6 +185,7 @@ bool ReaderActivity::handleEndOfBookReached() {
   if (readerEndEmitted) return false;
   readerEndEmitted = true;
 
+  bool replacementArmed = false;
   if (pluginevents::anySubscriber(pluginevents::Event::ReaderEnd)) {
     const ScreenshotInfo info = getScreenshotInfo();
     char percent[8];
@@ -192,13 +193,14 @@ bool ReaderActivity::handleEndOfBookReached() {
     snprintf(percent, sizeof(percent), "%d", info.progressPercent);
     snprintf(endPercent, sizeof(endPercent), "%d", info.endProgressPercent);
     const pluginevents::Var vars[] = {{"book", bookPath.c_str()}, {"percent", percent}, {"end_percent", endPercent}};
-    pluginevents::emit(pluginevents::Event::ReaderEnd, vars, 3);
+    replacementArmed = pluginevents::emit(pluginevents::Event::ReaderEnd, vars, 3);
   }
 
-  // Full takeover: the launch-mode emit above armed the replacer app. Step back
-  // off the EOB state so the firmware menu never renders and the app opens over
-  // the last page; paging to the end again re-triggers it.
-  if (pluginevents::anyEndOfBookReplacer()) {
+  // Full takeover: only when a "replaces: end of book" handler actually armed
+  // (passed metadata filtering), not merely because one is subscribed. If
+  // filtering left no replacement, fall through so the firmware menu still draws.
+  if (replacementArmed) {
+    onEndOfBookReplaced();    // the book is finished; commit finished-book handling (subclass)
     onReturnFromEndOfBook();  // no redraw: the app covers the screen, and the reader repaints when it closes
     return true;
   }

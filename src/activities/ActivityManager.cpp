@@ -114,7 +114,8 @@ void ActivityManager::loop() {
   // A launch-mode plugin-event handler asked to open its app (see PluginEvents).
   // Only when idle between screen changes, so it stacks cleanly over whatever is
   // on top; the app's queued event(s) wait in its app-events.jsonl to be read.
-  if (pendingAction == PendingAction::None && SETTINGS.pluginsEnabled) {
+  if (pendingAction == PendingAction::None && SETTINGS.pluginsEnabled &&
+      !(currentActivity && currentActivity->requiresExclusiveStorageLoop())) {
     std::string launch = pluginevents::takePendingLaunch();
     if (!launch.empty() && Storage.exists(launch.c_str())) {
       if (auto app = makeUniqueNoThrow<DessenAppActivity>(renderer, mappedInput, std::move(launch))) {

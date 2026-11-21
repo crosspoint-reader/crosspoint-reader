@@ -31,8 +31,9 @@ app. The app takes precedence over the catalog and README. A plugin with
 `"home": true` in its `manifest.json` can be selected in
 **Settings → Display → Home Launcher**.
 CrossPoint opens its built-in Home when the selected launcher is unavailable,
-is being installed, fails to load, or Plugins is disabled. Use the device's
-Home action or hold Back for one second to leave a custom launcher.
+is being installed, fails to load, or Plugins is disabled. To leave a custom
+launcher, hold Back for one second, or on touch devices long-press the top-left
+header Back area.
 
 `<root>` is any of `/.crosspoint/plugins`, `/plugins`, or `/.plugins` — the
 first two-dot-free options exist so plugins are easy to copy onto the card

@@ -93,6 +93,10 @@ void DessenAppActivity::onEnter() {
 }
 
 void DessenAppActivity::leaveApp() {
+  if (frameStored) {
+    renderer.discardStoredBwBuffer();  // release the app's last frame before the next screen runs
+    frameStored = false;
+  }
   if (homeLauncher) {
     activityManager.goHome(HomeMenuItem::NONE, /*cleanInitialRefresh=*/false, /*forceDefaultHome=*/true);
   } else {
@@ -103,7 +107,7 @@ void DessenAppActivity::leaveApp() {
 bool DessenAppActivity::handleHomeGesture() {
   // A home-launcher app IS the home screen, so the Home button does nothing
   // (like pressing Home on the built-in Home) instead of dropping to the default
-  // home. The escape hatches are a swipe-back (see loop()) and a long Back press.
+  // home. The escape hatches are a long Back press and a top-left header long-press (see loop()).
   // A normal plugin app still returns false so the Home gesture exits it.
   return homeLauncher;
 }

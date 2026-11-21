@@ -54,6 +54,10 @@ class ReaderActivity : public Activity {
   virtual bool remoteShortcut(bool /*readerMenu*/) { return false; }
   virtual bool isAtEndOfBook() const = 0;
   virtual void onReturnFromEndOfBook() {}
+  // Called when a plugin "replaces: end of book" handler actually took the
+  // end-of-book handoff (so the firmware menu is skipped). The book is finished;
+  // a subclass commits its finished-book handling here. No-op by default.
+  virtual void onEndOfBookReplaced() {}
 
   virtual void renderBook() = 0;
   virtual void applyInitialOrientation();

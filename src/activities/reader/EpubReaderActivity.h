@@ -62,6 +62,10 @@ class EpubReaderActivity final : public ReaderActivity {
   bool recentsEntryRemoved = false;
   unsigned long bookmarkMessageTime = 0UL;
   bool pendingReadFolderMove = false;
+  // Latched when a plugin replaced the end-of-book screen: the handoff steps back
+  // off the end state, so this keeps the finished-book handling committed instead
+  // of letting the step-back undo it.
+  bool bookFinished = false;
 
   // Toolbar reader menu (SETTINGS.readerMenuStyle == READER_MENU_TOOLBAR): drawn
   // over the page instead of pushing the full-screen list menu. Select opens the
@@ -269,6 +273,7 @@ class EpubReaderActivity final : public ReaderActivity {
   bool remoteShortcut(bool readerMenu) override;
   bool isAtEndOfBook() const override;
   void onReturnFromEndOfBook() override;
+  void onEndOfBookReplaced() override;
 
   bool skipLoopDelay() override;
 

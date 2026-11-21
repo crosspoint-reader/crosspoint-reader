@@ -253,3 +253,33 @@ TEST(LibraryIndexFile, ResolvesUnsortedFoldersAcrossReadBlocks) {
   EXPECT_STREQ(lookups[4].path, "");
   EXPECT_STREQ(lookups[5].path, "");
 }
+
+TEST(LibraryIndexFile, FailsWhenMalformedFolderRecordBlocksAKnownId) {
+  library::ClixHeader header{};
+  std::memcpy(header.magic, library::CLIX_MAGIC, sizeof(header.magic));
+  header.formatVersion = library::CLIX_FORMAT_VERSION;
+  header.foldVersion = library::CLIX_FOLD_VERSION;
+  header.bookCount = header.folderCount = 3;
+  // id 0 is a valid "/a"; id 1 claims a 250-byte path with no bytes behind it,
+  // so the walk toward id 2 hits malformed data before it can be resolved.
+  std::vector<uint8_t> folders = {2, '/', 'a', 250};
+  library::layoutSections(header, folders.size(), 0);
+  std::vector<uint8_t> bytes(header.selfSize, 0);
+  std::memcpy(bytes.data(), &header, sizeof(header));
+  std::copy(folders.begin(), folders.end(), bytes.begin() + header.folderStart);
+  Storage.setFile("/library.clx", std::move(bytes));
+
+  library::LibraryIndexFile index;
+  ASSERT_TRUE(index.open("/library.clx"));
+
+  // A known id the malformed record prevents resolving must fail, not succeed
+  // with an empty path.
+  library::LibraryIndexFile::FolderLookup blocked[] = {{2, {}}};
+  EXPECT_FALSE(index.readFolders(blocked, 1));
+  EXPECT_STREQ(blocked[0].path, "");
+
+  // A known id resolved before the malformed record still succeeds.
+  library::LibraryIndexFile::FolderLookup early[] = {{0, {}}};
+  EXPECT_TRUE(index.readFolders(early, 1));
+  EXPECT_STREQ(early[0].path, "/a");
+}

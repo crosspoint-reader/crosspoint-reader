@@ -52,6 +52,7 @@ struct Subscriber {
   uint8_t appMask = 0;       // events whose handler routes to a dessen app ("app")
   uint8_t launchMask = 0;    // app events with "mode": "launch" (open the app now)
   bool replacesEob = false;  // reader.end handler marked "replaces": "end of book"
+  char launchBin[40] = {0};  // launch handler's declared "app" binary; "" = app.bin
   // Hash of each handler's "require_meta" key, 0 = unfiltered. A hash keeps
   // emit() free of manifest reads; a collision only queues an extra event.
   uint32_t metaKeyHash[static_cast<size_t>(pluginevents::Event::COUNT)] = {};
@@ -121,6 +122,7 @@ void refreshSubscriptions() {
     uint8_t appMask = 0;
     uint8_t launchMask = 0;
     bool replacesEob = false;
+    char launchBin[40] = {0};  // last launch handler's "app" binary (bare filename)
     uint32_t metaHashes[static_cast<size_t>(Event::COUNT)] = {};
     for (JsonPairConst kv : doc["events"].as<JsonObjectConst>()) {
       const int e = eventFromName(kv.key().c_str());
@@ -143,8 +145,16 @@ void refreshSubscriptions() {
             e == static_cast<int>(Event::ReaderEnd) && strcmp(kv.value()["replaces"] | "", "end of book") == 0;
         // Replacing the EOB screen means opening the app at the last page, so it
         // implies launch mode even if the manifest omits it.
-        if (replaceEob || strcmp(kv.value()["mode"] | "read", "launch") == 0)
+        if (replaceEob || strcmp(kv.value()["mode"] | "read", "launch") == 0) {
           launchMask |= static_cast<uint8_t>(1u << e);
+          // Honour the declared binary; keep it a bare in-dir filename so it can
+          // not traverse out of the plugin. Last launch handler wins.
+          const char* bin = kv.value()["app"] | "";
+          if (bin[0] && !strpbrk(bin, "/\\") && strcmp(bin, ".") && strcmp(bin, "..") &&
+              strlen(bin) < sizeof(launchBin)) {
+            strncpy(launchBin, bin, sizeof(launchBin) - 1);
+          }
+        }
         if (replaceEob) replacesEob = true;
       }
       if (kv.value()["connect"] | false) connectMask |= static_cast<uint8_t>(1u << e);
@@ -165,6 +175,7 @@ void refreshSubscriptions() {
     sub.appMask = appMask;
     sub.launchMask = launchMask;
     sub.replacesEob = replacesEob;
+    memcpy(sub.launchBin, launchBin, sizeof(launchBin));
     memcpy(sub.metaKeyHash, metaHashes, sizeof(metaHashes));
     LOG_DBG("PEVT", "%s subscribes mask=0x%02x", sub.name, sub.mask);
   }
@@ -206,8 +217,8 @@ bool wantsConnectAny() {
   return false;
 }
 
-void emit(const Event e, const Var* vars, const size_t varCount) {
-  if (!anySubscriber(e)) return;
+bool emit(const Event e, const Var* vars, const size_t varCount) {
+  if (!anySubscriber(e)) return false;
 
   // One line: {"e":"reader.exit","id":"3fa9c21b-7","ts":1734212345,"vars":{"book":"...","percent":"74"}}
   JsonDocument doc;
@@ -233,12 +244,13 @@ void emit(const Event e, const Var* vars, const size_t varCount) {
   line += '\n';
   if (line.size() > MAX_EVENT_LINE) {
     LOG_ERR("PEVT", "event line too large (%u); dropped", static_cast<unsigned>(line.size()));
-    return;
+    return false;
   }
 
   // The book's sidecar, read once and shared by every filtered handler.
   pluginhttp::Headers meta;
   bool metaLoaded = false;
+  bool armedReplacer = false;  // a "replaces: end of book" handler actually fired and launched
   for (const auto& sub : subscribers) {
     if (sub.name[0] == '\0' || !(sub.mask & eventBit(e))) continue;
     const uint32_t wanted = sub.metaKeyHash[static_cast<size_t>(e)];
@@ -274,7 +286,8 @@ void emit(const Event e, const Var* vars, const size_t varCount) {
       LOG_DBG("PEVT", "%s: outbox over cap, dropped", sub.name);
     }
     const uint64_t before = file.fileSize64();
-    if (file.write(reinterpret_cast<const uint8_t*>(line.data()), line.size()) != line.size()) {
+    const bool appended = file.write(reinterpret_cast<const uint8_t*>(line.data()), line.size()) == line.size();
+    if (!appended) {
       // A torn line would glue the next event onto it and the drain would drop
       // both as corrupt: cut back to the last complete line, losing only this one.
       LOG_ERR("PEVT", "%s: short outbox append; event dropped", sub.name);
@@ -282,11 +295,17 @@ void emit(const Event e, const Var* vars, const size_t varCount) {
     }
     file.flush();
     // Launch mode: the event is now in the app's queue; ask the UI loop to open
-    // the app. Not for sleep.enter (no UI as the chip powers down). First wins.
-    if ((sub.launchMask & eventBit(e)) && e != Event::SleepEnter && pendingLaunchPath.empty()) {
-      pendingLaunchPath = std::string(sub.dir) + "/app.bin";
+    // the app. Only once the append actually landed (a rolled-back short write
+    // would open the app with no event to read). Not for sleep.enter (no UI as
+    // the chip powers down). First wins.
+    if (appended && (sub.launchMask & eventBit(e)) && e != Event::SleepEnter && pendingLaunchPath.empty()) {
+      pendingLaunchPath = std::string(sub.dir) + "/" + (sub.launchBin[0] ? sub.launchBin : "app.bin");
+      // An EOB replacement really took the handoff (replacesEob is a plugin-wide
+      // flag, so also require this to be the reader.end event).
+      if (sub.replacesEob && e == Event::ReaderEnd) armedReplacer = true;
     }
   }
+  return armedReplacer;
 }
 
 std::string takePendingLaunch() {

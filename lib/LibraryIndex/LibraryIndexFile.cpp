@@ -275,7 +275,7 @@ bool LibraryIndexFile::readFolders(FolderLookup* folders, size_t count) {
   const uint32_t end = head.folderStart + head.folderLen;
   uint32_t offset = head.folderStart, blockStart = 0, blockEnd = 0;
   for (uint32_t id = 0; id < head.folderCount && remaining; ++id) {
-    if (offset >= end) break;
+    if (offset >= end) return remaining == 0;
     if (offset >= blockEnd) {
       blockStart = offset;
       blockEnd = offset + std::min(BLOCK_SIZE, end - offset);
@@ -283,7 +283,7 @@ bool LibraryIndexFile::readFolders(FolderLookup* folders, size_t count) {
     }
     const uint8_t len = block[offset - blockStart];
     ++offset;
-    if (!len || len > end - offset) break;
+    if (!len || len > end - offset) return remaining == 0;
     for (size_t i = 0; i < count; ++i) {
       auto& folder = folders[i];
       if (folder.id != id) continue;
