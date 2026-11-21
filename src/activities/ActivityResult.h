@@ -21,6 +21,11 @@ struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
   uint8_t pageTurnOption = 0;
+  // Font picked in the menu: an index into the reader font family list (see
+  // readerFontFamilyIndex()), -1 when unchanged, and a point size, 0 when the
+  // font is unchanged.
+  int16_t fontFamily = -1;
+  uint8_t fontPointSize = 0;
 };
 
 struct ChapterResult {
