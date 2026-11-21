@@ -9,11 +9,13 @@
 #include <Memory.h>
 #include <WiFi.h>
 #include <esp_rom_crc.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
@@ -85,6 +87,7 @@ void FontDownloadActivity::onExit() {
     delay(30);
     silentRestart();
   }
+  if (fontsSuspended_) sdFontSystem.reloadUiFontFromCard(renderer);
 }
 
 void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
@@ -159,6 +162,7 @@ bool FontDownloadActivity::internString(const char* text, StrRef& outRef) {
 
 bool FontDownloadActivity::fetchAndParseManifest() {
   if (auto* fcm = renderer.getFontCacheManager()) {
+    RenderLock lock(*this);
     fcm->releaseSdFontCaches();
   }
   // Rescan installed families before any TLS or JSON buffers exist. The rescan
@@ -523,6 +527,15 @@ bool FontDownloadActivity::computeFileCrc32(const char* path, uint32_t& outCrc) 
   return true;
 }
 
+void FontDownloadActivity::suspendFontsForMutation(const char* familyName) {
+  if (fontsSuspended_ || (strcasecmp(familyName, SETTINGS.uiFontFamilyName) != 0 &&
+                          strcasecmp(familyName, SETTINGS.sdFontFamilyName) != 0))
+    return;
+  RenderLock lock(*this);
+  sdFontSystem.releaseForStorage(renderer);
+  fontsSuspended_ = true;
+}
+
 void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   {
     RenderLock lock(*this);
@@ -539,6 +552,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   // hold tens of KB the TLS session needs; release them up front rather than
   // starving the transfer. They repopulate on demand after the download.
   if (auto* fcm = renderer.getFontCacheManager()) {
+    RenderLock lock(*this);
     fcm->releaseSdFontCaches();
     LOG_DBG("FONT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
   }
@@ -554,6 +568,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     return;
   }
 
+  suspendFontsForMutation(str(family.name));
   if (!fontInstaller_.ensureFamilyDir(str(family.name))) {
     RenderLock lock(*this);
     state_ = ERROR;
@@ -704,6 +719,7 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
   }
   auto& family = families_[familyIndex];
 
+  suspendFontsForMutation(str(family.name));
   if (fontInstaller_.deleteFamily(str(family.name)) != FontInstaller::Error::OK) {
     RenderLock lock(*this);
     state_ = ERROR;

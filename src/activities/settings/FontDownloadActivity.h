@@ -142,6 +142,8 @@ class FontDownloadActivity final : public UiListActivity {
   // Returns false if the string does not fit the arena reserved for the manifest.
   bool internString(const char* text, StrRef& outRef);
   void clearManifest();
+  bool fontsSuspended_ = false;
+  void suspendFontsForMutation(const char* familyName);
   void downloadFamily(ManifestFamily& family);
   void downloadAll();
   void updateAll();
