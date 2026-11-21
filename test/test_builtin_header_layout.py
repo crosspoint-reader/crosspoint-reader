@@ -22,35 +22,39 @@ assert "const int16_t strip = HEADER_STATUS_HEIGHT;" in base
 assert "if (SETTINGS.clockShowInHeader &&" in base
 assert "metrics.headerShowsClock &&" not in base
 assert "status.clockCentered = metrics.headerClockCentered" not in base
-# Guard the complete shift expression, including subtraction of the theme's
-# top padding. A reversed sign would displace RoundedRaff's negative shift.
+# The band top moves to the shared status slot; bezel clearance stays in
+# the board's headerOffsetY, so the viewable inset must not enter the shift.
 shift_helper = base.split("int headerBandTopShift(", 1)[1].split("}  // namespace", 1)[0]
 assert re.search(
-    r"return\s+std::max\(BaseTheme::HEADER_STATUS_TOP,\s*top\)\s*-\s*"
+    r"return\s+BaseTheme::HEADER_STATUS_TOP\s*-\s*"
     r"UITheme::getInstance\(\)\.getMetrics\(\)\.topPadding\s*;",
     shift_helper,
 )
+assert "getOrientedViewableTRBL" not in shift_helper
 assert "static_cast<int16_t>(rect.height - offset)" in base
 assert "headerBatterySide = 0" in rounded_metrics
 assert "headerClockCentered = false" in lyra_metrics
 
-# The title compensates half of the *same* top-edge move as headerBand,
-# including device offsets. Combining before division prevents two odd
-# halves from being rounded independently.
-assert "const int topOffset = BoardConfig::ACTIVE.headerOffsetY + headerBandTopShift(renderer);" in base
-assert "props.titleOffsetY = static_cast<int16_t>(strip / 2 + topOffset / 2);" in base
-assert "const int16_t shift = static_cast<int16_t>(headerBandTopShift(renderer));" in base
-assert base.count("headerBandTopShift(renderer)") == 2
-for top, padding, board_offset in ((0, 5, 0), (0, 13, 0), (9, 13, 3),
-                                   (11, 13, 0), (15, 10, 2), (9, 13, -1)):
-    shift = max(10, top) - padding
-    total = board_offset + shift
-    # C++ integer division truncates toward zero, including negative totals.
-    half = int(total / 2)
-    title_offset = 20 // 2 + half
-    assert title_offset == 10 + int((board_offset + shift) / 2)
-    if total % 2 == 0:
-        assert 2 * (title_offset - 10) == total
+# Only the status row moves: title and buttons must land where the theme's
+# own strip height and topPadding put them, on every theme and board offset.
+assert "const int16_t contentStrip = static_cast<int16_t>(metrics.batteryBarHeight);" in base
+assert "opticalDrop - shift);" in base
+assert ("props.titleOffsetY = static_cast<int16_t>(contentStrip / 2 + "
+        "(BoardConfig::ACTIVE.headerOffsetY - shift) / 2);") in base
+band_h, btn = 84, 48
+for padding, content_strip in ((5, 20), (10, 20), (13, 24)):
+    for board_offset in (0, 6, -1):
+        shift = 10 - padding
+        # Buttons: band top + 4 + actionOffsetY, before and after the shift.
+        old_btn = padding + board_offset + 4 + content_strip + (band_h - content_strip - btn) // 2
+        new_btn = (padding + board_offset + shift) + 4 + content_strip + (band_h - content_strip - btn) // 2 - shift
+        assert new_btn == old_btn
+        # Title center, doubled to stay in integers; C++ division truncates.
+        old_center2 = 2 * (padding + board_offset) + (band_h - board_offset) + 2 * (
+            content_strip // 2 + int(board_offset / 2))
+        new_center2 = 2 * (padding + board_offset + shift) + (band_h - board_offset - shift) + 2 * (
+            content_strip // 2 + int((board_offset - shift) / 2))
+        assert abs(new_center2 - old_center2) <= 2, (padding, board_offset)
 
 # RoundedRaff's Home screen must not suppress the shared status line when
 # it draws a header without a book title.
@@ -68,14 +72,14 @@ assert not re.search(r"\b(if|switch|for|while|return|goto)\b", before_delegate)
 # short Home bands and when a board's headerOffsetY shifts the top edge.
 band = base.split("freeink::ui::Rect BaseTheme::headerBand(", 1)[1].split(
     "void BaseTheme::drawHeader(", 1)[0]
-assert "const int16_t shift = static_cast<int16_t>(headerBandTopShift(renderer));" in band
+assert "const int16_t shift = static_cast<int16_t>(headerBandTopShift());" in band
 assert "const int16_t offset = static_cast<int16_t>(BoardConfig::ACTIVE.headerOffsetY + shift);" in band
 assert re.search(r"rect\.y\s*\+\s*offset", band)
 assert re.search(r"rect\.height\s*-\s*offset", band)
 for band_y, band_height in ((5, 84), (10, 84), (13, 84), (0, 62),
                              (0, 76), (13, 24), (5, 51)):
-    for viewable_top, board_offset in ((0, 0), (9, 3), (11, 0), (15, 2)):
-        shift = max(10, viewable_top) - band_y
+    for board_offset in (0, 3, 6):
+        shift = 10 - band_y
         offset = board_offset + shift
         # Match headerBand's Rect{rect.x + left, rect.y + offset,
         #                         rect.width - left - right, rect.height - offset}.
