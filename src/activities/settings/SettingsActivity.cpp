@@ -632,6 +632,12 @@ void SettingsActivity::openSleepTimeoutPicker() {
 }
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
+#if CROSSPOINT_VECTOR_FONTS
+  if (setting.action == SettingAction::UiFont) {
+    const char* name = sdFontSystem.activeUiFontName();
+    return name[0] == '\0' ? tr(STR_DEFAULT_VALUE) : name;
+  }
+#endif
   if (setting.action == SettingAction::Plugins) return SETTINGS.pluginsEnabled ? tr(STR_ENABLED) : tr(STR_DISABLED);
   if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Guard like the valueGetter branch below: a corrupt/migrated settings
