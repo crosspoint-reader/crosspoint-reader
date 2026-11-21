@@ -253,11 +253,17 @@ int CrosspointServices::resolve(const char* path, std::string& out, uint32_t max
   return 0;
 }
 
+// Validate-only form: the path is already the full SD path (whole-card policy),
+// so most callers need no std::string copy and pass `path` straight through.
+int CrosspointServices::resolve(const char* path, uint32_t maxLen) {
+  if (!path || path[0] != '/' || strlen(path) > maxLen) return DSN_ERR_INVALID;
+  return 0;
+}
+
 int CrosspointServices::fsRead(const char* path, uint8_t* out, uint32_t cap) {
-  std::string full;
-  if (int e = resolve(path, full)) return e;
+  if (int e = resolve(path)) return e;
   HalFile f;
-  if (!Storage.openFileForRead("DSN", full, f)) return DSN_ERR_IO;
+  if (!Storage.openFileForRead("DSN", path, f)) return DSN_ERR_IO;
   const size_t size = f.fileSize();
   if (size > cap) return DSN_ERR_TOO_BIG;
   const int got = f.read(out, size);
@@ -265,10 +271,9 @@ int CrosspointServices::fsRead(const char* path, uint8_t* out, uint32_t cap) {
 }
 
 int CrosspointServices::fsReadAt(const char* path, uint32_t offset, uint8_t* out, uint32_t cap) {
-  std::string full;
-  if (int e = resolve(path, full)) return e;
+  if (int e = resolve(path)) return e;
   HalFile f;
-  if (!Storage.openFileForRead("DSN", full, f)) return DSN_ERR_IO;
+  if (!Storage.openFileForRead("DSN", path, f)) return DSN_ERR_IO;
   if (offset >= f.fileSize()) return 0;
   if (!f.seek(offset)) return DSN_ERR_IO;
   const int got = f.read(out, cap);
@@ -276,20 +281,18 @@ int CrosspointServices::fsReadAt(const char* path, uint32_t offset, uint8_t* out
 }
 
 int CrosspointServices::fsWrite(const char* path, const uint8_t* data, uint32_t n) {
-  std::string full;
-  if (int e = resolve(path, full)) return e;
+  if (int e = resolve(path)) return e;
   HalFile f;
-  if (!Storage.openFileForWrite("DSN", full, f)) return DSN_ERR_IO;
+  if (!Storage.openFileForWrite("DSN", path, f)) return DSN_ERR_IO;
   const size_t wrote = f.write(data, n);
   const bool closed = f.close();  // close flushes buffered data; its failure means a short write
   return (wrote == n && closed) ? 0 : DSN_ERR_IO;
 }
 
 int CrosspointServices::fsList(const char* path, char* out, uint32_t cap) {
-  std::string full;
-  if (int e = resolve(path, full)) return e;
+  if (int e = resolve(path)) return e;
   HalFile dir;
-  if (!Storage.openFileForRead("DSN", full, dir) || !dir.isDirectory()) return DSN_ERR_IO;
+  if (!Storage.openFileForRead("DSN", path, dir) || !dir.isDirectory()) return DSN_ERR_IO;
   BoundedOutput entries(cap);
   for (HalFile e = dir.openNextFile(); e; e = dir.openNextFile()) {
     char name[257];
@@ -303,9 +306,8 @@ int CrosspointServices::fsList(const char* path, char* out, uint32_t cap) {
 }
 
 int CrosspointServices::fsDelete(const char* path) {
-  std::string full;
-  if (int e = resolve(path, full)) return e;
-  return Storage.remove(full.c_str()) ? 0 : DSN_ERR_IO;
+  if (int e = resolve(path)) return e;
+  return Storage.remove(path) ? 0 : DSN_ERR_IO;
 }
 
 int CrosspointServices::fsAppDir(char* out, uint32_t cap) {
