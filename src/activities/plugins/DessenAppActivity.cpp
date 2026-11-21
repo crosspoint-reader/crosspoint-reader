@@ -101,9 +101,11 @@ void DessenAppActivity::leaveApp() {
 }
 
 bool DessenAppActivity::handleHomeGesture() {
-  if (!homeLauncher) return false;
-  leaveApp();
-  return true;
+  // A home-launcher app IS the home screen, so the Home button does nothing
+  // (like pressing Home on the built-in Home) instead of dropping to the default
+  // home. The escape hatches are a swipe-back (see loop()) and a long Back press.
+  // A normal plugin app still returns false so the Home gesture exits it.
+  return homeLauncher;
 }
 
 void DessenAppActivity::openKeyboard() {
@@ -143,6 +145,13 @@ void DessenAppActivity::loop() {
   // use the page keys to move a selection AND a swipe to scroll. Clear the
   // release so the swipe is never also read as a tap on what it passed over.
   const SwipeDir swipe = mappedInput.wasSwipe();
+  // Escape hatch for a home launcher (which ignores the Home button): a
+  // left-to-right back-swipe leaves to the default home. Reserved on the home
+  // launcher only, and only this direction, so the app keeps its other swipes.
+  if (homeLauncher && swipe == SwipeDir::Right) {
+    leaveApp();
+    return;
+  }
   dessen::FreeInkHost::Swipe appSwipe = dessen::FreeInkHost::SwipeNone;
   if (swipe != SwipeDir::None) {
     snap.touchReleased = false;  // never also read the swipe as a tap on what it passed over
