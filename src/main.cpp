@@ -664,6 +664,13 @@ void setupDisplayAndFonts(bool seamless = false) {
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);
 
+  // Let the user swap the whole UI font (menus, home) to an installed
+  // family. applyUiFont() re-points the UI font slots above, or keeps the built-in.
+#if CROSSPOINT_VECTOR_FONTS
+  sdFontSystem.setBuiltinUiFonts(&smallFontFamily, &ui10FontFamily, &ui12FontFamily);
+  sdFontSystem.applyUiFont(renderer);
+#endif
+
   LOG_DBG("MAIN", "Fonts setup");
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 #include <I18n.h>
+#include <VectorFontSupport.h>
 
 #include <functional>
 #include <span>
@@ -31,6 +32,9 @@ enum class SettingAction {
   TextSettings,
   Plugins,
   KeyboardLayouts,
+#if CROSSPOINT_VECTOR_FONTS
+  UiFont,
+#endif
   HomeButton,
   ControlsPower,
   ControlsFront,

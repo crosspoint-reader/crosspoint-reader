@@ -101,6 +101,11 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
   }
+#if CROSSPOINT_VECTOR_FONTS
+  if (uiFontFamilyName[0] != '\0') {
+    doc["uiFontFamilyName"] = uiFontFamilyName;
+  }
+#endif
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, save manually
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
@@ -286,6 +291,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
   sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
+#if CROSSPOINT_VECTOR_FONTS
+  const char* ufn = doc["uiFontFamilyName"] | "";
+  strncpy(uiFontFamilyName, ufn, sizeof(uiFontFamilyName) - 1);
+  uiFontFamilyName[sizeof(uiFontFamilyName) - 1] = '\0';
+#endif
   if (sdFontFamilyName[0] == '\0') {
     switch (storedFontFamily) {
       case LEGACY_NOTOSERIF:
