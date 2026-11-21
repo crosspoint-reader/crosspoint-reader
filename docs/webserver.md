@@ -64,6 +64,21 @@ CrossPoint-Reader
    phones and computers open the reader's home page automatically after
    joining.
 
+The hotspot's IPv4 network can be changed when 192.168.4.x collides with
+another network. Set `"apCidr"` in `/.crosspoint/settings.json` on the SD
+card, in CIDR notation with a /24 to /28 prefix. The address is the reader's
+own IP on the hotspot — typically the subnet's first host address:
+
+```json
+{
+  "apCidr": "10.0.0.1/24"
+}
+```
+
+The file is read once at startup: edit it with the reader off, or restart the
+reader after editing and before changing other settings. An invalid or
+unusable value is ignored and the default 192.168.4.1/24 network is used.
+
 The reader displays one QR code for joining the hotspot and another QR code for
 opening the web interface.
 
