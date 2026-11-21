@@ -479,51 +479,11 @@ void HomeActivity::loop() {
   }
 }
 
-void HomeActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-  // Content columns clear the bezel insets on rounded panels. The header
-  // self-insets in drawHeader, so only the cover/menu need it here.
-  const Rect content = UITheme::getInstance().getContentArea(renderer);
-
-  renderer.clearScreen();
-  if (coverGridUi) {
-    const auto drawGrid = [&] {
-      renderer.clearScreen();
-      coverGridUi->setSelection(selectorIndex);
-      UITheme::getInstance().drawCoverGridHome(*coverGridUi);
-      // Front Left/Right walk the tabs, so their hints read Left/Right; the
-      // side page buttons (unhinted) walk the covers.
-      const auto labels = mappedInput.mapLabels(hasContinueReading ? tr(STR_RESUME) : "", tr(STR_SELECT),
-                                                tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    };
-    drawGrid();
-    // Slot heights are recorded during the draw above; a change (first layout
-    // pass, orientation switch) means the paths must point at those sizes and
-    // any missing thumbs must be generated. Resolve the covers before the
-    // panel is touched and redraw into the framebuffer, so Home paints once
-    // instead of three e-ink refreshes (placeholder, placeholder, covers).
-    if (coverGridUi->takeThumbHeightChanged()) {
-      coverGridUi->refreshCoverPaths();
-      recentsLoaded = false;
-    }
-    if (!recentsLoaded && !recentsLoading) {
-      loadRecentCovers(CoverGridHomeUi::THUMB_HEIGHT);
-      coverGridUi->refreshCoverPaths();
-      drawGrid();
-      if (coverGridUi->takeThumbHeightChanged()) {
-        coverGridUi->refreshCoverPaths();
-        recentsLoaded = false;
-        requestUpdate();
-      }
-    }
-    renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH
-                                                                   : HalDisplay::FAST_REFRESH);
-    firstRenderDone = true;
-    return;
-  }
+/**
+ * Draw other themes
+ */
+void HomeActivity::drawThemeHome(const ThemeMetrics& metrics, const int pageWidth, const int pageHeight,
+                                 const Rect& content) {
   // A cover snapshot from the other output polarity holds the other byte form (night mode keeps images pre-inverted so
   // they stay positive): pasting it back after a theme switch showed the cover as a negative. Redraw it instead.
   if (coverBufferStored && coverBufferInverted != display.isInverted()) {
@@ -581,15 +541,74 @@ void HomeActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT), tr(STR_DIR_UP),
                                             tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
-
-  firstRenderDone = true;
   if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
     const int themeThumbHeight = GUI.homeCoverThumbHeight(renderer);
     loadRecentCovers(themeThumbHeight > 0 ? themeThumbHeight : metrics.homeCoverHeight);
   }
+}
+
+/**
+ * Draw Cover Grid-related UI
+ */
+void HomeActivity::drawCoverGrid() {
+  const auto drawGrid = [&] {
+    coverGridUi->setSelection(selectorIndex);
+    UITheme::getInstance().drawCoverGridHome(*coverGridUi);
+    // Front Left/Right walk the tabs, so their hints read Left/Right; the
+    // side page buttons (unhinted) walk the covers.
+    const auto labels = mappedInput.mapLabels(hasContinueReading ? tr(STR_RESUME) : "", tr(STR_SELECT),
+                                              tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  };
+  drawGrid();
+  // Slot heights are recorded during the draw above; a change (first layout
+  // pass, orientation switch) means the paths must point at those sizes and
+  // any missing thumbs must be generated. Resolve the covers before the
+  // panel is touched and redraw into the framebuffer, so Home paints once
+  // instead of three e-ink refreshes (placeholder, placeholder, covers).
+  if (coverGridUi->takeThumbHeightChanged()) {
+    coverGridUi->refreshCoverPaths();
+    recentsLoaded = false;
+  }
+  if (!recentsLoaded && !recentsLoading) {
+    loadRecentCovers(CoverGridHomeUi::THUMB_HEIGHT);
+    coverGridUi->refreshCoverPaths();
+    drawGrid();
+    if (coverGridUi->takeThumbHeightChanged()) {
+      coverGridUi->refreshCoverPaths();
+      recentsLoaded = false;
+      requestUpdate();
+    }
+  }
+}
+
+/**
+ * Draw home content according to current theme
+ */
+void HomeActivity::drawHomeContent() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const Rect content = UITheme::getInstance().getContentArea(renderer);
+
+  if (coverGridUi) {
+    drawCoverGrid();
+  } else {
+    drawThemeHome(metrics, pageWidth, pageHeight, content);
+  }
+}
+
+void HomeActivity::submitDisplayBuffer() {
+  renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+
+  firstRenderDone = true;
+}
+
+void HomeActivity::render(RenderLock&&) {
+  renderer.clearScreen();
+  drawHomeContent();
+  submitDisplayBuffer();
 }
 
 void HomeActivity::onRecentBookSelected(const std::string& path) { activityManager.goToReader(path); }
