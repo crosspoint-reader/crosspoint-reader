@@ -1,5 +1,4 @@
 #include "EpubReaderActivity.h"
-#include "util/PluginEvents.h"
 
 #include <BlePageTurner.h>
 #include <Epub/Page.h>
@@ -62,6 +61,7 @@
 #include "sync/SyncEngine.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
+#include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
