@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "BookCacheUtils.h"
 #include "PluginHttp.h"
 #include "PluginLocations.h"
 #include "components/UITheme.h"
@@ -19,8 +20,8 @@
 
 namespace {
 
-constexpr const char* EVENT_NAMES[] = {"reader.open", "reader.exit", "reader.session", "book.downloaded",
-                                       "sleep.enter", "reader.end"};
+constexpr const char* EVENT_NAMES[] = {"reader.open",     "reader.exit", "reader.session",
+                                       "book.downloaded", "sleep.enter", "reader.end"};
 static_assert(sizeof(EVENT_NAMES) / sizeof(EVENT_NAMES[0]) == static_cast<size_t>(pluginevents::Event::COUNT),
               "event name table out of sync");
 
@@ -44,13 +45,13 @@ constexpr size_t MAX_EVENT_RESPONSE = 8 * 1024;
 // plugin list screen, not a marketplace.
 constexpr size_t MAX_EVENT_PLUGINS = 8;
 struct Subscriber {
-  char name[24] = {0};      // plugin folder name; "" = empty slot
-  char dir[64] = {0};       // "<root>/<name>"
-  uint8_t mask = 0;         // bit per Event
-  uint8_t connectMask = 0;  // events whose handler declares "connect": true
-  uint8_t appMask = 0;      // events whose handler routes to a dessen app ("app")
-  uint8_t launchMask = 0;   // app events with "mode": "launch" (open the app now)
-  bool replacesEob = false; // reader.end handler marked "replaces": "end of book"
+  char name[24] = {0};       // plugin folder name; "" = empty slot
+  char dir[64] = {0};        // "<root>/<name>"
+  uint8_t mask = 0;          // bit per Event
+  uint8_t connectMask = 0;   // events whose handler declares "connect": true
+  uint8_t appMask = 0;       // events whose handler routes to a dessen app ("app")
+  uint8_t launchMask = 0;    // app events with "mode": "launch" (open the app now)
+  bool replacesEob = false;  // reader.end handler marked "replaces": "end of book"
   // Hash of each handler's "require_meta" key, 0 = unfiltered. A hash keeps
   // emit() free of manifest reads; a collision only queues an extra event.
   uint32_t metaKeyHash[static_cast<size_t>(pluginevents::Event::COUNT)] = {};
@@ -138,11 +139,12 @@ void refreshSubscriptions() {
       // or launches it (launch mode) instead of a network request/download.
       if (kv.value()["app"].is<const char*>()) {
         appMask |= static_cast<uint8_t>(1u << e);
-        const bool replaceEob = e == static_cast<int>(Event::ReaderEnd) &&
-                                strcmp(kv.value()["replaces"] | "", "end of book") == 0;
+        const bool replaceEob =
+            e == static_cast<int>(Event::ReaderEnd) && strcmp(kv.value()["replaces"] | "", "end of book") == 0;
         // Replacing the EOB screen means opening the app at the last page, so it
         // implies launch mode even if the manifest omits it.
-        if (replaceEob || strcmp(kv.value()["mode"] | "read", "launch") == 0) launchMask |= static_cast<uint8_t>(1u << e);
+        if (replaceEob || strcmp(kv.value()["mode"] | "read", "launch") == 0)
+          launchMask |= static_cast<uint8_t>(1u << e);
         if (replaceEob) replacesEob = true;
       }
       if (kv.value()["connect"] | false) connectMask |= static_cast<uint8_t>(1u << e);
@@ -454,6 +456,7 @@ bool deliverLine(const DrainManifest& mf, const std::string& lineText, std::stri
           return -1;
         }
         Storage.remove(bak.c_str());
+        sleepImageChanged(dest.c_str());
         if (library::isLibraryBookFile(dest)) library::markLibraryIndexDirty();
       } else {
         Storage.remove(tmp.c_str());

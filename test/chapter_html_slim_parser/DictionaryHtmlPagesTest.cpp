@@ -3,29 +3,23 @@
 #include <HalStorage.h>
 #include <gtest/gtest.h>
 
-#include <filesystem>
-
 #include "src/util/DictHtmlPages.h"
+#include "test/ScopedTempDir.h"
 
 namespace {
 
 class DictionaryHtmlPagesTest : public ::testing::Test {
  protected:
+  ScopedTempDir tempDir;
   GfxRenderer renderer;
   std::vector<std::unique_ptr<Page>> pages;
 
   void SetUp() override {
     ESP = {};
     renderer.sdFont = true;
-    // ctest runs each case as its own process; a shared staging file lets a
-    // concurrent case truncate or remove it mid-parse.
-    Storage.dictionaryTempPath = (std::filesystem::temp_directory_path() /
-                                  (std::string("crosspoint-dicthtml-") +
-                                   ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".tmp"))
-                                     .string();
+    Storage.dictionaryTempPath = (tempDir.path() / "dicthtml.tmp").string();
   }
   void TearDown() override {
-    std::filesystem::remove(Storage.dictionaryTempPath);
     Storage.dictionaryTempPath.clear();
     ESP = {};
   }

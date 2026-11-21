@@ -111,6 +111,8 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Browse Files](#33-browse-files-screen)**, the **[Library](#34-library-screen)**, **[File Transfer](#35-file-transfer-screen)**, or **[Settings](#36-settings)**.
 
+When saved reading progress is available, Lyra shows the percentage and a progress bar below the book title and author.
+
 ### 3.2 Reading Mode
 
 See [Reading Mode](#4-reading-mode) below for more information.
@@ -567,6 +569,10 @@ If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only fo
 Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Front buttons -> Menu long press** to **CrossPoint Sync** and hold Confirm to launch sync directly.
 
 - **Sync Clippings** is off by default. Enable it only for a compatible CrossPoint Sync server; manual **Sync Progress** then uploads and downloads this book’s clippings too. Leave it off for ordinary KOSync servers.
+- With the server type set to **CrossPoint** or **Other**, manual **Sync Progress** also syncs this book's bookmarks and uploads your reading sessions, if the server offers these features. If it does not, or this step fails, progress sync still continues.
+  - **Bookmarks:** each bookmark's position, text excerpt, and name are uploaded. Bookmarks added, renamed, or deleted on one device appear on your other devices after they sync.
+  - **Reading sessions:** CrossPoint records each reading session in `/.crosspoint/reading_sessions.jsonl` on the SD card, even before sync is set up, and never trims that file. Each line also stores the book's path and title, which are not uploaded. A sync uploads sessions the server does not have yet, up to 200 per sync, so a long history is uploaded over several syncs. Each session carries the book id, start time, active reading time, time zone offset, and an id that includes this device's hardware address.
+- **Sync On Sleep** is off by default. When it is on and you put the device to sleep from an EPUB, CrossPoint joins a saved Wi-Fi network that is in range, preferring the last one you used (if the battery is at least 20%), and syncs that book after the sleep screen appears: bookmarks, reading sessions, clippings if enabled, and your position. Your position is uploaded only when the server is not further ahead; a further position on the server waits for a manual **Sync Progress**. Going to sleep takes a few seconds longer and uses more battery. If the network is not reachable, the device just sleeps.
 - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
 - With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 
@@ -702,7 +708,7 @@ CrossPoint renders text using the following Unicode character blocks, enabling s
 * **Cyrillic Script (Standard and Extended):** Covers Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh, Kyrgyz, Mongolian, and others.
 * **Vietnamese:** Supported via extended Latin glyph coverage in the built-in reader fonts.
 
-The UI includes Arabic and Hebrew (menus use built-in fonts with presentation-form coverage). Built-in **reader** fonts do not cover Chinese, Japanese, Korean, Arabic, Greek, Hebrew, or Farsi for book text. **CJK, Hebrew, Arabic, Greek, and other extended scripts can be enabled for reading by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card).
+The UI includes Arabic and Hebrew (menus use built-in fonts with presentation-form coverage). Built-in **reader** fonts do not cover Chinese, Japanese, Korean, Arabic, Indic scripts (Hindi, Bengali, Tamil, ...), Greek, Hebrew, or Farsi for book text. **CJK, Hebrew, Arabic, Indic, Greek, and other extended scripts can be enabled for reading by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card). Devanagari, Bengali, Gurmukhi, Gujarati, Odia, Tamil, Telugu, Kannada, Malayalam and Sinhala text is fully shaped (conjuncts, reph and vowel-sign placement) with the matching `NotoSans…` or `NotoSerif…` download fonts; see [docs/sd-card-fonts.md](docs/sd-card-fonts.md#indic-scripts).
 
 ---
 
