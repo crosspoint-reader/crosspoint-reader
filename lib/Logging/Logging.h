@@ -65,6 +65,10 @@ void logPrintf(const char* level, const char* origin, const char* format, ...);
 #define LOG_INF(origin, format, ...)
 #endif
 
+// Silences logPrintf so a protocol can own the log UART (serial file transfer).
+void logSetMuted(bool muted);
+bool logIsMuted();
+
 std::string getLastLogs();
 void clearLastLogs();
 // Validates the RTC log state (magic word + logHead range). Returns true if

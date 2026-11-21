@@ -1570,18 +1570,23 @@ void CrossPointWebServer::handleSettingsPage() const {
 }
 
 void CrossPointWebServer::handleGetSettings() const {
+  // ?keys=a,b returns only those settings, so a plugin need not read the whole list.
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  ChunkedReply reply(*server);
+  writeSettingsJson(reply, server->arg("keys"));
+  reply.end();
+  LOG_DBG("WEB", "Served settings API");
+}
+
+void CrossPointWebServer::writeSettingsJson(Print& reply, const String& keys) {
   // Pass the SD font registry so the fontFamily setting's enumStringValues
   // includes SD-resident families — otherwise the web API only exposes the
   // three built-in fonts.
   std::vector<DictionaryEntry> dictionaries;
   DictionaryRegistry::discover(dictionaries);
-  // ?keys=a,b returns only those settings, so a plugin need not read the whole list.
-  const String keys = server->arg("keys");
   const auto wants = [&keys](const char* key) { return key && (keys.isEmpty() || listContainsKey(keys, key)); };
 
-  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server->send(200, "application/json", "");
-  ChunkedReply reply(*server);
   reply.write("[");
 
   bool seenFirst = false;
@@ -1671,8 +1676,6 @@ void CrossPointWebServer::handleGetSettings() const {
   });
 
   reply.write("]");
-  reply.end();
-  LOG_DBG("WEB", "Served settings API");
 }
 
 void CrossPointWebServer::handlePostSettings() {
@@ -1680,13 +1683,21 @@ void CrossPointWebServer::handlePostSettings() {
     server->send(400, "text/plain", "Missing JSON body");
     return;
   }
+  String error;
+  const int applied = applySettingsJson(server->arg("plain"), error);
+  if (applied < 0) {
+    server->send(400, "text/plain", error);
+    return;
+  }
+  server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");
+}
 
-  const String body = server->arg("plain");
+int CrossPointWebServer::applySettingsJson(const String& body, String& error) {
   JsonDocument doc;
   const DeserializationError err = deserializeJson(doc, body);
   if (err) {
-    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
-    return;
+    error = String("Invalid JSON: ") + err.c_str();
+    return -1;
   }
 
   std::vector<DictionaryEntry> dictionaries;
@@ -1751,7 +1762,7 @@ void CrossPointWebServer::handlePostSettings() {
   SETTINGS.saveToFile();
 
   LOG_DBG("WEB", "Applied %d setting(s)", applied);
-  server->send(200, "text/plain", String("Applied ") + String(applied) + " setting(s)");
+  return applied;
 }
 
 // ---- OPDS Server API ----
@@ -3272,15 +3283,20 @@ static void addFontFiles(const SdCardFontFamilyInfo& family, JsonArray files) {
 }
 
 void CrossPointWebServer::handleFontList() const {
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  ChunkedReply reply(*server);
+  writeFontListJson(reply);
+  reply.end();
+}
+
+bool CrossPointWebServer::writeFontListJson(Print& reply) {
   // Pick up any uploads/deletes that happened since the last reader load.
   const_cast<SdCardFontSystem&>(sdFontSystem).refreshIfDirty();
   const auto& families = sdFontSystem.registry().getFamilies();
 
   // Serialize one family at a time: with many families, the whole document plus
   // its serialized copy does not fit in the heap of a DRAM-only board.
-  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server->send(200, "application/json", "");
-  ChunkedReply reply(*server);
   char head[80];
   // Vector (.ttf/.otf) fonts need PSRAM to stay resident; DRAM-only boards
   // only take pre-rendered .cpfont uploads.
@@ -3303,8 +3319,7 @@ void CrossPointWebServer::handleFontList() const {
     if (doc.overflowed()) {
       // Leave the JSON unterminated so the page reports a failed load, not a short list.
       LOG_ERR("WEB", "OOM: font list entry");
-      reply.end();
-      return;
+      return false;
     }
     if (&family != &families.front()) reply.write(',');
     serializeJson(doc, reply);
@@ -3313,7 +3328,7 @@ void CrossPointWebServer::handleFontList() const {
   }
 
   reply.write("]}");
-  reply.end();
+  return true;
 }
 
 void CrossPointWebServer::handleFontUploadData() {
@@ -3493,15 +3508,18 @@ void CrossPointWebServer::handleFontDelete() {
   }
 
   const char* familyName = doc["family"];
-  FontInstaller installer(sdFontSystem.registry());
-  auto result = installer.deleteFamily(familyName);
-
-  if (result == FontInstaller::Error::OK) {
-    sdFontSystem.markRegistryDirty();
+  if (deleteFontFamily(familyName)) {
     server->send(200, "application/json", "{\"ok\":true}");
     LOG_DBG("WEB", "Deleted font family: %s", familyName);
   } else {
     server->send(500, "application/json", "{\"error\":\"Delete failed\"}");
     LOG_ERR("WEB", "Failed to delete font family: %s", familyName);
   }
+}
+
+bool CrossPointWebServer::deleteFontFamily(const char* familyName) {
+  FontInstaller installer(sdFontSystem.registry());
+  if (installer.deleteFamily(familyName) != FontInstaller::Error::OK) return false;
+  sdFontSystem.markRegistryDirty();
+  return true;
 }
