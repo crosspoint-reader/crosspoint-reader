@@ -56,6 +56,8 @@ class SdCardFontSystem {
   /// Release SD font handles and restore built-ins before storage leaves firmware control.
   /// The caller holds RenderLock.
   void releaseForStorage(GfxRenderer& renderer);
+  /// The caller holds RenderLock.
+  void reloadUiFontFromCard(GfxRenderer& renderer);
 
   /// Resolve an SD card font ID from family name + reader point size.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().

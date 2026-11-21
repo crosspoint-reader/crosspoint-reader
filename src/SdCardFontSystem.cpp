@@ -297,6 +297,14 @@ void SdCardFontSystem::releaseForStorage(GfxRenderer& renderer) {
   unloadCpfonts(renderer);
 }
 
+void SdCardFontSystem::reloadUiFontFromCard(GfxRenderer& renderer) {
+  registryDirty_.store(false, std::memory_order_relaxed);
+  registry_.discover();
+#if CROSSPOINT_VECTOR_FONTS
+  applyUiFont(renderer, SETTINGS.uiFontFamilyName);
+#endif
+}
+
 void SdCardFontSystem::unloadCpfonts(GfxRenderer& renderer) {
   cpfontVariants_.clear();  // the manager owns and frees the fonts themselves
   manager_.unloadAll(renderer);
