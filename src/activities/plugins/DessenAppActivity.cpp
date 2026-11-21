@@ -190,8 +190,10 @@ void DessenAppActivity::loop() {
         auto app = Storage.exists(target.c_str())
                        ? makeUniqueNoThrow<DessenAppActivity>(renderer, mappedInput, std::move(target))
                        : nullptr;
-        if (app) activityManager.replaceActivity(std::move(app));
-        else leaveApp();  // missing binary / OOM: fall back home
+        if (app)
+          activityManager.replaceActivity(std::move(app));
+        else
+          leaveApp();  // missing binary / OOM: fall back home
         break;
       }
       case dessen::Launch::Settings:

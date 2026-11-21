@@ -11,7 +11,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalFrontlight.h>  // declares the `Frontlight` singleton
-#include <HalGPIO.h>  // declares the `gpio` singleton (USB/charge detection)
+#include <HalGPIO.h>        // declares the `gpio` singleton (USB/charge detection)
 #include <HalHaptics.h>
 #include <HalPowerManager.h>  // declares the `powerManager` singleton
 #include <HalStorage.h>
