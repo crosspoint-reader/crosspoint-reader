@@ -135,6 +135,19 @@ void DessenAppActivity::loop() {
   }
 
   fui::InputSnapshot snap = touchSnapshotFrom(mappedInput, /*withLongPress=*/true);
+  // Escape hatch for a home launcher (where the Home button is a no-op): a
+  // press-and-hold in the top-left header "back" area leaves to the default
+  // home. A swipe would clash with the app's own paging, so use a long-press
+  // on the spot a header back button lives. touchX/Y are panel coordinates;
+  // the safe-area origin is the app's (0,0).
+  if (homeLauncher && snap.longPress) {
+    const fui::DeviceContext dev = uiTarget.deviceContext();
+    const int ox = dev.safeArea.left, oy = dev.safeArea.top;
+    if (snap.touchX >= ox && snap.touchX < ox + 88 && snap.touchY >= oy && snap.touchY < oy + 72) {
+      leaveApp();
+      return;
+    }
+  }
   using Button = MappedInputManager::Button;
   using SwipeDir = MappedInputManager::SwipeDir;
   snap.confirm = mappedInput.wasReleased(Button::Confirm);
@@ -145,13 +158,6 @@ void DessenAppActivity::loop() {
   // use the page keys to move a selection AND a swipe to scroll. Clear the
   // release so the swipe is never also read as a tap on what it passed over.
   const SwipeDir swipe = mappedInput.wasSwipe();
-  // Escape hatch for a home launcher (which ignores the Home button): a
-  // left-to-right back-swipe leaves to the default home. Reserved on the home
-  // launcher only, and only this direction, so the app keeps its other swipes.
-  if (homeLauncher && swipe == SwipeDir::Right) {
-    leaveApp();
-    return;
-  }
   dessen::FreeInkHost::Swipe appSwipe = dessen::FreeInkHost::SwipeNone;
   if (swipe != SwipeDir::None) {
     snap.touchReleased = false;  // never also read the swipe as a tap on what it passed over
