@@ -1097,7 +1097,10 @@ void loop() {
     if (!mappedInputManager.powerSleepRequested()) return;
   }
 
-  if (mappedInputManager.powerSleepClick()) {
+  if (loopStartTime < allowSleepAt && BoardConfig::isPaperMono()) {
+    // The PMIC wake click can arrive after setup. Drop it before it can outlast the sleep guard.
+    mappedInputManager.resetPowerButtonInput();
+  } else if (mappedInputManager.powerSleepClick()) {
     enterDeepSleep();
     return;
   }
@@ -1139,7 +1142,7 @@ void loop() {
   // power-button meaning and shut down; explicit alternate bindings still win.
   if ((SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP ||
        SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::IGNORE) &&
-      millis() >= allowSleepAt && mappedInputManager.wasPowerSingleClick()) {
+      loopStartTime >= allowSleepAt && mappedInputManager.wasPowerSingleClick()) {
     enterDeepSleep();
     return;
   }
