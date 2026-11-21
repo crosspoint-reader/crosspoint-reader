@@ -90,6 +90,10 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 77
+
+Version 77 keeps the binary layout and rebuilds sections for Knuth-Plass DP, 2/3 English hyphenation, 18% shrink, Bresenham justification, and 1-3 px optical margins (`LAYOUT_SIGNATURE_VERSION` 2 -> 3).
+
 ### Version 75
 
 Version 75 shapes Indic text (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya,
@@ -422,7 +426,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 74
+#define EXPECTED_VERSION 77
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
