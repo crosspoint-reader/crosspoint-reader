@@ -1,6 +1,7 @@
 #include "EpdFontFamily.h"
 
 const EpdFont* EpdFontFamily::getFont(const Style style) const {
+  if (useFallbackOnly()) return fallbackFont(style);
   // Extract font style bits; render-time overlay bits do not affect font selection.
   const bool hasBold = (style & BOLD) != 0;
   const bool hasItalic = (style & ITALIC) != 0;
@@ -19,14 +20,23 @@ const EpdFont* EpdFontFamily::getFont(const Style style) const {
 }
 
 void EpdFontFamily::getTextDimensions(const char* string, int* w, int* h, const Style style) const {
-  getFont(style)->getTextDimensions(string, w, h, fallbackFont(style));
+  const auto* font = getFont(style);
+  const auto* fallback = fallbackFont(style);
+  font->getTextDimensions(string, w, h, fallback);
+  if (font != fallback && useFallbackOnly()) fallback->getTextDimensions(string, w, h, fallback);
 }
 
 const EpdFontData* EpdFontFamily::getData(const Style style) const { return getFont(style)->data; }
 
 const EpdGlyph* EpdFontFamily::getGlyph(const uint32_t cp, const Style style) const {
   const auto* font = glyphFont(cp, style);
-  return font ? font->getGlyph(cp) : nullptr;
+  if (!font) return nullptr;
+  const auto* glyph = font->getGlyph(cp);
+  if (useFallbackOnly() && font != fallbackFont(style)) {
+    font = glyphFont(cp, style);
+    return font ? font->getGlyph(cp) : nullptr;
+  }
+  return glyph;
 }
 
 bool EpdFontFamily::hasCodepoint(const uint32_t cp, const Style style) const {
@@ -43,6 +53,14 @@ uint32_t EpdFontFamily::applyLigatures(const uint32_t cp, const char*& text, con
   return !glyphFallback || font->hasCodepoint(cp) ? font->applyLigatures(cp, text) : cp;
 }
 
+bool EpdFontFamily::useFallbackOnly() const {
+#if CROSSPOINT_VECTOR_FONTS
+  return glyphFallback && glyphLoadFailed && glyphLoadFailed->load(std::memory_order_relaxed);
+#else
+  return false;
+#endif
+}
+
 const EpdFont* EpdFontFamily::fallbackFont(const Style style) const {
   return glyphFallback ? glyphFallback->getFont(style) : nullptr;
 }
@@ -55,6 +73,11 @@ const EpdGlyph* EpdFontFamily::getGlyphMetrics(const uint32_t cp, EpdGlyph& soli
                                                const EpdFontData** glyphData) const {
   const auto* font = glyphFont(cp, style);
   if (!font) return nullptr;
-  if (glyphData) *glyphData = font->data;
-  return font->getGlyphMetrics(cp, solidFallback);
+  const auto* glyph = font->getGlyphMetrics(cp, solidFallback);
+  if (useFallbackOnly() && font != fallbackFont(style)) {
+    font = glyphFont(cp, style);
+    glyph = font ? font->getGlyphMetrics(cp, solidFallback) : nullptr;
+  }
+  if (glyphData && font) *glyphData = font->data;
+  return glyph;
 }

@@ -48,7 +48,9 @@ class SdCardFontSystem {
   /// Returns false on failure, with the built-ins restored. The caller holds
   /// RenderLock after startup.
   bool applyUiFont(GfxRenderer& renderer, const char* name);
-  const char* activeUiFontName() const { return activeUiFontName_; }
+  const char* activeUiFontName() const { return uiTtfFailed() ? "" : activeUiFontName_; }
+  bool uiTtfFailed() const { return uiTtfFailed_.load(std::memory_order_relaxed); }
+  void recoverUiFont(GfxRenderer& renderer);
 #endif
 
   /// Release SD font handles and restore built-ins before storage leaves firmware control.
@@ -150,6 +152,7 @@ class SdCardFontSystem {
   EpdFontFamily* builtinUi10_ = nullptr;
   EpdFontFamily* builtinUi12_ = nullptr;
   char activeUiFontName_[32] = "";
+  std::atomic<bool> uiTtfFailed_{false};
 
   // One style source file. SMALL files are read fully into `bytes` (resident,
   // PSRAM when present); LARGE files stream from `file` (kept open) so a multi-MB

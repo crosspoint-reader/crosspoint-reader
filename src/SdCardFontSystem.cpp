@@ -602,7 +602,8 @@ bool SdCardFontSystem::loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer
       ok = font->loadVariantOf(*uiTtf_[0], size, /*twoBit=*/true, kUiGlyphCacheBytes, kUiMaxGlyphs);
     }
     if (!ok) return false;
-    font->build(" ");
+    font->setGlyphLoadFailureFlag(&uiTtfFailed_);
+    if (!font->build(" ") || uiTtfFailed()) return false;
     uiTtf_[i] = std::move(font);
   }
   // All three sizes loaded: only now replace the slots, so a failure above
@@ -613,6 +614,7 @@ bool SdCardFontSystem::loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer
     auto font = uiTtf_[i]->family();
     const EpdFontFamily* const builtins[] = {builtinUiSmall_, builtinUi10_, builtinUi12_};
     font.setGlyphFallback(builtins[i]);
+    font.setGlyphLoadFailureFlag(&uiTtfFailed_);
     renderer.insertFont(id, font);
     renderer.registerTtfFont(id, uiTtf_[i].get());
   }
@@ -621,6 +623,7 @@ bool SdCardFontSystem::loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer
 
 bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer, const char* want) {
   unloadUiTtf(renderer);
+  uiTtfFailed_.store(false, std::memory_order_relaxed);
   activeUiFontName_[0] = '\0';
   if (want[0] != '\0') {
     const SdCardFontFamilyInfo* family = registry_.findFamily(want);
@@ -631,10 +634,17 @@ bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer, const char* want) {
     }
     LOG_ERR("SDFS", "UI font '%s' missing or failed to load; using built-in", want);
     unloadUiTtf(renderer);  // drop a partial load
+    uiTtfFailed_.store(false, std::memory_order_relaxed);
   }
 
   restoreBuiltinUiFonts(renderer);
   return want[0] == '\0';
+}
+
+void SdCardFontSystem::recoverUiFont(GfxRenderer& renderer) {
+  if (!uiTtfFailed()) return;
+  LOG_ERR("SDFS", "UI glyph load failed in %s; using built-in fonts", activeUiFontName_);
+  applyUiFont(renderer, "");
 }
 
 void SdCardFontSystem::restoreBuiltinUiFonts(GfxRenderer& renderer) {

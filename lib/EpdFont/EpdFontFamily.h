@@ -1,4 +1,10 @@
 #pragma once
+#include <VectorFontSupport.h>
+
+#if CROSSPOINT_VECTOR_FONTS
+#include <atomic>
+#endif
+
 #include "EpdFont.h"
 
 class EpdFontFamily {
@@ -37,6 +43,9 @@ class EpdFontFamily {
   const EpdGlyph* getGlyphMetrics(uint32_t cp, EpdGlyph& solidFallback, Style style = REGULAR,
                                   const EpdFontData** glyphData = nullptr) const;
   void setGlyphFallback(const EpdFontFamily* fallback) { glyphFallback = fallback; }
+#if CROSSPOINT_VECTOR_FONTS
+  void setGlyphLoadFailureFlag(const std::atomic<bool>* failure) { glyphLoadFailed = failure; }
+#endif
   bool hasGlyphFallback() const { return glyphFallback != nullptr; }
   /// Returns true if the resolved style's font can render `cp` directly
   /// (interval coverage only — see EpdFont::hasCodepoint).
@@ -54,6 +63,11 @@ class EpdFontFamily {
   const EpdFont* boldItalic;
   float sizeInPixels;
   const EpdFontFamily* glyphFallback = nullptr;
+#if CROSSPOINT_VECTOR_FONTS
+  const std::atomic<bool>* glyphLoadFailed = nullptr;
+#endif
+
+  bool useFallbackOnly() const;
 
   const EpdFont* fallbackFont(Style style) const;
   const EpdFont* glyphFont(uint32_t cp, Style style) const;
