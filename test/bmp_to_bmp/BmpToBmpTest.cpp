@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "test/ScopedTempDir.h"
+
 namespace {
 
 class Output final : public Print {
@@ -60,14 +62,9 @@ std::vector<uint8_t> splitBmp(int width, int height, bool topDown, bool oneBit, 
 
 class BmpToBmpTest : public ::testing::Test {
  protected:
-  std::filesystem::path path =
-      std::filesystem::temp_directory_path() /
-      (std::string("crosspoint-bmp-to-bmp-") + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+  ScopedTempDir tempDir;
+  const std::filesystem::path path = tempDir.path() / "input.bmp";
   HalFile file;
-  void TearDown() override {
-    file.close();
-    std::filesystem::remove(path);
-  }
   Output convert(const std::vector<uint8_t>& bmp, bool crop) {
     {
       std::ofstream out(path, std::ios::binary);
