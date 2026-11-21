@@ -43,7 +43,13 @@ class HalPowerManager {
   // wakeOnHeldButton: arm the wake without waiting for the power button's
   // release, so a press that is still down wakes the device straight back up
   // through the normal power-button wake path.
-  void startDeepSleep(HalGPIO& gpio, bool wakeOnHeldButton = false) const;
+  //
+  // timerWakeUs requests an ESP-IDF one-shot timer in microseconds; zero adds
+  // no timer. Existing board shutdown and button-wake behavior is unchanged.
+  // Timer wake requires ESP power through sleep and an IDF-accepted duration.
+  // Callers pass timerWakeUs as an explicit third argument so positional
+  // second arguments keep their held-button meaning.
+  void startDeepSleep(HalGPIO& gpio, bool wakeOnHeldButton = false, uint64_t timerWakeUs = 0) const;
 
 #if FREEINK_DEVICE_PICCO
   // While USB powers the device, light-sleep instead of deep sleep (deep sleep
