@@ -524,6 +524,8 @@ void SettingsActivity::toggleSelectedSetting() {
           bool applied;
           {
             RenderLock lock;
+            if (strcmp(name, sdFontSystem.activeUiFontName()) == 0 && strcmp(name, SETTINGS.uiFontFamilyName) == 0)
+              return;
             char previous[sizeof(SETTINGS.uiFontFamilyName)];
             snprintf(previous, sizeof(previous), "%s", sdFontSystem.activeUiFontName());
             applied = sdFontSystem.applyUiFont(renderer, name);
@@ -534,8 +536,10 @@ void SettingsActivity::toggleSelectedSetting() {
             optionPopup.showMessage("", tr(STR_UI_FONT_LOAD_FAILED), options, 1, 0, nullptr);
             return;
           }
-          snprintf(SETTINGS.uiFontFamilyName, sizeof(SETTINGS.uiFontFamilyName), "%s", name);
-          SETTINGS.saveToFile();
+          if (strcmp(name, SETTINGS.uiFontFamilyName) != 0) {
+            snprintf(SETTINGS.uiFontFamilyName, sizeof(SETTINGS.uiFontFamilyName), "%s", name);
+            SETTINGS.saveToFile();
+          }
           rebuildSettings();
         });
         requestUpdate();
