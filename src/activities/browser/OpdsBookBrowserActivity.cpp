@@ -18,6 +18,8 @@
 #include <Util.h>
 #include <WolfsslCrypto.h>
 
+#include <algorithm>
+#include <cstdio>
 #include <iterator>
 
 #include "BookKey.h"
@@ -33,7 +35,6 @@
 #include "network/LcpDevice.h"
 #include "util/BookCacheUtils.h"
 #include "util/OpdsFeedError.h"
-#include "util/OpdsFilename.h"
 #include "util/UrlUtils.h"
 
 namespace fui = freeink::ui;
@@ -115,7 +116,11 @@ void OpdsBookBrowserActivity::onExit() {
 
 void OpdsBookBrowserActivity::activateIndex(const int index) {
   app.clearTapFlash();
-  const auto& entry = entries[index];
+  if (isDownloadAllRow(index)) {
+    downloadAllNew();
+    return;
+  }
+  const auto& entry = entries[entryIndexFromRow(index)];
   entry.type == OpdsEntryType::BOOK ? openPublicationDetail(entry) : navigateToEntry(entry);
 }
 
@@ -278,10 +283,11 @@ void OpdsBookBrowserActivity::drawFooter() {
   MappedInputManager::Labels labels;
   switch (state) {
     case State::BROWSING: {
-      const char* confirmLabel = tr(STR_OPEN);
-      if (!entries.empty() && nav.selected >= 0 && nav.selected < static_cast<int>(entries.size()) &&
-          entries[nav.selected].type == OpdsEntryType::BOOK) {
-        confirmLabel = entries[nav.selected].purchase ? tr(STR_OPDS_BUY) : tr(STR_DOWNLOAD);
+      const char* confirmLabel = isDownloadAllRow(nav.selected) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
+      const int entryIndex = entryIndexFromRow(nav.selected);
+      if (!entries.empty() && entryIndex >= 0 && entryIndex < static_cast<int>(entries.size()) &&
+          entries[entryIndex].type == OpdsEntryType::BOOK) {
+        confirmLabel = entries[entryIndex].purchase ? tr(STR_OPDS_BUY) : tr(STR_DOWNLOAD);
       }
       const char* searchLabel = (hasSearch() && nav.selected == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
       labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
@@ -425,8 +431,18 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 // (fetchFeed()/releaseEntries()) so buildBrowsingScreen() reuses the cached
 // rows on every repaint instead of rebuilding them per render.
 void OpdsBookBrowserActivity::rebuildRowItems() {
+  // Only for books the batch can fetch: it leaves purchases and LCP books alone.
+  showDownloadAllRow = std::any_of(entries.begin(), entries.end(), [](const OpdsEntry& entry) {
+    return entry.type == OpdsEntryType::BOOK && !entry.purchase && !entry.lcpLicense;
+  });
   rowItems.clear();
-  rowItems.reserve(entries.size());
+  rowItems.reserve(entries.size() + (showDownloadAllRow ? 1 : 0));
+  if (showDownloadAllRow) {
+    fui::ListItem batch;
+    batch.label = tr(STR_OPDS_DOWNLOAD_ALL_NEW);
+    batch.actionValue = 0;
+    rowItems.push_back(batch);
+  }
   for (const auto& entry : entries) {
     fui::ListItem item;
     // A group's "see all" self link carries no title of its own; the UI
@@ -450,6 +466,7 @@ void OpdsBookBrowserActivity::releaseEntries() {
   closeRouting();
   std::vector<OpdsEntry>().swap(entries);
   std::vector<fui::ListItem>().swap(rowItems);
+  showDownloadAllRow = false;
 }
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
@@ -483,25 +500,9 @@ void OpdsBookBrowserActivity::onBackButton() { navigateBack(); }
 
 // SD destination from the configured download folder + filename format.
 std::string OpdsBookBrowserActivity::downloadDestination(const OpdsEntry& book) const {
-  // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
-  // no std::string copy. exists()/mkdir() take const char*.
-  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
-  bool haveFolder = folder[0] != '\0';
-  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
-    // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
-    // existing caller checks exists() before mkdir. On real failure, fall back
-    // to SD root so the download is never lost.
-    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
-    haveFolder = false;
-  }
-  // Titles are unbounded (a fixed char[] would truncate). Cold path (a
-  // multi-second download follows), so one reserve'd owning string is right.
-  std::string filename;
-  filename.reserve(96);
-  if (haveFolder) filename += folder;
-  filename += '/';
-  filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
-  return filename;
+  // Same composition as the batch walk's skip check, so a file written here is
+  // recognised as already-present there.
+  return OpdsBatchDownload::destPath(book.author, book.title);
 }
 
 // A purchase link (or any misbehaving endpoint) can answer 200 with an HTML
@@ -570,10 +571,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       if (!dlAuth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + dlAuth.bearer});
       result = downloadFile(downloadUrl, filename, dlAuth.username, dlAuth.password, headers);
     }
-    if (attempt != 0 || result != HttpDownloader::UNAUTHORIZED || HttpDownloader::lastStatus() != 401 ||
-        HttpDownloader::lastAnswerRedirected() ||
-        freeink::fetchOrigin(downloadUrl) != freeink::fetchOrigin(server.url) || cancelDownload)
-      break;
+    if (attempt != 0 || cancelDownload || !OpdsBatchDownload::authRetryAllowed(result, downloadUrl, server.url)) break;
     std::string title;
     {
       RenderLock lock;
@@ -594,6 +592,86 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 
   if (result == HttpDownloader::OK && !verifyAndRegisterEpub(filename)) return;
   finishDownload(result);
+}
+
+// Pumped by OpdsBatchDownload before and after each book: the status line
+// carries the counters and the title of the book in flight.
+bool OpdsBookBrowserActivity::onBatchProgress(void* ctx, const OpdsBatchDownload::Status& status) {
+  auto* self = static_cast<OpdsBookBrowserActivity*>(ctx);
+  self->onDownloadProgress(0, 0);  // pumps Back, Home and the Cancel button
+  char counters[24];
+  snprintf(counters, sizeof(counters), "%d / %d", status.downloaded, status.examined);
+  {
+    RenderLock lock;
+    self->statusMessage = counters;
+    if (status.title[0] != '\0') {
+      self->statusMessage += "  ";
+      self->statusMessage += status.title;
+    }
+  }
+  self->requestUpdate(true);
+  return !self->cancelDownload;
+}
+
+HttpDownloader::DownloadError OpdsBookBrowserActivity::onBatchTransfer(void* ctx, const std::string& url,
+                                                                       const std::string& dest,
+                                                                       const freeink::opds::HttpAuth& auth) {
+  auto* self = static_cast<OpdsBookBrowserActivity*>(ctx);
+  std::vector<HttpDownloader::Header> headers = auth.headers;
+  if (!auth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + auth.bearer});
+  return self->downloadFile(url, dest, auth.username, auth.password, headers);
+}
+
+// Downloads every book of the current catalog that is not already on the SD
+// card, following the feed's pagination, then reloads the feed.
+void OpdsBookBrowserActivity::downloadAllNew() {
+  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
+  // Reclaim the catalog while TLS owns its record buffers; the walk parses its
+  // own pages and the feed is reloaded when it finishes.
+  {
+    RenderLock lock;
+    releaseEntries();
+  }
+  beginDownload(tr(STR_OPDS_DOWNLOAD_ALL_NEW));
+  batchStatus = {};
+
+  const OpdsBatchDownload::Hooks hooks{this, &OpdsBookBrowserActivity::onBatchProgress,
+                                       &OpdsBookBrowserActivity::onBatchTransfer};
+  const auto result = OpdsBatchDownload::run(opdsClient, server.url, feedUrl, hooks, batchStatus);
+  if (opdsClient.tokensDirty()) persistTokens();
+  LOG_INF("OPDS", "Batch: %d new, %d skipped, %d failed of %d", batchStatus.downloaded, batchStatus.skipped,
+          batchStatus.failed, batchStatus.examined);
+
+  if (result == OpdsBatchDownload::Result::FAILED) {
+    fail(StrId::STR_DOWNLOAD_FAILED);
+    return;
+  }
+  const bool limited = result == OpdsBatchDownload::Result::LIMIT_REACHED;
+  const bool pageTruncated = result == OpdsBatchDownload::Result::PAGE_TRUNCATED;
+  const bool failures = result != OpdsBatchDownload::Result::CANCELLED && batchStatus.failed > 0;
+  if (limited) LOG_INF("OPDS", "Batch stopped at its limit");
+  if (pageTruncated) LOG_INF("OPDS", "Batch ended on a truncated page");
+  const bool notice = limited || pageTruncated;
+  if (notice || failures) {
+    std::string message = limited         ? tr(STR_OPDS_BATCH_STOPPED_EARLY)
+                          : pageTruncated ? tr(STR_OPDS_BATCH_PAGE_TRUNCATED)
+                                          : "";
+    if (failures) {
+      char counts[24];
+      snprintf(counts, sizeof(counts), " (%d / %d)", batchStatus.failed, batchStatus.downloaded + batchStatus.failed);
+      if (notice) message += ' ';
+      message += tr(STR_DOWNLOAD_FAILED);
+      message += counts;
+    }
+    {
+      RenderLock lock;
+      state = State::ERROR;
+      errorMessage = std::move(message);
+    }
+    requestUpdate();
+    return;
+  }
+  finishDownload(result == OpdsBatchDownload::Result::CANCELLED ? HttpDownloader::ABORTED : HttpDownloader::OK);
 }
 
 // LCP acquisition: the href is a small license document (.lcpl), not the

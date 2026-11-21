@@ -10,6 +10,7 @@
 
 #include "OpdsServerStore.h"
 #include "activities/CatalogActivity.h"
+#include "network/OpdsBatchDownload.h"
 #include "network/OpdsHttpTransport.h"
 
 struct DetailsSpec;
@@ -35,6 +36,11 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   // a ListItem vector per render.
   std::vector<freeink::ui::ListItem> rowItems;
   void rebuildRowItems();
+  // A synthetic "Download new" row precedes the feed whenever the current page
+  // holds at least one book, so list rows are one longer than entries.
+  bool showDownloadAllRow = false;
+  int entryIndexFromRow(int rowIndex) const { return showDownloadAllRow ? rowIndex - 1 : rowIndex; }
+  bool isDownloadAllRow(const int rowIndex) const { return showDownloadAllRow && rowIndex == 0; }
   std::vector<std::string> navigationHistory;
   std::string currentPath;
   // The active search query. While browsing its results the header shows it
@@ -86,7 +92,9 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   freeink::opds::OpdsClient opdsClient{opdsTransport};
 
   // --- CatalogActivity / UiListActivity contract -----------------------------
-  int listCount() const override { return state == State::BROWSING ? static_cast<int>(entries.size()) : 0; }
+  int listCount() const override {
+    return state == State::BROWSING ? static_cast<int>(entries.size()) + (showDownloadAllRow ? 1 : 0) : 0;
+  }
   bool hasSearch() const override { return !searchTemplate.empty() || !searchDescriptionUrl.empty(); }
   std::string searchPrefill() const override { return searchQuery; }
   void activateIndex(int index) override;
@@ -134,6 +142,12 @@ class OpdsBookBrowserActivity final : public CatalogActivity {
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
   void downloadBook(const OpdsEntry& book);
+  void downloadAllNew();
+  // Set while "Download new" runs; the status line shows its counters.
+  OpdsBatchDownload::Status batchStatus;
+  static bool onBatchProgress(void* ctx, const OpdsBatchDownload::Status& status);
+  static HttpDownloader::DownloadError onBatchTransfer(void* ctx, const std::string& url, const std::string& dest,
+                                                       const freeink::opds::HttpAuth& auth);
   void openPublicationDetail(const OpdsEntry& entry);
   static void fillDetailInfo(const OpdsPublication& publication, DetailsSpec& spec);
   // Download the publication's cover art to an SD temp for the details page.
