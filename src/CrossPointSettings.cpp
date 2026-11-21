@@ -101,6 +101,9 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
   }
+  if (uiFontFamilyName[0] != '\0') {
+    doc["uiFontFamilyName"] = uiFontFamilyName;
+  }
 #if CROSSPOINT_DESSEN_APPS
   if (customHomeApp[0] != '\0') {
     doc["customHomeApp"] = customHomeApp;
@@ -291,6 +294,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
   sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
+  const char* ufn = doc["uiFontFamilyName"] | "";
+  strncpy(uiFontFamilyName, ufn, sizeof(uiFontFamilyName) - 1);
+  uiFontFamilyName[sizeof(uiFontFamilyName) - 1] = '\0';
 #if CROSSPOINT_DESSEN_APPS
   const char* cha = doc["customHomeApp"] | "";
   strncpy(customHomeApp, cha, sizeof(customHomeApp) - 1);

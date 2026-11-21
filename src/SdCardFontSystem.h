@@ -17,6 +17,7 @@
 #include <vector>
 
 class GfxRenderer;
+class EpdFontFamily;
 class TtfEpdFont;
 
 /// Facade that owns the SD card font registry, manager, and resolver logic.
@@ -37,6 +38,17 @@ class SdCardFontSystem {
   /// Call before entering the reader or after settings change.
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).
   void ensureLoaded(GfxRenderer& renderer);
+
+  /// Remember the built-in UI font families (SMALL/UI_10/UI_12) so applyUiFont()
+  /// can restore them when no SD UI font is selected. Call once at boot.
+  void setBuiltinUiFonts(EpdFontFamily* small, EpdFontFamily* ui10, EpdFontFamily* ui12);
+
+  /// Bind the UI font slots (SMALL_FONT_ID/UI_10/UI_12) to SETTINGS.uiFontFamilyName
+  /// when it is set and ships .cpfont glyphs at those sizes; otherwise restore the
+  /// built-in UI fonts. The whole UI — menus, home, and dessen apps, which draw
+  /// through these same slots — follows. Call at boot and whenever the setting
+  /// changes. Returns true if an SD UI font was applied, false if built-in.
+  bool applyUiFont(GfxRenderer& renderer);
 
   /// Resolve an SD card font ID from family name + reader point size.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
@@ -112,6 +124,12 @@ class SdCardFontSystem {
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
+
+  // Built-in UI font families, remembered via setBuiltinUiFonts() so applyUiFont()
+  // can restore them when SETTINGS.uiFontFamilyName is empty.
+  EpdFontFamily* builtinUiSmall_ = nullptr;
+  EpdFontFamily* builtinUi10_ = nullptr;
+  EpdFontFamily* builtinUi12_ = nullptr;
 
 #if CROSSPOINT_VECTOR_FONTS
   // One style source file. SMALL files are read fully into `bytes` (resident,

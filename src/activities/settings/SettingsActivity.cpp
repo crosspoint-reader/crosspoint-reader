@@ -144,6 +144,7 @@ void SettingsActivity::rebuildSettings() {
 #if CROSSPOINT_DESSEN_APPS
   addAction(SettingsSection::Display, StrId::STR_HOME_LAUNCHER, SettingAction::HomeApp);
 #endif
+  addAction(SettingsSection::Display, StrId::STR_UI_FONT, SettingAction::UiFont);
   addAction(SettingsSection::Reader, StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings);
   addAction(SettingsSection::Reader, StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts);
   if (section == SettingsSection::Controls) {
@@ -525,6 +526,35 @@ void SettingsActivity::toggleSelectedSetting() {
         return;
       }
 #endif
+      case SettingAction::UiFont: {
+        // Only pre-rasterized families that ship every built-in UI size can back
+        // the whole-UI font (see SdCardFontSystem::applyUiFont); "Default" is the
+        // built-in, and selecting it just clears the setting.
+        const auto& families = sdFontSystem.registry().getFamilies();
+        std::vector<std::string> options;
+        std::vector<std::string> names;  // family name for each option after "Default"
+        options.emplace_back("Default (built-in)");
+        int current = 0;
+        for (const auto& fam : families) {
+          if (fam.vector || !fam.findFile(8) || !fam.findFile(10) || !fam.findFile(12)) continue;
+          names.push_back(fam.name);
+          options.push_back(fam.name);
+          if (fam.name == SETTINGS.uiFontFamilyName) current = static_cast<int>(names.size());
+        }
+        optionPopup.show(StrId::STR_UI_FONT, options, current, [this, names](const int idx) {
+          if (idx <= 0 || idx > static_cast<int>(names.size())) {
+            SETTINGS.uiFontFamilyName[0] = '\0';
+          } else {
+            strncpy(SETTINGS.uiFontFamilyName, names[idx - 1].c_str(), sizeof(SETTINGS.uiFontFamilyName) - 1);
+            SETTINGS.uiFontFamilyName[sizeof(SETTINGS.uiFontFamilyName) - 1] = '\0';
+          }
+          sdFontSystem.applyUiFont(renderer);
+          SETTINGS.saveToFile();
+          rebuildSettings();
+        });
+        requestUpdate();
+        return;
+      }
       case SettingAction::Plugins: {
         static constexpr StrId OPTIONS[] = {StrId::STR_ENABLED, StrId::STR_DISABLED, StrId::STR_CANCEL};
         optionPopup.show(StrId::STR_PLUGINS, OPTIONS, 3, SETTINGS.pluginsEnabled ? 0 : 1, [this](const int idx) {

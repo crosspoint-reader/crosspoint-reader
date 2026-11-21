@@ -1,5 +1,6 @@
 #include "SdCardFontSystem.h"
 
+#include <EpdFontFamily.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -269,6 +270,61 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
       LOG_DBG("SDFS", "No %u pt SD glyphs for UI fallback in %s", ui.pointSize, familyName.c_str());
     }
   }
+}
+
+void SdCardFontSystem::setBuiltinUiFonts(EpdFontFamily* small, EpdFontFamily* ui10, EpdFontFamily* ui12) {
+  builtinUiSmall_ = small;
+  builtinUi10_ = ui10;
+  builtinUi12_ = ui12;
+}
+
+bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer) {
+  const char* want = SETTINGS.uiFontFamilyName;
+  const SdCardFontFamilyInfo* family = want[0] != '\0' ? registry_.findFamily(want) : nullptr;
+
+  // Usable as the UI font only if it ships a pre-rasterized (.cpfont) glyph set
+  // at EVERY built-in UI size, so no slot is left without a font. (Vector/.ttf UI
+  // fonts are a follow-up — they load through a different path.)
+  bool usable = family != nullptr && !family->vector;
+  if (usable) {
+    for (const auto& ui : kUiFontSizes) {
+      if (!family->findFile(ui.pointSize)) {
+        usable = false;
+        break;
+      }
+    }
+  }
+
+  if (usable) {
+    bool ok = true;
+    for (const auto& ui : kUiFontSizes) {
+      renderer.removeFont(ui.fontId);  // free the built-in (or previous) binding; loadFile rejects a collision
+      if (!manager_.loadFamilyVariant(*family, renderer, ui.pointSize, ui.fontId)) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) {
+      LOG_DBG("SDFS", "UI font: %s", want);
+      return true;
+    }
+    LOG_ERR("SDFS", "UI font '%s' failed to load; using built-in", want);
+    // fall through and restore the built-in so no UI slot is left fontless
+  } else if (want[0] != '\0') {
+    LOG_DBG("SDFS", "UI font '%s' unavailable (missing a UI size, vector, or not on card); using built-in", want);
+  }
+
+  // Built-in UI font — the default, and the recovery path. Re-insert the
+  // remembered families; a no-op the first boot (they are already registered).
+  if (builtinUiSmall_ && builtinUi10_ && builtinUi12_) {
+    renderer.removeFont(SMALL_FONT_ID);
+    renderer.removeFont(UI_10_FONT_ID);
+    renderer.removeFont(UI_12_FONT_ID);
+    renderer.insertFont(SMALL_FONT_ID, *builtinUiSmall_);
+    renderer.insertFont(UI_10_FONT_ID, *builtinUi10_);
+    renderer.insertFont(UI_12_FONT_ID, *builtinUi12_);
+  }
+  return false;
 }
 
 int SdCardFontSystem::variantFontId(const int readerFontId, const uint8_t pointSize) {

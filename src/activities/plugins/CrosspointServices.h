@@ -36,6 +36,7 @@ class CrosspointServices : public dessen::Services {
   int clock(uint8_t* out) override;
   bool randomBytes(uint8_t* out, uint32_t n) override;
   int deviceId(char* out, uint32_t cap) override;
+  int locale(char* out, uint32_t cap) override;
   // ---- storage ----
   int fsRead(const char* path, uint8_t* out, uint32_t cap) override;
   int fsWrite(const char* path, const uint8_t* data, uint32_t n) override;

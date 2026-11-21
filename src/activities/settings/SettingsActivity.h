@@ -34,6 +34,7 @@ enum class SettingAction {
 #if CROSSPOINT_DESSEN_APPS
   HomeApp,
 #endif
+  UiFont,
   HomeButton,
   ControlsPower,
   ControlsFront,

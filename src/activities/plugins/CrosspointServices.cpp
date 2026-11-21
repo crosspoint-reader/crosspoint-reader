@@ -14,6 +14,7 @@
 #include <HalHaptics.h>
 #include <HalPowerManager.h>  // declares the `powerManager` singleton
 #include <HalStorage.h>
+#include <I18n.h>  // I18N, Language, LANGUAGE_CODES
 #include <LibraryBuilder.h>
 #include <LibraryIndexFile.h>
 #include <LibraryText.h>
@@ -224,6 +225,14 @@ int CrosspointServices::deviceId(char* out, uint32_t cap) {
   if (65 > cap) return DSN_ERR_TOO_BIG;
   for (size_t i = 0; i < 32; i++) snprintf(out + 2 * i, 3, "%02x", hash[i]);
   return 64;
+}
+
+int CrosspointServices::locale(char* out, uint32_t cap) {
+  const char* code = LANGUAGE_CODES[static_cast<int>(I18N.getLanguage())];
+  const size_t n = strlen(code);
+  if (n + 1 > cap) return DSN_ERR_TOO_BIG;
+  memcpy(out, code, n + 1);
+  return static_cast<int>(n);
 }
 
 // ---- storage ----
