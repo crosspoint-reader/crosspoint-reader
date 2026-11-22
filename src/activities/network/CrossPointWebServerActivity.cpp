@@ -12,7 +12,6 @@
 
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
-#include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
 #include "activities/network/CalibreConnectActivity.h"
@@ -115,7 +114,6 @@ void CrossPointWebServerActivity::onExit() {
   LOG_DBG("WEBACT", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
   state = WebServerActivityState::SHUTTING_DOWN;
-  const bool usedFileTransfer = webServer && webServer->isRunning();
   webServer.reset();
   stopDnsServer();
   MDNS.end();
@@ -134,11 +132,6 @@ void CrossPointWebServerActivity::onExit() {
     }
     delay(30);
     silentRestart();
-  }
-
-  // ActivityManager holds RenderLock during exit.
-  if (usedFileTransfer) {
-    sdFontSystem.reloadUiFontFromCard(renderer);
   }
 
   LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());

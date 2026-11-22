@@ -321,12 +321,6 @@ void SdCardFontSystem::clearCpfontUiFallbacks(GfxRenderer& renderer) {
   }
 }
 
-void SdCardFontSystem::reloadUiFontFromCard(GfxRenderer& renderer) {
-  registryDirty_.store(false, std::memory_order_relaxed);
-  registry_.discover();
-  applyUiFont(renderer, SETTINGS.uiFontFamilyName);
-}
-
 const char* SdCardFontSystem::activeUiFontName() const {
 #if CROSSPOINT_VECTOR_FONTS
   if (uiTtfFailed()) return "";

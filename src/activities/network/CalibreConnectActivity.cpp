@@ -6,7 +6,6 @@
 #include <WiFi.h>
 
 #include "MappedInputManager.h"
-#include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
 #include "components/UITheme.h"
@@ -53,7 +52,6 @@ void CalibreConnectActivity::onEnter() {
 void CalibreConnectActivity::onExit() {
   Activity::onExit();
 
-  const bool usedFileTransfer = webServer && webServer->isRunning();
   webServer.reset();
   MDNS.end();
 
@@ -62,7 +60,6 @@ void CalibreConnectActivity::onExit() {
     delay(30);
     silentRestart();
   }
-  if (usedFileTransfer) sdFontSystem.reloadUiFontFromCard(renderer);
 }
 
 void CalibreConnectActivity::onWifiSelectionComplete(const bool connected) {

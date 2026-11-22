@@ -87,7 +87,6 @@ void FontDownloadActivity::onExit() {
     delay(30);
     silentRestart();
   }
-  if (fontsSuspended_) sdFontSystem.reloadUiFontFromCard(renderer);
 }
 
 void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
