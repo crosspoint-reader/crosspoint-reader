@@ -3,6 +3,7 @@
 #include <Logging.h>
 #include <MD5Builder.h>
 #include <ObfuscationUtils.h>
+#include <base64.h>
 
 namespace {
 // Default sync server URL. crosspoint-sync speaks the full KOSync protocol, so
@@ -27,6 +28,7 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
   doc["matchMethod"] = static_cast<uint8_t>(getMatchMethod());
   doc["sendMetadata"] = getSendMetadata();
   doc["syncClippings"] = getSyncClippings();
+  doc["syncOnSleep"] = getSyncOnSleep();
   doc["syncBehavior"] = static_cast<uint8_t>(getSyncBehavior());
   JsonArray headers = doc["headers"].to<JsonArray>();
   for (const auto& header : customHeaders) {
@@ -85,6 +87,7 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
   }
   setSendMetadata(doc["sendMetadata"] | false);
   setSyncClippings(doc["syncClippings"] | false);
+  setSyncOnSleep(doc["syncOnSleep"] | false);
 
   size_t headerIndex = 0;
   for (JsonObjectConst headerObj : doc["headers"].as<JsonArrayConst>()) {
@@ -134,14 +137,12 @@ std::string KOReaderCredentialStore::getMd5Password() const {
   return md5.toString().c_str();
 }
 
-bool KOReaderCredentialStore::hasCredentials() const { return !username.empty() && !password.empty(); }
-
-void KOReaderCredentialStore::clearCredentials() {
-  username.clear();
-  password.clear();
-  saveToFile();
-  LOG_DBG("KRS", "Cleared KOReader credentials");
+std::string KOReaderCredentialStore::getBasicAuthorization() const {
+  const std::string credentials = username + ":" + password;
+  return std::string("Basic ") + base64::encode(credentials.c_str()).c_str();
 }
+
+bool KOReaderCredentialStore::hasCredentials() const { return !username.empty() && !password.empty(); }
 
 void KOReaderCredentialStore::setServerUrl(const std::string& url) {
   serverUrl = url;

@@ -4,7 +4,6 @@
 #include <HalMemory.h>
 #include <Logging.h>
 #include <SecureHttpClient.h>
-#include <base64.h>
 
 #include <string>
 
@@ -15,7 +14,6 @@ int KOReaderSyncClient::lastHttpCode = 0;
 namespace {
 // Device identifier for CrossPoint reader
 constexpr char DEVICE_NAME[] = "CrossPoint";
-constexpr char DEVICE_ID[] = "crosspoint-reader";
 
 // wolfSSL uses the default allocator, which can use PSRAM on supported builds.
 // Keep a free-space floor and room for a full TLS record when the server does
@@ -30,9 +28,7 @@ void applyAuthHeaders(freeink::SecureHttpClient& http) {
   http.addHeader("Accept", "application/vnd.koreader.v1+json");
   http.addHeader("x-auth-user", KOREADER_STORE.getUsername());
   http.addHeader("x-auth-key", KOREADER_STORE.getMd5Password());
-  const std::string credentials = KOREADER_STORE.getUsername() + ":" + KOREADER_STORE.getPassword();
-  const String encoded = base64::encode(credentials.c_str());
-  http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
+  http.addHeader("Authorization", KOREADER_STORE.getBasicAuthorization());
 }
 
 // Caller-configured headers (e.g. a Cloudflare Access service token) applied

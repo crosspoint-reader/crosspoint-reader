@@ -4,6 +4,7 @@
 
 #pragma once
 #include <cstdint>
+#include <string>
 
 // fontconvert.py, fontconvert_sdcard.py and the vector loader rasterize point sizes at this DPI.
 constexpr uint16_t FONT_RASTER_DPI = 150;
@@ -26,6 +27,10 @@ constexpr int32_t HALF = 1 << (FRAC_BITS - 1);  // 8, added before shift for rou
 
 /// Convert an integer pixel value to 12.4 fixed-point.
 constexpr int32_t fromPixel(int px) { return static_cast<int32_t>(px) << FRAC_BITS; }
+
+/// Discard the two low bits of a 26.6 value, leaving four fractional bits.
+/// This is used to preserve the final pixel snap when combining advances with fp4 kerning.
+constexpr int32_t truncate26_6_to_4(int32_t fp) { return fp >> 2; }
 
 /// Snap a fixed-point value to the nearest integer pixel.
 constexpr int toPixel(int32_t fp) { return static_cast<int>((fp + HALF) >> FRAC_BITS); }
@@ -259,6 +264,13 @@ typedef struct {
   /// none). Shares glyphMissCtx. nullptr for built-in and SD fonts, whose
   /// kerning is baked into the tables above (all fonts zero-init this).
   int8_t (*kernHandler)(void* ctx, uint32_t leftCp, uint32_t rightCp);
+
+  /// Complex-script shaping (ComplexShaper). When non-null, the renderer hands
+  /// it any text containing a complex-script run and draws the ShapingTokens.h
+  /// stream written to `out` instead. Returns false to draw the text unshaped.
+  /// Shares glyphMissCtx. nullptr for fonts without shaping data (all fonts
+  /// zero-init this).
+  bool (*shapeHandler)(void* ctx, const char* utf8, std::string* out);
 } EpdFontData;
 
 // Solid Unicode symbols can be drawn as rectangles when the font lacks them.

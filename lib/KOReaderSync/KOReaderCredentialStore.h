@@ -46,6 +46,7 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   DocumentMatchMethod matchMethod = DocumentMatchMethod::FILENAME;  // Default to filename for compatibility
   bool sendMetadata = true;                                         // Send document metadata with progress sync
   bool syncClippings = false;                                       // Opt-in crosspoint-sync extension
+  bool syncOnSleep = false;                                         // Sync the open book when the device sleeps
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
   KOReaderServerType serverType = KOReaderServerType::CROSSPOINT;
 
@@ -74,11 +75,11 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Get MD5 hash of password for API authentication
   std::string getMd5Password() const;
 
+  // HTTP Basic Authorization header value for servers that check Basic auth
+  std::string getBasicAuthorization() const;
+
   // Check if credentials are set
   bool hasCredentials() const;
-
-  // Clear credentials
-  void clearCredentials();
 
   // Server URL management
   void setServerUrl(const std::string& url);
@@ -103,6 +104,9 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
 
   void setSyncClippings(bool enabled) { syncClippings = enabled; }
   bool getSyncClippings() const { return syncClippings; }
+
+  void setSyncOnSleep(bool enabled) { syncOnSleep = enabled; }
+  bool getSyncOnSleep() const { return syncOnSleep; }
 
   // Sync behavior
   void setSyncBehavior(KOReaderSyncBehavior behavior);

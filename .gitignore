@@ -3,6 +3,9 @@
 .DS_Store
 .vscode
 .zed
+.codex
+.artifacts
+.impeccable
 open-x4-sdk
 fs_
 lib/EpdFont/fontsrc

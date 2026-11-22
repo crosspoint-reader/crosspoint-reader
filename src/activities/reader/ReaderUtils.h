@@ -57,6 +57,17 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   }
 }
 
+struct FrontPageTurnButtons {
+  MappedInputManager::Button previous;
+  MappedInputManager::Button next;
+};
+
+inline FrontPageTurnButtons getFrontPageTurnButtons(const MappedInputManager& input) {
+  const bool swapped = input.isNavDirectionSwapped();
+  return {swapped ? MappedInputManager::Button::Right : MappedInputManager::Button::Left,
+          swapped ? MappedInputManager::Button::Left : MappedInputManager::Button::Right};
+}
+
 struct PageTurnResult {
   bool prev;
   bool next;
@@ -67,20 +78,18 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   const bool usePress = SETTINGS.longPressButtonBehavior == SETTINGS.OFF;
   const bool tiltNext = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedForward();
   const bool tiltPrev = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedBack();
-  const bool swapFront = input.isNavDirectionSwapped();
-  const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
-  const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
+  const auto frontButtons = getFrontPageTurnButtons(input);
   const auto pageButtonTriggered = [&](const MappedInputManager::Button button) {
     if (usePress) return input.wasPressed(button);
     return input.wasLongPressed(button, SKIP_HOLD_MS) || input.wasReleased(button);
   };
-  const bool prev =
-      tiltPrev || (pageButtonTriggered(MappedInputManager::Button::PageBack) || pageButtonTriggered(prevButton));
-  const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-                         input.wasReleased(MappedInputManager::Button::Power);
+  const bool prev = tiltPrev || (pageButtonTriggered(MappedInputManager::Button::PageBack) ||
+                                 pageButtonTriggered(frontButtons.previous));
+  const bool powerTurn =
+      SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN && input.wasPowerSingleClick();
   const bool next = input.homeButtonAction() == HomeButtonAction::NextPage || tiltNext ||
                     pageButtonTriggered(MappedInputManager::Button::PageForward) || powerTurn ||
-                    pageButtonTriggered(nextButton);
+                    pageButtonTriggered(frontButtons.next);
   return {prev, next, tiltPrev || tiltNext};
 }
 
@@ -91,7 +100,7 @@ struct TouchPageTurn {
 };
 
 inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const MappedInputManager& input,
-                                         const bool rtlBook = false) {
+                                         const bool rtlBook = false, const bool reserveReaderMenuTap = true) {
   TouchPageTurn result{false, false, 0};
   if (!SETTINGS.touchReaderControls || !input.hasTouch()) {
     return result;
@@ -121,10 +130,9 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
 
   const int width = renderer.getScreenWidth();
   const int height = renderer.getScreenHeight();
-  // The centered reader-menu tap target (isTouchMenuTap below) keeps priority
-  // over the page-turn zones.
-  if (SETTINGS.showReaderMenu == CrossPointSettings::READER_MENU_TAP && x >= width / 3 && x < width - width / 3 &&
-      y >= height / 3 && y < height - height / 3) {
+  // Reserve the centered reader-menu tap target when this view has a menu.
+  if (reserveReaderMenuTap && SETTINGS.showReaderMenu == CrossPointSettings::READER_MENU_TAP && x >= width / 3 &&
+      x < width - width / 3 && y >= height / 3 && y < height - height / 3) {
     return result;
   }
 
@@ -141,8 +149,8 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
 }
 
 // Tap in the center third of the screen: the tap path into the reader menu on
-// every touch board. detectTouchPageTurn() excludes this centered rectangle,
-// so it remains free in tap mode. The Off/Swipe Up
+// every touch board. Reader pages reserve this rectangle for the menu,
+// so it stays free in tap mode. The Off/Swipe Up
 // alternatives are only surfaced on home-key boards (SettingsList), where the
 // menu stays reachable through the key's long-press function.
 inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager& input) {
@@ -211,36 +219,13 @@ inline void displayBaseWithRefreshCycle(const GfxRenderer& renderer, int& pagesU
   }
 }
 
-// Grayscale anti-aliasing pass. Renders content twice (LSB + MSB) to build
-// the grayscale buffer. Only the content callback is re-rendered — status bars
-// and other overlays should be drawn before calling this.
-// Kept as a template to avoid std::function overhead; instantiated once per reader type.
-template <typename RenderFn>
-void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
-  if (!renderer.storeBwBuffer()) {
-    LOG_ERR("READER", "Failed to store BW buffer for anti-aliasing");
-    // A combined-base panel may still hold a deferred B/W activation; flush it
-    // so the page reaches the panel even without its grays.
-    if (renderer.grayscaleCapabilities().base == HalDisplay::GrayscaleBase::Combined)
-      renderer.cleanupGrayscaleWithFrameBuffer();
-    return;
-  }
-
-  renderer.clearScreen(0x00);
-  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-  renderFn();
-  renderer.copyGrayscaleLsbBuffers();
-
-  renderer.clearScreen(0x00);
-  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-  renderFn();
-  renderer.copyGrayscaleMsbBuffers();
-
-  renderer.displayGrayBuffer();
-  renderer.setRenderMode(GfxRenderer::BW);
-
-  renderer.restoreBwBuffer();
-}
+// Book page presentation: lets the panel use its reading waveform.
+struct ReaderRefreshScope {
+  ReaderRefreshScope() { display.setReaderRefresh(true); }
+  ~ReaderRefreshScope() { display.setReaderRefresh(false); }
+  ReaderRefreshScope(const ReaderRefreshScope&) = delete;
+  ReaderRefreshScope& operator=(const ReaderRefreshScope&) = delete;
+};
 
 struct BackNavCallback {
   void* ctx;
@@ -256,6 +241,11 @@ struct BackNavCallback {
 // - with backShortToFileBrowser: go to file browser.
 inline bool handleBackNavigation(const MappedInputManager& mappedInput, ActivityManager& activityManager,
                                  const char* filePath, BackNavCallback goHome) {
+  if (mappedInput.homeButtonAction() == HomeButtonAction::FileBrowser) {
+    activityManager.goToFileBrowser(filePath);
+    return true;
+  }
+
   // The reading surface deliberately has no left-edge swipe-to-exit path: in
   // swipe page-turn mode a right swipe must page back instead. Home remains
   // available through the board's dedicated Home gesture/key. Back swipes stay

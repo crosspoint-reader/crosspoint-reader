@@ -42,11 +42,6 @@ void HalDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uin
   einkDisplay.drawImage(imageData, x, y, w, h, fromProgmem);
 }
 
-void HalDisplay::drawImageTransparent(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                                      bool fromProgmem) const {
-  einkDisplay.drawImageTransparent(imageData, x, y, w, h, fromProgmem);
-}
-
 EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   switch (mode) {
     case HalDisplay::FULL_REFRESH:
@@ -83,23 +78,13 @@ HalDisplay::GrayscaleCapabilities HalDisplay::grayscaleCapabilities(GrayscaleMod
   return einkDisplay.grayscaleCapabilities(mode);
 }
 
-bool HalDisplay::supportsAsyncGrayscaleBase() const { return grayscaleCapabilities().asyncBase; }
-
-void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
-  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
-    einkDisplay.requestResync(1);
-  }
-
-  einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
-}
-
 void HalDisplay::setInverted(bool inverted) { einkDisplay.setInverted(inverted); }
-
-bool HalDisplay::toggleInverted() { return einkDisplay.toggleInverted(); }
 
 bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
 
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
+
+void HalDisplay::controllerIdle() { einkDisplay.controllerIdle(); }
 
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
@@ -110,10 +95,6 @@ void HalDisplay::returnFrameBufferStorage() { einkDisplay.returnBuildStorage(); 
 bool HalDisplay::displayGrayscaleBase(GrayscaleMode mode, RefreshMode fallback, bool turnOffScreen) {
   if (gpio.deviceIsX3() && fallback == HALF_REFRESH) einkDisplay.requestResync();
   return einkDisplay.displayGrayscaleBase(mode, static_cast<EInkDisplay::RefreshMode>(fallback), turnOffScreen);
-}
-
-void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer) {
-  einkDisplay.copyGrayscaleBuffers(lsbBuffer, msbBuffer);
 }
 
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
@@ -149,10 +130,6 @@ void HalDisplay::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, ui
   einkDisplay.writeGrayscalePlaneStrip(lsbPlane ? EInkDisplay::GRAY_PLANE_LSB : EInkDisplay::GRAY_PLANE_MSB, rows,
                                        yStart, numRows);
 }
-
-bool HalDisplay::supportsStripGrayscale() const { return grayscaleCapabilities().stripUploads; }
-
-bool HalDisplay::combinesGrayscaleBase() const { return grayscaleCapabilities().base == GrayscaleBase::Combined; }
 
 uint16_t HalDisplay::getDisplayWidth() const { return einkDisplay.getDisplayWidth(); }
 

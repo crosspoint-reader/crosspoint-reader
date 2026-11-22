@@ -10,7 +10,6 @@ void utf8AppendCodepoint(uint32_t cp, std::string& out);
 // Remove the last UTF-8 codepoint from a std::string and return the new size.
 size_t utf8RemoveLastChar(std::string& str);
 // Truncate string by removing N UTF-8 codepoints from the end.
-void utf8TruncateChars(std::string& str, size_t numChars);
 
 // Canonical composition (NFC) for the Latin / Vietnamese range and Hangul:
 // precomposes a base letter followed by combining diacritical mark(s), and
@@ -113,6 +112,17 @@ inline uint32_t utf8SmallCapsUpper(const uint32_t cp) {
   if (cp >= 0x430 && cp <= 0x44F) return cp - 0x20;                        // Cyrillic
   if (cp >= 0x450 && cp <= 0x45F) return cp - 0x50;
   return cp;
+}
+
+// Hebrew combining marks (Unicode 18.0), including niqqud, cantillation and Judeo-Spanish varika.
+inline bool isHebrewMark(const uint32_t cp) {
+  return (cp >= 0x0591 && cp <= 0x05BD) || cp == 0x05BF || (cp >= 0x05C1 && cp <= 0x05C2) ||
+         (cp >= 0x05C4 && cp <= 0x05C5) || (cp >= 0x05C7 && cp <= 0x05C9) || cp == 0xFB1E;
+}
+
+// Basic harakat and superscript alef, excluding shaddah, hamza and maddah.
+inline bool isArabicVowelMark(const uint32_t cp) {
+  return (cp >= 0x064B && cp <= 0x0650) || cp == 0x0652 || cp == 0x0670;
 }
 
 // Returns true for Unicode combining diacritical marks that should not advance the cursor.

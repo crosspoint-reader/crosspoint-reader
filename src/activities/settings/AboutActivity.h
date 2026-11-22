@@ -1,16 +1,19 @@
 #pragma once
+#include <BoardConfig.h>
+
 #include <string>
 
 #include "activities/UiListActivity.h"
 
 // Read-only device information: detected hardware (device profile, display
-// controller, touch, frontlight, RTC, IMU), firmware version, and MAC address.
-// Rows are informational; activating one does nothing.
+// controller and panel, touch, frontlight, RTC, IMU), firmware version, MAC address, EEGO UID, and the SD card's
+// size, used and free space. Rows are informational; activating one does nothing.
 class AboutActivity final : public UiListActivity {
  public:
   explicit AboutActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
 
-  static constexpr int ITEM_COUNT = 11;
+  // The Picco adds a panel row and the EEGO A4 a UID row.
+  static constexpr int ITEM_COUNT = 14 + FREEINK_DEVICE_PICCO + FREEINK_DEVICE_EEGO_A4;
 
   void onEnter() override;
 
