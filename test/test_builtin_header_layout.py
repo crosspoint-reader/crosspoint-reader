@@ -64,6 +64,27 @@ assert 80 + 325 == 64 + 341
 assert "props.sidePadding = props.status.edgeInset;" in base
 assert "props.titleText.align == fui::TextAlign::Left" in base
 
+# Only a titled, left-aligned compact Home header with a visible clock gets
+# optical balancing. The clock, band, cover and menu remain untouched.
+assert "title && props.status.clockText && rect.height < UITheme::getInstance().getMetrics().headerHeight" in base
+assert "ui.target.inkBounds(props.status.battery.text.font, props.status.clockText" in base
+assert "ui.target.inkBounds(props.titleText.font, title, props.titleText)" in base
+assert "const int targetTop = std::min(2 * clockTop + clockInk.height, band.bottom() - titleInk.height - 6);" in base
+assert "props.titleOffsetY = static_cast<int16_t>(std::max(0, targetTop - titleTop));" in base
+
+# The ink-based target makes clock top-margin and title separation identical
+# whenever the compact band's cover-clearance bound does not intervene.
+for band_y, band_h, clock_h, title_h, title_line_h, title_ink_y in (
+        (16, 64, 12, 18, 24, 3), (10, 70, 12, 18, 24, 3), (18, 62, 11, 20, 27, 4)):
+    clock_top = band_y + (20 - clock_h) // 2
+    title_top = band_y + (band_h - title_line_h) // 2 + title_ink_y
+    target = min(2 * clock_top + clock_h, band_y + band_h - title_h - 6)
+    offset = max(0, target - title_top)
+    assert title_top + offset == target
+    assert target + title_h + 6 <= band_y + band_h
+    if target == 2 * clock_top + clock_h:
+        assert target - (clock_top + clock_h) == clock_top
+
 # RoundedRaff's Home screen must not suppress the shared status line when
 # it draws a header without a book title.
 header = rounded.split("void RoundedRaffTheme::drawHeader(", 1)[1].split(
