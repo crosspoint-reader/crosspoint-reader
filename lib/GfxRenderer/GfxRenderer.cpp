@@ -6,6 +6,7 @@
 #include <ComplexShaper.h>
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
+#include <ImageOpsConfig.h>
 #include <IndicReorder.h>
 #include <IndicScripts.h>
 #include <Logging.h>
@@ -21,6 +22,9 @@
 #include "../Memory/Memory.h"
 #include "FontCacheManager.h"
 #include "GlyphBitmap.h"
+#if CROSSPOINT_ACCELERATED_IMAGES
+#include "ImagePackedWriter.h"
+#endif
 
 namespace {
 // Synthesized small caps: lowercase letters draw as capitals at roughly x-height.
@@ -1513,6 +1517,50 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
   }
 }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+namespace {
+imagePacked::Writer makeImagePackedWriter(const GfxRenderer& renderer, int width, int imageX, int first, int end,
+                                          bool monochrome, bool transparent, bool enabled) {
+  glyphBitmap::Target target{renderer.getWriteTarget(),  renderer.getDisplayWidth(), renderer.getDisplayWidthBytes(),
+                             renderer.getWriteOriginY(), renderer.getWriteRows(),    {}};
+  auto& frame = target.frame;
+  const auto orientation = renderer.getOrientation();
+  const int w = renderer.getDisplayWidth(), h = renderer.getDisplayHeight();
+  rotateCoordinates(orientation, imageX, 0, &frame.x, &frame.y, w, h);
+  int px, py;
+  rotateCoordinates(orientation, imageX + 1, 0, &px, &py, w, h);
+  frame.dxX = px - frame.x;
+  frame.dxY = py - frame.y;
+  rotateCoordinates(orientation, imageX, 1, &px, &py, w, h);
+  frame.dyX = px - frame.x;
+  frame.dyY = py - frame.y;
+  const auto clip = renderer.getClipRect();
+  first = std::max({first, -imageX, clip[0] - imageX});
+  end = std::min({end, renderer.getScreenWidth() - imageX, clip[0] + clip[2] - imageX});
+  const auto mode = renderer.getRenderMode();
+  auto plane = glyphBitmap::Plane::BW;
+  if (!monochrome) {
+    switch (mode) {
+      case GfxRenderer::BW:
+        break;
+      case GfxRenderer::GRAYSCALE_LSB:
+        plane = glyphBitmap::Plane::GrayLSB;
+        break;
+      case GfxRenderer::GRAYSCALE_MSB:
+        plane = glyphBitmap::Plane::GrayMSB;
+        break;
+      default:
+        enabled = false;
+        break;
+    }
+  }
+  return imagePacked::Writer(target, width, first, end, std::max(0, clip[1]),
+                             std::min(renderer.getScreenHeight(), clip[1] + clip[3]), plane,
+                             renderer.grayPlanesAreAbsolute(), transparent, enabled);
+}
+}  // namespace
+#endif
+
 bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY, const bool whiteAsTransparent) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return false;
@@ -1564,6 +1612,10 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   auto* outputRow = rowScratch.get();
   auto* rowBytes = rowScratch.get() + outputRowSize;
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  auto packed = makeImagePackedWriter(*this, bitmap.getWidth(), x - cropPixX, cropPixX, bitmap.getWidth() - cropPixX,
+                                      false, whiteAsTransparent, !isScaled);
+#endif
   for (int bmpY = 0; bmpY < (bitmap.getHeight() - cropPixY); bmpY++) {
     // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
     // Screen's (0, 0) is the top-left corner.
@@ -1595,6 +1647,9 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       continue;
     }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+    if (packed.writeRow(outputRow, screenY)) continue;
+#endif
     for (int bmpX = cropPixX; bmpX < bitmap.getWidth() - cropPixX; bmpX++) {
       int screenX = bmpX - cropPixX;
       if (isScaled) {
@@ -1620,6 +1675,9 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     }
   }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  packed.flush();
+#endif
   const int sourceWidth = bitmap.getWidth() - cropPixX * 2;
   const int sourceHeight = bitmap.getHeight() - cropPixY * 2;
   const int renderedWidth = isScaled ? static_cast<int>(std::floor((sourceWidth - 1) * scale)) + 1 : sourceWidth;
@@ -1654,6 +1712,9 @@ bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
   auto* outputRow = rowScratch.get();
   auto* rowBytes = rowScratch.get() + outputRowSize;
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  auto packed = makeImagePackedWriter(*this, bitmap.getWidth(), x, 0, bitmap.getWidth(), true, true, !isScaled);
+#endif
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // Read rows sequentially using readNextRow
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
@@ -1672,6 +1733,9 @@ bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
       continue;
     }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+    if (packed.writeRow(outputRow, screenY)) continue;
+#endif
     for (int bmpX = 0; bmpX < bitmap.getWidth(); bmpX++) {
       int screenX = x + (isScaled ? static_cast<int>(std::floor(bmpX * scale)) : bmpX);
       if (screenX >= getScreenWidth()) {
@@ -1693,6 +1757,9 @@ bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
     }
   }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  packed.flush();
+#endif
   const int renderedWidth =
       isScaled ? static_cast<int>(std::floor((bitmap.getWidth() - 1) * scale)) + 1 : bitmap.getWidth();
   const int renderedHeight =

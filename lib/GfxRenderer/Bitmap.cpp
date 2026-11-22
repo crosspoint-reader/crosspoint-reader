@@ -1,7 +1,13 @@
 #include "Bitmap.h"
 
+#include <ImageOpsConfig.h>
 #include <Logging.h>
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+#include <ImageOps.h>
+#endif
+
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 
@@ -234,6 +240,24 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
     currentX++;
   };
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  const auto packDecodedRow = [&]() {
+    // One full 1-bit SIMD block; BGR24 reuses the same bounded scratch.
+    constexpr int CHUNK_PIXELS = 128;
+    alignas(16) uint8_t pixels[CHUNK_PIXELS];
+    for (int first = 0; first < width; first += CHUNK_PIXELS) {
+      const int count = std::min(CHUNK_PIXELS, width - first);
+      if (bpp == 24) {
+        imageops::bgr24ToGraySpan(rowBuffer + first * 3, pixels, count);
+        for (int i = 0; i < count; ++i) packPixel(pixels[i]);
+      } else {
+        imageops::unpackIndexSpan(rowBuffer, pixels, count, static_cast<imageops::IndexDepth>(bpp), first);
+        for (int i = 0; i < count; ++i) packPixel(paletteLum[pixels[i]]);
+      }
+    }
+  };
+#endif
+
   uint8_t lum;
 
   switch (bpp) {
@@ -247,12 +271,16 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
       break;
     }
     case 24: {
+#if CROSSPOINT_ACCELERATED_IMAGES
+      packDecodedRow();
+#else
       const uint8_t* p = rowBuffer;
       for (int x = 0; x < width; x++) {
         lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
         packPixel(lum);
         p += 3;
       }
+#endif
       break;
     }
     case 8: {
@@ -262,20 +290,57 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
       break;
     }
     case 4: {
+#if CROSSPOINT_ACCELERATED_IMAGES
+      packDecodedRow();
+#else
       for (int x = 0; x < width; x++) {
         const uint8_t nibble = (x & 1) ? (rowBuffer[x >> 1] & 0x0F) : (rowBuffer[x >> 1] >> 4);
         packPixel(paletteLum[nibble]);
       }
+#endif
       break;
     }
     case 2: {
+#if CROSSPOINT_ACCELERATED_IMAGES
+      if (nativePalette && !atkinsonDitherer && !fsDitherer) {
+        bool identity = true;
+        for (int i = 0; i < 4; ++i) {
+          if ((adjustPixel(paletteLum[i]) >> 6) != i) identity = false;
+        }
+        if (identity) {
+          const int bytes = (width + 3) / 4;
+          memcpy(data, rowBuffer, bytes);
+          if (width & 3) data[bytes - 1] &= static_cast<uint8_t>(0xffu << (8 - (width & 3) * 2));
+          break;
+        }
+      }
+      packDecodedRow();
+#else
       for (int x = 0; x < width; x++) {
         lum = paletteLum[(rowBuffer[x >> 2] >> (6 - ((x & 3) * 2))) & 0x03];
         packPixel(lum);
       }
+#endif
       break;
     }
     case 1: {
+#if CROSSPOINT_ACCELERATED_IMAGES
+      if (nativePalette && !atkinsonDitherer && !fsDitherer) {
+        // Spread four source bits into the low bit of four 2bpp lanes.
+        static constexpr uint8_t SPREAD[16] = {0, 1, 4, 5, 16, 17, 20, 21, 64, 65, 68, 69, 80, 81, 84, 85};
+        const unsigned zero = adjustPixel(paletteLum[0]) >> 6;
+        const unsigned one = adjustPixel(paletteLum[1]) >> 6;
+        for (int x = 0; x < width; x += 4) {
+          const uint8_t packed = rowBuffer[x >> 3];
+          const uint8_t nibble = (x & 4) ? packed & 0x0f : packed >> 4;
+          const uint8_t lanes = SPREAD[nibble];
+          data[x >> 2] = static_cast<uint8_t>(lanes * one | (lanes ^ 0x55u) * zero);
+        }
+        if (width & 3) data[(width - 1) / 4] &= static_cast<uint8_t>(0xffu << (8 - (width & 3) * 2));
+        break;
+      }
+      packDecodedRow();
+#else
       for (int x = 0; x < width; x++) {
         // Get palette index (0 or 1) from bit at position x
         const uint8_t palIndex = (rowBuffer[x >> 3] & (0x80 >> (x & 7))) ? 1 : 0;
@@ -283,6 +348,7 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
         lum = paletteLum[palIndex];
         packPixel(lum);
       }
+#endif
       break;
     }
     default:
@@ -308,6 +374,12 @@ BmpReaderError Bitmap::readRowGray(const int y, uint8_t* gray, uint8_t* rowBuffe
   switch (bpp) {
     case 32:
     case 24: {
+#if CROSSPOINT_ACCELERATED_IMAGES
+      if (bpp == 24) {
+        imageops::bgr24ToGraySpan(rowBuffer, gray, width);
+        break;
+      }
+#endif
       const int step = bpp / 8;
       const uint8_t* p = rowBuffer;
       for (int x = 0; x < width; x++, p += step) gray[x] = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
@@ -316,6 +388,14 @@ BmpReaderError Bitmap::readRowGray(const int y, uint8_t* gray, uint8_t* rowBuffe
     case 8:
       for (int x = 0; x < width; x++) gray[x] = paletteLum[rowBuffer[x]];
       break;
+#if CROSSPOINT_ACCELERATED_IMAGES
+    case 4:
+    case 2:
+    case 1:
+      imageops::unpackIndexSpan(rowBuffer, gray, width, static_cast<imageops::IndexDepth>(bpp));
+      for (int x = 0; x < width; x++) gray[x] = paletteLum[gray[x]];
+      break;
+#else
     case 4:
       for (int x = 0; x < width; x++)
         gray[x] = paletteLum[(x & 1) ? (rowBuffer[x >> 1] & 0x0F) : (rowBuffer[x >> 1] >> 4)];
@@ -326,6 +406,7 @@ BmpReaderError Bitmap::readRowGray(const int y, uint8_t* gray, uint8_t* rowBuffe
     case 1:
       for (int x = 0; x < width; x++) gray[x] = paletteLum[(rowBuffer[x >> 3] & (0x80 >> (x & 7))) ? 1 : 0];
       break;
+#endif
     default:
       return BmpReaderError::UnsupportedBpp;
   }

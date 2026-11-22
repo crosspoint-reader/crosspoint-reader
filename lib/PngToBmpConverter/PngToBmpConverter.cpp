@@ -2,6 +2,7 @@
 
 #include <HalDisplay.h>
 #include <HalStorage.h>
+#include <ImageOpsConfig.h>
 #include <InflateStream.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -10,6 +11,10 @@
 #include <cstring>
 
 #include "BmpStreamWriter.h"
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+#include <ImageOps.h>
+#endif
 
 // Paeth predictor function per PNG spec
 inline uint8_t paethPredictor(uint8_t a, uint8_t b, uint8_t c) {
@@ -79,10 +84,29 @@ struct PngDecodeContext {
   // File read buffer for feeding the inflate stream
   uint8_t readBuf[2048];
 
-  // Palette for indexed color (type 3)
+  // RGB palette from PLTE, compacted in place when acceleration is enabled.
   uint8_t palette[256 * 3];
   int paletteSize;
 };
+
+static uint8_t rgbToGray(const uint8_t* rgb) { return (rgb[0] * 77u + rgb[1] * 150u + rgb[2] * 29u) >> 8; }
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+static void prepareGrayPalette(PngDecodeContext& ctx) {
+  // Empty/missing PLTE retains the existing entry-zero fallback.
+  const int entries = ctx.paletteSize > 0 ? ctx.paletteSize : 1;
+  for (int i = 0; i < entries; ++i) {
+    const auto* rgb = ctx.palette + i * 3;
+    // Forward compaction leaves unread RGB entries untouched.
+    ctx.palette[i] = rgbToGray(rgb);
+  }
+}
+#else
+static uint8_t packedSample(const uint8_t* row, uint32_t x, unsigned depth) {
+  const unsigned perByte = 8 / depth;
+  return (row[x / perByte] >> (8 - depth - (x % perByte) * depth)) & ((1u << depth) - 1);
+}
+#endif
 
 // Read the next IDAT chunk header, skipping non-IDAT chunks
 // Returns true if an IDAT chunk was found
@@ -209,39 +233,48 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
       } else if (ctx.bitDepth == 16) {
         for (uint32_t x = 0; x < w; x++) grayRow[x] = src[x * 2];
       } else {
-        const int ppb = 8 / ctx.bitDepth;
-        const uint8_t mask = (1 << ctx.bitDepth) - 1;
-        for (uint32_t x = 0; x < w; x++) {
-          int shift = (ppb - 1 - (x % ppb)) * ctx.bitDepth;
-          grayRow[x] = (src[x / ppb] >> shift & mask) * 255 / mask;
-        }
+        const unsigned scale = 255u / ((1u << ctx.bitDepth) - 1);
+#if CROSSPOINT_ACCELERATED_IMAGES
+        imageops::unpackIndexSpan(src, grayRow, w, static_cast<imageops::IndexDepth>(ctx.bitDepth));
+        for (uint32_t x = 0; x < w; x++) grayRow[x] *= scale;
+#else
+        for (uint32_t x = 0; x < w; x++) grayRow[x] = packedSample(src, x, ctx.bitDepth) * scale;
+#endif
       }
       break;
 
     case PNG_COLOR_RGB:
       if (ctx.bitDepth == 8) {
-        // Fast path: most common EPUB cover format
-        for (uint32_t x = 0; x < w; x++) {
-          const uint8_t* p = src + x * 3;
-          grayRow[x] = (p[0] * 25 + p[1] * 50 + p[2] * 25) / 100;
-        }
+#if CROSSPOINT_ACCELERATED_IMAGES
+        imageops::rgb24ToGraySpan(src, grayRow, w);
+#else
+        for (uint32_t x = 0; x < w; x++) grayRow[x] = rgbToGray(src + x * 3);
+#endif
       } else {
         for (uint32_t x = 0; x < w; x++) {
-          grayRow[x] = (src[x * 6] * 25 + src[x * 6 + 2] * 50 + src[x * 6 + 4] * 25) / 100;
+          grayRow[x] = (src[x * 6] * 77u + src[x * 6 + 2] * 150u + src[x * 6 + 4] * 29u) >> 8;
         }
       }
       break;
 
     case PNG_COLOR_PALETTE: {
-      const int ppb = 8 / ctx.bitDepth;
-      const uint8_t mask = (1 << ctx.bitDepth) - 1;
+#if CROSSPOINT_ACCELERATED_IMAGES
+      imageops::unpackIndexSpan(src, grayRow, w, static_cast<imageops::IndexDepth>(ctx.bitDepth));
+#endif
       const uint8_t* pal = ctx.palette;
       const int palSize = ctx.paletteSize;
       for (uint32_t x = 0; x < w; x++) {
-        int shift = (ppb - 1 - (x % ppb)) * ctx.bitDepth;
-        uint8_t idx = (src[x / ppb] >> shift) & mask;
-        if (idx >= palSize) idx = 0;
-        grayRow[x] = (pal[idx * 3] * 25 + pal[idx * 3 + 1] * 50 + pal[idx * 3 + 2] * 25) / 100;
+#if CROSSPOINT_ACCELERATED_IMAGES
+        const uint8_t idx = grayRow[x];
+#else
+        const uint8_t idx = packedSample(src, x, ctx.bitDepth);
+#endif
+        const unsigned entry = idx < palSize ? idx : 0;
+#if CROSSPOINT_ACCELERATED_IMAGES
+        grayRow[x] = pal[entry];
+#else
+        grayRow[x] = rgbToGray(pal + entry * 3);
+#endif
       }
       break;
     }
@@ -257,12 +290,11 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
     case PNG_COLOR_RGBA:
       if (ctx.bitDepth == 8) {
         for (uint32_t x = 0; x < w; x++) {
-          const uint8_t* p = src + x * 4;
-          grayRow[x] = (p[0] * 25 + p[1] * 50 + p[2] * 25) / 100;
+          grayRow[x] = rgbToGray(src + x * 4);
         }
       } else {
         for (uint32_t x = 0; x < w; x++) {
-          grayRow[x] = (src[x * 8] * 25 + src[x * 8 + 2] * 50 + src[x * 8 + 4] * 25) / 100;
+          grayRow[x] = (src[x * 8] * 77u + src[x * 8 + 2] * 150u + src[x * 8 + 4] * 29u) >> 8;
         }
       }
       break;
@@ -336,6 +368,10 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
   switch (colorType) {
     case PNG_COLOR_GRAYSCALE:
+      if (bitDepth != 1 && bitDepth != 2 && bitDepth != 4 && bitDepth != 8 && bitDepth != 16) {
+        LOG_ERR("PNG", "Unsupported grayscale PNG bit depth: %u", bitDepth);
+        return false;
+      }
       if (bitDepth == 16) {
         bytesPerPixel = 2;
         rawRowBytes = width * 2;
@@ -353,6 +389,10 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       rawRowBytes = width * bytesPerPixel;
       break;
     case PNG_COLOR_PALETTE:
+      if (bitDepth != 1 && bitDepth != 2 && bitDepth != 4 && bitDepth != 8) {
+        LOG_ERR("PNG", "Unsupported indexed PNG bit depth: %u", bitDepth);
+        return false;
+      }
       bytesPerPixel = 1;
       rawRowBytes = (width * bitDepth + 7) / 8;
       break;
@@ -429,6 +469,10 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     LOG_ERR("PNG", "No IDAT chunk found");
     return false;
   }
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+  if (colorType == PNG_COLOR_PALETTE) prepareGrayPalette(ctx);
+#endif
 
   // Initialize streaming decompressor with 32KB window for back-reference history
   if (!ctx.reader.init(true)) {
