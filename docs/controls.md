@@ -26,11 +26,11 @@ are independent: a corner with a disabled tap behaves like any other tap on
 the page, and a corner with a disabled long press still starts word selection.
 Tap and long press can be bound to **Toggle Bookmark**, **Bookmarks**,
 **Select Chapter**, **Reader Menu**, **Look Up**, **Links and Footnotes**,
-**Night Mode**, **Go to %**, or **CrossPoint Sync**. An action the device
-cannot perform (for example footnotes on a page without them, or a lookup with
-no dictionary) falls back to the normal zone behavior. A lookup with a
-dictionary that cannot open (for example a page with no selectable text) does
-nothing. The shortcuts follow **Touch controls while reading**.
+**Night Mode**, **Go to %**, or **CrossPoint Sync**. An unavailable shortcut
+(for example footnotes on a page without them, or a lookup with no dictionary)
+falls back to the normal zone behavior. A lookup that cannot open despite
+having a dictionary, or a bookmark save that fails, does not fall back.
+The shortcuts follow **Touch controls while reading**.
 
 **Page turn long press** is shared by Front buttons and Side buttons. Changing it
 in either group changes the same setting.

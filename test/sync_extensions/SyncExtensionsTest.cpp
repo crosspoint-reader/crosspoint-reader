@@ -81,6 +81,36 @@ void localDeletionIsRemembered() {
   assert(state.deleted.size() == 1 && state.deleted[0] == BookmarkUtil::syncId("/removed"));
 }
 
+void savesProposedBookmarkChange() {
+  fake::reset();
+  const std::vector cached{bookmark("/remove-a", true), bookmark("/keep", true), bookmark("/remove-b", true)};
+  assert(BookmarkFile::saveSynced(book, cached, "reader@server"));
+  auto added = bookmark("/new", false);
+  added.name.resize(BookmarkEntry::MAX_NAME_LENGTH + 1, 'x');
+  assert(!BookmarkFile::save(book, cached, &added));
+  std::vector<BookmarkEntry> loaded;
+  BookmarkFile::SyncState state;
+  assert(BookmarkFile::load(book, loaded, &state) && loaded.size() == 3 && state.deleted.empty());
+
+  added.name = "new";
+  assert(BookmarkFile::save(book, cached, &added));
+  assert(BookmarkFile::load(book, loaded, &state) && loaded.size() == 4);
+  assert(loaded[0].xpath == "/new" && loaded[1].xpath == "/remove-a" && state.deleted.empty());
+  const auto remove = [](const BookmarkEntry& entry) { return entry.xpath.starts_with("/remove-"); };
+  assert(BookmarkFile::save(book, loaded, nullptr, std::cref(remove)));
+  assert(loaded.size() == 4);
+  assert(BookmarkFile::load(book, loaded, &state) && loaded.size() == 2);
+  assert(loaded[0].xpath == "/new" && loaded[1].xpath == "/keep");
+  assert((state.deleted == std::vector{BookmarkUtil::syncId("/remove-a"), BookmarkUtil::syncId("/remove-b")}));
+
+  // Do not replace an unreadable file and silently discard its sync state.
+  const auto path = BookmarkUtil::getBookmarkPath(book);
+  fake::add(path, "{invalid");
+  const auto previous = fake::files.at(path);
+  assert(!BookmarkFile::save(book, cached, nullptr, std::cref(remove)));
+  assert(fake::files.at(path) == previous);
+}
+
 void bookmarksMerge() {
   fake::reset();
   uploads.clear();
@@ -300,6 +330,7 @@ void summaryIsCutOnCharacterBoundary() {
 int main() {
   fake::syncHeap = 100000;  // room for the heap transfer buffer and TLS
   localDeletionIsRemembered();
+  savesProposedBookmarkChange();
   bookmarksMerge();
   engineGatesEveryUpload();
   sessionsUploadOnce();

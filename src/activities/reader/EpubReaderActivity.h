@@ -225,7 +225,8 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();
-  bool addBookmark(bool showConfirmation = false);
+  enum class BookmarkResult { Unavailable, SaveFailed, Saved };
+  BookmarkResult addBookmark(bool showConfirmation = false);
   void updateBookmarkFlag();
 
   void navigateToHref(const std::string& href, bool savePosition = false);

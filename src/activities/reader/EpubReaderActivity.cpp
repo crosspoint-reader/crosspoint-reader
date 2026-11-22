@@ -3509,63 +3509,72 @@ void EpubReaderActivity::loadCachedBookmarks() {
   updateBookmarkFlag();
 }
 
-bool EpubReaderActivity::addBookmark(const bool showConfirmation) {
+EpubReaderActivity::BookmarkResult EpubReaderActivity::addBookmark(const bool showConfirmation) {
   BookmarkEntry entry;
   CrossPointPosition position;
-  bool removedBookmark;
-  {
-    RenderLock lock;
-    if (!section || !epub) return false;
-    const int currentPage = section->currentPage;
-#if FREEINK_CAP_TOUCH
-    if (showConfirmation) bookmarkMessagePosition = {currentSpineIndex, currentPage};
-#endif
-    const int pageCount = section->estimatedTotalPages();
-    LOG_DBG("ERS", "Toggle bookmark at spine %d, page %d", currentSpineIndex, currentPage);
-    const ProgressRange pageRange = getPageProgressRange(epub, currentSpineIndex, currentPage, pageCount);
-
-    const auto removed = std::remove_if(cachedBookmarks.begin(), cachedBookmarks.end(), [&](const BookmarkEntry& b) {
-      return bookmarkMatchesProgress(b, currentSpineIndex, currentPage, pageCount, pageRange);
-    });
-    removedBookmark = removed != cachedBookmarks.end();
-    if (removedBookmark) {
-      cachedBookmarks.erase(removed, cachedBookmarks.end());
-      currentPageBookmarked = false;
-    } else {
-      position = getCurrentPosition();
-      if (currentPage >= 0 && currentPage < pageCount) {
-        entry.summary = BookmarkUtil::sanitizeBookmarkSummary(section->getTextFromSectionFile());
-      }
-      entry.computedSpineIndex = position.spineIndex;
-      entry.computedChapterPageCount = position.totalPages;
-      entry.computedChapterProgress = position.pageNumber;
-      entry.hasVisibleTextOffset = position.hasVisibleTextOffset;
-      entry.visibleTextOffset = position.visibleTextOffset;
+  RenderLock lock;
+  if (!section || !epub) return BookmarkResult::Unavailable;
+  const int spineIndex = currentSpineIndex;
+  const int currentPage = section->currentPage;
+  const int pageCount = section->estimatedTotalPages();
+  LOG_DBG("ERS", "Toggle bookmark at spine %d, page %d", spineIndex, currentPage);
+  const ProgressRange pageRange = getPageProgressRange(epub, spineIndex, currentPage, pageCount);
+  const auto matchesPage = [&](const BookmarkEntry& bookmark) {
+    return bookmarkMatchesProgress(bookmark, spineIndex, currentPage, pageCount, pageRange);
+  };
+  const bool removedBookmark = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(), matchesPage);
+  if (!removedBookmark) {
+    position = getCurrentPosition();
+    if (currentPage >= 0 && currentPage < pageCount) {
+      entry.summary = BookmarkUtil::sanitizeBookmarkSummary(section->getTextFromSectionFile());
     }
   }
+  lock.unlock();
+
   if (!removedBookmark) {
     auto progress = ProgressMapper::toSavedProgress(epub, position);
     entry.percentage = progress.percentage;
     entry.xpath = std::move(progress.xpath);
-    RenderLock lock;
-    cachedBookmarks.insert(cachedBookmarks.begin(), std::move(entry));
-    updateBookmarkFlag();
+    entry.computedSpineIndex = position.spineIndex;
+    entry.computedChapterPageCount = position.totalPages;
+    entry.computedChapterProgress = position.pageNumber;
+    entry.hasVisibleTextOffset = position.hasVisibleTextOffset;
+    entry.visibleTextOffset = position.visibleTextOffset;
+    // Grow as insert would, after XPath mapping but before saving.
+    RenderLock reserveLock;
+    const auto size = cachedBookmarks.size();
+    if (size == cachedBookmarks.capacity()) cachedBookmarks.reserve(size + std::max(size, size_t{1}));
   }
 
-  const bool saved = BookmarkFile::save(epub->getPath(), cachedBookmarks);
+  const bool saved = removedBookmark
+                         ? BookmarkFile::save(epub->getPath(), cachedBookmarks, nullptr, std::cref(matchesPage))
+                         : BookmarkFile::save(epub->getPath(), cachedBookmarks, &entry);
   if (!saved) {
     LOG_ERR("ERS", "Failed to save bookmarks");
   }
+  bool redraw = saved;
   {
-    RenderLock lock;
-    showBookmarkMessage = showConfirmation && saved;
+    RenderLock commitLock;
+    if (saved) {
+      if (removedBookmark) {
+        std::erase_if(cachedBookmarks, matchesPage);
+      } else {
+        cachedBookmarks.insert(cachedBookmarks.begin(), std::move(entry));
+      }
+      updateBookmarkFlag();
+    }
+    redraw = redraw || showBookmarkMessage;
+    showBookmarkMessage = saved && showConfirmation;
     if (showBookmarkMessage) {
+#if FREEINK_CAP_TOUCH
+      bookmarkMessagePosition = {spineIndex, currentPage};
+#endif
       bookmarkRemoved = removedBookmark;
       bookmarkMessageTime = millis();
     }
   }
-  requestUpdate();
-  return true;
+  if (redraw) requestUpdate();
+  return saved ? BookmarkResult::Saved : BookmarkResult::SaveFailed;
 }
 
 void EpubReaderActivity::updateBookmarkFlag() {
@@ -3677,7 +3686,14 @@ bool EpubReaderActivity::runCornerActionAt(const int x, const int y, const bool 
             bookmarkMessagePosition.pageNumber == section->currentPage)
           break;
       }
-      if (!addBookmark(/*showConfirmation=*/true)) return false;
+      switch (addBookmark(/*showConfirmation=*/true)) {
+        case BookmarkResult::Unavailable:
+          return false;
+        case BookmarkResult::SaveFailed:
+          return true;  // Consume the gesture without feedback or a page turn.
+        case BookmarkResult::Saved:
+          break;
+      }
       break;
     case CrossPointSettings::CORNER_ACTION_BOOKMARKS:
       startActivityForResult(

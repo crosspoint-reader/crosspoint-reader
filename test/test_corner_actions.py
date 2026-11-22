@@ -53,10 +53,12 @@ tap_start = activity.index("  if (!atEndOfBook && SETTINGS.touchReaderControls &
 auto_start = activity.index("  if (automaticPageTurnActive) {", loop_start)
 assert tap_start < auto_start
 dispatch = activity[tap_start:activity.index("  if (showClippingMessage", auto_start)]
-# Use the actual position capture and corner decision; the host fake stores bookmarks in memory.
-toggle_start = activity.index("bool EpubReaderActivity::addBookmark(")
-capture_start = activity.index("    RenderLock lock;", toggle_start)
-capture = activity[capture_start:activity.index("    const int pageCount", capture_start)]
+# Compile the real toggle and corner decision with a controllable save result.
+toggle_start = activity.index("EpubReaderActivity::BookmarkResult EpubReaderActivity::addBookmark(")
+toggle = activity[toggle_start:activity.index("\n}", toggle_start) + 2].replace("EpubReaderActivity::", "BookmarkReader::")
+reader_header = (ROOT / "src/activities/reader/EpubReaderActivity.h").read_text()
+result_start = reader_header.index("enum class BookmarkResult ")
+bookmark_result = reader_header[result_start:reader_header.index(";", result_start) + 1]
 case_start = activity.index("    case CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK:", activity.index(
     "bool EpubReaderActivity::runCornerActionAt("))
 bookmark_case = activity[case_start:activity.index("    case CrossPointSettings::CORNER_ACTION_BOOKMARKS:", case_start)]
@@ -72,10 +74,12 @@ HARNESS = r"""
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <set>
 #include <utility>
 #include <vector>
+#include "util/BookmarkFile.h"
 #define FREEINK_CAP_TOUCH 1
+#define LOG_DBG(...)
+#define LOG_ERR(...)
 
 // Minimal page model so the real selectionWindowHasText() can be compiled and
 // exercised; the reader's Page/PageLine provide the same getTag/valid/wordCount.
@@ -139,7 +143,9 @@ struct RenderLock {
   enum class Mode { Try };
   RenderLock() { assert(!locked); locked = true; }
   explicit RenderLock(Mode) { locked = !busy; }
-  ~RenderLock() { locked = false; }
+  bool held = true;
+  ~RenderLock() { if (held) unlock(); }
+  void unlock() { locked = false; held = false; }
   bool ownsLock() const { return locked; }
   static bool peek() { return busy; }
 };
@@ -164,29 +170,74 @@ void tapWithTimerDue() {
 """ + dispatch + r"""
 }
 
+namespace BookmarkFile {
+bool failSave = false;
+bool save(const std::string&, const std::vector<BookmarkEntry>&, const BookmarkEntry*, const RemoveMatch&) {
+  assert(!locked);
+  return !failSave;
+}
+}
+struct CrossPointPosition {
+  int spineIndex, totalPages, pageNumber;
+  bool hasVisibleTextOffset = false;
+  unsigned visibleTextOffset = 0;
+};
+struct Book {
+  std::string getPath() const { return "/test.epub"; }
+};
+struct ProgressRange {};
+ProgressRange getPageProgressRange(const Book*, int, int, int) { return {}; }
+bool bookmarkMatchesProgress(const BookmarkEntry& entry, int spine, int page, int, ProgressRange) {
+  return entry.computedSpineIndex == spine && entry.computedChapterProgress == page;
+}
+namespace ProgressMapper {
+struct Progress { float percentage = 0; std::string xpath = "/new"; };
+Progress toSavedProgress(const Book*, const CrossPointPosition&) { return {}; }
+}
+namespace BookmarkUtil {
+std::string sanitizeBookmarkSummary(std::string text) { return text; }
+}
+
 struct BookmarkReader {
+  """ + bookmark_result + r"""
   enum class SelectionResult { Unavailable, Consumed, Opened };
   struct ClipSelectionActivity { enum class Mode { Lookup }; };
   SelectionResult lookup = SelectionResult::Unavailable;
   SelectionResult startClipSelection(int, int, ClipSelectionActivity::Mode) { return lookup; }
   bool automaticPageTurnActive = true;
   int pendingManualTurn = 1;
-  struct { int currentPage = 0; } loaded;
+  struct {
+    int currentPage = 0;
+    int estimatedTotalPages() const { return 3; }
+    std::string getTextFromSectionFile() const { return "test"; }
+  } loaded;
   decltype(loaded)* section = &loaded;
-  bool epub = true, showBookmarkMessage = false;
+  Book book;
+  Book* epub = &book;
+  bool showBookmarkMessage = false, currentPageBookmarked = false, bookmarkRemoved = false;
+  int bookmarkMessageTime = 0, redraws = 0;
   int currentSpineIndex = 0;
   struct { int spineIndex, pageNumber; } bookmarkMessagePosition{};
-  std::set<std::pair<int, int>> bookmarks;
+  std::vector<BookmarkEntry> cachedBookmarks;
 
-  bool addBookmark(bool showConfirmation) {
-    {
-""" + capture + r"""
-      const auto page = std::make_pair(currentSpineIndex, currentPage);
-      if (!bookmarks.erase(page)) bookmarks.insert(page);
-    }
-    showBookmarkMessage = showConfirmation;
-    return true;
+  void requestUpdate() {
+    assert(!locked);
+    ++redraws;
   }
+  CrossPointPosition getCurrentPosition() const {
+    assert(locked);
+    return {currentSpineIndex, section->estimatedTotalPages(), section->currentPage};
+  }
+  bool hasBookmark(int spine, int page) const {
+    return std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(), [&](const BookmarkEntry& entry) {
+      return bookmarkMatchesProgress(entry, spine, page, 0, {});
+    });
+  }
+  void updateBookmarkFlag() {
+    assert(locked);
+    currentPageBookmarked = hasBookmark(currentSpineIndex, section->currentPage);
+  }
+  BookmarkResult addBookmark(bool showConfirmation);
   bool tap(int action = CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK, bool hold = false) {
     switch (action) {
 """ + bookmark_case + dictionary_case + r"""
@@ -196,16 +247,53 @@ struct BookmarkReader {
   }
 };
 
+""" + toggle + r"""
+
 int main() {
   BookmarkReader reader;
   assert(reader.tap() && reader.tap());  // repeat must not undo the add
   ++reader.loaded.currentPage;
   assert(reader.tap());  // previous confirmation is still visible
-  assert(reader.bookmarks.count({0, 0}) && reader.bookmarks.count({0, 1}));
+  assert(reader.hasBookmark(0, 0) && reader.hasBookmark(0, 1));
   ++reader.currentSpineIndex;
-  assert(reader.tap() && reader.bookmarks.count({1, 1}));  // same page number in another chapter
+  reader.currentPageBookmarked = false;  // the new page has already rendered
+  BookmarkFile::failSave = true;
+  const int previousRedraws = reader.redraws;
+  assert(reader.tap() && !reader.showBookmarkMessage && reader.redraws == previousRedraws + 1);
+  assert(!reader.currentPageBookmarked && !reader.hasBookmark(1, 1));
+  BookmarkFile::failSave = false;
+  assert(reader.tap() && reader.hasBookmark(1, 1));  // same page number in another chapter
   reader.showBookmarkMessage = false;
-  assert(reader.tap() && reader.tap() && !reader.bookmarks.count({1, 1}));  // repeat after removal
+  assert(reader.tap() && reader.tap() && !reader.hasBookmark(1, 1));  // repeat after removal
+  for (bool hold : {false, true}) {
+    BookmarkReader failed;
+    const int action = CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK;
+    const int before = haptics;
+    BookmarkFile::failSave = true;
+    assert(failed.tap(action, hold));  // handled: no page turn or word selection fallback
+    assert(failed.cachedBookmarks.empty() && !failed.currentPageBookmarked && !failed.showBookmarkMessage);
+    assert(haptics == before && failed.automaticPageTurnActive && failed.pendingManualTurn == 1);
+    BookmarkFile::failSave = false;
+    assert(failed.tap(action, hold) && failed.currentPageBookmarked && !failed.bookmarkRemoved);
+    assert(haptics == before + 1 && failed.showBookmarkMessage);
+
+    failed.showBookmarkMessage = false;
+    BookmarkEntry other{};
+    other.computedChapterProgress = 1;
+    other.xpath = "/other";
+    failed.cachedBookmarks.push_back(other);
+    BookmarkEntry duplicate = failed.cachedBookmarks.front();
+    duplicate.xpath = "/same-page";
+    failed.cachedBookmarks.push_back(duplicate);
+    BookmarkFile::failSave = true;
+    assert(failed.tap(action, hold));
+    assert(failed.cachedBookmarks.size() == 3 && failed.cachedBookmarks[0].xpath == "/new" &&
+           failed.cachedBookmarks[1].xpath == "/other" && failed.cachedBookmarks[2].xpath == "/same-page");
+    assert(failed.currentPageBookmarked && !failed.showBookmarkMessage && haptics == before + 1);
+    BookmarkFile::failSave = false;
+    assert(failed.tap(action, hold) && !failed.currentPageBookmarked && failed.bookmarkRemoved);
+    assert(failed.cachedBookmarks.size() == 1 && failed.cachedBookmarks[0].xpath == "/other");
+  }
   for (bool hold : {false, true}) {
     BookmarkReader dictionary;
     const int before = haptics;
@@ -316,7 +404,8 @@ with tempfile.TemporaryDirectory() as directory:
     tmp = Path(directory)
     (tmp / "corner.cpp").write_text(HARNESS)
     subprocess.run(
-        ["c++", "-std=c++20", "-Wall", "-Wextra", "-Werror", str(tmp / "corner.cpp"), "-o", str(tmp / "corner")],
+        ["c++", "-std=c++20", "-Wall", "-Wextra", "-Werror", "-I", str(ROOT / "src"),
+         str(tmp / "corner.cpp"), "-o", str(tmp / "corner")],
         check=True,
     )
     subprocess.run([str(tmp / "corner")], check=True)

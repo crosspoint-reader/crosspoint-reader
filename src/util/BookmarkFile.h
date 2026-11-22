@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -21,7 +22,11 @@ bool load(const std::string& bookPath, std::vector<BookmarkEntry>& bookmarks, Sy
 
 // Saves the bookmarks for bookPath, creating the bookmarks directory as needed.
 // Once the book has been synced, a bookmark missing from the list is recorded as a pending deletion.
-bool save(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks);
+// An optional prepend or removal is saved without modifying the caller's list.
+// When either is supplied, an unreadable existing file is not overwritten.
+using RemoveMatch = std::function<bool(const BookmarkEntry&)>;
+bool save(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks,
+          const BookmarkEntry* prepend = nullptr, const RemoveMatch& remove = {});
 
 // Saves the list a sync with account produced and clears the pending deletions.
 bool saveSynced(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks, const std::string& account);

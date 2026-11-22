@@ -20,8 +20,15 @@ void readSyncState(const JsonDocument& doc, BookmarkFile::SyncState& state) {
   }
 }
 
-bool write(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks,
-           const BookmarkFile::SyncState& state);
+struct BookmarkView {
+  const std::vector<BookmarkEntry>& entries;
+  const BookmarkEntry* prepend = nullptr;
+  const BookmarkFile::RemoveMatch* remove = nullptr;
+
+  bool keeps(const BookmarkEntry& entry) const { return !remove || !(*remove)(entry); }
+};
+
+bool write(const std::string& bookPath, const BookmarkView& bookmarks, const BookmarkFile::SyncState& state);
 }  // namespace
 
 bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>& bookmarks, SyncState* state) {
@@ -63,46 +70,49 @@ bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>&
   return true;
 }
 
-bool BookmarkFile::save(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks) {
+bool BookmarkFile::save(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks,
+                        const BookmarkEntry* prepend, const RemoveMatch& remove) {
+  const BookmarkView proposed{bookmarks, prepend, remove ? &remove : nullptr};
   // The lists callers hold do not carry deletions, so recover them from the file being replaced.
   SyncState state;
   {
     JsonDocument previous;
-    if (PersistableStoreBase::readDocFromFile(BookmarkUtil::getBookmarkPath(bookPath).c_str(), previous)) {
+    const auto path = BookmarkUtil::getBookmarkPath(bookPath);
+    if (PersistableStoreBase::readDocFromFile(path.c_str(), previous)) {
       readSyncState(previous, state);
       for (JsonObjectConst obj : previous["bookmarks"].as<JsonArrayConst>()) {
         // After a first sync every removal is recorded: a renamed bookmark loses its synced
         // flag while the server still holds it, and deleting an unknown id is harmless there.
         const char* xpath = obj["xpath"] | "";
         if (state.account.empty() || !xpath[0]) continue;
-        const bool kept = std::any_of(bookmarks.begin(), bookmarks.end(),
-                                      [xpath](const BookmarkEntry& bookmark) { return bookmark.xpath == xpath; });
+        const bool kept = (prepend && prepend->xpath == xpath) ||
+                          std::any_of(bookmarks.begin(), bookmarks.end(), [&](const BookmarkEntry& bookmark) {
+                            return bookmark.xpath == xpath && proposed.keeps(bookmark);
+                          });
         if (!kept) state.deleted.push_back(BookmarkUtil::syncId(xpath));
       }
+    } else if ((proposed.prepend || proposed.remove) && Storage.exists(path.c_str())) {
+      LOG_ERR("BKM", "Cannot read existing bookmarks; toggle not saved");
+      return false;
     }
   }
-  return write(bookPath, bookmarks, state);
+  return write(bookPath, proposed, state);
 }
 
 bool BookmarkFile::saveSynced(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks,
                               const std::string& account) {
-  return write(bookPath, bookmarks, {{}, account});
+  return write(bookPath, {bookmarks}, {{}, account});
 }
 
 namespace {
-bool write(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks,
-           const BookmarkFile::SyncState& state) {
-  for (const auto& bookmark : bookmarks) {
+bool write(const std::string& bookPath, const BookmarkView& bookmarks, const BookmarkFile::SyncState& state) {
+  JsonDocument doc;
+  JsonArray arr = doc["bookmarks"].to<JsonArray>();
+  const auto append = [&](const BookmarkEntry& bookmark) {
     if (bookmark.name.size() > BookmarkEntry::MAX_NAME_LENGTH) {
       LOG_ERR("BKM", "Bookmark name exceeds %zu bytes", BookmarkEntry::MAX_NAME_LENGTH);
       return false;
     }
-  }
-
-  JsonDocument doc;
-  JsonArray arr = doc["bookmarks"].to<JsonArray>();
-  LOG_DBG("BKM", "Saving %zu bookmarks to file", bookmarks.size());
-  for (const auto& bookmark : bookmarks) {
     JsonObject obj = arr.add<JsonObject>();
     obj["xpath"] = bookmark.xpath;
     obj["percentage"] = bookmark.percentage;
@@ -119,7 +129,13 @@ bool write(const std::string& bookPath, const std::vector<BookmarkEntry>& bookma
     if (bookmark.synced) {
       obj["sy"] = true;
     }
+    return true;
+  };
+  if (bookmarks.prepend && !append(*bookmarks.prepend)) return false;
+  for (const auto& bookmark : bookmarks.entries) {
+    if (bookmarks.keeps(bookmark) && !append(bookmark)) return false;
   }
+  LOG_DBG("BKM", "Saving %zu bookmarks to file", arr.size());
   if (!state.account.empty()) {
     doc["acct"] = state.account;
   }

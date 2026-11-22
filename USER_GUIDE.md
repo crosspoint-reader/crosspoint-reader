@@ -705,10 +705,10 @@ square (15% of the shorter screen side) in each top corner, so holding a word
 elsewhere on the page still starts word selection. A link directly under the
 corner keeps priority on a tap, and the shortcuts follow **Touch controls while
 reading**.
-An action the device cannot perform falls back to the normal zone behavior. A
-lookup that cannot open, for example on a page with no selectable text, does
-nothing. If a tap during a page refresh does nothing, tap again after the page
-is drawn.
+An unavailable shortcut falls back to the normal zone behavior. A lookup that
+cannot open despite having a dictionary, or a bookmark save that fails, does
+not fall back. If a tap during a page refresh does nothing, tap again after the
+page is drawn.
 
 ### Links and footnotes
 
