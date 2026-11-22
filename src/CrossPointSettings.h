@@ -374,10 +374,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t readerMenuStyle = READER_MENU_LIST;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
-  // SD card font family to use for the whole UI (menus, home, dessen apps);
-  // empty = the built-in UI font. Bound to the UI font slots at boot and on
-  // change. Independent of the reader font above.
-  char uiFontFamilyName[32] = "";
 #if CROSSPOINT_DESSEN_APPS
   // Absolute SD path of a dessen app to use as the home screen (empty = firmware home).
   char customHomeApp[256] = {0};

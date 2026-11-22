@@ -144,9 +144,6 @@ void SettingsActivity::rebuildSettings() {
 #if CROSSPOINT_DESSEN_APPS
   addAction(SettingsSection::Display, StrId::STR_HOME_LAUNCHER, SettingAction::HomeApp);
 #endif
-#if CROSSPOINT_VECTOR_FONTS
-  addAction(SettingsSection::Display, StrId::STR_UI_FONT, SettingAction::UiFont);
-#endif
   addAction(SettingsSection::Reader, StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings);
   addAction(SettingsSection::Reader, StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts);
   if (section == SettingsSection::Controls) {
@@ -520,46 +517,6 @@ void SettingsActivity::toggleSelectedSetting() {
           } else {
             strncpy(SETTINGS.customHomeApp, apps[idx - 1].appPath.c_str(), sizeof(SETTINGS.customHomeApp) - 1);
             SETTINGS.customHomeApp[sizeof(SETTINGS.customHomeApp) - 1] = '\0';
-          }
-          SETTINGS.saveToFile();
-          rebuildSettings();
-        });
-        requestUpdate();
-        return;
-      }
-#endif
-#if CROSSPOINT_VECTOR_FONTS
-      case SettingAction::UiFont: {
-        // Only vector families can back the whole-UI font: they rasterize at
-        // any UI size (see SdCardFontSystem::applyUiFont). "Default" is the
-        // built-in, and selecting it just clears the setting.
-        const auto& families = sdFontSystem.registry().getFamilies();
-        std::vector<std::string> options;
-        std::vector<std::string> names;  // family name for each option after "Default"
-        options.emplace_back("Default (built-in)");
-        int current = 0;
-        for (const auto& fam : families) {
-          if (!fam.vector) continue;
-          // Only offer names that fit the setting exactly: a truncated name would
-          // neither match here (current-selection) nor in applyUiFont.
-          if (fam.name.size() >= sizeof(SETTINGS.uiFontFamilyName)) continue;
-          names.push_back(fam.name);
-          options.push_back(fam.name);
-          if (fam.name == SETTINGS.uiFontFamilyName) current = static_cast<int>(names.size());
-        }
-        optionPopup.show(StrId::STR_UI_FONT, options, current, [this, names](const int idx) {
-          if (idx <= 0 || idx > static_cast<int>(names.size())) {
-            SETTINGS.uiFontFamilyName[0] = '\0';
-          } else {
-            strncpy(SETTINGS.uiFontFamilyName, names[idx - 1].c_str(), sizeof(SETTINGS.uiFontFamilyName) - 1);
-            SETTINGS.uiFontFamilyName[sizeof(SETTINGS.uiFontFamilyName) - 1] = '\0';
-          }
-          {
-            // applyUiFont rebinds the renderer's fonts; hold the RenderLock for
-            // the swap only (see TextSettingsActivity::applyFamily), then write
-            // and rebuild outside it.
-            RenderLock lock;
-            sdFontSystem.applyUiFont(renderer);
           }
           SETTINGS.saveToFile();
           rebuildSettings();

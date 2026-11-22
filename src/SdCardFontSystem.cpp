@@ -1,6 +1,5 @@
 #include "SdCardFontSystem.h"
 
-#include <EpdFontFamily.h>
 #include <Fnv1a.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
@@ -403,9 +402,8 @@ int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*pointSize*
 
 #if CROSSPOINT_VECTOR_FONTS
 
-void SdCardFontSystem::freeTtfSources(TtfSource* sources) {
-  for (uint8_t st = 0; st < 4; ++st) {
-    TtfSource& s = sources[st];
+void SdCardFontSystem::freeTtfSources() {
+  for (auto& s : ttfSources_) {
     s.bytes.clear();
     freeink::font::PsramVector<uint8_t>().swap(s.bytes);  // actually release
     if (s.file) s.file.close();
@@ -469,13 +467,14 @@ void SdCardFontSystem::unloadTtf(GfxRenderer& renderer) {
     renderer.removeFont(ttfFontId_);  // drop from the renderer's fontMap
   }
   ttf_.reset();  // frees the FT faces first (they read ttfSources_)
-  freeTtfSources(ttfSources_);
+  freeTtfSources();
   ttfFamily_.clear();
   ttfFontId_ = 0;
   ttfPointSize_ = 0;
 }
 
-bool SdCardFontSystem::openTtfSource(TtfSource& s, const std::string& path) {
+bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& path) {
+  if (style >= 4) return false;
   HalFile f = Storage.open(path.c_str());
   if (!f) {
     LOG_ERR("SDFS", "Failed to open TTF: %s", path.c_str());
@@ -487,6 +486,7 @@ bool SdCardFontSystem::openTtfSource(TtfSource& s, const std::string& path) {
     f.close();
     return false;
   }
+  TtfSource& s = ttfSources_[style];
   s.file = std::move(f);  // kept open; prefixRead() reads it on demand
   s.streamed = true;
   // Cache the file's head in PSRAM: an sfnt's per-glyph-fault tables (cmap,
@@ -527,9 +527,9 @@ unsigned long SdCardFontSystem::prefixRead(void* ctx, const unsigned long offset
   return SdCardFontRegistry::halFileRead(&s->file, offset, buffer, count);
 }
 
-void SdCardFontSystem::addTtfSources(TtfEpdFont& font, TtfSource* sources) {
+void SdCardFontSystem::addTtfSources(TtfEpdFont& font) {
   for (uint8_t st = 0; st < 4; ++st) {
-    TtfSource& s = sources[st];
+    TtfSource& s = ttfSources_[st];
     if (!s.present) continue;
     if (s.streamed) {
       font.addStreamSource(st, &SdCardFontSystem::prefixRead, &s, s.size);
@@ -537,99 +537,6 @@ void SdCardFontSystem::addTtfSources(TtfEpdFont& font, TtfSource* sources) {
       font.addResidentSource(st, s.bytes.data(), static_cast<uint32_t>(s.bytes.size()));
     }
   }
-}
-
-bool SdCardFontSystem::openTtfFamilySources(const SdCardFontFamilyInfo& family, TtfSource* sources) {
-  // A single-file family (loose .ttf, or a folder with one file) supplies only
-  // regular; TtfEpdFont then derives bold/italic from the wght axis or an
-  // oblique shear. Extra files upgrade those styles to the real designs.
-  char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
-  for (const auto& file : family.files) {
-    const uint8_t role = file.style < 4 ? file.style : 0;
-    if (sources[role].present) continue;  // registry already deduped by role
-    if (!family.filePath(file, path, sizeof(path))) {
-      LOG_ERR("SDFS", "Vector font path too long in family %s", family.name.c_str());
-      continue;
-    }
-    openTtfSource(sources[role], path);
-  }
-  return sources[0].present;
-}
-
-void SdCardFontSystem::setBuiltinUiFonts(EpdFontFamily* small, EpdFontFamily* ui10, EpdFontFamily* ui12) {
-  builtinUiSmall_ = small;
-  builtinUi10_ = ui10;
-  builtinUi12_ = ui12;
-}
-
-void SdCardFontSystem::unloadUiTtf(GfxRenderer& renderer) {
-  if (uiTtf_[0]) {
-    for (const auto& ui : kUiFontSizes) {
-      renderer.unregisterTtfFont(ui.fontId);
-      renderer.removeFont(ui.fontId);
-    }
-  }
-  // Variants borrow the master's faces, and the master reads the sources.
-  for (size_t i = std::size(uiTtf_); i-- > 0;) uiTtf_[i].reset();
-  freeTtfSources(uiTtfSources_);
-}
-
-bool SdCardFontSystem::loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer& renderer) {
-  static_assert(std::size(kUiFontSizes) == sizeof(uiTtf_) / sizeof(uiTtf_[0]), "one face per UI font slot");
-  if (!openTtfFamilySources(family, uiTtfSources_)) return false;
-  // A UI screen shows well under 512 distinct glyphs per size; the glyph
-  // arenas are PSRAM-backed (FontPsram).
-  static constexpr size_t kUiGlyphCacheBytes = 64 * 1024;
-  static constexpr uint16_t kUiMaxGlyphs = 512;
-  for (size_t i = 0; i < std::size(uiTtf_); ++i) {
-    auto font = makeUniqueNoThrow<TtfEpdFont>();
-    if (!font) return false;
-    const uint8_t size = kUiFontSizes[i].pointSize;
-    bool ok;
-    if (i == 0) {
-      addTtfSources(*font, uiTtfSources_);
-      ok = font->load(size, /*twoBit=*/true, kUiGlyphCacheBytes, kUiMaxGlyphs);
-    } else {
-      ok = font->loadVariantOf(*uiTtf_[0], size, /*twoBit=*/true, kUiGlyphCacheBytes, kUiMaxGlyphs);
-    }
-    if (!ok) return false;
-    font->build(" ");
-    uiTtf_[i] = std::move(font);
-  }
-  // All three sizes loaded: only now replace the slots, so a failure above
-  // never leaves a slot without a font.
-  for (size_t i = 0; i < std::size(uiTtf_); ++i) {
-    const int id = kUiFontSizes[i].fontId;
-    renderer.removeFont(id);
-    renderer.insertFont(id, uiTtf_[i]->family());
-    renderer.registerTtfFont(id, uiTtf_[i].get());
-  }
-  return true;
-}
-
-bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer) {
-  unloadUiTtf(renderer);
-  const char* want = SETTINGS.uiFontFamilyName;
-  if (want[0] != '\0') {
-    const SdCardFontFamilyInfo* family = registry_.findFamily(want);
-    if (family != nullptr && loadUiTtf(*family, renderer)) {
-      LOG_DBG("SDFS", "UI font: %s", want);
-      return true;
-    }
-    LOG_ERR("SDFS", "UI font '%s' missing or failed to load; using built-in", want);
-    unloadUiTtf(renderer);  // drop a partial load
-  }
-
-  // Built-in UI fonts: the default, and the recovery path.
-  if (builtinUiSmall_ && builtinUi10_ && builtinUi12_) {
-    renderer.removeFont(SMALL_FONT_ID);
-    renderer.removeFont(UI_10_FONT_ID);
-    renderer.removeFont(UI_12_FONT_ID);
-    renderer.insertFont(SMALL_FONT_ID, *builtinUiSmall_);
-    renderer.insertFont(UI_10_FONT_ID, *builtinUi10_);
-    renderer.insertFont(UI_12_FONT_ID, *builtinUi12_);
-  }
-  return false;
 }
 
 void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
@@ -718,11 +625,25 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     return;
   }
 
-  if (!openTtfFamilySources(family, ttfSources_)) {
+  // Open each style source the family ships (0=regular, 1=bold, 2=italic,
+  // 3=bold-italic). A single-file family (loose .ttf, or a folder with one file)
+  // supplies only regular; TtfEpdFont then derives bold/italic from the wght axis
+  // or an oblique shear. Extra files upgrade those styles to the real designs.
+  char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
+  for (const auto& file : family.files) {
+    const uint8_t role = file.style < 4 ? file.style : 0;
+    if (ttfSources_[role].present) continue;  // registry already deduped by role
+    if (!family.filePath(file, path, sizeof(path))) {
+      LOG_ERR("SDFS", "Vector font path too long in family %s", family.name.c_str());
+      continue;
+    }
+    openTtfSource(role, path);
+  }
+  if (!ttfSources_[0].present) {
     // Possibly a transient SD read failure: keep the user's selection so the
     // next ensureLoaded() retries; this session falls back to the built-in.
     LOG_ERR("SDFS", "Vector family %s: regular file failed to open (keeping selection)", family.name.c_str());
-    freeTtfSources(ttfSources_);
+    freeTtfSources();
     return;
   }
 
@@ -731,10 +652,10 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     // Transient OOM: keep the user's selection (unlike a parse failure) so the
     // next ensureLoaded() can retry once heap pressure passes.
     LOG_ERR("SDFS", "OOM: TtfEpdFont for %s", family.name.c_str());
-    freeTtfSources(ttfSources_);
+    freeTtfSources();
     return;
   }
-  addTtfSources(*ttf_, ttfSources_);
+  addTtfSources(*ttf_);
   const bool ok = ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs);
   if (!ok) {
     // init failure is ambiguous (corrupt font vs. transient OOM inside
@@ -743,7 +664,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     // font costs one failed load per reader entry, visible in the log.
     LOG_ERR("SDFS", "FreeInkFont could not parse %s (keeping selection)", family.name.c_str());
     ttf_.reset();
-    freeTtfSources(ttfSources_);
+    freeTtfSources();
     return;
   }
   // Seed the regular face's glyph cache; other styles + glyphs fault on demand.

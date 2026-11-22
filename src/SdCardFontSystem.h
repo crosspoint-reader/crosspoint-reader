@@ -17,7 +17,6 @@
 #include <vector>
 
 class GfxRenderer;
-class EpdFontFamily;
 class TtfEpdFont;
 
 /// Facade that owns the SD card font registry, manager, and resolver logic.
@@ -38,19 +37,6 @@ class SdCardFontSystem {
   /// Call before entering the reader or after settings change.
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).
   void ensureLoaded(GfxRenderer& renderer);
-
-#if CROSSPOINT_VECTOR_FONTS
-  /// Remember the built-in UI font families (SMALL/UI_10/UI_12) so applyUiFont()
-  /// can restore them when no SD UI font is selected. Call once at boot.
-  void setBuiltinUiFonts(EpdFontFamily* small, EpdFontFamily* ui10, EpdFontFamily* ui12);
-
-  /// Bind the UI font slots (SMALL_FONT_ID/UI_10/UI_12) to the vector family
-  /// named by SETTINGS.uiFontFamilyName, rasterized at each UI size; otherwise
-  /// restore the built-in UI fonts. The whole UI (menus, home, dessen apps)
-  /// draws through these slots. PSRAM boards only. Call at boot and whenever
-  /// the setting changes. Returns true if an SD UI font was applied.
-  bool applyUiFont(GfxRenderer& renderer);
-#endif
 
   /// Resolve an SD card font ID from family name + reader point size.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
@@ -93,22 +79,13 @@ class SdCardFontSystem {
   // text (book titles, list rows, menus, status bar) in scripts the built-in
   // fonts lack renders in the chosen TTF. Mirrors setupUiFallbacks for .cpfont.
   void setupTtfUiFallbacks(GfxRenderer& renderer);
-  // Style source arrays hold 4 entries: 0=regular (required), 1=bold,
-  // 2=italic, 3=bold-italic. The reader family and the UI font each own one.
-  struct TtfSource;
-  // Open one style source file (resident if small, streamed if large).
-  // Returns false on open/read failure.
-  static bool openTtfSource(TtfSource& s, const std::string& path);
-  // Open every style file the family ships. False if regular failed to open.
-  static bool openTtfFamilySources(const SdCardFontFamilyInfo& family, TtfSource* sources);
+  // Open one style source file (resident if small, streamed if large) into
+  // ttfSources_[style]. Returns false on open/read failure.
+  bool openTtfSource(uint8_t style, const std::string& path);
   // Register every present source with `font` (shared bytes / file handles).
-  static void addTtfSources(TtfEpdFont& font, TtfSource* sources);
+  void addTtfSources(TtfEpdFont& font);
   // Close/free all style sources.
-  static void freeTtfSources(TtfSource* sources);
-  // Load `family` at the three UI sizes and bind the UI font slots to it.
-  bool loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer& renderer);
-  // Unbind and free the vector UI font, if one is loaded.
-  void unloadUiTtf(GfxRenderer& renderer);
+  void freeTtfSources();
   // ReadFn for streamed sources: serves the PSRAM prefix cache first, SD after.
   static unsigned long prefixRead(void* ctx, unsigned long offset, unsigned char* buffer, unsigned long count);
 #endif  // CROSSPOINT_VECTOR_FONTS
@@ -137,12 +114,6 @@ class SdCardFontSystem {
   std::atomic<bool> registryDirty_{false};
 
 #if CROSSPOINT_VECTOR_FONTS
-  // Built-in UI font families, remembered via setBuiltinUiFonts() so applyUiFont()
-  // can restore them when SETTINGS.uiFontFamilyName is empty.
-  EpdFontFamily* builtinUiSmall_ = nullptr;
-  EpdFontFamily* builtinUi10_ = nullptr;
-  EpdFontFamily* builtinUi12_ = nullptr;
-
   // One style source file. SMALL files are read fully into `bytes` (resident,
   // PSRAM when present); LARGE files stream from `file` (kept open) so a multi-MB
   // file never sits in RAM. All faces (reader + UI sizes) share these sources.
@@ -177,11 +148,6 @@ class SdCardFontSystem {
   std::vector<TtfVariant> ttfVariants_;
   bool loadTtfVariant(uint8_t pointSize, int fontId);
   void clearTtfVariants(GfxRenderer& renderer);
-
-  // Vector UI font: its own sources, so it outlives reader family changes.
-  // uiTtf_[0] owns the FreeType faces; the other two are sized variants of it.
-  TtfSource uiTtfSources_[4];
-  std::unique_ptr<TtfEpdFont> uiTtf_[3];
 #endif  // CROSSPOINT_VECTOR_FONTS
 };
 
