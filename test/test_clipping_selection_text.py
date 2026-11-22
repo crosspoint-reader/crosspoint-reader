@@ -468,22 +468,30 @@ int main() {
     // Selection box hugs the measured ink (top 2, bottom 14), not the full line advance.
     const int inkY = decorated.words[0].y;
     assert(decorated.words[0].height == 12);
-    // Tight line spacing: capped at the line pitch, trimmed from the top so descenders stay whole.
-    decorated.renderer.linePitch = 10;
+    // Last line on the page: the box is the full measured ink (top 2, bottom 14), whatever the line pitch.
+    for (const int pitch : {10, 14, 15, 20}) {
+      decorated.renderer.linePitch = pitch;
+      assert(decorated.extractWords());
+      assert(decorated.words[0].height == 12 && decorated.words[0].y == inkY);
+    }
+    // A following line closer than the ink is tall: the excess is cut half from each side, so boxes never overlap.
+    auto next = std::make_unique<PageLine>();
+    next->yPos = 5 + 8;
+    next->block.packedText = std::string("x\0", 2);
+    next->block.positions = {0};
+    next->block.styles = {EpdFontFamily::REGULAR};
+    decorated.pages[0]->elements.push_back(std::move(next));
     assert(decorated.extractWords());
-    assert(decorated.words[0].height == 10);
-    assert(decorated.words[0].y == inkY + 2);
-    assert(decorated.words[0].y + decorated.words[0].height == inkY + 12);
-    // A gap within the font's headroom (ink top 2) is closed by growing upwards; descenders stay put.
-    decorated.renderer.linePitch = 14;
-    assert(decorated.extractWords());
-    assert(decorated.words[0].height == 14);
-    assert(decorated.words[0].y == inkY - 2);
-    // One pixel more than the headroom: the gap stays and the box hugs the ink.
-    decorated.renderer.linePitch = 15;
+    assert(decorated.words[0].height == 8 && decorated.words[0].y == inkY + 2);
+    // A gap at least as tall as the ink (e.g. paragraph spacing) leaves the box untouched.
+    decorated.pages[0]->elements.back()->yPos = 5 + 12;
     assert(decorated.extractWords());
     assert(decorated.words[0].height == 12 && decorated.words[0].y == inkY);
-    // Nothing measurable (e.g. glyphs not loaded): a neutral one-pitch box from the top, never shifted down.
+    decorated.pages[0]->elements.back()->yPos = 5 + 40;
+    assert(decorated.extractWords());
+    assert(decorated.words[0].height == 12 && decorated.words[0].y == inkY);
+    decorated.pages[0]->elements.pop_back();
+    // Nothing measurable (e.g. glyphs not loaded): a neutral one-pitch box from the top.
     decorated.renderer.measureAll = false;
     for (const int pitch : {10, 16, 20}) {
       decorated.renderer.linePitch = pitch;

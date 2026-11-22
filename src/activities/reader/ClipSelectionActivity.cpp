@@ -183,7 +183,7 @@ bool ClipSelectionActivity::extractWords() {
                                        static_cast<uint8_t>(styleMask | (1U << EpdFontFamily::REGULAR)));
       }
 
-      ClippingLineInk lineInk;
+      ClippingLineInk lineInk(clippingRowGap(pageAt(pageOffset).elements, line));
       const size_t lineStart = wordCount;
       const bool isRtl = block->getBlockStyle().isRtl;
       const int8_t characterSpacing = block->getBlockStyle().characterSpacing;

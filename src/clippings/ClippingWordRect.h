@@ -6,6 +6,8 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <climits>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -37,7 +39,11 @@ struct ClippingLineWords {
 
 // Ink extent per word font for one line, measured lazily and once: the union over the line's unique glyphs, so every
 // word box on the line shares one height and any script is measured. Create one per line, outside the word loop.
+// rowGap is the distance to the next line on the page (INT_MAX for the last line): boxes are cut to it so they
+// never overlap, however tall the script's marks are.
 struct ClippingLineInk {
+  explicit ClippingLineInk(const int rowGap = INT_MAX) : rowGap(rowGap) {}
+  int rowGap;
   std::vector<std::pair<int, GfxRenderer::InkBounds>> byFont;
 
   GfxRenderer::InkBounds get(const GfxRenderer& renderer, const int fontId, const TextBlock& block, const int wordFont,
@@ -76,6 +82,16 @@ struct ClippingLineInk {
   }
 };
 
+// Distance to the next line on the page, so the line's boxes can be cut to the row. INT_MAX when none follows.
+inline int clippingRowGap(const std::vector<std::unique_ptr<PageElement>>& elements, const PageLine& line) {
+  int gap = INT_MAX;
+  for (const auto& element : elements) {
+    if (element->getTag() != TAG_PageLine || element->yPos <= line.yPos) continue;
+    gap = std::min(gap, static_cast<int>(element->yPos - line.yPos));
+  }
+  return gap;
+}
+
 inline Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, const PageLine& line, const uint16_t i,
                              const int top, const int left, const int wordWidth, ClippingLineInk& lineInk) {
   const auto& block = line.getBlock();
@@ -89,17 +105,16 @@ inline Rect clippingWordRect(const GfxRenderer& renderer, const int fontId, cons
     width = std::min(width, static_cast<int>(block->wordXpos(i + 1) - block->wordXpos(i) - skipX));
   }
   const int lineFont = TextBlock::renderFontId(renderer, block->blockFontId(fontId), fontId);
-  // Measured ink extent, capped at the word font's line pitch so tight line spacing doesn't overlap adjacent lines.
-  // Trim from the top only: descenders stay whole. The word's own font keeps larger runs intact.
-  // Ink is the union over the line's words in this font, so boxes share one height and any script is measured.
+  // Measured ink extent (any script), as the union over the line's words in this font so boxes share one height.
+  // Where it is taller than the row (tight spacing, tall marks) the excess is cut half from each side, so the box
+  // never overlaps the neighbouring line.
   const int pitch = renderer.getLineHeight(wordFont, SETTINGS.getReaderLineCompression());
   const auto ink = lineInk.get(renderer, fontId, *block, wordFont, pitch);
-  int trim = ink.bottom - ink.top - pitch;
-  // Glue to the line above when the gap fits in the font's own headroom above its letters (ink.top, room the
-  // ascender reserves for accents): the box grows upwards but never past the font's ascender. Larger gaps stay.
-  if (-trim > ink.top) trim = 0;
+  const int excess = std::max(0, ink.bottom - ink.top - lineInk.rowGap);
+  const int boxTop = ink.top + excess / 2;
+  const int boxHeight = ink.bottom - ink.top - excess;
   return Rect{left + line.xPos + block->wordXpos(i) + skipX,
               top + line.yPos + block->getRubyShift(renderer.getFontAscenderSize(lineFont)) +
-                  block->wordYOffset(renderer, fontId, i) + ink.top + trim,
-              width, ink.bottom - ink.top - trim};
+                  block->wordYOffset(renderer, fontId, i) + boxTop,
+              width, boxHeight};
 }

@@ -2420,7 +2420,7 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
     const auto& line = static_cast<const PageLine&>(*element);
     const auto& block = line.getBlock();
     if (!block || !block->valid()) continue;
-    ClippingLineInk lineInk;
+    ClippingLineInk lineInk(clippingRowGap(page.elements, line));
     for (uint16_t i = 0; i < block->wordCount(); ++i) {
       const char* text = block->wordText(i);
       if (!clippingText::hasVisibleText(text)) continue;
@@ -2494,7 +2494,7 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     bool hasPreviousHighlight = false;
     int previousHighlightX = 0;
     int previousHighlightWidth = 0;
-    ClippingLineInk lineInk;
+    ClippingLineInk lineInk(clippingRowGap(page.elements, line));
     for (uint16_t i = 0; i < block->wordCount(); ++i) {
       const char* text = block->wordText(i);
       if (!clippingText::hasVisibleText(text)) continue;
