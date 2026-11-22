@@ -100,8 +100,8 @@ appear in the picker.
 The selected font is used for menus, library titles, and other interface text.
 The reader uses the built-in font for any characters missing from the selected
 font. If neither font covers a character, the reader skips it. Choose
-**Default** to restore the built-in menu fonts. The reader also uses built-in
-fonts temporarily during USB Drive and File Transfer.
+**Default** to restore the built-in menu fonts. USB Drive uses built-in fonts.
+File Transfer switches to built-in fonts when the web server starts.
 
 ## Non-Latin Scripts Fallback in the User Interface
 

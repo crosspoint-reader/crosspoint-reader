@@ -193,7 +193,6 @@ class OptionPopup {
 
     const auto& metrics = UITheme::getInstance().getMetrics();
     const int count = static_cast<int>(ownedStrings.size());
-    const int selected = selectedIndex.load();
     fui::DialogOption options[MAX_VISIBLE_OPTIONS];
 
     fui::OptionDialogProps props;
@@ -253,7 +252,9 @@ class OptionPopup {
     const int maxHeight = screen.height - metrics.optionPopupDialogSideMargin * 2;
     const int visibleCount = std::clamp(1 + (maxHeight - singleOptionHeight) / (props.buttonHeight + props.gap), 1,
                                         std::min(count, MAX_VISIBLE_OPTIONS));
-    if (followSelection.exchange(false)) {
+    const bool follow = followSelection.exchange(false);
+    const int selected = selectedIndex.load();
+    if (follow) {
       firstOption = fui::listTopIndexFor(selected, firstOption, visibleCount, count);
     }
     const int scroll = std::clamp(pendingScroll.exchange(0), -count, count);

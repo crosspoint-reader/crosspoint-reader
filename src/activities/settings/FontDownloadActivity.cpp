@@ -556,6 +556,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     fcm->releaseSdFontCaches();
     LOG_DBG("FONT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
   }
+  suspendFontsForMutation(str(family.name));
 
   // Check before touching the family directory so a failed update leaves the
   // installed family unchanged.
@@ -568,7 +569,6 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     return;
   }
 
-  suspendFontsForMutation(str(family.name));
   if (!fontInstaller_.ensureFamilyDir(str(family.name))) {
     RenderLock lock(*this);
     state_ = ERROR;
