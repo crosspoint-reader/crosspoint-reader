@@ -462,9 +462,9 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   props.borderEdges = fui::EdgeBottom;
   props.titleText = tokens.titleText;
   props.titleText.align = tokens.headerTitleAlign;
-  // Compact Home titles must have the same visible gap below the clock as
-  // the clock has above it. Centering font line boxes in the short band does
-  // not achieve this: their ink bounds differ, especially on inset panels.
+  // Compact Home titles use a 12px visible gap below the clock. Centering
+  // font line boxes in the short band does not achieve this because the clock
+  // and title have different ink metrics, especially on inset panels.
   // Adjust only the title, never the clock, band bottom, cover, or menu.
   if (title && props.status.clockText && rect.height < UITheme::getInstance().getMetrics().headerHeight &&
       props.titleText.align == fui::TextAlign::Left) {
@@ -474,7 +474,9 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     const int clockTop = band.y + (props.status.stripHeight - clockInk.height) / 2;
     const int titleTop = band.y + (band.height - ui.target.lineHeight(props.titleText.font)) / 2 + titleInk.y;
     // Reserve six pixels under the visible title before the cover tile starts.
-    const int targetTop = std::min(2 * clockTop + clockInk.height, band.bottom() - titleInk.height - 6);
+    constexpr int clockTitleGap = 12;
+    const int targetTop = std::min(clockTop + clockInk.height + clockTitleGap,
+                                   band.bottom() - titleInk.height - 6);
     props.titleOffsetY = static_cast<int16_t>(std::max(0, targetTop - titleTop));
   }
   props.subtitleText = tokens.smallText;
