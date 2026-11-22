@@ -10,6 +10,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 
@@ -34,9 +35,6 @@ void BaseTheme::setCheckboxRow(freeink::ui::ListItem& item, const bool checked) 
 
 // Internal constants
 namespace {
-constexpr int homeMenuMargin = 20;
-constexpr int homeMarginTop = 30;
-constexpr int subtitleY = 738;
 constexpr int bookmarkStatusIconWidth = 16;
 constexpr int bookmarkStatusIconHeight = 14;
 constexpr int bookmarkStatusIconGap = 4;
@@ -318,10 +316,13 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   }
 }
 
-// Slightly inside the side padding: the battery's boxed glyph and the clock
-// digits read wider than text/cover ink on the same line, so flush placement
-// looks like it overhangs the content columns.
-int BaseTheme::headerStatusInset() { return UITheme::getInstance().getMetrics().headerSidePadding + 4; }
+namespace {
+// headerBand moves the band's top edge by this amount so the status row starts
+// at HEADER_STATUS_TOP on every theme. Bezel clearance stays in headerOffsetY.
+int headerBandTopShift() { return BaseTheme::HEADER_STATUS_TOP - UITheme::getInstance().getMetrics().topPadding; }
+}  // namespace
+
+int BaseTheme::headerStatusInset() { return HEADER_STATUS_EDGE_INSET; }
 
 void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::HeaderProps& props) {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
@@ -343,15 +344,14 @@ void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::Head
     snprintf(percentText, sizeof(percentText), "%u%%", static_cast<unsigned>(percentage));
     status.battery.label = percentText;
   }
-  status.battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
-  status.battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
+  status.battery.glyphWidth = 16;
+  status.battery.glyphHeight = 12;
   status.battery.gap = batteryPercentSpacing;
-  status.batteryLeft = metrics.headerBatterySide == 1;
+  status.batteryLeft = false;
   status.edgeInset = static_cast<int16_t>(headerStatusInset());
 
-  // Header chrome geometry. Status lives on the theme's thin top strip in
-  // fixed corners — battery top-right, a corner clock (headerClockCentered =
-  // false) top-left, a centered clock top-center — and never repositions.
+  // Header chrome geometry uses Lyra's fixed status strip: battery top-right,
+  // clock top-left. Themes cannot reposition either indicator.
   // The content row (title, back arrow, trailing action buttons) centers on
   // the region between the strip and the band bottom, so its padding reads
   // as balanced under the status line rather than against the full band.
@@ -361,27 +361,30 @@ void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::Head
   // the boxes are invisible and minTouchSize pads the tap target.
   constexpr int16_t headerButtonSize = 48;
   const int16_t bandHeight = static_cast<int16_t>(metrics.headerHeight);
-  const int16_t strip = static_cast<int16_t>(metrics.batteryBarHeight);
+  const int16_t strip = HEADER_STATUS_HEIGHT;
   const int titleFontId = uiScaleSpec().titleFontId;
   const int16_t opticalDrop =
       static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
   props.leadingSize = headerButtonSize;
   props.trailingSize = headerButtonSize;
   props.leadingStyles = freeink::ui::plainStyles(freeink::ui::Paint::solid(freeink::ui::Color::Black));
-  props.actionOffsetY = static_cast<int16_t>(strip + (bandHeight - strip - headerButtonSize) / 2 - 4 + opticalDrop);
-  // Shift the title's band-centered box down by half the strip: its center
-  // lands on the below-strip region's midline with the buttons.
-  // headerBand lowers only the band's top edge, which moves a centered title
-  // half as far as the buttons; the second half keeps the title on their line.
-  props.titleOffsetY = static_cast<int16_t>(strip / 2 + BoardConfig::ACTIVE.headerOffsetY / 2);
+  // Only the status row moves to the shared slot. The title and buttons keep
+  // the theme's own layout: they center below the theme's strip height, and
+  // the band-top shift is taken back out (in full for the top-relative
+  // buttons, half for the band-centered title).
+  const int16_t contentStrip = static_cast<int16_t>(metrics.batteryBarHeight);
+  const int shift = headerBandTopShift();
+  props.actionOffsetY =
+      static_cast<int16_t>(contentStrip + (bandHeight - contentStrip - headerButtonSize) / 2 - 4 + opticalDrop - shift);
+  // headerBand lowers only the band's top edge by headerOffsetY, which moves a
+  // centered title half as far as the buttons; the second half goes here.
+  props.titleOffsetY = static_cast<int16_t>(contentStrip / 2 + (BoardConfig::ACTIVE.headerOffsetY - shift) / 2);
   status.stripHeight = strip;
-  status.clockCentered = metrics.headerClockCentered;
+  status.clockCentered = false;
 
-  // Header clock, opposite the battery, on every screen that draws this band
-  // (SETTINGS.clockShowInHeader). Themes whose title layout has no room for
-  // the clock's left reserve opt out via headerShowsClock.
+  // The user's setting alone controls the clock; themes cannot hide or center it.
   static char clockText[10];
-  if (metrics.headerShowsClock && SETTINGS.clockShowInHeader && halClock.isAvailable() &&
+  if (SETTINGS.clockShowInHeader && halClock.isAvailable() &&
       halClock.formatTime(clockText, sizeof(clockText), SETTINGS.clockFormat == 1)) {
     status.clockText = clockText;
   }
@@ -393,9 +396,11 @@ freeink::ui::Rect BaseTheme::headerBand(const GfxRenderer& renderer, const freei
   renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
   const auto l = static_cast<int16_t>(left);
   const auto r = static_cast<int16_t>(right);
-  const int16_t offset = BoardConfig::ACTIVE.headerOffsetY;
+  // Move the top edge to the shared status slot without moving the header's
+  // bottom edge or changing the available content area below it.
+  const int16_t shift = static_cast<int16_t>(headerBandTopShift());
+  const int16_t offset = static_cast<int16_t>(BoardConfig::ACTIVE.headerOffsetY + shift);
   props.bleed = freeink::ui::Insets{0, r, 0, l};
-  // Only the status line sits up in the rounded corners; it alone gets their clearance.
   const int corner = BoardConfig::ACTIVE.cornerRadius;
   props.status.edgeInset = static_cast<int16_t>(props.status.edgeInset + std::max(0, corner - std::min(left, right)));
   return freeink::ui::Rect{static_cast<int16_t>(rect.x + l), static_cast<int16_t>(rect.y + offset),
@@ -493,7 +498,7 @@ void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
 // TODO: Refactor method to make it cleaner, split into smaller methods
 void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                     const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
-                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
+                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer, int) const {
   const bool hasContinueReading = !recentBooks.empty();
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
 
@@ -627,8 +632,6 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       // Draw selection border (no bookmark inversion needed since cover has no bookmark)
       renderer.drawRect(bookX + 1, bookY + 1, bookWidth - 2, bookHeight - 2);
       renderer.drawRect(bookX + 2, bookY + 2, bookWidth - 4, bookHeight - 4);
-    } else if (!coverRendered && !bufferRestored) {
-      // Selection border already handled above in the no-cover case
     }
   }
 
@@ -712,11 +715,28 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       renderer.drawCenteredText(UI_10_FONT_ID, continueY, tr(STR_CONTINUE_READING), !bookSelected);
     }
   } else {
-    // No book to continue reading
-    const int y =
-        bookY + (bookHeight - renderer.getLineHeight(UI_12_FONT_ID) - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
-    renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK));
-    renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), tr(STR_START_READING));
+    // No book to continue reading. Keep each line inside the empty cover frame: a longer translation
+    // (e.g. Russian "Нет открытой книги") steps down one font size; wrapping is only the last resort.
+    const int textWidth = std::max(1, bookWidth - 16);
+    const auto fitFont = [&](const char* text, const int preferred, const int smaller) {
+      return renderer.getTextWidth(preferred, text) <= textWidth ? preferred : smaller;
+    };
+    const int titleFont = fitFont(tr(STR_NO_OPEN_BOOK), UI_12_FONT_ID, UI_10_FONT_ID);
+    const int hintFont = fitFont(tr(STR_START_READING), UI_10_FONT_ID, SMALL_FONT_ID);
+    const auto title = renderer.wrappedText(titleFont, tr(STR_NO_OPEN_BOOK), textWidth, 3);
+    const auto hint = renderer.wrappedText(hintFont, tr(STR_START_READING), textWidth, 3);
+    const int titleLine = renderer.getLineHeight(titleFont);
+    const int hintLine = renderer.getLineHeight(hintFont);
+    int y = bookY +
+            (bookHeight - static_cast<int>(title.size()) * titleLine - static_cast<int>(hint.size()) * hintLine) / 2;
+    for (const auto& line : title) {
+      renderer.drawCenteredText(titleFont, y, line.c_str());
+      y += titleLine;
+    }
+    for (const auto& line : hint) {
+      renderer.drawCenteredText(hintFont, y, line.c_str());
+      y += hintLine;
+    }
   }
 }
 
@@ -820,8 +840,10 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // Draw Progress Text
   const auto screenHeight = renderer.getScreenHeight();
-  auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4 +
-               BoardConfig::ACTIVE.statusBarOffsetY;
+  const int statusBarHeight =
+      fillMargin ? UITheme::getReaderStatusBarHeight() : UITheme::getInstance().getStatusBarHeight();
+  auto textY =
+      screenHeight - statusBarHeight - orientedMarginBottom - paddingBottom - 4 + BoardConfig::ACTIVE.statusBarOffsetY;
 
   // The side clusters sit in the bottom corners: clear the panel's rounded corners too.
   const int corner = BoardConfig::ACTIVE.bottomCornerRadius != 0 ? BoardConfig::ACTIVE.bottomCornerRadius
@@ -877,11 +899,6 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
 
   // Draw Progress Bar
   if (sb.showsProgressBar()) {
-    const int barMarginLeft = fillMargin ? 0 : orientedMarginLeft;
-    const int barMarginRight = fillMargin ? 0 : orientedMarginRight;
-    const int progressBarMaxWidth = renderer.getScreenWidth() - barMarginLeft - barMarginRight;
-    const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom - sb.progressBarHeightPx -
-                             paddingBottom + (fillMargin ? 1 : 0);
     size_t progress;
     if (sb.progressBarMode == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
       progress = static_cast<size_t>(bookProgress);
@@ -889,9 +906,31 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       // Chapter progress
       progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
     }
-    const int barWidth = progressBarMaxWidth * progress / 100;
-    const int barHeight = sb.progressBarHeightPx + (fillMargin ? orientedMarginBottom - 1 : 0);
-    renderer.fillRect(barMarginLeft, progressBarY, barWidth, barHeight, true);
+    if (BoardConfig::isEegoA4() && fillMargin) {
+      // EEGO A4: a slim line hugging the bottom bezel instead of a slab filling
+      // the bottom inset. Its top row sits edgeGap px above the panel edge and
+      // it fills down to the edge, so no gap shows under it at any viewing
+      // angle. Both ends stop where the rounded corners start to cut in.
+      constexpr int edgeGap = 7;
+      const int barY = screenHeight - edgeGap - sb.progressBarHeightPx - paddingBottom;
+      const int radius = corner;
+      const int d = std::max(0, radius - edgeGap);
+      const int intrusion =
+          radius > 0 ? static_cast<int>(std::ceil(radius - std::sqrt(static_cast<float>(radius * radius - d * d)))) : 0;
+      const int barLeft = std::max(orientedMarginLeft, intrusion + 1);
+      const int barRight = renderer.getScreenWidth() - std::max(orientedMarginRight, intrusion + 1);
+      const int barWidth = std::max(0, barRight - barLeft) * static_cast<int>(std::min<size_t>(progress, 100)) / 100;
+      renderer.fillRect(barLeft, barY, barWidth, sb.progressBarHeightPx + edgeGap, true);
+    } else {
+      const int barMarginLeft = fillMargin ? 0 : orientedMarginLeft;
+      const int barMarginRight = fillMargin ? 0 : orientedMarginRight;
+      const int progressBarMaxWidth = renderer.getScreenWidth() - barMarginLeft - barMarginRight;
+      const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom - sb.progressBarHeightPx -
+                               paddingBottom + (fillMargin ? 1 : 0);
+      const int barWidth = progressBarMaxWidth * progress / 100;
+      const int barHeight = sb.progressBarHeightPx + (fillMargin ? orientedMarginBottom - 1 : 0);
+      renderer.fillRect(barMarginLeft, progressBarY, barWidth, barHeight, true);
+    }
   }
 
   // Draw Battery
@@ -1004,14 +1043,15 @@ void BaseTheme::drawSelectionHandle(const GfxRenderer& renderer, const Rect rect
   renderer.fillRect(left ? rect.x + radius : rect.x, rect.y, radius, radius);
 }
 
-void BaseTheme::drawSelectionActions(const GfxRenderer& renderer, const Rect rect, const int count) {
+void BaseTheme::drawSelectionActions(const GfxRenderer& renderer, const Rect rect, const int count,
+                                     const int firstAction) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const char* labels[] = {tr(STR_LOOKUP), tr(STR_CLIP), tr(STR_BOOKMARK_OPTION)};
   for (int i = 0; i < count; ++i) {
     const Rect button = selectionGeometry::button(rect, i, metrics.menuSpacing, count);
     renderer.fillRoundedRect(button.x, button.y, button.width, button.height, metrics.controlRadius, Color::White);
     renderer.drawRoundedRect(button.x, button.y, button.width, button.height, 1, metrics.controlRadius, true);
-    UITheme::drawCenteredWrappedText(renderer, button, uiScaleSpec().smallFontId, labels[i], 2, true,
+    UITheme::drawCenteredWrappedText(renderer, button, uiScaleSpec().smallFontId, labels[firstAction + i], 2, true,
                                      EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::CENTER);
   }
 }

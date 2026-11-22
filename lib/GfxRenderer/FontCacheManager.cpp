@@ -3,6 +3,7 @@
 #include <FontDecompressor.h>
 #include <Logging.h>
 #include <SdCardFont.h>
+#include <ShapingTokens.h>
 #include <TtfEpdFont.h>
 #include <Utf8.h>
 
@@ -29,6 +30,7 @@ void FontCacheManager::clearCache() {
 }
 
 void FontCacheManager::releaseSdFontCaches() {
+  if (releaseCb_) releaseCb_(releaseCtx_);
   if (fontDecompressor_) fontDecompressor_->clearCache();
   for (auto& [id, font] : sdCardFonts_) {
     font->releaseResidentCaches();
@@ -40,21 +42,23 @@ void FontCacheManager::releaseSdFontCaches() {
 #endif
 }
 
-void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask, bool accumulate) {
+bool FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask, bool accumulate) {
   // TTF (vector) font prewarm path. This is the single dispatch every draw path
   // funnels through (reader endScanAndPrewarm, the settings preview, UI text),
-  // so building here covers them all. accumulate=false means "this is the whole
-  // glyph set for this render" → replace; accumulate=true → add incrementally.
-  // styleMask is ignored: a TTF face has no synthesized bold/italic here.
+  // so building here covers them all. For TTF, build() maintains an accumulating
+  // cache across render scopes, flushing only on capacity exhaustion or degradation;
+  // addCoverage() faults incremental codepoints without evicting nearer pages.
 #if CROSSPOINT_VECTOR_FONTS
   auto tit = ttfFonts_.find(fontId);
   if (tit != ttfFonts_.end() && tit->second) {
-    if (accumulate) {
-      tit->second->addCoverage(utf8Text);
-    } else {
-      tit->second->build(utf8Text);
+    bool ok = true;
+    for (uint8_t i = 0; i < 4; ++i) {
+      if (styleMask & (1 << i)) {
+        const bool stepOk = accumulate ? tit->second->addCoverage(utf8Text, i) : tit->second->build(utf8Text, i);
+        ok = ok && stepOk;
+      }
     }
-    return;
+    return ok;
   }
 #endif
 
@@ -65,11 +69,11 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
     if (missed > 0) {
       LOG_DBG("FCM", "prewarmCache(SD): %d glyph(s) not found (styleMask=0x%02X)", missed, styleMask);
     }
-    return;
+    return true;
   }
 
   // Standard compressed font prewarm path: loop over all requested styles
-  if (!fontDecompressor_ || fontMap_.count(fontId) == 0) return;
+  if (!fontDecompressor_ || fontMap_.count(fontId) == 0) return true;
 
   for (uint8_t i = 0; i < 4; i++) {
     if (!(styleMask & (1 << i))) continue;
@@ -81,13 +85,16 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
       LOG_DBG("FCM", "prewarmCache: %d glyph(s) not cached for style %d", missed, i);
     }
   }
+  return true;
 }
 
-void FontCacheManager::logStats(const char* label) {
-  if (fontDecompressor_) fontDecompressor_->logStats(label);
-  for (auto& [id, font] : sdCardFonts_) {
-    font->logStats(label);
-  }
+int FontCacheManager::getIdleLookaheadPages(const int fontId) const {
+#if CROSSPOINT_VECTOR_FONTS
+  return ttfFonts_.count(fontId) > 0 ? 5 : 1;
+#else
+  (void)fontId;
+  return 1;
+#endif
 }
 
 void FontCacheManager::resetStats() {
@@ -136,6 +143,7 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
   while (*cursor) {
     uint32_t codepoint = utf8NextCodepoint(&cursor);
     if (codepoint == 0) break;
+    if (shaping::isPositionToken(codepoint)) continue;  // modifies the next glyph; has no glyph of its own
     // Small caps draw lowercase letters with their uppercase glyphs.
     if (style & EpdFontFamily::SMALL_CAPS) codepoint = utf8SmallCapsUpper(codepoint);
 
@@ -166,19 +174,22 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
 
 // --- PrewarmScope implementation ---
 
-FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager) : manager_(&manager) {
+FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager, const bool accumulate)
+    : manager_(&manager), accumulate_(accumulate) {
   manager_->scanMode_ = ScanMode::Scanning;
-  manager_->clearCache();
-  manager_->resetStats();
+  if (!accumulate_) {
+    manager_->clearCache();
+    manager_->resetStats();
+  }
   manager_->scanCodepointCount_ = 0;
   manager_->scanFontCount_ = 0;
   manager_->scanOverflowWarned_ = false;
   memset(manager_->scanGroupCounts_, 0, sizeof(manager_->scanGroupCounts_));
 }
 
-void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
+bool FontCacheManager::PrewarmScope::endScanAndPrewarm() {
   manager_->scanMode_ = ScanMode::None;
-  if (manager_->scanCodepointCount_ == 0) return;
+  if (manager_->scanCodepointCount_ == 0) return true;
 
   std::sort(manager_->scanCodepoints_, manager_->scanCodepoints_ + manager_->scanCodepointCount_);
 
@@ -190,6 +201,7 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
   // Each packed entry provides four bytes, enough for one UTF-8 codepoint.
   // Encoding high groups first means a terminator can overwrite only a group
   // that has already been prewarmed; unread lower groups remain intact.
+  bool ok = true;
   for (int group = SCAN_GROUP_COUNT - 1; group >= 0; group--) {
     const uint16_t groupCount = manager_->scanGroupCounts_[group];
     if (groupCount == 0) continue;
@@ -206,24 +218,28 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
     const uint8_t fontSlot = static_cast<uint8_t>(group) / 4;
     const uint8_t style = static_cast<uint8_t>(group) & 0x03;
     // This group is the complete glyph set for one font/style in this render.
-    manager_->prewarmCache(manager_->scanFontIds_[fontSlot], utf8Text, 1 << style, /*accumulate=*/false);
+    const bool stepOk = manager_->prewarmCache(manager_->scanFontIds_[fontSlot], utf8Text, 1 << style, accumulate_);
+    ok = ok && stepOk;
   }
 
   manager_->scanCodepointCount_ = 0;
   manager_->scanFontCount_ = 0;
   memset(manager_->scanGroupCounts_, 0, sizeof(manager_->scanGroupCounts_));
+  return ok;
 }
 
 FontCacheManager::PrewarmScope::~PrewarmScope() {
   if (active_) {
     endScanAndPrewarm();  // no-op if already called
-    manager_->clearCache();
+    if (!accumulate_) manager_->clearCache();
   }
 }
 
 FontCacheManager::PrewarmScope::PrewarmScope(PrewarmScope&& other) noexcept
-    : manager_(other.manager_), active_(other.active_) {
+    : manager_(other.manager_), active_(other.active_), accumulate_(other.accumulate_) {
   other.active_ = false;
 }
 
-FontCacheManager::PrewarmScope FontCacheManager::createPrewarmScope() { return PrewarmScope(*this); }
+FontCacheManager::PrewarmScope FontCacheManager::createPrewarmScope(const bool accumulate) {
+  return PrewarmScope(*this, accumulate);
+}

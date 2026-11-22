@@ -35,6 +35,7 @@ enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 
 class GfxRenderer {
  public:
   enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
+  enum class DitherMode { Replace, PreserveInk };
 
   // Logical screen orientation from the perspective of callers
   enum Orientation {
@@ -50,6 +51,7 @@ class GfxRenderer {
   HalDisplay& display;
   RenderMode renderMode;
   mutable bool absoluteGrayPlanes = false;
+  bool ditherImagesInBw = false;
   Orientation orientation;
   bool fadingFix;
   uint8_t* frameBuffer = nullptr;
@@ -65,7 +67,6 @@ class GfxRenderer {
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
   // fontCacheManager_ below.
   mutable std::map<int, SdCardFont*> sdCardFonts_;
-  mutable std::map<int, uint16_t> sdCardFontScales_;  // fontId -> 8.8 fixed point scale (256=1.0x)
   // TTF (vector) fonts: rebuilt per page by ensureSdCardFontReady(). Mutable for
   // the same reason as sdCardFonts_ (const layout path triggers a rebuild).
   mutable std::map<int, TtfEpdFont*> ttfFonts_;
@@ -76,7 +77,7 @@ class GfxRenderer {
   mutable FontCacheManager* fontCacheManager_ = nullptr;
 
   // One-shot refresh promotion (see promoteNextRefresh). Mutable because
-  // displayBuffer() is const but must consume the flag.
+  // Display entry points are const but must consume the flag.
   mutable bool promotedRefreshPending_ = false;
   mutable HalDisplay::RefreshMode promotedRefresh_ = HalDisplay::FAST_REFRESH;
   // Swap in (and clear) the promoted mode, if one is pending.
@@ -136,7 +137,7 @@ class GfxRenderer {
   // physical row with head-mask / middle memset / tail-mask byte writes — no
   // per-pixel rotation, no per-pixel RMW.
   template <Color color>
-  void fillRectImpl(int x, int y, int width, int height) const;
+  void fillRectImpl(int x, int y, int width, int height, DitherMode mode = DitherMode::Replace) const;
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
@@ -152,7 +153,6 @@ class GfxRenderer {
   void removeFont(int fontId) {
     fontMap.erase(fontId);
     sdCardFonts_.erase(fontId);
-    sdCardFontScales_.erase(fontId);
   }
   void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
@@ -170,21 +170,10 @@ class GfxRenderer {
   using TextGetter = const char* (*)(const void* ctx, uint32_t index);
   void prewarmFallbackText(int fontId, TextGetter getter, const void* ctx, uint32_t textCount,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
-  void prewarmFallbackText(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   bool isFontCacheScanning() const;
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }
-  void unregisterSdCardFont(int fontId) { removeFont(fontId); }
-  void clearSdCardFonts() {
-    sdCardFonts_.clear();
-    sdCardFontScales_.clear();
-  }
-  void registerSdCardFontScale(int fontId, uint16_t scale) { sdCardFontScales_[fontId] = scale; }
-  void clearSdCardFontScales() { sdCardFontScales_.clear(); }
-  uint16_t getSdCardFontScale(int fontId) const {
-    auto it = sdCardFontScales_.find(fontId);
-    return (it != sdCardFontScales_.end()) ? it->second : 256;
-  }
+  void clearSdCardFonts() { sdCardFonts_.clear(); }
   const std::map<int, SdCardFont*>& getSdCardFonts() const { return sdCardFonts_; }
   bool isSdCardFont(int fontId) const { return sdCardFonts_.count(fontId) > 0; }
   // TTF (vector) fonts rendered via TtfEpdFont/FreeInkFont. Registered like an
@@ -232,7 +221,8 @@ class GfxRenderer {
   int getScreenHeight() const;
   void tapToLogical(float nx, float ny, int& outX, int& outY) const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
-  // One-shot: the next displayBuffer()/displayBufferAsync() call uses `mode`
+  // One-shot: the next displayBuffer(), displayBufferAsync(), or
+  // displayGrayscaleBase() call uses `mode`
   // instead of what its caller asked for, then the override clears itself.
   // Lets a closing overlay (the control center's refresh tile) hand a
   // ghost-cleanup waveform to the repaint of whatever screen is underneath,
@@ -252,14 +242,12 @@ class GfxRenderer {
   // fadingFix isn't forcing the blocking path. Callers can skip overlap
   // scaffolding (e.g. whole-plane grayscale buffers) when false.
   bool supportsAsyncRefresh() const;
-  // True when the display can overlap an ordinary B/W refresh with grayscale
-  // composition without bypassing a required grayscale base waveform.
+  // When checking stripUploads, pass the grayscale mode used for the planes.
   HalDisplay::GrayscaleCapabilities grayscaleCapabilities(
       HalDisplay::GrayscaleMode mode = HalDisplay::GrayscaleMode::Overlay) const;
-  // Compatibility queries for Overlay mode.
-  bool supportsAsyncGrayscaleBase() const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
-  // void displayWindow(int x, int y, int width, int height) const;
+  // Repaint a B/W rectangle over retained gray pixels; false means the caller must use its normal paint.
+  bool displayRetainedGrayscaleOverlay(int x, int y, int width, int height, bool restore = false) const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
@@ -314,7 +302,8 @@ class GfxRenderer {
                        bool roundTopRight, bool roundBottomLeft, bool roundBottomRight, bool state) const;
   void maskRoundedRectOutsideCorners(int x, int y, int width, int height, int radius, Color color = Color::White) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
-  void fillRectDither(int x, int y, int width, int height, Color color) const;
+  // PreserveInk adds the pattern's black pixels without clearing existing ink.
+  void fillRectDither(int x, int y, int width, int height, Color color, DitherMode mode = DitherMode::Replace) const;
   void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, Color color) const;
   void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, bool roundTopLeft, bool roundTopRight,
                        bool roundBottomLeft, bool roundBottomRight, Color color) const;
@@ -348,6 +337,19 @@ class GfxRenderer {
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const;
+
+  // A word as layout measured it: `text` is its logical form, which picks the
+  // font as for any string, and `display` the form resolveForDisplay() made
+  // of it, or nullptr when it made none. The overloads taking one draw and
+  // measure a display form without shaping again, so a page turn draws what
+  // layout measured; without one they resolve `text` like any string.
+  struct LaidOutText {
+    const char* text;
+    const char* display;
+  };
+  void drawText(int fontId, int x, int y, const LaidOutText& text, bool black = true,
+                EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const;
   // Draws one glyph at scale256/256 of its size with its baseline at baselineY (drop caps).
   // Outlines are bilinearly resampled from the font bitmap, so no larger font is loaded.
   // Returns the scaled advance in pixels.
@@ -365,8 +367,45 @@ class GfxRenderer {
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style, int8_t tracking = 0,
                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
                       TextMeasureMode mode = TextMeasureMode::Layout) const;
+  int getTextAdvanceX(int fontId, const LaidOutText& text, EpdFontFamily::Style style, int8_t tracking = 0,
+                      BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
+                      TextMeasureMode mode = TextMeasureMode::Layout) const;
+
+  // The form getTextAdvanceX measures a complex-script `text` in: shaped
+  // glyph tokens (ShapingTokens.h), or reordered vowel signs when the font
+  // cannot shape. A font that shapes but could not shape `text` just now
+  // (e.g. memory ran short) gets the unshaped form, so the page draws the width
+  // layout measured. Returns false, leaving `out` untouched, when `text`
+  // draws as it is: a font that cannot shape needs no reordering, or the font
+  // does not draw the script. Tied to this font and style; layout stores it
+  // in the page cache as a LaidOutText display form.
+  bool resolveForDisplay(int fontId, const char* text, EpdFontFamily::Style style, std::string& out) const;
+
+  // While one of these is alive, repeated runs shape once (see
+  // ComplexShaper::beginMemo). Scope it to a paragraph's layout.
+  class ShapingMemoScope {
+    const bool enabled;
+
+   public:
+    explicit ShapingMemoScope(bool enabled = true);
+    ~ShapingMemoScope();
+    ShapingMemoScope(const ShapingMemoScope&) = delete;
+    ShapingMemoScope& operator=(const ShapingMemoScope&) = delete;
+  };
+
+ private:
+  // drawText and getTextAdvanceX once `text` is the visual stream (bidi
+  // resolved, complex scripts shaped) and `resolvedFontId` the font it draws in.
+  // `shapedText`: `text` may hold shaping tokens; other text skips token handling.
+  void drawVisualText(int fontId, int resolvedFontId, int x, int y, const char* text, bool shapedText, bool black,
+                      EpdFontFamily::Style style, int8_t tracking) const;
+  int measureVisualText(int resolvedFontId, const char* text, bool shapedText, EpdFontFamily::Style style,
+                        int8_t tracking, TextMeasureMode mode) const;
+
+ public:
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
+  // Explicit line spacing scales font size; the one-argument form returns font metrics.
   int getLineHeight(int fontId, float compression) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,
                             EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
@@ -384,12 +423,9 @@ class GfxRenderer {
   // Grayscale functions
   void setRenderMode(RenderMode mode);
   RenderMode getRenderMode() const { return renderMode; }
-  // Grayscale preconditioning settle pass (no-op on X4). The rect overload
-  // takes the gray region in LOGICAL screen coordinates and rotates it to the
-  // panel; the no-arg overload settles the full frame. Call after the BW base
-  // frame is displayed and before the grayscale planes are written.
+  // Settle the full frame after displaying the B/W base and before writing
+  // the grayscale planes (no-op on X4).
   void preconditionGrayscale() const;
-  void preconditionGrayscale(int x, int y, int w, int h) const;
   // Display the framebuffer as the base frame for a grayscale overlay that
   // follows (X3: OEM differential base waveform; others: plain display with
   // `fallback`).
@@ -401,15 +437,17 @@ class GfxRenderer {
   void displayGrayBuffer() const;
   // Active input encoding, used when drawing monochrome overlays into planes.
   bool grayPlanesAreAbsolute() const { return absoluteGrayPlanes; }
+  // B/W pass: draw 2-bit image pixels as a 2x2 ordered dither instead of
+  // "any ink is black". Only for pages that get no image grayscale pass,
+  // because overlay gray planes expect every gray pixel black in the base.
+  void setDitherImagesInBw(bool enabled) { ditherImagesInBw = enabled; }
+  bool imagesDitheredInBw() const { return ditherImagesInBw; }
 
   // Tiled grayscale (X4): stream one band of a plane straight to controller RAM
   // from `scratch` (panelWidthBytes * numRows, physical rows [yStart, yStart+
-  // numRows)), bypassing the framebuffer. supportsStripGrayscale() gates use.
+  // numRows)), bypassing the framebuffer. Check grayscaleCapabilities(mode).stripUploads
+  // with the same grayscale mode used for the planes.
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const;
-  bool supportsStripGrayscale() const;
-  // Paper Mono: the base activation is deferred so base + gray planes go out
-  // as one waveform. Route the base through displayGrayscaleBase() when true.
-  bool combinesGrayscaleBase() const;
   bool storeBwBuffer();  // Returns true if buffer was stored successfully
   // Restore and free the stored buffer. resyncPanelBaseline rewrites the
   // controller's differential baseline to the restored frame — correct after

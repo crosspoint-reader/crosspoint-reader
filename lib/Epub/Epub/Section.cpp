@@ -1,6 +1,7 @@
 #include "Section.h"
 
 #include <BufferedFile.h>
+#include <ComplexShaper.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -76,7 +77,18 @@ namespace {
 // v66: Omit carried no-break spaces at the start of wrapped lines.
 // v67: Count only stretchable literal spaces after visual text reordering.
 // v68: Leave text below drop caps unsplit until it is laid out at full width.
-constexpr uint8_t SECTION_FILE_VERSION = 68;
+// v69: Line spacing multiplies font size instead of advanceY.
+// v70: SD-font layout rounds each scaled glyph advance to match drawing.
+// v71: Focus split offsets follow the visual run order for RTL words.
+// v72: Make ruby rendering closer to how Chromium renders ruby by default.
+// v73: TrueType vector fonts load and advance .notdef for missing glyphs.
+// v74: TrueType advances defer rounding until pixel placement.
+// v75: Headings are not hyphenated.
+// v76: Indic text is measured as shaped glyphs (OpenType conjuncts, reph, positioned
+//      marks, in the book's language; reordered vowel signs for fonts without shaping
+//      data), and TextBlocks store each complex-script word's drawn form so page turns
+//      never shape.
+constexpr uint8_t SECTION_FILE_VERSION = 76;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -481,6 +493,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   ctx->parser->setTextSpacing(spec.characterSpacing, spec.wordSpacingPercent);
   ctx->parser->setParagraphIndentSpaces(spec.paragraphIndentSpaces);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
+  ComplexShaper::setDocumentLanguage(epub->getLanguage().c_str());
   build_ = std::move(ctx);
 
   if (!build_->parser->beginParse()) {
@@ -779,6 +792,10 @@ bool Section::finalizeBuild() {
   partial_ = false;
   partialPageCount_ = 0;
   pageCount = builtPageCount_;
+  // Drop caches grown beside parser allocations so prewarming can reuse the freed space.
+  if (auto* fontCache = renderer.getFontCacheManager()) {
+    fontCache->releaseSdFontCaches();
+  }
   return true;
 }
 

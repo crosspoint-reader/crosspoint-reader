@@ -4,12 +4,16 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalFrontlight.h>
+#include <HalStorage.h>
+#include <HalSystem.h>
 #include <HalTiltSensor.h>
+#include <I18n.h>
 #include <esp_mac.h>
 
 #include <cstdio>
 
 #include "MappedInputManager.h"
+#include "activities/RenderLock.h"
 #include "components/UITheme.h"
 
 namespace fui = freeink::ui;
@@ -20,22 +24,65 @@ enum MenuItem {
   ITEM_FIRMWARE,
   ITEM_CHIP,
   ITEM_FLASH,
+  ITEM_SD_SIZE,
+  ITEM_SD_USED,
+  ITEM_SD_FREE,
   ITEM_DISPLAY,
+#if FREEINK_DEVICE_PICCO
+  ITEM_PANEL,
+#endif
   ITEM_RESOLUTION,
   ITEM_TOUCH,
   ITEM_FRONTLIGHT,
   ITEM_RTC,
   ITEM_IMU,
   ITEM_MAC,
+#if FREEINK_DEVICE_EEGO_A4
+  ITEM_UID,
+#endif
+  ITEM_ENUM_COUNT,
 };
+static_assert(ITEM_ENUM_COUNT == AboutActivity::ITEM_COUNT, "About rows and ITEM_COUNT differ");
 
 // Deliberately hardcoded English, exempt from the tr() rule: support reads
 // these screenshots across every device language, so the labels must be
 // identical on every unit.
 const char* const menuNames[AboutActivity::ITEM_COUNT] = {
-    "Device", "Firmware",          "Chip",        "Flash", "Display Controller", "Resolution", "Touch", "Frontlight",
-    "RTC",    "Tilt Sensor (IMU)", "MAC Address",
+    "Device",
+    "Firmware",
+    "Chip",
+    "Flash",
+    "SD Size",
+    "SD Used",
+    "SD Free",
+    "Display Controller",
+#if FREEINK_DEVICE_PICCO
+    "Display Panel",
+#endif
+    "Resolution",
+    "Touch",
+    "Frontlight",
+    "RTC",
+    "Tilt Sensor (IMU)",
+    "MAC Address",
+#if FREEINK_DEVICE_EEGO_A4
+    "UID",
+#endif
 };
+
+// "14.5 GB" / "35 MB": GiB with one decimal, MiB below 1 GiB.
+std::string formatBytes(const uint64_t bytes) {
+  char buf[24];
+  constexpr uint64_t MIB = 1024ull * 1024ull;
+  constexpr uint64_t GIB = 1024ull * MIB;
+  if (bytes >= GIB) {
+    const uint64_t tenths = (bytes * 10 + GIB / 2) / GIB;
+    snprintf(buf, sizeof(buf), "%u.%u GB", static_cast<unsigned>(tenths / 10), static_cast<unsigned>(tenths % 10));
+  } else {
+    snprintf(buf, sizeof(buf), "%u MB", static_cast<unsigned>((bytes + MIB / 2) / MIB));
+  }
+  return buf;
+}
 
 // Chip part numbers, not user prose — deliberately untranslated.
 const char* displayControllerName(const BoardConfig::DisplayController c) {
@@ -74,8 +121,12 @@ const char* touchControllerName(const BoardConfig::TouchController c) {
       return "FT6336U";
     case BoardConfig::TouchController::Gslx680:
       return "GSLX680";
+    case BoardConfig::TouchController::Cst816s:
+      return "CST816S";
+    case BoardConfig::TouchController::Tma525c:
+      return "TMA525C";
   }
-  return nullptr;
+  return "?";
 }
 }  // namespace
 
@@ -97,12 +148,29 @@ void AboutActivity::onEnter() {
   // profile and applyXteinkDisplayController() may have promoted the display
   // controller to the panel actually found on the bus.
   rowValues_[ITEM_DEVICE] = BoardConfig::ACTIVE.name;
+#if FREEINK_DEVICE_EEGO_A4
+  uint32_t uid = 0;
+  if (HalSystem::getEegoUid(uid)) {
+    snprintf(buf, sizeof(buf), "%lu", static_cast<unsigned long>(uid));
+    rowValues_[ITEM_UID] = buf;
+  } else {
+    rowValues_[ITEM_UID] = "Error.";
+  }
+#endif
   rowValues_[ITEM_FIRMWARE] = CROSSPOINT_VERSION;
   snprintf(buf, sizeof(buf), "%s rev %u", ESP.getChipModel(), static_cast<unsigned>(ESP.getChipRevision()));
   rowValues_[ITEM_CHIP] = buf;
   snprintf(buf, sizeof(buf), "%u MB", static_cast<unsigned>(ESP.getFlashChipSize() / (1024u * 1024u)));
   rowValues_[ITEM_FLASH] = buf;
-  rowValues_[ITEM_DISPLAY] = displayControllerName(BoardConfig::ACTIVE.displayController);
+  // The profile names a boot default; boards that probe their panel (Picco,
+  // Sticky) can run another driver, and the driver knows which.
+  const char* liveController = display.controllerName();
+  rowValues_[ITEM_DISPLAY] =
+      liveController ? liveController : displayControllerName(BoardConfig::ACTIVE.displayController);
+#if FREEINK_DEVICE_PICCO
+  const char* panel = display.panelName();
+  rowValues_[ITEM_PANEL] = panel ? panel : "Unknown";
+#endif
   snprintf(buf, sizeof(buf), "%ux%u", static_cast<unsigned>(BoardConfig::ACTIVE.displayWidth),
            static_cast<unsigned>(BoardConfig::ACTIVE.displayHeight));
   rowValues_[ITEM_RESOLUTION] = buf;
@@ -115,6 +183,23 @@ void AboutActivity::onEnter() {
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
   snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
   rowValues_[ITEM_MAC] = buf;
+
+  // The used-space scan walks the whole FAT (seconds on a large card): answer the press with "Loading" first.
+  // onEnter runs without the render lock; take it for the popup.
+  {
+    RenderLock lock;
+    GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  }
+  // The firmware does not boot without a card, so About always has one.
+  const uint64_t sdTotal = Storage.sdTotalBytes();
+  rowValues_[ITEM_SD_SIZE] = formatBytes(sdTotal);
+  uint64_t sdUsed = 0;
+  if (Storage.sdUsedBytes(sdUsed)) {
+    rowValues_[ITEM_SD_USED] = formatBytes(sdUsed);
+    rowValues_[ITEM_SD_FREE] = formatBytes(sdUsed <= sdTotal ? sdTotal - sdUsed : 0);
+  } else {
+    rowValues_[ITEM_SD_USED] = rowValues_[ITEM_SD_FREE] = "Error.";
+  }
 }
 
 void AboutActivity::buildScreen(UiScreen& screen) {

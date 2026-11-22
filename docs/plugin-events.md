@@ -47,10 +47,19 @@ against newer firmware degrades gracefully on older firmware.
 | Event             | Fires when                                             | Variables                            |
 | ----------------- | ------------------------------------------------------ | ------------------------------------ |
 | `reader.open`     | A book is opened (EPUB/TXT/XTC)                        | `book` (SD path)                     |
-| `reader.exit`     | The reader is left (home, sleep, another activity)     | `book`, `percent` (0-100 whole-book) |
+| `reader.exit`     | The reader is left (home, sleep, another activity)     | `book`, `percent`, `end_percent`     |
 | `reader.session`  | An active-reading summary is flushed before sleep/exit | fields documented below              |
 | `book.downloaded` | An on-device catalog download completed                | `path`, `title`, `plugin`            |
-| `sleep.enter`     | The device begins entering deep sleep                  | `book`, `percent` when sleeping out of a reader, else none |
+| `sleep.enter`     | The device begins entering deep sleep                  | `book`, `percent`, `end_percent` when sleeping out of a reader, else none |
+
+`percent` and `end_percent` are whole-book progress, 0-100, sent as strings
+like all event variables. In EPUB and TXT books, `percent` is measured at the
+top of the visible page, so it can stay below 100 on the last page.
+`end_percent` is measured at the bottom of the visible page, rounded down, and
+is `100` only on the last page and on the end-of-book screen: a book is
+finished when `end_percent` is `100`. In XTC books both values count the
+visible page as read. `end_percent` is not related to `reader.session`'s
+`end_progress_bp`, which is the progress when a reading session ended.
 
 `sleep.enter` carries the reader snapshot because sleeping straight out of a
 book is the common flow, and the reader's own `reader.exit` fires after the
@@ -77,8 +86,17 @@ when it remains visible for at least 2 seconds; one dwell is capped at 1800
 seconds. Reverse turns, chapter skips, failed turns, and shorter displays are
 excluded and re-anchor the timer. At least 10 active seconds and a trustworthy
 positive start time are required. EPUB retains basis-point precision; TXT/XTC
-may report whole-percent steps. The document hash is calculated lazily only
-when an emit-worthy summary and a subscriber both exist.
+may report whole-percent steps. The file is hashed only for an emit-worthy
+summary, and only when a subscriber exists or KOSync document matching is
+set to Binary.
+
+The firmware also appends every emit-worthy summary to its own history,
+`/.crosspoint/reading_sessions.jsonl`, with or without a subscriber. That
+history is what **Sync Progress** uploads to a CrossPoint Sync server. Its
+`doc` field follows the KOSync document matching setting, so it can differ
+from the binary `document` that plugins receive. Each line also stores the
+book's SD path and title so the file can be read on its own; those two fields
+are never uploaded.
 
 `end_time` is deliberately not the wall-clock time of the last interaction.
 Idle gaps are removed, so it always equals `start_time + duration_seconds` and
@@ -142,6 +160,16 @@ Optional per handler:
 
 - **`toast`** — a template shown as the standard popup after the request
   succeeds, when a screen is available (sleep entry, web-server session).
+- **`require_meta`** — a sidecar key, e.g. `"require_meta": "bookfusion_id"`.
+  The event is queued for this handler only when the event's book (`book`, or
+  `path` for `book.downloaded`) has a metadata sidecar where that key holds a
+  non-empty string or a whole number (decimals and `true`/`false` do not
+  match). Other books' events are not queued at all, so they cost no outbox
+  space, no request, and no WiFi bring-up at sleep. An event without a book
+  (`sleep.enter` outside a reader) is not queued, and neither is one whose
+  sidecar cannot be read. The sidecar is read when the event fires, so write
+  it before the book is opened. A handler whose `require_meta` is not a
+  string is ignored, so a wrong type cannot turn the filter off.
 - **`connect`** — normally the drain only runs when the device is already
   online. `"connect": true` opts a handler into WiFi bring-up at **sleep entry
   only**. Subscribing to `sleep.enter` sets that opt-in for you, so a
@@ -156,8 +184,9 @@ something queued, not only handlers subscribed to `sleep.enter`. So a
 sleep that ends the reading turn.
 
 If WiFi is not already up, the device brings it up for the drain: with battery at
-least 20% and a saved credential for the last-connected network, it shows a
-popup, joins with a 10-second deadline, drains, and proceeds to sleep. Sleep is
+least 20% and a saved network in range (the last-connected one is preferred;
+with several saved networks a scan picks one), it shows a popup, joins with a
+10-second deadline, drains, and proceeds to sleep. Sleep is
 never blocked on the network — a failed join, low battery, or a mid-drain failure
 just sleeps with the previous image, and the queued events retry on the next
 drain like any other (at-least-once; a handler whose action only made sense for
@@ -181,7 +210,11 @@ Templates in `url`, `headers`, `body`, `dest`, and `toast` substitute:
 | `{event.NAME}` | The event's variables (see the whitelist table)                  |
 | `{event.ts}`   | Unix time when the event fired; 0 if the clock was never set     |
 | `{event.id}`   | Unique event id, stable across delivery retries (dedupe key)     |
-| `{meta.KEY}`   | The book's metadata sidecar, for events that carry a `book`      |
+| `{meta.KEY}`   | The book's metadata sidecar, for events that carry a `book` (or `path`, for `book.downloaded`) |
+
+Values are inserted as they are. Before a request is sent, spaces, control
+characters, and non-ASCII bytes in its URL are percent-encoded; `&`, `?`, `#`,
+`+` and `/` inside a value are not, and events have no `_enc` forms.
 
 Unmatched variables substitute as nothing was replaced (the literal `{...}`
 text is sent), so servers should tolerate or reject malformed values.
@@ -214,10 +247,12 @@ writer of a key wins. Use `bookfusion_id`, not `id`.
    e.g. `metadata.bookfusion_id` — the firmware never learns what any key
    means.
 2. **Event handlers**, via `{meta.*}` as above.
+3. **Handler filters**, via `require_meta` (see above).
 
 Fields are flat strings, numbers, or booleans with a 2KB read cap. KOSync
-uploads carry them with their JSON types; `{meta.*}` templates see them as
-text. Null and nested values are ignored. Structured service data
+uploads carry them with their JSON types; `{meta.*}` templates see strings
+and whole numbers as text, and decimals and booleans as empty. Null and
+nested values are ignored. Structured service data
 belongs on the service's server, keyed by the id in the sidecar.
 
 ## Delivery semantics and limits

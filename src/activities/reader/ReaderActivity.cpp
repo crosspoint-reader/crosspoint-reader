@@ -3,6 +3,7 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <KOReaderCredentialStore.h>
 #include <KOReaderDocumentId.h>
 #include <Memory.h>
 #include <TrustedTime.h>
@@ -18,6 +19,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "XtcReaderActivity.h"
+#include "sync/ReadingSessionLog.h"
 #include "util/PluginEvents.h"
 
 ReaderActivity::ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -97,6 +99,9 @@ void ReaderActivity::rememberBookOnceRendered() {
 void ReaderActivity::onExit() {
   Activity::onExit();
 
+  // The first page can finish rendering after the last reader loop.
+  rememberBookOnceRendered();
+
   // Keep rebuildable font buffers from pinning the heap between reading sessions.
   if (auto* fontCache = renderer.getFontCacheManager()) {
     fontCache->releaseSdFontCaches();
@@ -109,10 +114,13 @@ void ReaderActivity::onExit() {
   flushReaderSession();
 
   if (pluginevents::anySubscriber(pluginevents::Event::ReaderExit)) {
+    const ScreenshotInfo info = getScreenshotInfo();
     char percent[8];
-    snprintf(percent, sizeof(percent), "%d", getScreenshotInfo().progressPercent);
-    const pluginevents::Var vars[] = {{"book", bookPath.c_str()}, {"percent", percent}};
-    pluginevents::emit(pluginevents::Event::ReaderExit, vars, 2);
+    char endPercent[8];
+    snprintf(percent, sizeof(percent), "%d", info.progressPercent);
+    snprintf(endPercent, sizeof(endPercent), "%d", info.endProgressPercent);
+    const pluginevents::Var vars[] = {{"book", bookPath.c_str()}, {"percent", percent}, {"end_percent", endPercent}};
+    pluginevents::emit(pluginevents::Event::ReaderExit, vars, 3);
   }
 
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -126,17 +134,25 @@ void ReaderActivity::onExit() {
 void ReaderActivity::prepareForSleep() { flushReaderSession(); }
 
 void ReaderActivity::flushReaderSession() {
-  if (!readerSession.isEmitWorthy() || !pluginevents::anySubscriber(pluginevents::Event::ReaderSession)) {
+  if (!readerSession.isEmitWorthy()) {
     readerSession.reset();
     return;
   }
 
-  const std::string document = KOReaderDocumentId::calculate(bookPath);
+  // The history uses the id progress sync uses, so the server files a session under the same book.
+  // Plugins always receive the binary id; hash the file only when one of the two needs it.
+  const bool subscribed = pluginevents::anySubscriber(pluginevents::Event::ReaderSession);
+  const bool binaryMatch = KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::BINARY;
+  const std::string document = (subscribed || binaryMatch) ? KOReaderDocumentId::calculate(bookPath) : std::string();
+  readingSessionLog::append(binaryMatch ? document : KOReaderDocumentId::calculateFromFilename(bookPath), bookPath,
+                            getBookTitle(), readerSession.startTime(), readerSession.durationSeconds(),
+                            readerSession.startProgressBp(), readerSession.endProgressBp());
+
   const bool validDocument =
       document.size() == 32 && std::all_of(document.begin(), document.end(), [](const unsigned char c) {
         return std::isdigit(c) || (c >= 'a' && c <= 'f');
       });
-  if (validDocument) {
+  if (subscribed && validDocument) {
     char startTime[24];
     char endTime[24];
     char duration[16];

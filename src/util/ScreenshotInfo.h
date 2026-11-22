@@ -9,4 +9,6 @@ struct ScreenshotInfo {
   int currentPage = 0;      // 1-based page number
   int totalPages = 0;       // Total pages in chapter (EPUB) or book (TXT/XTC)
   int progressPercent = 0;  // 0-100 whole-book progress
+  // 0-100 whole-book progress at the bottom of the visible page: 100 on the last page.
+  int endProgressPercent = 0;
 };

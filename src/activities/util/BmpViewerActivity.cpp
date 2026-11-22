@@ -16,6 +16,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookCacheUtils.h"
 
 namespace {
 constexpr char CUSTOM_SLEEP_ROOT_BMP[] = "/sleep.bmp";
@@ -428,6 +429,7 @@ void BmpViewerActivity::doSetSleepCover() {
   }
 
   if (success) {
+    sleepImageChanged(destination);
     if (!transparentMode) SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
     SETTINGS.saveToFile();
     GUI.drawPopup(renderer, tr(STR_DONE));
@@ -474,7 +476,10 @@ void BmpViewerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // Touch boards draw no button hints; long-press stands in for Confirm, as for file browser actions.
+  int touchX = 0;
+  int touchY = 0;
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenLongPress(touchX, touchY)) {
     if (!canSetSleepCover()) return;
 
     auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_SET_SLEEP_COVER_CONFIRM),

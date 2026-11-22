@@ -52,13 +52,6 @@ class HttpDownloader {
   static bool lastAnswerRedirected();
 
   /**
-   * Fetch text content from a URL with optional credentials. `headers` are
-   * added to the request, as for downloadToFile().
-   */
-  static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
-                       const std::string& password = "", const std::vector<Header>& headers = {});
-
-  /**
    * Stream the response body to onData as it arrives, without buffering it.
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
@@ -85,6 +78,7 @@ class HttpDownloader {
     // Extra headers (per-server custom headers), sent to the starting origin only.
     std::vector<Header> headers;
     int* statusOut = nullptr;
+    std::string* wwwAuthenticateOut = nullptr;
     bool captureErrorBody = false;
   };
 

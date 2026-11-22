@@ -155,9 +155,13 @@ void FileBrowserActivity::provideRow(void* ctx, const uint16_t index, fui::ListI
   const std::string& entry = self->files[index];
   formatFileName(entry, self->rowNameBuf, sizeof(self->rowNameBuf));
   item.label = self->rowNameBuf;
-  formatFileExtension(entry, self->rowExtBuf, sizeof(self->rowExtBuf));
-  if (self->rowExtBuf[0] != '\0') {
-    item.value = self->rowExtBuf;
+  // With extensions hidden the row has no value column, so the name gets the full width. A name that is only an
+  // extension (".epub", " .epub") keeps it, or the row would have no visible text.
+  if (SETTINGS.showFileExtensions || self->rowNameBuf[strspn(self->rowNameBuf, " ")] == '\0') {
+    formatFileExtension(entry, self->rowExtBuf, sizeof(self->rowExtBuf));
+    if (self->rowExtBuf[0] != '\0') {
+      item.value = self->rowExtBuf;
+    }
   }
   item.icon = listIconFor(UITheme::getFileIcon(entry));
   item.actionValue = static_cast<int16_t>(index);
@@ -359,17 +363,19 @@ void FileBrowserActivity::activateSelected() {
   // buildScreen() runs on the render task and reads basepath plus `files`
   // through the row provider; mutate only under the render lock.
   RenderLock lock(*this);
-  if (basepath.back() != '/') basepath += "/";
+  // A file open can fail and leave this screen up, so only a directory change edits basepath.
+  std::string dir = basepath;
+  if (dir.back() != '/') dir += "/";
 
   if (isDirectory) {
-    basepath += entry.substr(0, entry.length() - 1);
+    basepath = dir + entry.substr(0, entry.length() - 1);
     loadFiles();
     nav.selected = 0;
     nav.top = 0;
     lock.unlock();
     requestUpdate();
   } else {
-    const std::string fullPath = basepath + entry;
+    const std::string fullPath = dir + entry;
     lock.unlock();  // onSelectBook launches an activity; don't hold the lock across it
     onSelectBook(fullPath);
   }
@@ -381,10 +387,15 @@ void FileBrowserActivity::showEntryActions() {
     return;
   }
 
-  const bool isDirectory = files[nav.selected].back() == '/';
-  static constexpr StrId FILE_OPTIONS[] = {StrId::STR_OPEN, StrId::STR_DELETE, StrId::STR_RENAME};
-  static constexpr StrId DIRECTORY_OPTIONS[] = {StrId::STR_OPEN, StrId::STR_DELETE};
-  optionPopup.show(StrId::STR_FILENAME, isDirectory ? DIRECTORY_OPTIONS : FILE_OPTIONS, isDirectory ? 2 : 3, 0,
+  const std::string& entry = files[nav.selected];
+  const bool isDirectory = entry.back() == '/';
+  const int nameLength = static_cast<int>(isDirectory ? entry.size() - 1 : entry.size());
+  snprintf(fileNameBuffer.get(), NAME_BUFFER_SIZE, "%.*s", nameLength, entry.c_str());
+  utf8ComposeNfcInPlace(fileNameBuffer.get());
+
+  const char* fileActionOptions[] = {tr(STR_OPEN), tr(STR_DELETE), tr(STR_RENAME)};
+  RenderLock lock(*this);
+  optionPopup.show("", fileNameBuffer.get(), fileActionOptions, isDirectory ? 2 : 3, /*currentIndex=*/0,
                    [this](const int index) {
                      if (index == 0) {
                        activateSelected();
@@ -394,6 +405,7 @@ void FileBrowserActivity::showEntryActions() {
                        startRename();
                      }
                    });
+  lock.unlock();
   requestUpdate();
 }
 
@@ -499,6 +511,7 @@ void FileBrowserActivity::renameSelectedFile(const std::string& oldPath, const s
     return;
   }
 
+  sleepImageChanged(newPath.c_str());
   RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);
   if (APP_STATE.openEpubPath == oldPath) {
     APP_STATE.openEpubPath = newPath;

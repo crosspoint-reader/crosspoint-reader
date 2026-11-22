@@ -463,20 +463,12 @@ bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, si
 
   int lineStartIdx = 0;
   int lineY = inputStartY;
-  int lastLineStartIdx = 0;
-  int lastLineEndIdx = static_cast<int>(displayText.length());
-  int lastLineStartX = textLeft;
-  int lastLineWidth = 0;
 
   while (true) {
     const int lineEndIdx = lineBreakEnd(displayText, lineStartIdx, maxLineWidth);
     const int textWidth = measureRange(displayText, lineStartIdx, lineEndIdx);
     const int lineStartX = centerText ? textLeft + (maxLineWidth - textWidth) / 2 : textLeft;
     const bool isRtl = rangeIsRtl(displayText, lineStartIdx, lineEndIdx);
-    lastLineStartIdx = lineStartIdx;
-    lastLineEndIdx = lineEndIdx;
-    lastLineStartX = lineStartX;
-    lastLineWidth = textWidth;
 
     if (y >= lineY - metrics.verticalSpacing && y < lineY + lineHeight + metrics.verticalSpacing) {
       if (x <= lineStartX) {
@@ -507,23 +499,19 @@ bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, si
     }
 
     if (lineEndIdx == static_cast<int>(displayText.length())) {
-      break;
+      const int underlineBottom = lineY + lineHeight + metrics.verticalSpacing + 8;
+      if (y >= inputStartY - metrics.verticalSpacing && y < underlineBottom && x >= textLeft &&
+          x < textLeft + maxLineWidth + toggleReserve) {
+        const bool insideText = x < lineStartX + textWidth;
+        position = static_cast<size_t>(insideText == isRtl ? lineEndIdx : lineStartIdx);
+        return true;
+      }
+      return false;
     }
 
     lineY += lineHeight;
     lineStartIdx = lineEndIdx;
   }
-
-  const int underlineBottom = lineY + lineHeight + metrics.verticalSpacing + 8;
-  if (y >= inputStartY - metrics.verticalSpacing && y < underlineBottom && x >= textLeft &&
-      x < textLeft + maxLineWidth + toggleReserve) {
-    const bool isRtl = rangeIsRtl(displayText, lastLineStartIdx, lastLineEndIdx);
-    const bool insideText = x < lastLineStartX + lastLineWidth;
-    position = static_cast<size_t>(insideText == isRtl ? lastLineEndIdx : lastLineStartIdx);
-    return true;
-  }
-
-  return false;
 }
 
 fui::Rect KeyboardEntryActivity::keyboardRect() const {

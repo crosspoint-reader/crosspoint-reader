@@ -13,6 +13,7 @@
 #include <OpdsFeedParser.h>
 #include <OpdsPublicationDoc.h>
 #include <OpdsSearchTemplate.h>
+#include <ResumableFetch.h>
 #include <StreamingJsonParser.h>
 #include <Util.h>
 #include <WolfsslCrypto.h>
@@ -38,6 +39,7 @@
 namespace fui = freeink::ui;
 
 namespace {
+constexpr unsigned long GO_HOME_MS = 1000;
 // ACTION_PAGE values: which pagination link a tab follows.
 constexpr int16_t PAGE_FIRST = 0;
 constexpr int16_t PAGE_PREV = 1;
@@ -299,7 +301,10 @@ void OpdsBookBrowserActivity::drawFooter() {
 }
 
 void OpdsBookBrowserActivity::startBrowse() {
-  releaseEntries();  // harmless when already empty
+  {
+    RenderLock lock;
+    releaseEntries();  // harmless when already empty
+  }
   nav.reset();
   beginLoading();
   fetchFeed(currentPath);
@@ -328,7 +333,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
         fail(StrId::STR_SET_CREDENTIALS_FIRST);
         break;
       case freeink::opds::OpdsClient::FetchStatus::AuthFailed:
-        fail(StrId::STR_OPDS_AUTH_FAILED);
+        fail(HttpDownloader::lastAnswerRedirected() ? StrId::STR_FEED_REDIRECTED : StrId::STR_OPDS_AUTH_FAILED);
         break;
       case freeink::opds::OpdsClient::FetchStatus::ParseFailed:
         fail(StrId::STR_PARSE_FEED_FAILED);
@@ -340,6 +345,9 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     return;
   }
 
+  // Everything the render task reads (header, pagination bar, entries, rows, state) changes under
+  // the lock: a repaint that started before beginLoading() may still be drawing the old feed.
+  RenderLock lock;
   searchTemplate = parser.getSearchTemplate();
   searchDescriptionUrl = parser.getSearchDescriptionUrl();
   searchTemplateBase = "";  // feed-inline template resolves against the feed URL
@@ -405,9 +413,11 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     LOG_INF("OPDS", "Feed truncated to fit memory");
   }
 
+  // Rows first: the render task reads rowItems once the state is BROWSING.
+  rebuildRowItems();
   state = entries.empty() ? State::ERROR : State::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
-  rebuildRowItems();
+  lock.unlock();
   requestUpdate();
 }
 
@@ -432,6 +442,8 @@ void OpdsBookBrowserActivity::rebuildRowItems() {
   }
 }
 
+// Callers outside onExit() (which already runs under the render lock) take the lock first: a
+// repaint queued before this (e.g. by the press that opened a book) may still be drawing these rows.
 void OpdsBookBrowserActivity::releaseEntries() {
   // The app's interaction table holds row indices (and hit rects) for the old
   // entries; stop routing touches against it until the next render.
@@ -454,7 +466,7 @@ void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
 }
 
 void OpdsBookBrowserActivity::navigateBack() {
-  if (navigationHistory.empty()) {
+  if (navigationHistory.empty() || mappedInput.getHeldTime() >= GO_HOME_MS) {
     onGoHome();
     return;
   }
@@ -545,14 +557,40 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // The selected book data is now copied into the download URL, filename, and
   // status line. Reclaim the catalog while TLS owns its record buffers; reload
   // the current feed when the transfer finishes.
-  releaseEntries();
+  {
+    RenderLock lock;
+    releaseEntries();
+  }
 
-  const freeink::opds::HttpAuth dlAuth = opdsClient.downloadAuth();
-  std::vector<HttpDownloader::Header> headers = dlAuth.headers;
-  if (!dlAuth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + dlAuth.bearer});
-  // downloadFile() (CatalogActivity) releases font caches, checks the TLS heap
-  // floor, and pumps cancel input during the transfer.
-  const auto result = downloadFile(downloadUrl, filename, dlAuth.username, dlAuth.password, headers);
+  HttpDownloader::DownloadError result;
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    {
+      const freeink::opds::HttpAuth dlAuth = opdsClient.downloadAuth();
+      std::vector<HttpDownloader::Header> headers = dlAuth.headers;
+      if (!dlAuth.bearer.empty()) headers.push_back({"Authorization", "Bearer " + dlAuth.bearer});
+      result = downloadFile(downloadUrl, filename, dlAuth.username, dlAuth.password, headers);
+    }
+    if (attempt != 0 || result != HttpDownloader::UNAUTHORIZED || HttpDownloader::lastStatus() != 401 ||
+        HttpDownloader::lastAnswerRedirected() ||
+        freeink::fetchOrigin(downloadUrl) != freeink::fetchOrigin(server.url) || cancelDownload)
+      break;
+    std::string title;
+    {
+      RenderLock lock;
+      title = std::move(statusMessage);
+    }
+    const bool authenticated = opdsClient.authenticateDownload(downloadUrl);
+    {
+      RenderLock lock;
+      statusMessage = std::move(title);
+    }
+    if (opdsClient.tokensDirty()) persistTokens();
+    if (cancelDownload) {
+      result = HttpDownloader::ABORTED;
+      break;
+    }
+    if (!authenticated) break;
+  }
 
   if (result == HttpDownloader::OK && !verifyAndRegisterEpub(filename)) return;
   finishDownload(result);
@@ -612,7 +650,10 @@ void OpdsBookBrowserActivity::downloadLcpBook(const OpdsEntry& book) {
 
   // Reclaim the catalog while TLS owns its record buffers, as for a plain
   // download; downloadFile() gates the heap and pumps cancel input.
-  releaseEntries();
+  {
+    RenderLock lock;
+    releaseEntries();
+  }
   const auto result = downloadFile(freeink::content::LCP_FULFILL_URL, filename, "", "", {}, &licenseText,
                                    "application/vnd.readium.lcp.license.v1.0+json");
   if (result != HttpDownloader::OK) {
@@ -808,8 +849,11 @@ void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
 
   beginLoading();
 
-  releaseEntries();
-  if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
+  {
+    RenderLock lock;  // the loading repaint may still be drawing with these caches
+    releaseEntries();
+    if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
+  }
 
   if (haveSelf) {
     opdsClient.fetchPublication(docUrl, publication);
@@ -964,7 +1008,10 @@ const char* OpdsBookBrowserActivity::acquireLabel(const OpdsAvailability& av) co
 // frozen on the previous message.
 void OpdsBookBrowserActivity::onClientStatus(void* ctx, const freeink::opds::ClientPhase phase) {
   auto* self = static_cast<OpdsBookBrowserActivity*>(ctx);
-  self->statusMessage = phase == freeink::opds::ClientPhase::SigningIn ? tr(STR_OPDS_SIGNING_IN) : tr(STR_LOADING);
+  {
+    RenderLock lock;
+    self->statusMessage = phase == freeink::opds::ClientPhase::SigningIn ? tr(STR_OPDS_SIGNING_IN) : tr(STR_LOADING);
+  }
   self->requestUpdate(true);
 }
 

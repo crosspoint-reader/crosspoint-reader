@@ -261,5 +261,5 @@ void UiListActivity::render(RenderLock&&) {
     renderUi();
   }
   drawFooter();
-  renderer.displayBuffer();
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "CssParser.h"
+#include "test/ScopedTempDir.h"
 
 namespace fs = std::filesystem;
 
@@ -23,23 +24,13 @@ constexpr size_t kStyleLengthBytes = sizeof(decltype(CssLength::value)) + sizeof
 
 class CssParserTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-    directory_ = fs::temp_directory_path() / "crosspoint_css_parser_test" / info->name();
-    fs::remove_all(directory_);
-    fs::create_directories(directory_);
-    Storage.clearFailures();
-  }
+  void SetUp() override { Storage.clearFailures(); }
+  void TearDown() override { Storage.clearFailures(); }
 
-  void TearDown() override {
-    Storage.clearFailures();
-    fs::remove_all(directory_);
-  }
-
-  std::string cachePath() const { return directory_.string(); }
-  fs::path cacheFile() const { return directory_ / "css_rules.cache"; }
-  fs::path cacheTempFile() const { return directory_ / "css_rules.cache.tmp"; }
-  fs::path cacheBackupFile() const { return directory_ / "css_rules.cache.bak"; }
+  std::string cachePath() const { return directory_.path().string(); }
+  fs::path cacheFile() const { return directory_.path() / "css_rules.cache"; }
+  fs::path cacheTempFile() const { return directory_.path() / "css_rules.cache.tmp"; }
+  fs::path cacheBackupFile() const { return directory_.path() / "css_rules.cache.bak"; }
 
   std::vector<uint8_t> readCache() const {
     std::ifstream input(cacheFile(), std::ios::binary);
@@ -52,7 +43,7 @@ class CssParserTest : public ::testing::Test {
   }
 
   CssParser::ParseResult loadCss(CssParser& parser, const std::string& css) const {
-    const fs::path sourcePath = directory_ / "input.css";
+    const fs::path sourcePath = directory_.path() / "input.css";
     std::ofstream output(sourcePath, std::ios::binary);
     output.write(css.data(), static_cast<std::streamsize>(css.size()));
     output.close();
@@ -62,7 +53,7 @@ class CssParserTest : public ::testing::Test {
     return parser.loadFromStream(source);
   }
 
-  fs::path directory_;
+  ScopedTempDir directory_;
 };
 
 TEST_F(CssParserTest, ResolvesCaseInsensitiveCascadeAndRepeatedSelectors) {

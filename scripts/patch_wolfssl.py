@@ -18,6 +18,13 @@ OVERRIDES = f"""
    heap, and TLS cert verification allocates dozens at once. */
 #undef FP_MAX_BITS
 #define FP_MAX_BITS 8192
+/* Arduino-wolfSSL always defines DEBUG_WOLFSSL, but SecureClient turns the
+   trace on only in FREEINK_WOLFSSL_DEBUG builds. Drop it otherwise so the trace
+   code and strings are not linked. Set the flag for all sources (build_flags),
+   not just SecureNet, to keep the trace. */
+#ifndef FREEINK_WOLFSSL_DEBUG
+#undef DEBUG_WOLFSSL
+#endif
 """
 
 

@@ -73,6 +73,12 @@ TEST(ReadingSpeedTrackerTest, EstimatesBookTimeLeft) {
   // At 50% progress, remaining fraction is 0.5
   int minLeft = tracker.getMinutesLeftInBook(50.0f, 10, 20);
   EXPECT_GT(minLeft, 0);
+
+  // Start of a mid-book chapter (page 1 of a 20-page chapter that represents 10% of the book, at 50% book progress):
+  // Book time left must reflect ~100 remaining pages (~75m at 45s/page), never collapsing to 1m on page 1.
+  const int midBookChapterStart = tracker.getMinutesLeftInBook(50.0f, 1, 20, 0.10f);
+  EXPECT_GE(midBookChapterStart, tracker.getMinutesLeftInChapter(1, 20));
+  EXPECT_EQ(midBookChapterStart, 75);
 }
 
 TEST(ReadingSpeedTrackerTest, FormatsTimeLeftCorrectly) {

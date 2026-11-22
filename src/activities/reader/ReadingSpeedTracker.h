@@ -67,22 +67,27 @@ class ReadingSpeedTracker {
     return std::max(1, static_cast<int>((totalSec + 30) / 60));
   }
 
-  int getMinutesLeftInBook(float bookProgressPercent, int currentPage, int totalPagesInChapter) const {
+  int getMinutesLeftInBook(float bookProgressPercent, int currentPage, int totalPagesInChapter,
+                           float chapterProgressShare = 0.0f) const {
     if (bookProgressPercent >= 99.5f) {
       return 0;
     }
     const uint32_t secPerPage = getAverageSecondsPerPage();
     const int minInChapter = getMinutesLeftInChapter(currentPage, totalPagesInChapter);
-    if (bookProgressPercent < 1.0f) {
-      return minInChapter * 10;
+    const float remainingFraction = (100.0f - std::clamp(bookProgressPercent, 0.0f, 100.0f)) / 100.0f;
+    float estimatedTotalPages = 250.0f;
+    if (totalPagesInChapter > 0 && chapterProgressShare > 0.001f) {
+      estimatedTotalPages = static_cast<float>(totalPagesInChapter) / chapterProgressShare;
+    } else if (bookProgressPercent < 1.0f) {
+      return std::max(1, minInChapter * 10);
+    } else if (totalPagesInChapter > 0 && bookProgressPercent > 0.0f) {
+      const int effectivePages = std::max(currentPage, totalPagesInChapter);
+      estimatedTotalPages = static_cast<float>(effectivePages) / (bookProgressPercent / 100.0f);
     }
-    const float remainingFraction = (100.0f - bookProgressPercent) / 100.0f;
-    const float estimatedTotalPages = (totalPagesInChapter > 0 && bookProgressPercent > 0)
-                                          ? ((currentPage > 0 ? currentPage : 1) / (bookProgressPercent / 100.0f))
-                                          : 250.0f;
-    const float remainingPages = estimatedTotalPages * remainingFraction;
+    const float minPagesLeft = static_cast<float>(std::max(0, totalPagesInChapter - currentPage));
+    const float remainingPages = std::max(minPagesLeft, estimatedTotalPages * remainingFraction);
     const uint32_t totalSec = static_cast<uint32_t>(remainingPages * secPerPage);
-    return std::max(1, static_cast<int>((totalSec + 30) / 60));
+    return std::max({1, minInChapter, static_cast<int>((totalSec + 30) / 60)});
   }
 
   static void formatTimeLeft(char* buffer, size_t bufferSize, int minutes, const char* mSuffix = "m",

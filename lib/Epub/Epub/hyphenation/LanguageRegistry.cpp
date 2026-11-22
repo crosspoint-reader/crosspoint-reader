@@ -1,5 +1,7 @@
 #include "LanguageRegistry.h"
 
+// Pattern licenses and copyright notices: licenses/hyphenation.txt.
+
 #include <algorithm>
 #include <array>
 
@@ -55,9 +57,4 @@ const LanguageHyphenator* getLanguageHyphenatorForPrimaryTag(const std::string& 
   const auto it = std::find_if(allEntries.begin(), allEntries.end(),
                                [&primaryTag](const LanguageEntry& entry) { return primaryTag == entry.primaryTag; });
   return (it != allEntries.end()) ? it->hyphenator : nullptr;
-}
-
-LanguageEntryView getLanguageEntries() {
-  const auto& allEntries = entries();
-  return LanguageEntryView{allEntries.data(), allEntries.size()};
 }

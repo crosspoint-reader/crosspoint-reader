@@ -4,7 +4,9 @@
 #include <HalStorage.h>
 #include <KOReaderCredentialStore.h>
 #include <SecureHttpClient.h>
+#include <strings.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <string>
@@ -12,6 +14,7 @@
 
 #include "BuildScratch.h"
 #include "clippings/ClippingSync.h"
+#include "sync/SyncRequest.h"
 
 namespace {
 constexpr const char* book = "/book.epub";
@@ -22,12 +25,20 @@ void reset() {
   fake::reset();
   fake::syncHeap = 68000;
   fake::syncBufferAllocated = false;
+  fake::headers.clear();
   fake::uploads.clear();
   fake::requests = 0;
   fake::failHttpAt = -1;
   fake::incomplete = false;
   fake::remoteResponse = "{\"cursor\":0,\"more\":false,\"items\":[]}";
   syncCredentials.enabled = true;
+  syncCredentials.customHeaders.clear();
+}
+// Mirrors syncEngine::run for clippings alone.
+bool runClippings() {
+  if (!syncCredentials.enabled) return true;
+  SyncRequest sync;
+  return sync.ready() && clippingSync::run(sync, book, "hash");
 }
 void released() {
   auto* scratch = buildscratch::claim(32768);
@@ -63,7 +74,7 @@ void maximumTextRoundTrip() {
   fake::remoteResponse.clear();
   serializeJson(response, fake::remoteResponse);
   assert(fake::remoteResponse.size() > 24 * 1024);
-  assert(clippingSync::run(book, "hash"));
+  assert(runClippings());
   released();
   assert(fake::uploads.size() == 1);
   assert(fake::uploads.front().size() > 8 * 1024);
@@ -77,11 +88,51 @@ void maximumTextRoundTrip() {
   assert(stored == text);
   CLIPPINGS.unload();
 }
+bool hasHeader(const fake::Headers& headers, const std::string& name, const std::string& value) {
+  return std::find(headers.begin(), headers.end(), std::make_pair(name, value)) != headers.end();
+}
+// Every clipping request sends one Authorization header: the configured one, else the Basic auth of progress sync.
+void everyRequestSendsAuthHeaders(const SyncCredentials::Header& custom, const std::string& authorization) {
+  reset();
+  syncCredentials.customHeaders = {custom};
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
+  fake::syncHeap = 100000;
+#endif
+  add("kept");
+  add("removed");
+  assert(runClippings());  // Probe, two uploads, pull.
+  released();
+  assert(CLIPPINGS.loadForBook(book, "", "", "epub"));
+  assert(CLIPPINGS.removeClippingAt(1));
+  CLIPPINGS.unload();
+  fake::uploads.clear();
+  assert(runClippings());  // Probe, delete, pull.
+  released();
+  assert(fake::uploads.size() == 1);
+  assert(fake::uploads.front().find("\"deleted\":1") != std::string::npos);
+  assert(fake::requests == 7 && fake::headers.size() == 7);
+  for (const auto& headers : fake::headers) {
+    assert(hasHeader(headers, "x-auth-user", "reader"));
+    assert(hasHeader(headers, "x-auth-key", "key"));
+    if (!custom.name.empty()) assert(hasHeader(headers, custom.name, custom.value));
+    std::vector<std::string> values;
+    for (const auto& [name, value] : headers) {
+      if (strcasecmp(name.c_str(), "Authorization") == 0) values.push_back(value);
+    }
+    assert(values == std::vector<std::string>{authorization});
+  }
+}
 }  // namespace
 
 int main() {
   buildscratch::lend(framebuffer.data(), framebuffer.size());
   maximumTextRoundTrip();
+  const std::string basic = "Basic cmVhZGVyOnBhc3M=";
+  everyRequestSendsAuthHeaders({}, basic);
+  everyRequestSendsAuthHeaders({"CF-Access-Client-Id", "client"}, basic);
+  for (const char* name : {"Authorization", "authorization", "AuThOrIzAtIoN"}) {
+    everyRequestSendsAuthHeaders({name, "Bearer fixture"}, "Bearer fixture");
+  }
   for (int failure = 0; failure < 3; ++failure) {
     reset();
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
@@ -90,21 +141,21 @@ int main() {
     if (failure == 0) fake::failHttpAt = 0;
     if (failure == 1) fake::incomplete = true;
     if (failure == 2) fake::remoteResponse.assign(32768, 'x');
-    assert(!clippingSync::run(book, "hash"));
+    assert(!runClippings());
     released();
   }
   reset();
   fake::failAlloc = 0;
-  assert(!clippingSync::run(book, "hash"));
+  assert(!runClippings());
   released();
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
   reset();
-  assert(!clippingSync::run(book, "hash"));  // Preserve the S3 heap guard.
+  assert(!runClippings());  // Preserve the S3 heap guard.
 #endif
   buildscratch::reclaim();
 #if defined(CONFIG_IDF_TARGET_ESP32C3) && CONFIG_IDF_TARGET_ESP32C3
   reset();
-  assert(!clippingSync::run(book, "hash"));  // Missing loan must fail safely.
+  assert(!runClippings());  // Missing loan must fail safely.
   assert(fake::requests == 0);
 #endif
   std::puts("Clipping sync tests passed");

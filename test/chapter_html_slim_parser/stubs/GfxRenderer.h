@@ -10,6 +10,7 @@
 #include <set>
 #include <string>
 #include <tuple>
+#include <vector>
 
 namespace BidiUtils {
 enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
@@ -19,6 +20,7 @@ enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 
 
 class GfxRenderer {
  public:
+  int boldGlyphAdvance = 8;
   mutable size_t fontPreparations = 0;
   std::function<void()> onFontPrepare;
   enum class TextMeasureMode { Layout, Rendered };
@@ -51,8 +53,26 @@ class GfxRenderer {
     top = 10;
     return true;
   }
-  void drawText(int, int, int, const char*, bool, EpdFontFamily::Style,
-                BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO, int8_t = 0) const {}
+  struct LaidOutText {
+    const char* text;
+    const char* display;
+  };
+  struct TextDraw {
+    int x;
+    std::string text;
+    EpdFontFamily::Style style;
+    BidiUtils::BidiBaseDir direction;
+  };
+  // Every string drawText received, in order (a laid-out word's display form when it has one).
+  mutable std::vector<TextDraw> textDraws;
+  void drawText(int, int x, int, const char* text, bool, EpdFontFamily::Style style,
+                BidiUtils::BidiBaseDir direction = BidiUtils::BidiBaseDir::AUTO, int8_t = 0) const {
+    textDraws.push_back({x, text, style, direction});
+  }
+  void drawText(int font, int x, int y, const LaidOutText& text, bool black, EpdFontFamily::Style style,
+                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const {
+    drawText(font, x, y, text.display ? text.display : text.text, black, style, baseDir, tracking);
+  }
   int getTextWidth(int font, const char* text, EpdFontFamily::Style style,
                    BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO) const {
     return getTextAdvanceX(font, text, style);
@@ -60,10 +80,16 @@ class GfxRenderer {
   int getScreenWidth() const { return 480; }
   int getScreenHeight() const { return 800; }
   std::map<int, int> fontLineHeights;
+  std::map<int, float> fontSizePixels;
   std::map<int, int> fontAscenders;
-  int getLineHeight(int fontId, float compression = 1.0f) const {
+  int getLineHeight(int fontId) const {
     const auto found = fontLineHeights.find(fontId);
-    return found == fontLineHeights.end() ? 16 : static_cast<int>(found->second * compression);
+    return found == fontLineHeights.end() ? 16 : found->second;
+  }
+  int getLineHeight(int fontId, float compression) const {
+    const auto found = fontSizePixels.find(fontId);
+    const float size = found == fontSizePixels.end() ? getLineHeight(fontId) : found->second;
+    return static_cast<int>(size * compression + 0.5f);
   }
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void setFontVariantProvider(const FontVariantProvider& provider) { fontVariantProvider_ = provider; }
@@ -91,10 +117,15 @@ class GfxRenderer {
       if (utf8IsCombiningMark(cp)) continue;
       const uint32_t measured = (style & EpdFontFamily::SMALL_CAPS) ? utf8SmallCapsUpper(cp) : cp;
       if (sdFont && !preparedAdvances.count({fontId, static_cast<uint8_t>(style) & 3, measured})) ++coldMeasurements;
-      width += 8 + trackingBetween(previous, cp, tracking);
+      width += ((style & EpdFontFamily::BOLD) ? boldGlyphAdvance : 8) + trackingBetween(previous, cp, tracking);
       previous = cp;
     }
     return width;
+  }
+  int getTextAdvanceX(int font, const LaidOutText& text, EpdFontFamily::Style style, int8_t tracking = 0,
+                      BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
+                      TextMeasureMode mode = TextMeasureMode::Layout) const {
+    return getTextAdvanceX(font, text.display ? text.display : text.text, style, tracking, baseDir, mode);
   }
   int getKerning(int, uint32_t left, uint32_t right, EpdFontFamily::Style, int8_t tracking = 0) const {
     return trackingBetween(left, right, tracking);
@@ -126,6 +157,15 @@ class GfxRenderer {
     if (includeSpace) ensureSdCardFontReady(fontId, " ", mask);
     if (includeHyphen) ensureSdCardFontReady(fontId, "-", mask);
   }
+
+  bool resolveForDisplay(int, const char*, EpdFontFamily::Style, std::string&) const { return false; }
+  inline static unsigned shapingMemoStarts = 0;
+  struct ShapingMemoScope {
+    explicit ShapingMemoScope(bool enabled = true) {
+      if (enabled) ++shapingMemoStarts;
+    }
+    ~ShapingMemoScope() {}
+  };
 
  private:
   FontVariantProvider fontVariantProvider_;
