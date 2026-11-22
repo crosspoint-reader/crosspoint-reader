@@ -734,10 +734,7 @@ bool SdCardFontSystem::loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer
 void SdCardFontSystem::recoverUiFont(GfxRenderer& renderer) {
   if (!uiTtfFailed()) return;
   LOG_ERR("SDFS", "UI glyph load failed in %s; using built-in fonts", activeUiFontName_);
-  unloadUiTtf(renderer);
-  activeUiFontName_[0] = '\0';
-  uiTtfFailed_.store(false, std::memory_order_relaxed);
-  restoreBuiltinUiFonts(renderer);
+  applyUiFont(renderer, "");
 }
 
 void SdCardFontSystem::clearTtfUiFallbacks(GfxRenderer& renderer) {
