@@ -4,6 +4,7 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/PageLink.h>
 #include <Epub/Section.h>
+#include <HalMemory.h>
 
 #include <atomic>
 #include <memory>
@@ -253,6 +254,12 @@ class EpubReaderActivity final : public ReaderActivity {
   int getProgressBasisPoints() const override;
   void renderBook() override;
   void onEndOfBookRendered() override;
+
+  // Full-screen LSB/MSB grayscale planes retained in PSRAM across page turns for
+  // this reading session to avoid per-page allocation churn; unused (null) on
+  // non-PSRAM boards, and freed automatically when this activity is destroyed.
+  HalMemory::PsramBuffer psramLsbPlane;
+  HalMemory::PsramBuffer psramMsbPlane;
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,

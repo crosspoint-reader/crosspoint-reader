@@ -2281,40 +2281,54 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     const int gwBytes = renderer.getDisplayWidthBytes();
     const size_t planeBytes = static_cast<size_t>(gwBytes) * gh;
 
-    auto renderPlaneToBuffer = [&](const bool lsbPlane, uint8_t* buf) {
+    auto renderFullPlane = [&](const bool lsbPlane, uint8_t* planeBuf) {
       renderer.setRenderMode(lsbPlane ? GfxRenderer::GRAYSCALE_LSB : GfxRenderer::GRAYSCALE_MSB);
-      for (int y = 0; y < gh; y += STRIP_ROWS) {
-        const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
-        renderer.beginStripTarget(buf + static_cast<size_t>(y) * gwBytes, y, rows);
-        renderer.clearScreen(absoluteImageGrayscale ? 0xFF : 0x00);
-        renderGrayscalePass();
-        renderer.endStripTarget();
-      }
+      // Redirect drawing from the B/W framebuffer into planeBuf across the full screen height (0..gh).
+      renderer.beginStripTarget(planeBuf, 0, gh);
+      renderer.clearScreen(absoluteImageGrayscale ? 0xFF : 0x00);
+      renderGrayscalePass();
+      renderer.endStripTarget();
     };
 
-    constexpr size_t PLANE_BUF_HEADROOM = 60000;
-    constexpr size_t PLANE_BUF_MAX_ALLOC_RESERVE = 16 * 1024;
-    const auto planeBufFits = [planeBytes] {
-      return ESP.getFreeHeap() >= planeBytes + PLANE_BUF_HEADROOM &&
-             ESP.getMaxAllocHeap() >= planeBytes + PLANE_BUF_MAX_ALLOC_RESERVE;
-    };
-    auto lsbPlaneBuf = (overlapRefresh && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
-    auto msbPlaneBuf = (lsbPlaneBuf && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+    uint8_t* fullLsbPlane = nullptr;
+    uint8_t* fullMsbPlane = nullptr;
+    std::unique_ptr<uint8_t[]> sramLsbPlane;
+    std::unique_ptr<uint8_t[]> sramMsbPlane;
 
-    if (lsbPlaneBuf) {
-      renderPlaneToBuffer(true, lsbPlaneBuf.get());
-      if (msbPlaneBuf) renderPlaneToBuffer(false, msbPlaneBuf.get());
+    if (planeBytes > 0 && HalMemory::getPsramHeap().totalBytes > 0) {
+      if (!psramLsbPlane) psramLsbPlane = HalMemory::allocatePsram(planeBytes);
+      if (psramLsbPlane && !psramMsbPlane) psramMsbPlane = HalMemory::allocatePsram(planeBytes);
+      fullLsbPlane = psramLsbPlane.get();
+      fullMsbPlane = psramMsbPlane.get();
+    } else if (overlapRefresh && planeBytes > 0) {
+      constexpr size_t PLANE_BUF_HEADROOM = 60000;
+      constexpr size_t PLANE_BUF_MAX_ALLOC_RESERVE = 16 * 1024;
+      const auto planeBufFits = [planeBytes] {
+        return ESP.getFreeHeap() >= planeBytes + PLANE_BUF_HEADROOM &&
+               ESP.getMaxAllocHeap() >= planeBytes + PLANE_BUF_MAX_ALLOC_RESERVE;
+      };
+      sramLsbPlane = planeBufFits() ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+      sramMsbPlane = (sramLsbPlane && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+      fullLsbPlane = sramLsbPlane.get();
+      fullMsbPlane = sramMsbPlane.get();
+    }
+
+    const bool hasFullScreenPlaneBuffer = (fullLsbPlane != nullptr);
+    if (hasFullScreenPlaneBuffer) {
+      const bool hasBothFullScreenPlanes = (fullMsbPlane != nullptr);
+      renderFullPlane(true, fullLsbPlane);
+      if (hasBothFullScreenPlanes) renderFullPlane(false, fullMsbPlane);
       const auto tGrayRender = millis();
 
       renderer.waitRefreshComplete();
       const auto tWait = millis();
 
-      renderer.writeGrayscalePlaneStrip(true, lsbPlaneBuf.get(), 0, gh);
-      if (msbPlaneBuf) {
-        renderer.writeGrayscalePlaneStrip(false, msbPlaneBuf.get(), 0, gh);
+      renderer.writeGrayscalePlaneStrip(true, fullLsbPlane, 0, gh);
+      if (hasBothFullScreenPlanes) {
+        renderer.writeGrayscalePlaneStrip(false, fullMsbPlane, 0, gh);
       } else {
-        renderPlaneToBuffer(false, lsbPlaneBuf.get());
-        renderer.writeGrayscalePlaneStrip(false, lsbPlaneBuf.get(), 0, gh);
+        renderFullPlane(false, fullLsbPlane);
+        renderer.writeGrayscalePlaneStrip(false, fullLsbPlane, 0, gh);
       }
       const auto tGrayWrite = millis();
 
@@ -2329,8 +2343,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
               "Page render (tiled async): prewarm=%lums bw_render=%lums display=%lums gray_render=%lums "
               "wait=%lums gray_write=%lums gray_display=%lums cleanup=%lums total=%lums (planes buffered: %d)",
               tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tGrayRender - tDisplay, tWait - tGrayRender,
-              tGrayWrite - tWait, tGrayDisplay - tGrayWrite, tEnd - tGrayDisplay, tEnd - t0, msbPlaneBuf ? 2 : 1);
+              tGrayWrite - tWait, tGrayDisplay - tGrayWrite, tEnd - tGrayDisplay, tEnd - t0,
+              hasBothFullScreenPlanes ? 2 : 1);
     } else {
+      // No full-screen plane buffer available: render band-by-band in 80-row strips.
       auto scratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(gwBytes) * STRIP_ROWS);
       renderer.waitRefreshComplete();
       if (!scratch) {
