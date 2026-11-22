@@ -76,6 +76,7 @@ bool DessenAppActivity::loadApp() {
     LOG_ERR("DSN", "OOM: services");
     return false;
   }
+  services->setHintContext(&renderer, &mappedInput);
   host.setServices(services.get());
   return true;
 }
