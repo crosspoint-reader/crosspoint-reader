@@ -790,7 +790,6 @@ void GfxRenderer::drawVisualText(const int fontId, const int resolvedFontId, con
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor)))) {
     if (shapedText && shaped.consume(cp)) continue;
     const bool isShapedGlyph = shapedText && shaping::isGlyphToken(cp);
-    if (!isShapedGlyph && font.hasGlyphFallback() && !font.hasCodepoint(cp, style)) continue;
     // RTL vowel marks (Hebrew niqqud, Arabic harakat) ride the combining-mark
     // path: zero-advance overlays on the preceding base glyph (applyBidiVisual
     // emits base-then-marks per UAX#9 L3). anchorFor pins position-sensitive
@@ -820,6 +819,11 @@ void GfxRenderer::drawVisualText(const int fontId, const int resolvedFontId, con
       cp = font.applyLigatures(cp, textCursor, style);
     }
 
+    EpdGlyph solidFallback;
+    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
+    // Neither the UI font nor its built-in fallback covers cp.
+    if (!glyph && !isShapedGlyph && font.hasGlyphFallback()) continue;
+
     // Differential rounding: snap (previous advance + current kern) as one unit so
     // identical character pairs always produce the same pixel step regardless of
     // where they fall on the line.
@@ -827,9 +831,6 @@ void GfxRenderer::drawVisualText(const int fontId, const int resolvedFontId, con
       const auto kernFP = kernUnlessShaped(font, prevCp, cp, style, shapedText);  // 4.4 fixed-point kern
       lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP) + trackingUnlessShaped(prevCp, cp, tracking, shapedText);
     }
-
-    EpdGlyph solidFallback;
-    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
@@ -2325,7 +2326,6 @@ int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, c
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (shapedText && shaped.consume(cp)) continue;
     const bool isShapedGlyph = shapedText && shaping::isGlyphToken(cp);
-    if (!isShapedGlyph && font.hasGlyphFallback() && !font.hasCodepoint(cp, style)) continue;
     // RTL vowel marks (niqqud/harakat) are zero-advance overlays in drawText — no width.
     if (!isShapedGlyph && (BidiUtils::isTransparentMark(cp) || utf8IsCombiningMark(cp))) {
       continue;
@@ -2338,17 +2338,19 @@ int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, c
       cp = font.applyLigatures(cp, text, style);
     }
 
+    // Shaped glyphs carry their advance; only fetch the glyph when they don't.
+    EpdGlyph solidFallback;
+    const EpdGlyph* glyph =
+        isShapedGlyph && shaped.advanceFP >= 0 ? nullptr : font.getGlyphMetrics(cp, solidFallback, style);
+    // Neither the UI font nor its built-in fallback covers cp.
+    if (!glyph && !isShapedGlyph && font.hasGlyphFallback()) continue;
+
     // Differential rounding: snap (previous advance + current kern) together,
     // matching drawText so measurement and rendering agree exactly.
     if (prevCp != 0) {
       const auto kernFP = kernUnlessShaped(font, prevCp, cp, style, shapedText);  // 4.4 fixed-point kern
       widthPx += fp4::toPixel(prevAdvanceFP + kernFP) + trackingUnlessShaped(prevCp, cp, tracking, shapedText);
     }
-
-    // Shaped glyphs carry their advance; only fetch the glyph when they don't.
-    EpdGlyph solidFallback;
-    const EpdGlyph* glyph =
-        isShapedGlyph && shaped.advanceFP >= 0 ? nullptr : font.getGlyphMetrics(cp, solidFallback, style);
     prevAdvanceFP = shaped.advanceOr(glyph ? glyph->advanceX : 0);
     shaped.reset();
     if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
@@ -2535,7 +2537,6 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (visualText.shaped && shaped.consume(cp)) continue;
     const bool isShapedGlyph = visualText.shaped && shaping::isGlyphToken(cp);
-    if (!isShapedGlyph && font.hasGlyphFallback() && !font.hasCodepoint(cp, style)) continue;
     // RTL vowel marks (Hebrew niqqud, Arabic harakat) ride the combining-mark
     // path: zero-advance overlays on the preceding base glyph (applyBidiVisual
     // emits base-then-marks per UAX#9 L3). anchorFor pins position-sensitive
@@ -2560,15 +2561,17 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     if (!isShapedGlyph) cp = font.applyLigatures(cp, text, style);
 
+    EpdGlyph solidFallback;
+    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
+    // Neither the UI font nor its built-in fallback covers cp.
+    if (!glyph && !isShapedGlyph && font.hasGlyphFallback()) continue;
+
     // Differential rounding: snap (previous advance + current kern) as one unit,
     // subtracting for the rotated coordinate direction.
     if (prevCp != 0) {
       const auto kernFP = kernUnlessShaped(font, prevCp, cp, style, visualText.shaped);  // 4.4 fixed-point kern
       lastBaseY -= fp4::toPixel(prevAdvanceFP + kernFP);  // snap 12.4 fixed-point to nearest pixel
     }
-
-    EpdGlyph solidFallback;
-    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
