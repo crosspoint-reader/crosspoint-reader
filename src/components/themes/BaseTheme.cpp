@@ -465,6 +465,12 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   props.subtitleText = tokens.smallText;
   props.styles = tokens.popup;
   props.sidePadding = tokens.headerSidePadding;
+  // Align compact Home book titles with the clock's actual left inset.
+  // Keep other headers and centered titles on their existing theme padding.
+  if (title && rect.height < UITheme::getInstance().getMetrics().headerHeight &&
+      props.titleText.align == fui::TextAlign::Left) {
+    props.sidePadding = props.status.edgeInset;
+  }
   // Underline only under a titled header: an untitled band (Lyra home screen)
   // historically drew no rule, and the old themes keyed the line on the title.
   if (title != nullptr && props.styles.normal.border.kind == fui::PaintKind::None && tokens.headerUnderline > 0) {

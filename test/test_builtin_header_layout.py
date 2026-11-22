@@ -56,6 +56,14 @@ for padding, content_strip in ((5, 20), (10, 20), (13, 24)):
             content_strip // 2 + int((board_offset - shift) / 2))
         assert abs(new_center2 - old_center2) <= 2, (padding, board_offset)
 
+# A taller RoundedRaff Home band separates the clock from the book title
+# without moving the bottom of its cover tile and menu.
+assert ".homeTopPadding = 80," in rounded_metrics
+assert ".homeCoverTileHeight = 325," in rounded_metrics
+assert 80 + 325 == 64 + 341
+assert "props.sidePadding = props.status.edgeInset;" in base
+assert "props.titleText.align == fui::TextAlign::Left" in base
+
 # RoundedRaff's Home screen must not suppress the shared status line when
 # it draws a header without a book title.
 header = rounded.split("void RoundedRaffTheme::drawHeader(", 1)[1].split(
