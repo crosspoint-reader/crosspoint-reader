@@ -475,8 +475,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     const int titleTop = band.y + (band.height - ui.target.lineHeight(props.titleText.font)) / 2 + titleInk.y;
     // Reserve six pixels under the visible title before the cover tile starts.
     constexpr int clockTitleGap = 12;
-    const int targetTop = std::min(clockTop + clockInk.height + clockTitleGap,
-                                   band.bottom() - titleInk.height - 6);
+    const int targetTop = std::min(clockTop + clockInk.height + clockTitleGap, band.bottom() - titleInk.height - 6);
     props.titleOffsetY = static_cast<int16_t>(std::max(0, targetTop - titleTop));
   }
   props.subtitleText = tokens.smallText;
