@@ -3,9 +3,6 @@
 
 #include <freeink/DessenServices.h>
 
-class GfxRenderer;
-class MappedInputManager;
-
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -88,24 +85,12 @@ class CrosspointServices : public dessen::Services {
   void deliverText(const char* text);
   void cancelText();
 
-  // ---- button hints ----  the active theme's own, over the keys as the user
-  // mapped them. Without a renderer (or on a touch board, or turned) none.
-  void setHintContext(GfxRenderer* renderer, const MappedInputManager* input) {
-    hintRenderer_ = renderer;
-    hintInput_ = input;
-  }
-  int buttonHintsHeight() override;
-  void drawButtonHints(freeink::ui::DrawTarget& target, const freeink::ui::Rect& band,
-                       const char* const labels[4]) override;
-
  private:
   enum class Op : uint8_t { None, Net, Fetch, Keygen, TextInput, WifiStart, WifiConnecting };
 
   static int resolve(const char* path, uint32_t maxLen = 255);  // validates an app path (already the SD path)
 
   std::string appName_, appDir_;
-  GfxRenderer* hintRenderer_ = nullptr;
-  const MappedInputManager* hintInput_ = nullptr;
   std::unique_ptr<freeink::content::Crypto> crypto_;
   struct ShelfOverlap;
   std::unique_ptr<ShelfOverlap> shelfOverlap_;

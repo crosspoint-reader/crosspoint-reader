@@ -35,8 +35,6 @@
 #include <ctime>
 #include <string_view>
 
-#include "MappedInputManager.h"
-#include "components/UITheme.h"
 #include "RecentBooksStore.h"
 #include "components/icons/cover.h"  // CoverIcon, the fallback-cover glyph
 #include "network/HttpDownloader.h"
@@ -858,21 +856,3 @@ void CrosspointServices::cancelText() {
 }
 
 #endif  // CROSSPOINT_DESSEN_APPS
-
-// The theme draws its hints upright (Portrait) along the bottom, and none on a
-// touch board, so that is the only case with a band to report.
-int CrosspointServices::buttonHintsHeight() {
-  if (!hintRenderer_ || gpio.hasTouch() || hintRenderer_->getOrientation() != GfxRenderer::Orientation::Portrait) {
-    return 0;
-  }
-  return UITheme::getInstance().getMetrics().buttonHintsHeight;
-}
-
-void CrosspointServices::drawButtonHints(freeink::ui::DrawTarget&, const freeink::ui::Rect&,
-                                         const char* const labels[4]) {
-  if (!hintRenderer_ || !hintInput_) return;
-  // The same remapping every firmware screen uses: the app names actions,
-  // the user's settings say which key each is on.
-  const auto keys = hintInput_->mapLabels(labels[0], labels[1], labels[2], labels[3]);
-  GUI.drawButtonHints(*hintRenderer_, keys.btn1, keys.btn2, keys.btn3, keys.btn4);
-}
