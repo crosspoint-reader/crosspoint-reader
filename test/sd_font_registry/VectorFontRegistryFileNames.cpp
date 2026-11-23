@@ -5,7 +5,10 @@
 #include <string>
 
 namespace {
-void addFont(const std::string& path) { fake::add(path, std::string("\x01\x90\0", 3)); }
+void addFont(const std::string& path) {
+  const char bytes[12] = {'\x01', '\x90', '\0'};
+  fake::add(path, std::string(bytes, sizeof(bytes)));
+}
 
 class VectorFontRegistryFileNamesTest : public ::testing::Test {
  protected:

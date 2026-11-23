@@ -7,7 +7,7 @@
 namespace {
 
 void addFace(const std::string& filename, const uint16_t weight, const bool italic) {
-  const char bytes[] = {static_cast<char>(weight >> 8), static_cast<char>(weight & 255), static_cast<char>(italic)};
+  const char bytes[12] = {static_cast<char>(weight >> 8), static_cast<char>(weight & 255), static_cast<char>(italic)};
   fake::add("/fonts/Family/" + filename, std::string(bytes, sizeof(bytes)));
 }
 
@@ -42,7 +42,7 @@ TEST_F(VectorFontRegistryTest, FilenameStylesSurviveMissingItalicMetadata) {
   expectFace(3, "Family-BoldItalic.ttf");
 }
 
-TEST_F(VectorFontRegistryTest, ExplicitStylesAreRejectedWhenInspectionIsUnavailable) {
+TEST_F(VectorFontRegistryTest, EmptyFilesCannotReserveExplicitStyles) {
   for (const char* style : {"Regular", "Bold", "Italic", "BoldItalic"}) {
     fake::add(std::string("/fonts/Family/Family-") + style + ".ttf", "");
   }
@@ -251,7 +251,7 @@ TEST_F(VectorFontRegistryTest, ConcatenatedBoldIsOnlyAHintNotAnExplicitRole) {
   for (const char* filename : {"FamilyBold.ttf", "Familybold.ttf", "FamilyBOLD.ttf"}) {
     SCOPED_TRACE(filename);
     fake::reset();
-    addFace("Control-Regular.ttf", 400, false);
+    addFace("Control-Regular.ttf", 300, false);
     addFace(filename, 400, true);
     addFace("Z.ttf", 700, false);
 
@@ -295,7 +295,7 @@ TEST_F(VectorFontRegistryTest, ExplicitRolesWinButEveryCandidateIsInspected) {
 TEST_F(VectorFontRegistryTest, DuplicateExplicitFilesAreNotReusedForOtherRoles) {
   addFace("A-Regular.ttf", 700, true);
   addFace("Z-Regular.ttf", 700, false);
-  addFace("Fallback.ttf", 700, false);
+  addFace("Fallback.ttf", 800, false);
 
   ASSERT_TRUE(registry.discover());
   expectFace(0, "A-Regular.ttf");
@@ -322,7 +322,7 @@ TEST_F(VectorFontRegistryTest, FallbackPrefersTargetWeightsOverThinAndHeavyExtre
 }
 
 TEST_F(VectorFontRegistryTest, FallbackOrsEachFilenameHintWithMetadata) {
-  addFace("RegularCandidate.ttf", 400, false);
+  addFace("RegularCandidate.ttf", 300, false);
   addFace("semiboldish.ttf", 400, false);
   addFace("obliquish.ttf", 400, true);
   addFace("italicized.ttf", 700, false);
@@ -336,20 +336,21 @@ TEST_F(VectorFontRegistryTest, FallbackOrsEachFilenameHintWithMetadata) {
 
 TEST_F(VectorFontRegistryTest, FallbackCombinesFilenameBoldWithMetadataItalic) {
   addFace("semiboldish.ttf", 400, true);
-  addFace("Control-Regular.ttf", 400, false);
+  addFace("Control-Regular.ttf", 300, false);
 
   ASSERT_TRUE(registry.discover());
   expectFace(3, "semiboldish.ttf");
   EXPECT_EQ(registry.findFamily("Family")->files.size(), 2u);
 }
 
-TEST_F(VectorFontRegistryTest, UnavailableMetadataRejectsUnsuffixedCandidates) {
+TEST_F(VectorFontRegistryTest, EmptyFilesAreUnsupportedWithoutMakingDiscoveryInconclusive) {
   for (const char* filename : {"plain.ttf", "semiboldish.ttf", "italicized.ttf", "bolditalicized.ttf"}) {
     fake::add(std::string("/fonts/Family/") + filename, "");
   }
 
   EXPECT_FALSE(registry.discover());
   EXPECT_EQ(registry.findFamily("Family"), nullptr);
+  EXPECT_FALSE(registry.hadUnavailableVectorFonts());
 }
 
 TEST_F(VectorFontRegistryTest, InvalidLexicalFirstSuffixDoesNotHideValidDuplicate) {
@@ -389,6 +390,77 @@ TEST_F(VectorFontRegistryTest, ReadFailureDoesNotReserveAnExplicitRole) {
 
   ASSERT_TRUE(registry.discover());
   expectFace(0, "Z-Regular.ttf");
+  EXPECT_TRUE(registry.hadUnavailableVectorFonts());
+}
+
+TEST_F(VectorFontRegistryTest, TemporarilyUnavailableFamilyCanReturnOnRescan) {
+  for (const bool loose : {false, true}) {
+    SCOPED_TRACE(loose);
+    fake::reset();
+    const char bytes[12] = {'\x01', '\x90', '\0'};
+    fake::add(loose ? "/fonts/Family.ttf" : "/fonts/Family/Family-Regular.ttf", std::string(bytes, sizeof(bytes)));
+    fake::failRead = 0;
+
+    EXPECT_FALSE(registry.discover());
+    EXPECT_EQ(registry.findFamily("Family"), nullptr);
+    EXPECT_TRUE(registry.hadUnavailableVectorFonts());
+
+    ASSERT_TRUE(registry.discover());
+    EXPECT_NE(registry.findFamily("Family"), nullptr);
+    EXPECT_FALSE(registry.hadUnavailableVectorFonts());
+  }
+}
+
+TEST_F(VectorFontRegistryTest, TruncatedCollectionDoesNotMakeScanInconclusive) {
+  fake::add("/fonts/Family/Truncated.ttc", std::string("ttcf\0\x01\0\0", 8));
+  EXPECT_FALSE(registry.discover());
+  EXPECT_FALSE(registry.hadUnavailableVectorFonts());
+}
+
+TEST_F(VectorFontRegistryTest, InferredBoldCannotBeLighterThanRegular) {
+  for (const uint16_t weight : {500, 600, 650}) {
+    SCOPED_TRACE(weight);
+    fake::reset();
+    addFace("Family-Regular.ttf", 600, false);
+    addFace("Candidate.ttf", weight, false);
+
+    ASSERT_TRUE(registry.discover());
+    if (weight >= 600) {
+      expectFace(1, "Candidate.ttf");
+    } else {
+      EXPECT_EQ(registry.findFamily("Family")->findFile(0, 1), nullptr);
+    }
+  }
+}
+
+TEST_F(VectorFontRegistryTest, InferredBoldItalicUsesItalicAsBaseWhenPresent) {
+  for (const uint16_t weight : {600, 650, 700}) {
+    SCOPED_TRACE(weight);
+    fake::reset();
+    addFace("Family-Regular.ttf", 400, false);
+    addFace("Family-Italic.ttf", 650, true);
+    addFace("Candidate.ttf", weight, true);
+
+    ASSERT_TRUE(registry.discover());
+    expectFace(2, "Family-Italic.ttf");
+    if (weight >= 650) {
+      expectFace(3, "Candidate.ttf");
+    } else {
+      EXPECT_EQ(registry.findFamily("Family")->findFile(0, 3), nullptr);
+    }
+  }
+}
+
+TEST_F(VectorFontRegistryTest, InferredBoldItalicUsesRegularAsBaseWithoutItalic) {
+  addFace("Family-Regular.ttf", 800, false);
+  addFace("A.ttf", 700, true);
+  ASSERT_TRUE(registry.discover());
+  EXPECT_EQ(registry.findFamily("Family")->findFile(0, 2), nullptr);
+  EXPECT_EQ(registry.findFamily("Family")->findFile(0, 3), nullptr);
+
+  addFace("Z.ttf", 800, true);
+  ASSERT_TRUE(registry.discover());
+  expectFace(3, "Z.ttf");
 }
 
 TEST_F(VectorFontRegistryTest, AliasesAreNotAddedToLegacyHints) {

@@ -243,6 +243,7 @@ unsigned long SdCardFontRegistry::halFileRead(void* ctx, const unsigned long off
 void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
   static constexpr int WGHT_REGULAR = 400;
   static constexpr int WGHT_DIST_BOLD = 300;
+  static constexpr size_t MIN_FONT_HEADER_SIZE = 12;  // SFNT or TTC header.
 
   // - Validate every candidate with the existing face inspector; discard any failure.
   // - Prefer explicit suffix roles over filename hints OR metadata.
@@ -251,6 +252,7 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
   //   Unsuffixed italic candidates instead target the selected regular weight.
   //   Equal distances prefer the heavier weight, then lexical filename order.
   //   Intermediate weights (401-699) can fill either weight role.
+  //   Inferred bold faces cannot be lighter than Regular (BoldItalic: Italic if available).
   // - Pick regular first, promoting italic, bold, or bold-italic if needed (in that order).
   //   Fill other roles from unused files, matching italics; never reuse a file.
   using freeink::font::FtFont;
@@ -259,10 +261,20 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
     snprintf(path, sizeof(path), "%s/%s", dirPath, file.name.get());
     HalFile f = Storage.open(path);
     FtFont::FaceInfo face;
-    if (!f || f.isDirectory() ||
-        FtFont::inspectStream(&halFileRead, &f, static_cast<unsigned long>(f.size()), face) !=
-            FtFont::InspectResult::Ok) {
-      LOG_ERR("SDREG", "Skipping unavailable or unsupported font: %s", path);
+    auto result = FtFont::InspectResult::Unsupported;
+    if (f && !f.isDirectory()) {
+      const auto size = static_cast<unsigned long>(f.size());
+      if (size >= MIN_FONT_HEADER_SIZE) {
+        result = FtFont::inspectStream(&halFileRead, &f, size, face);
+      }
+    }
+    if (!f || result == FtFont::InspectResult::Unavailable) {
+      unavailableVectorFonts_ = true;
+      LOG_ERR("SDREG", "Unable to inspect font: %s", path);
+      return true;
+    }
+    if (result != FtFont::InspectResult::Ok) {
+      LOG_ERR("SDREG", "Unsupported font: %s", path);
       return true;
     }
     file.weight = face.weight;
@@ -282,6 +294,8 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
     const int regularWeight = picks[0] == missing ? WGHT_REGULAR : static_cast<int>(files[picks[0]].weight);
     const int target = wantBold ? regularWeight + WGHT_DIST_BOLD : WGHT_REGULAR;
     const int fallbackTarget = wantItalic && !wantBold ? regularWeight : target;
+    const size_t italicPick = picks[static_cast<size_t>(VectorRole::Italic)];
+    const size_t base = wantItalic && italicPick != missing ? italicPick : picks[0];
     const auto better = [&](const size_t candidate, const size_t current, const int preferredWeight) {
       if (current == missing) return true;
       const int distance = std::abs(static_cast<int>(files[candidate].weight) - preferredWeight);
@@ -300,15 +314,16 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
       const bool bold = files[i].style & HINT_BOLD;
       const bool italic = files[i].style & HINT_ITALIC;
       if (italic != wantItalic || (!intermediate && bold != wantBold)) continue;
+      if (wantBold && base != missing && files[i].weight < files[base].weight) continue;
       if (better(i, fallbackPick, fallbackTarget)) fallbackPick = i;
     }
     return explicitPick != missing ? explicitPick : fallbackPick;
   };
 
+  static constexpr VectorRole selectionOrder[] = {VectorRole::Italic, VectorRole::Bold, VectorRole::BoldItalic};
   picks[0] = pickUnused(static_cast<size_t>(VectorRole::Regular));
   if (picks[0] == missing) {
-    static constexpr VectorRole promotionOrder[] = {VectorRole::Italic, VectorRole::Bold, VectorRole::BoldItalic};
-    for (const auto promotedRole : promotionOrder) {
+    for (const auto promotedRole : selectionOrder) {
       const size_t role = static_cast<size_t>(promotedRole);
       picks[0] = pickUnused(role);
       if (picks[0] == missing) continue;
@@ -316,7 +331,8 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
     }
   }
 
-  for (size_t role = 1; role < VECTOR_STYLE_COUNT; ++role) {
+  for (const auto selectedRole : selectionOrder) {
+    const size_t role = static_cast<size_t>(selectedRole);
     picks[role] = pickUnused(role);
   }
 
@@ -430,7 +446,7 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
 // Scan a single root (e.g. "/.fonts") and append its families to `out`.
 // Skips families whose names already exist in `out` (de-duplicates between
 // the hidden and visible roots — first scan wins).
-void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFamilyInfo>& out) {
+void SdCardFontRegistry::scanRoot(const char* rootPath) {
   HalFile root = Storage.open(rootPath);
   if (!root) {
     LOG_DBG("SDREG", "Fonts directory not found: %s", rootPath);
@@ -454,7 +470,7 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
 
       // De-dup by family name across roots.
       bool exists = false;
-      for (const auto& fam : out) {
+      for (const auto& fam : families_) {
         if (fam.name == nameBuffer) {
           exists = true;
           break;
@@ -466,12 +482,12 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
       family.name = nameBuffer;
       family.root = rootPath;
       std::string subDirPath = std::string(rootPath) + "/" + nameBuffer;
-      SdCardFontRegistry::scanDirectory(subDirPath.c_str(), family);
+      scanDirectory(subDirPath.c_str(), family);
 
       if (!family.files.empty()) {
-        out.push_back(std::move(family));
-        LOG_DBG("SDREG", "Found family: %s (%d files) in %s", out.back().name.c_str(),
-                static_cast<int>(out.back().files.size()), rootPath);
+        families_.push_back(std::move(family));
+        LOG_DBG("SDREG", "Found family: %s (%d files) in %s", families_.back().name.c_str(),
+                static_cast<int>(families_.back().files.size()), rootPath);
       }
     } else {
 #if CROSSPOINT_VECTOR_FONTS
@@ -485,7 +501,7 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
 
       std::string famName(nameBuffer, baseLen);  // filename without extension
       bool exists = false;
-      for (const auto& fam : out) {
+      for (const auto& fam : families_) {
         if (fam.name == famName) {
           exists = true;
           break;
@@ -510,7 +526,7 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
       family.files.push_back(std::move(info));
       refineVectorStyles(rootPath, family.files);
       if (family.files.empty()) continue;
-      out.push_back(std::move(family));
+      families_.push_back(std::move(family));
       LOG_DBG("SDREG", "Found vector font: %s in %s", famName.c_str(), rootPath);
 #endif  // CROSSPOINT_VECTOR_FONTS — loose .ttf/.otf files are ignored without the engine
     }
@@ -519,11 +535,14 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
 
 bool SdCardFontRegistry::discover() {
   families_.clear();
+#if CROSSPOINT_VECTOR_FONTS
+  unavailableVectorFonts_ = false;
+#endif
 
   // Hidden root is scanned first so it wins on name collisions, matching the
   // sleep-folder pattern (/.sleep preferred over /sleep).
-  scanRoot(FONTS_DIR_HIDDEN, families_);
-  scanRoot(FONTS_DIR_VISIBLE, families_);
+  scanRoot(FONTS_DIR_HIDDEN);
+  scanRoot(FONTS_DIR_VISIBLE);
 
   // Sort families alphabetically
   std::sort(families_.begin(), families_.end(),
@@ -559,7 +578,7 @@ const char* SdCardFontRegistry::defaultWriteRoot() {
   return FONTS_DIR_HIDDEN;
 }
 
-const SdCardFontFamilyInfo* SdCardFontRegistry::findFamily(const std::string& name) const {
+const SdCardFontFamilyInfo* SdCardFontRegistry::findFamily(const std::string_view name) const {
   for (const auto& f : families_) {
     if (f.name == name) return &f;
   }

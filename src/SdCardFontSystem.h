@@ -37,7 +37,8 @@ class SdCardFontSystem {
   /// Ensure the correct SD font family is loaded for the current settings.
   /// Call before entering the reader or after settings change.
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).
-  void ensureLoaded(GfxRenderer& renderer);
+  /// Settings previews can defer retries so the displayed family list stays stable.
+  void ensureLoaded(GfxRenderer& renderer, bool retryUnavailable = true);
 
   static bool supportsUiFont(const SdCardFontFamilyInfo& family);
 
@@ -79,6 +80,7 @@ class SdCardFontSystem {
   bool loadUiCpfonts(const SdCardFontFamilyInfo& family, GfxRenderer& renderer);
   void restoreBuiltinUiFonts(GfxRenderer& renderer);
   void clearCpfontUiFallbacks(GfxRenderer& renderer);
+  void handleMissingFamily() const;
 
   // Load the active SD family at the built-in UI point sizes and register each
   // as a size-matched script fallback for the corresponding UI font, so book

@@ -128,8 +128,7 @@ void SdCardFontSystem::begin(GfxRenderer& renderer, const EpdFontFamily& small, 
         SETTINGS.clearSdFontFamily();
       }
     } else {
-      LOG_DBG("SDFS", "SD font family not found on card: %s (clearing)", SETTINGS.sdFontFamilyName);
-      SETTINGS.clearSdFontFamily();
+      handleMissingFamily();
     }
   }
 
@@ -138,18 +137,33 @@ void SdCardFontSystem::begin(GfxRenderer& renderer, const EpdFontFamily& small, 
   LOG_DBG("SDFS", "SD font system ready (%d families discovered)", registry_.getFamilyCount());
 }
 
-void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
+void SdCardFontSystem::handleMissingFamily() const {
+#if CROSSPOINT_VECTOR_FONTS
+  if (registry_.hadUnavailableVectorFonts()) {
+    LOG_DBG("SDFS", "SD font scan incomplete; keeping selection: %s", SETTINGS.sdFontFamilyName);
+    return;
+  }
+#endif
+  LOG_DBG("SDFS", "SD font family not found on card: %s (clearing)", SETTINGS.sdFontFamilyName);
+  SETTINGS.clearSdFontFamily();
+}
+
+void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, [[maybe_unused]] const bool retryUnavailable) {
   // If the web server (or another task) installed/deleted fonts, re-discover.
   // Track whether we just re-discovered so we can force a reload below even
   // when the wanted family/size still maps to the same point size — the file
   // contents on disk may have changed (e.g. user re-uploaded a new build).
-  const bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
+  const char* wantedFamily = SETTINGS.sdFontFamilyName;
+  bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
+#if CROSSPOINT_VECTOR_FONTS
+  // Retry an inconclusive scan only when the saved family is still missing.
+  registryWasDirty = registryWasDirty || (retryUnavailable && wantedFamily[0] != '\0' &&
+                                          registry_.hadUnavailableVectorFonts() && !registry_.findFamily(wantedFamily));
+#endif
   if (registryWasDirty) {
-    LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
+    LOG_DBG("SDFS", "Re-discovering fonts");
     registry_.discover();
   }
-
-  const char* wantedFamily = SETTINGS.sdFontFamilyName;
 
 #if CROSSPOINT_VECTOR_FONTS
   // Vector (.ttf/.otf) family selected: route through the FreeInkFont path and
@@ -187,9 +201,8 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   if (familyMatches) {
     const auto* family = registry_.findFamily(wantedFamily);
     if (!family) {
-      LOG_DBG("SDFS", "SD font family disappeared: %s (clearing)", wantedFamily);
       unloadCpfonts(renderer);
-      SETTINGS.clearSdFontFamily();
+      handleMissingFamily();
       return;
     }
     const auto* selected = family->findNearestSize(SETTINGS.fontPointSize);
@@ -217,8 +230,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
       SETTINGS.clearSdFontFamily();
     }
   } else {
-    LOG_DBG("SDFS", "SD font family not found: %s (clearing)", wantedFamily);
-    SETTINGS.clearSdFontFamily();
+    handleMissingFamily();
   }
 }
 

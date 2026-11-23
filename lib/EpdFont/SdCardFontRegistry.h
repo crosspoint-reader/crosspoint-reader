@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "VectorFontSupport.h"
@@ -75,10 +76,13 @@ class SdCardFontRegistry {
   bool discover();
 
   const std::vector<SdCardFontFamilyInfo>& getFamilies() const { return families_; }
-  const SdCardFontFamilyInfo* findFamily(const std::string& name) const;
+  const SdCardFontFamilyInfo* findFamily(std::string_view name) const;
   int getFamilyCount() const { return static_cast<int>(families_.size()); }
 
 #if CROSSPOINT_VECTOR_FONTS
+  // A candidate could not be inspected in the latest scan; absence is inconclusive.
+  bool hadUnavailableVectorFonts() const { return unavailableVectorFonts_; }
+
   // FtFont::ReadFn over a HalFile* ctx (absolute-offset reads; count 0 is a
   // seek probe). Shared by face inspection here and streamed TTF sources
   // (SdCardFontSystem).
@@ -93,6 +97,7 @@ class SdCardFontRegistry {
   // filePath() rebuilds without a stored string.
   static bool isCanonicalCpfontName(const char* filename, const std::string& family, uint8_t size);
 #if CROSSPOINT_VECTOR_FONTS
+  bool unavailableVectorFonts_ = false;
   // Match a loose vector font filename (.ttf/.otf/.ttc, case-insensitive) and
   // return the length of the base name (extension stripped) in `baseLen`.
   static bool parseVectorFontName(const char* filename, size_t& baseLen);
@@ -101,9 +106,9 @@ class SdCardFontRegistry {
   // Reject inspection failures, then prefer suffixes over filename hints OR metadata.
   // Rank nearest 400 (unsuffixed italic: regular weight) or regular weight + 300 for bold.
   // Ties prefer heavier, then lexical. No file reuse.
-  static void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
+  void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
 #endif
-  static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
-  // Scan one root (e.g. "/.fonts"), append families to `out`, dedup by name.
-  static void scanRoot(const char* rootPath, std::vector<SdCardFontFamilyInfo>& out);
+  void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
+  // Scan one root (e.g. "/.fonts"), appending families and deduplicating by name.
+  void scanRoot(const char* rootPath);
 };
