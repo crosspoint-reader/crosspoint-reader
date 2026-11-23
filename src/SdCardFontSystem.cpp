@@ -34,6 +34,79 @@ int computeTtfFontId(const char* familyName, uint8_t pointSize, const uint32_t f
   const int id = static_cast<int>(hash);
   return id != 0 ? id : 1;
 }
+// Read big-endian uint16 / uint32 from an sfnt header buffer.
+uint16_t readBe16(const uint8_t* p) { return (static_cast<uint16_t>(p[0]) << 8) | p[1]; }
+uint32_t readBe32(const uint8_t* p) {
+  return (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16) |
+         (static_cast<uint32_t>(p[2]) << 8) | p[3];
+}
+
+constexpr uint32_t sfntTag(const char a, const char b, const char c, const char d) {
+  return (static_cast<uint32_t>(static_cast<uint8_t>(a)) << 24) |
+         (static_cast<uint32_t>(static_cast<uint8_t>(b)) << 16) |
+         (static_cast<uint32_t>(static_cast<uint8_t>(c)) << 8) | static_cast<uint32_t>(static_cast<uint8_t>(d));
+}
+
+// Compute the prefix byte count needed to cover the font's lookup/metric tables
+// (cmap, loca, hmtx, kern, etc.) without caching the multi-MB glyf/CFF body.
+// Falls back to min(fileLen, maxPrefix) on TTC collections or unexpected layouts.
+size_t computeTtfPrefixBytes(HalFile& file, const size_t fileLen, const size_t maxPrefix) {
+  const size_t fallback = std::min(fileLen, maxPrefix);
+  uint8_t hdr[12];
+  if (!file.seek(0) || file.read(hdr, sizeof(hdr)) != static_cast<int>(sizeof(hdr))) return fallback;
+
+  const uint32_t version = readBe32(hdr);
+  if (version != 0x00010000u && version != sfntTag('O', 'T', 'T', 'O') && version != sfntTag('t', 'r', 'u', 'e') &&
+      version != sfntTag('t', 'y', 'p', '1')) {
+    return fallback;  // TTC ('ttcf') or unrecognized container
+  }
+  const uint16_t numTables = readBe16(hdr + 4);
+  if (numTables == 0 || numTables > 128) return fallback;
+
+  const size_t dirEnd = sizeof(hdr) + static_cast<size_t>(numTables) * 16u;
+  if (dirEnd > fileLen) return fallback;
+
+  size_t neededEnd = dirEnd;
+  bool foundCoreTable = false;
+  uint8_t records[16 * 16];  // 256 B stack chunk (16 table records)
+  uint16_t remaining = numTables;
+  while (remaining > 0) {
+    const uint16_t batch = remaining < 16 ? remaining : 16;
+    const size_t bytes = static_cast<size_t>(batch) * 16u;
+    if (file.read(records, bytes) != static_cast<int>(bytes)) return fallback;
+    for (uint16_t i = 0; i < batch; ++i) {
+      const uint8_t* rec = records + static_cast<size_t>(i) * 16u;
+      const uint32_t tag = readBe32(rec);
+      const uint32_t offset = readBe32(rec + 8);
+      const uint32_t length = readBe32(rec + 12);
+      if (offset > fileLen || length > fileLen - offset) continue;
+      const size_t end = static_cast<size_t>(offset) + length;
+      if (end > maxPrefix) continue;
+      switch (tag) {
+        case sfntTag('h', 'e', 'a', 'd'):
+        case sfntTag('h', 'h', 'e', 'a'):
+        case sfntTag('m', 'a', 'x', 'p'):
+        case sfntTag('O', 'S', '/', '2'):
+        case sfntTag('c', 'm', 'a', 'p'):
+        case sfntTag('l', 'o', 'c', 'a'):
+        case sfntTag('h', 'm', 't', 'x'):
+        case sfntTag('k', 'e', 'r', 'n'):
+        case sfntTag('f', 'v', 'a', 'r'):
+        case sfntTag('a', 'v', 'a', 'r'):
+        case sfntTag('c', 'v', 't', ' '):
+        case sfntTag('f', 'p', 'g', 'm'):
+        case sfntTag('p', 'r', 'e', 'p'):
+          neededEnd = std::max(neededEnd, end);
+          foundCoreTable = true;
+          break;
+        default:
+          break;
+      }
+    }
+    remaining -= batch;
+  }
+  return foundCoreTable ? neededEnd : fallback;
+}
 #endif  // CROSSPOINT_VECTOR_FONTS
 
 }  // namespace
@@ -594,12 +667,12 @@ bool SdCardFontSystem::openTtfSource(TtfSource& s, const std::string& path) {
   }
   s.file = std::move(f);  // kept open; prefixRead() reads it on demand
   s.streamed = true;
-  // Cache the file's head in PSRAM: an sfnt's per-glyph-fault tables (cmap,
-  // loca, hmtx) sit before the multi-MB glyf table, so serving the first
-  // 1 MB from RAM turns each glyph fault's 4-6 scattered SD seeks into one
-  // glyf read. Gated per source so a small-PSRAM board takes what fits.
+  // Cache the font's lookup/metric prefix (cmap, loca, hmtx before glyf) in
+  // PSRAM so each glyph load only needs one SD read. Read the font header
+  // first to calculate the prefix size (capped at 1 MB) and allocate just that
+  // amount of memory to to the prefix, only when there is enough free PSRAM
   static constexpr size_t kStreamPrefix = 1024 * 1024;
-  const size_t prefix = len < kStreamPrefix ? len : kStreamPrefix;
+  const size_t prefix = computeTtfPrefixBytes(s.file, len, kStreamPrefix);
   if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) > prefix + 256 * 1024) {
     s.bytes.resize(prefix);
     if (s.file.seek(0) && static_cast<size_t>(s.file.read(s.bytes.data(), prefix)) == prefix) {
