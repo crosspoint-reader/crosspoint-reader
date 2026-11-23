@@ -1844,7 +1844,7 @@ void EpubReaderActivity::renderBook() {
           // demand after the build. Skipped for cpfont/builtin reading: the
           // release drops the persistent advance table and mini tables, which
           // would force SD metric re-reads on every fresh chapter for no gain.
-          if (!renderer.getTtfFonts().empty()) {
+          if (renderer.getTtfFonts().count(renderSpec.fontId) != 0) {
             if (auto* fcm = renderer.getFontCacheManager()) {
               fcm->releaseSdFontCaches();
             }
