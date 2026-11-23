@@ -168,7 +168,7 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   // frees and reallocates every registry entry, which fragments the heap if it
   // runs while the manifest DOM and the catalog arena are live.
   clearManifest();
-  fontInstaller_.refreshRegistry();
+  sdFontSystem.refreshRegistry();
 
   // Download manifest to a temp file on SD card to avoid holding both
   // TLS buffers and the full JSON string in RAM simultaneously.
@@ -682,7 +682,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     currentFileIndex_++;
   }
 
-  fontInstaller_.refreshRegistry();
+  sdFontSystem.refreshRegistry();
   family.installed = true;
   family.hasUpdate = false;
 
@@ -724,7 +724,7 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
     state_ = ERROR;
     errorMessage_ = "Failed to delete font";
   } else {
-    fontInstaller_.refreshRegistry();
+    sdFontSystem.refreshRegistry();
     family.installed = false;
     family.hasUpdate = false;
     // Unlike the other family_ mutations, this one stays in FAMILY_LIST (no
