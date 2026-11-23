@@ -36,8 +36,8 @@
 #include <string_view>
 
 #include "MappedInputManager.h"
-#include "components/UITheme.h"
 #include "RecentBooksStore.h"
+#include "components/UITheme.h"
 #include "components/icons/cover.h"  // CoverIcon, the fallback-cover glyph
 #include "network/HttpDownloader.h"
 #include "util/BookProgress.h"
