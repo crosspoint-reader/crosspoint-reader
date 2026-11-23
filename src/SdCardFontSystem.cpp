@@ -507,22 +507,8 @@ void SdCardFontSystem::releaseTtfSources(TtfSource*& sources, const TtfSource* o
     s.streamed = false;
     s.size = 0;
     s.present = false;
-    s.identity = 0;
   }
   sources = nullptr;
-}
-
-int SdCardFontSystem::ttfIdentity(const uint8_t pointSize, const bool uiFallback) const {
-  uint32_t hashes[4] = {};
-  uint8_t present = 0;
-  for (uint8_t role = 0; role < 4; ++role) {
-    if (!ttfSources_[role].present) continue;
-    present |= 1u << role;
-    hashes[role] = ttfSources_[role].identity;
-  }
-  // Reader pages store shaped glyph IDs, so table changes must invalidate their identity.
-  const uint32_t contentKey = !uiFallback && ttf_ ? ttf_->contentKey() : 0;
-  return vectorFontIdentity(hashes, present, pointSize, uiFallback, contentKey);
 }
 
 bool SdCardFontSystem::loadTtfVariant(const uint8_t pointSize, const int fontId) {
@@ -590,8 +576,6 @@ bool SdCardFontSystem::openTtfSource(TtfSource& s, const std::string& path) {
     f.close();
     return false;
   }
-  const char* slash = strrchr(path.c_str(), '/');
-  s.identity = vectorFontSourceHash(f, slash ? slash + 1 : path.c_str());
   s.file = std::move(f);  // kept open; prefixRead() reads it on demand
   s.streamed = true;
   // Cache the file's head in PSRAM: an sfnt's per-glyph-fault tables (cmap,
@@ -745,6 +729,7 @@ void SdCardFontSystem::clearTtfUiFallbacks(GfxRenderer& renderer) {
 void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
   if (!ttf_ || activeUiFontName_[0] != '\0' || !ttfUiIds_.empty()) return;
 
+  const uint32_t contentKey = ttf_->contentKey();
   // Small caches: UI strings (titles/rows) are short. Each UI family is a sized
   // variant of ttf_, sharing its FreeType faces without parsing font files or
   // allocating separate FT_Face objects in DRAM.
@@ -768,7 +753,7 @@ void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
     if (!ok) continue;
     LOG_DBG("SDFS", "TTF UI fallback @%upt loaded (heap free %u)", ui.pointSize, (unsigned)ESP.getFreeHeap());
     // Separate reader and UI identities even when their point sizes match.
-    const int id = ttfIdentity(ui.pointSize, /*uiFallback=*/true);
+    const int id = vectorFontIdentity(ttfFamily_.c_str(), contentKey, ui.pointSize, /*uiFallback=*/true);
     renderer.insertFont(id, f->family());
     renderer.registerTtfFont(id, f.get());
     renderer.setFallbackFont(ui.fontId, id);
@@ -809,7 +794,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     renderer.removeFont(ttfFontId_);
     if (ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs)) {
       ttf_->build(" ");
-      ttfFontId_ = ttfIdentity(size);
+      ttfFontId_ = vectorFontIdentity(family.name.c_str(), ttf_->contentKey(), size);
       renderer.insertFont(ttfFontId_, ttf_->family());
       renderer.registerTtfFont(ttfFontId_, ttf_.get());
       ttfPointSize_ = size;
@@ -859,7 +844,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   // Seed the regular face's glyph cache; other styles + glyphs fault on demand.
   ttf_->build(" ");
 
-  ttfFontId_ = ttfIdentity(size);
+  ttfFontId_ = vectorFontIdentity(family.name.c_str(), ttf_->contentKey(), size);
   renderer.insertFont(ttfFontId_, ttf_->family());
   renderer.registerTtfFont(ttfFontId_, ttf_.get());
   ttfFamily_ = family.name;
