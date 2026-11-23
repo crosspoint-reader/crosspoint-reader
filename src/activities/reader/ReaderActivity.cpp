@@ -19,6 +19,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "XtcReaderActivity.h"
+#include "activities/RenderLock.h"
 #include "sync/ReadingSessionLog.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFontFile.h"
@@ -160,6 +161,8 @@ void ReaderActivity::beginBookFont() {
   if (savedFamily[0] != '\0' && !sdFontSystem.registry().findFamily(savedFamily)) fields &= ~BookFontField::Font;
   ReaderFont bookFont = defaultFont;
   copyFields(bookFont, savedBookFont.font, fields);
+  // Locked because the render task can load or unload SD font variants too.
+  RenderLock lock;
   SETTINGS.beginBookFont(bookFont);
   // A failed load clears only the book's font: settings saves keep the default.
   sdFontSystem.ensureLoaded(renderer);
