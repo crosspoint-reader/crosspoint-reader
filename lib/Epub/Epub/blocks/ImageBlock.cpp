@@ -2,16 +2,24 @@
 
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <ImageOpsConfig.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <Serialization.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <new>
 
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+#include <ImagePackedBand.h>
+
+#include "Epub/converters/PortraitImageWriter.h"
+#endif
 
 // Cache file format:
 // - uint16_t width
@@ -130,6 +138,57 @@ const uint8_t* pxcRowPtr(size_t rowStart, int bytesPerRow, uint8_t* tempRow) {
   return tempRow;
 }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+bool canReplayPackedRows(const GfxRenderer& renderer, const DirectPixelWriter& pixels, int x, int y, int width,
+                         int height) {
+  // Cached dimensions may differ by one pixel from the validated layout size.
+  return !pixels.ditherBw && pixels.phyXStepX == 0 && (pixels.phyYStepX == 1 || pixels.phyYStepX == -1) &&
+         (pixels.phyXStepY == 1 || pixels.phyXStepY == -1) && x >= 0 && y >= 0 && width > 0 && height > 0 &&
+         x + width <= renderer.getScreenWidth() && y + height <= renderer.getScreenHeight();
+}
+
+// The caller supplies stable rows in physical bit-lane order.
+void replayPackedRows(DirectPixelWriter& pixels, const imagePacked::BandRows& rows, int width, int x, int y) {
+  pixels.beginRow(y);
+  int start, end;
+  pixels.bandColRange(x, width, start, end);
+  if (start >= end) return;
+  const int byte = pixels.rowPhyXBase / 8;
+  const int localY = pixels.phyYBase + (x + start) * pixels.phyYStepX - pixels.originY;
+  imagePacked::drawBand(
+      rows, {width, start, end},
+      {pixels.fb + localY * pixels.displayWidthBytes + byte, pixels.displayWidthBytes * pixels.phyYStepX,
+       portraitImage::planeFor(pixels.mode), pixels.absolute},
+      imagePacked::WhitePixels::Draw);
+}
+
+int replayLane(const DirectPixelWriter& pixels, int y) { return (pixels.phyXBase + y * pixels.phyXStepY) & 7; }
+
+int replayStablePxcRows(DirectPixelWriter& pixels, int row, int bytesPerRow, int x, int y) {
+  int count = portraitImage::batchRows(pixels, y + row, pxcSlotHeight - row);
+  imagePacked::BandRows rows{};
+  for (int r = 0; r < count; ++r) {
+    const size_t start = static_cast<size_t>(row + r) * bytesPerRow;
+    const size_t offset = start & (PXC_CHUNK_SIZE - 1);
+    // Split rows need the legacy scratch; do not retain pointers to that scratch.
+    if (offset + bytesPerRow > PXC_CHUNK_SIZE) {
+      count = r;
+      break;
+    }
+    rows[replayLane(pixels, y + row + r)] = pxcChunks[start >> PXC_CHUNK_SHIFT].get() + offset;
+  }
+  if (count != 0) replayPackedRows(pixels, rows, pxcSlotWidth, x, y + row);
+  return count;
+}
+
+void replayStreamedRows(DirectPixelWriter& pixels, const uint8_t* input, int bytesPerRow, int count, int width, int x,
+                        int y) {
+  imagePacked::BandRows rows{};
+  for (int r = 0; r < count; ++r) rows[replayLane(pixels, y + r)] = input + static_cast<size_t>(r) * bytesPerRow;
+  replayPackedRows(pixels, rows, width, x, y);
+}
+#endif
+
 // cacheFile is positioned just past the header. True when the slot holds the
 // full pixel payload for this cache path afterward.
 bool loadPxcSlot(uint64_t cacheHash, HalFile& cacheFile, uint16_t cachedWidth, uint16_t cachedHeight, int bytesPerRow) {
@@ -168,7 +227,19 @@ void renderRowsFromPxcSlot(GfxRenderer& renderer, int x, int y) {
   DirectPixelWriter pw;
   pw.init(renderer);
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  const bool packed = canReplayPackedRows(renderer, pw, x, y, pxcSlotWidth, pxcSlotHeight);
+#endif
   for (int row = 0; row < pxcSlotHeight; row++) {
+#if CROSSPOINT_ACCELERATED_IMAGES
+    if (packed) {
+      const int count = replayStablePxcRows(pw, row, bytesPerRow, x, y);
+      if (count != 0) {
+        row += count - 1;
+        continue;
+      }
+    }
+#endif
     const uint8_t* rowBuffer = pxcRowPtr((size_t)row * bytesPerRow, bytesPerRow, tempRow);
     pw.beginRow(y + row);
     int colStart, colEnd;
@@ -245,6 +316,9 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   DirectPixelWriter pw;
   pw.init(renderer);
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  const bool packed = canReplayPackedRows(renderer, pw, x, y, cachedWidth, cachedHeight);
+#endif
   int rowsInBuffer = 0;
   int bufferRow = 0;
   for (int row = 0; row < cachedHeight; row++) {
@@ -260,6 +334,17 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
       bufferRow = 0;
     }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+    if (packed) {
+      // Consume only currently buffered rows; no borrowed pointer survives a refill.
+      const int count = portraitImage::batchRows(pw, y + row, rowsInBuffer - bufferRow);
+      replayStreamedRows(pw, readBuffer + static_cast<size_t>(bufferRow) * bytesPerRow, bytesPerRow, count, cachedWidth,
+                         x, y + row);
+      bufferRow += count;
+      row += count - 1;
+      continue;
+    }
+#endif
     const uint8_t* rowBuffer = readBuffer + (size_t)bufferRow * bytesPerRow;
     bufferRow++;
 

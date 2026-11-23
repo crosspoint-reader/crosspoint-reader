@@ -3,6 +3,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <ImageOpsConfig.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <PNGdec.h>
@@ -12,11 +13,27 @@
 #include <memory>
 #include <new>
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+#include "PortraitImageRows.h"
+#include "PortraitImageWriter.h"
+#endif
+
 #include "DirectPixelWriter.h"
 #include "DitherUtils.h"
 #include "PixelCache.h"
 
 namespace {
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+enum class GrayRowLayout {
+  Source,
+  Destination,
+  PackedIndices,
+  Indices,
+};
+
+enum class IndexedPaletteState { Empty, Ready, Disabled };
+#endif
 
 // Context struct passed through PNGdec callbacks to avoid global mutable state.
 // The draw callback receives this via pDraw->pUser (set by png.decode()).
@@ -45,7 +62,135 @@ struct PngContext {
   uint8_t* grayLineBuffer{nullptr};
   uint8_t* alphaLineBuffer{nullptr};
   uint32_t lastYieldMs{0};  // throttle state for yieldDuringDecode()
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+  std::unique_ptr<uint8_t[]> indexedStorage;
+  IndexedPaletteState indexedState{IndexedPaletteState::Empty};
+  int indexedBits{0};
+  bool indexedHasAlpha{false};
+  bool indexedRetainAlpha{false};
+  portraitImage::LevelRows levelRows;
+  int batchY{0};
+  int batchRows{0};
+  DirectPixelWriter batchPixels{};
+
+  void flushBatch() {
+    if (batchRows == 0) return;
+    portraitImage::writeLevels(batchPixels, levelRows.data(), levelRows.stride(), batchRows, levelRows.width(),
+                               config->x, batchY);
+    batchRows = 0;
+  }
+#endif
 };
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+bool canBatchPortrait(const PngContext& ctx, const DirectPixelWriter& pixels) {
+  return ctx.config->useDithering && !ctx.config->preserveAlpha && !pixels.ditherBw && pixels.fb &&
+         pixels.phyXStepX == 0 && (pixels.phyYStepX == 1 || pixels.phyYStepX == -1) &&
+         (pixels.phyXStepY == 1 || pixels.phyXStepY == -1) && ctx.config->x >= 0 && ctx.config->y >= 0 &&
+         ctx.config->x < ctx.screenWidth && ctx.config->y < ctx.screenHeight && ctx.dstWidth > 0 && ctx.dstHeight > 0;
+}
+
+bool sameBatchTarget(const DirectPixelWriter& a, const DirectPixelWriter& b) {
+  return a.fb == b.fb && a.mode == b.mode && a.absolute == b.absolute && a.ditherBw == b.ditherBw &&
+         a.displayWidthBytes == b.displayWidthBytes && a.originY == b.originY && a.clipRows == b.clipRows &&
+         a.phyXBase == b.phyXBase && a.phyYBase == b.phyYBase && a.phyXStepX == b.phyXStepX &&
+         a.phyYStepX == b.phyYStepX && a.phyXStepY == b.phyXStepY && a.phyYStepY == b.phyYStepY;
+}
+
+void allocatePortraitLevels(PngContext& ctx) {
+  DirectPixelWriter pixels;
+  pixels.init(*ctx.renderer);
+  if (!canBatchPortrait(ctx, pixels)) return;
+  if (ctx.decoder &&
+      (ctx.decoder->getPixelType() == PNG_PIXEL_GRAY_ALPHA || ctx.decoder->getPixelType() == PNG_PIXEL_TRUECOLOR_ALPHA))
+    return;
+  ctx.levelRows.allocate(std::min(ctx.dstWidth, ctx.screenWidth - ctx.config->x), "PNG");
+}
+
+GrayRowLayout convertOpaqueRgbRow(PngContext& ctx, const uint8_t* rgb) {
+  const int width = ctx.levelRows.width();
+  if (width > ctx.srcWidth) {
+    // On horizontal upscales every source sample in the selected prefix is used.
+    const size_t count = (static_cast<uint64_t>(width - 1) * ctx.visibleWidth) / ctx.dstWidth + 1;
+    imageops::rgb24ToGraySpan(rgb + ctx.cropLeft * 3, ctx.grayLineBuffer + ctx.cropLeft, count);
+    return GrayRowLayout::Source;
+  }
+  if (ctx.visibleWidth == ctx.dstWidth) {
+    imageops::rgb24ToGraySpan(rgb + ctx.cropLeft * 3, ctx.grayLineBuffer, width);
+    return GrayRowLayout::Destination;
+  }
+  int srcX = ctx.cropLeft;
+  int error = 0;
+  for (int x = 0; x < width;) {
+    alignas(4) uint8_t packed[48];
+    const int count = std::min(16, width - x);
+    for (int i = 0; i < count; ++i) {
+      memcpy(packed + i * 3, rgb + srcX * 3, 3);
+      error += ctx.visibleWidth;
+      while (error >= ctx.dstWidth) {
+        error -= ctx.dstWidth;
+        ++srcX;
+      }
+    }
+    imageops::rgb24ToGraySpan(packed, ctx.grayLineBuffer + x, count);
+    x += count;
+  }
+  return GrayRowLayout::Destination;
+}
+void preparePortraitRow(PngContext& ctx, const DirectPixelWriter& pixels, DirectCacheWriter* cache, int outY,
+                        GrayRowLayout layout, [[maybe_unused]] const PNGDRAW& draw) {
+  if (ctx.batchRows != 0 && outY != ctx.batchY + ctx.batchRows) ctx.flushBatch();
+  if (ctx.batchRows == 0) {
+    ctx.batchY = outY;
+    ctx.batchPixels = pixels;
+  }
+  auto* row = ctx.levelRows.row(ctx.batchRows);
+  const int width = ctx.levelRows.width();
+  memset(row, 255, ctx.levelRows.stride());
+  switch (layout) {
+    case GrayRowLayout::Destination:
+      memcpy(row, ctx.grayLineBuffer, width);
+      break;
+    case GrayRowLayout::Source:
+      if (ctx.visibleWidth == ctx.dstWidth) {
+        memcpy(row, ctx.grayLineBuffer + ctx.cropLeft, width);
+      } else {
+        int srcX = ctx.cropLeft;
+        int error = 0;
+        for (int x = 0; x < width; ++x) {
+          row[x] = ctx.grayLineBuffer[srcX];
+          error += ctx.visibleWidth;
+          while (error >= ctx.dstWidth) {
+            error -= ctx.dstWidth;
+            ++srcX;
+          }
+        }
+      }
+      break;
+    case GrayRowLayout::PackedIndices:
+      imageops::unpackIndexSpan(draw.pPixels, row, width, static_cast<imageops::IndexDepth>(draw.iBpp), ctx.cropLeft);
+      for (int x = 0; x < width; ++x) row[x] = ctx.indexedStorage[row[x]];
+      break;
+    case GrayRowLayout::Indices: {
+      int srcX = ctx.cropLeft;
+      int error = 0;
+      for (int x = 0; x < width; ++x) {
+        row[x] = ctx.indexedStorage[ctx.grayLineBuffer[srcX]];
+        error += ctx.visibleWidth;
+        while (error >= ctx.dstWidth) {
+          error -= ctx.dstWidth;
+          ++srcX;
+        }
+      }
+      break;
+    }
+  }
+  portraitImage::finishDitheredRow(row, width, ctx.config->x, outY, cache);
+  ++ctx.batchRows;
+  if (ctx.batchRows == portraitImage::batchRows(pixels, ctx.batchY, 8)) ctx.flushBatch();
+}
+#endif
 
 // File I/O callbacks use pFile->fHandle to access the HalFile*,
 // avoiding the need for global file state.
@@ -142,6 +287,73 @@ uint8_t alphaThreshold4x4(const int x, const int y) {
   static constexpr uint8_t BAYER_4X4[16] = {0, 128, 32, 160, 192, 64, 224, 96, 48, 176, 16, 144, 240, 112, 208, 80};
   return BAYER_4X4[((y & 0x03) << 2) | (x & 0x03)];
 }
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+bool useIndexedPalette(PngContext& ctx, const PNGDRAW& draw) {
+  if (!isSupportedBitDepth(PNG_PIXEL_INDEXED, draw.iBpp)) {
+    ctx.indexedState = IndexedPaletteState::Disabled;
+    return false;
+  }
+  const unsigned entries = 1u << draw.iBpp;
+  const bool hasAlpha = draw.iHasAlpha != 0;
+  const bool retainAlpha = ctx.alphaLineBuffer != nullptr;
+  switch (ctx.indexedState) {
+    case IndexedPaletteState::Disabled:
+      return false;
+    case IndexedPaletteState::Ready: {
+      const auto* snapshot = ctx.indexedStorage.get() + 512;
+      if (!draw.pPalette || ctx.indexedBits != draw.iBpp || ctx.indexedHasAlpha != hasAlpha ||
+          ctx.indexedRetainAlpha != retainAlpha || memcmp(snapshot, draw.pPalette, entries * 3) != 0 ||
+          (hasAlpha && memcmp(snapshot + 768, draw.pPalette + 768, entries) != 0)) {
+        ctx.indexedState = IndexedPaletteState::Disabled;
+        return false;
+      }
+      return true;
+    }
+    case IndexedPaletteState::Empty: {
+      if (!draw.pPalette) return false;
+      // Attempt once; OOM and later palette changes keep scalar conversion.
+      ctx.indexedState = IndexedPaletteState::Disabled;
+      constexpr size_t WORKSPACE_BYTES = 512 + 1024;
+      ctx.indexedStorage = makeUniqueNoThrow<uint8_t[]>(WORKSPACE_BYTES);
+      if (!ctx.indexedStorage) {
+        LOG_ERR("PNG", "Failed to allocate indexed palette (%u bytes), using scalar conversion",
+                static_cast<unsigned>(WORKSPACE_BYTES));
+        return false;
+      }
+      auto* table = ctx.indexedStorage.get();
+      imageops::prepareIndexedPalette(draw.pPalette, static_cast<imageops::IndexDepth>(draw.iBpp), hasAlpha,
+                                      retainAlpha, table, table + 256);
+      auto* snapshot = table + 512;
+      memcpy(snapshot, draw.pPalette, entries * 3);
+      if (hasAlpha) memcpy(snapshot + 768, draw.pPalette + 768, entries);
+      ctx.indexedBits = draw.iBpp;
+      ctx.indexedHasAlpha = hasAlpha;
+      ctx.indexedRetainAlpha = retainAlpha;
+      ctx.indexedState = IndexedPaletteState::Ready;
+      return true;
+    }
+  }
+  return false;
+}
+
+GrayRowLayout convertIndexedRow(PngContext& ctx, const PNGDRAW& draw, bool batch) {
+  const auto depth = static_cast<imageops::IndexDepth>(draw.iBpp);
+  if (batch) {
+    if (ctx.visibleWidth == ctx.dstWidth) return GrayRowLayout::PackedIndices;
+    imageops::unpackIndexSpan(draw.pPixels, ctx.grayLineBuffer + ctx.cropLeft, ctx.visibleWidth, depth, ctx.cropLeft);
+    return GrayRowLayout::Indices;
+  }
+  imageops::unpackIndexSpan(draw.pPixels, ctx.grayLineBuffer, ctx.srcWidth, depth);
+  const auto* table = ctx.indexedStorage.get();
+  for (int x = 0; x < ctx.srcWidth; ++x) {
+    const uint8_t index = ctx.grayLineBuffer[x];
+    ctx.grayLineBuffer[x] = table[index];
+    if (ctx.alphaLineBuffer) ctx.alphaLineBuffer[x] = table[256 + index];
+  }
+  return GrayRowLayout::Source;
+}
+#endif
 
 // Convert an entire source line to grayscale and optionally retain alpha.
 // Low-bit-depth grayscale/indexed scanlines are packed most-significant sample first.
@@ -241,8 +453,6 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   // PNGdec parses tRNS while decoding, after open() returns, so query the
   // transparent color here rather than caching its pre-decode value.
   const uint32_t transparentColor = ctx->decoder ? ctx->decoder->getTransparentColor() : 0;
-  convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->iBpp, pDraw->pPalette,
-                    pDraw->iHasAlpha, transparentColor, ctx->alphaLineBuffer);
 
   // Render scaled rows using Bresenham-style integer stepping (no floating-point division)
   int dstWidth = ctx->dstWidth;
@@ -253,6 +463,30 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   // Pre-compute orientation and render-mode state once per callback.
   DirectPixelWriter pw;
   pw.init(*ctx->renderer);
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+  if (ctx->batchRows != 0 && !sameBatchTarget(ctx->batchPixels, pw)) ctx->flushBatch();
+  const bool batch = ctx->levelRows.data() && canBatchPortrait(*ctx, pw) && !pDraw->iHasAlpha &&
+                     pDraw->iPixelType != PNG_PIXEL_GRAY_ALPHA && pDraw->iPixelType != PNG_PIXEL_TRUECOLOR_ALPHA;
+  if (!batch) ctx->flushBatch();
+  GrayRowLayout grayLayout = GrayRowLayout::Source;
+
+  bool converted = false;
+  if (pDraw->iPixelType == PNG_PIXEL_INDEXED && useIndexedPalette(*ctx, *pDraw)) {
+    grayLayout = convertIndexedRow(*ctx, *pDraw, batch);
+    converted = true;
+  }
+  if (!converted && batch && pDraw->iPixelType == PNG_PIXEL_TRUECOLOR && pDraw->iBpp == 8 && !ctx->alphaLineBuffer) {
+    grayLayout = convertOpaqueRgbRow(*ctx, pDraw->pPixels);
+    converted = true;
+  }
+  if (!converted) {
+#endif
+    convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->iBpp, pDraw->pPalette,
+                      pDraw->iHasAlpha, transparentColor, ctx->alphaLineBuffer);
+#if CROSSPOINT_ACCELERATED_IMAGES
+  }
+#endif
 
   for (int dstY = firstDstY; dstY < endDstY; dstY++) {
     ctx->lastDstY = dstY;
@@ -276,6 +510,13 @@ int pngDrawCallback(PNGDRAW* pDraw) {
         cw.beginRow(outY, ctx->config->y + ctx->cache.bandStart);
       }
     }
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+    if (batch) {
+      preparePortraitRow(*ctx, pw, caching ? &cw : nullptr, outY, grayLayout, *pDraw);
+      continue;
+    }
+#endif
 
     int srcX = ctx->cropLeft;
     int error = 0;
@@ -460,9 +701,17 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     }
   }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  allocatePortraitLevels(ctx);
+#endif
+
   unsigned long decodeStart = millis();
   ctx.lastYieldMs = decodeStart;
   rc = png->decode(&ctx, 0);
+#if CROSSPOINT_ACCELERATED_IMAGES
+  // Match scalar partial-frame output even when decoding stops before a full batch.
+  ctx.flushBatch();
+#endif
   unsigned long decodeTime = millis() - decodeStart;
 
   ctx.grayLineBuffer = nullptr;

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "lib/GfxRenderer/BitmapHelpers.h"
+#include "lib/GfxRenderer/ImagePlane.h"
 
 namespace {
 thread_local int rowAllocationToFail = -1;
@@ -93,4 +94,42 @@ TEST(AbsoluteGrayscale, TransparentPassesRetainBackgroundWithoutClearingBetweenP
   EXPECT_EQ(planes[1], 0x3a);
   EXPECT_EQ(planes[0] & 0x0f, 0x0a);
   EXPECT_EQ(planes[1] & 0x0f, 0x0a);
+}
+
+TEST(AbsoluteGrayscale, ImagePlaneMergeMatchesScalarPixelsForEveryMask) {
+  using glyphBitmap::Plane;
+  for (const auto plane : {Plane::BW, Plane::GrayLSB, Plane::GrayMSB}) {
+    for (const bool absolute : {false, true}) {
+      for (unsigned phase = 0; phase < 4; ++phase) {
+        uint8_t low = 0;
+        uint8_t high = 0;
+        for (unsigned lane = 0; lane < 8; ++lane) {
+          const unsigned level = (lane + phase) % 4;
+          if (level & 1) low |= 0x80 >> lane;
+          if (level & 2) high |= 0x80 >> lane;
+        }
+        for (const uint8_t seed : {uint8_t{0x5a}, uint8_t{0xa5}}) {
+          for (unsigned mask = 0; mask <= 0xff; ++mask) {
+            uint8_t expected = seed;
+            for (unsigned lane = 0; lane < 8; ++lane) {
+              const uint8_t bit = 0x80 >> lane;
+              if (!(mask & bit)) continue;
+              const uint8_t level = (lane + phase) % 4;
+              const auto pixel = plane == Plane::BW ? GrayPlanePixel{level != 3, true}
+                                                    : grayPlanePixel(level, plane == Plane::GrayMSB, absolute);
+              if (!pixel.write) continue;
+              if (pixel.black)
+                expected &= ~bit;
+              else
+                expected |= bit;
+            }
+            uint8_t actual = seed;
+            imagePlane::merge(actual, low, high, mask, plane, absolute);
+            ASSERT_EQ(actual, expected) << "plane=" << static_cast<int>(plane) << " absolute=" << absolute
+                                        << " phase=" << phase << " seed=" << +seed << " mask=" << mask;
+          }
+        }
+      }
+    }
+  }
 }

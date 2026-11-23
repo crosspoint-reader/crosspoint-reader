@@ -7,8 +7,16 @@
 #include <GifCommon.h>
 #include <HalMemory.h>
 #include <HalStorage.h>
+#include <ImageOpsConfig.h>
 #include <Logging.h>
 #include <Memory.h>
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+#include <ImagePackedWriter.h>
+
+#include <algorithm>
+#include <optional>
+#endif
 
 #include <cstring>
 
@@ -38,7 +46,69 @@ struct GifContext {
   bool caching{false};
   bool success{true};
   uint32_t lastYieldMs{0};
+#if CROSSPOINT_ACCELERATED_IMAGES
+  int packedWidth{0};
+  std::unique_ptr<uint8_t[]> packedRow;
+  std::optional<imagePacked::Writer> packedWriter;
+#endif
 };
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+// Keep setup scratch out of the long-lived decoder frame.
+__attribute__((noinline)) void preparePackedRows(GifContext& ctx) {
+  DirectPixelWriter pixels;
+  pixels.init(*ctx.renderer);
+  const auto& config = *ctx.config;
+  // Retain the scalar writer's 16-bit addressing and BW-only dithering behavior.
+  const bool fitsLegacyOffsets = pixels.clipRows >= 0 && pixels.displayWidthBytes > 0 &&
+                                 static_cast<uint64_t>(pixels.clipRows) * pixels.displayWidthBytes <= 65536;
+  if (!pixels.fb || pixels.ditherBw || config.preserveAlpha || !fitsLegacyOffsets || pixels.phyXStepX != 0 ||
+      pixels.phyYStepY != 0 || (pixels.phyYStepX != 1 && pixels.phyYStepX != -1) ||
+      (pixels.phyXStepY != 1 && pixels.phyXStepY != -1) || config.x < 0 || config.y < 0 ||
+      config.x >= ctx.screenWidth || config.y >= ctx.screenHeight)
+    return;
+  const int width = std::min(ctx.dstWidth, ctx.screenWidth - config.x);
+  if (width <= 0 || width > 2048) return;
+  pixels.beginRow(config.y);
+  int first, end;
+  pixels.bandColRange(config.x, width, first, end);
+  if (first >= end) return;
+  auto plane = glyphBitmap::Plane::BW;
+  switch (pixels.mode) {
+    case GfxRenderer::BW:
+      break;
+    case GfxRenderer::GRAYSCALE_LSB:
+      plane = glyphBitmap::Plane::GrayLSB;
+      break;
+    case GfxRenderer::GRAYSCALE_MSB:
+      plane = glyphBitmap::Plane::GrayMSB;
+      break;
+    default:
+      return;
+  }
+  const size_t rowBytes = (width + 3) / 4;
+  ctx.packedRow = makeUniqueNoThrow<uint8_t[]>(rowBytes);
+  if (!ctx.packedRow) {
+    LOG_ERR("GIF", "OOM: packed row (%u bytes); using pixel output", static_cast<unsigned>(rowBytes));
+    return;
+  }
+  const glyphBitmap::Target target{
+      pixels.fb,
+      ctx.renderer->getDisplayWidth(),
+      pixels.displayWidthBytes,
+      pixels.originY,
+      pixels.clipRows,
+      {pixels.phyXBase + config.x * pixels.phyXStepX, pixels.phyYBase + config.x * pixels.phyYStepX, pixels.phyXStepX,
+       pixels.phyYStepX, pixels.phyXStepY, pixels.phyYStepY}};
+  ctx.packedWriter.emplace(target, width, 0, width, 0, ctx.screenHeight, plane, pixels.absolute, false, true);
+  if (!ctx.packedWriter->isActive()) {
+    ctx.packedWriter.reset();
+    ctx.packedRow.reset();
+    return;
+  }
+  ctx.packedWidth = width;
+}
+#endif
 
 void updateGrayPalette(const GIFDRAW* pDraw, GifContext& ctx) {
   const uint8_t* palette24 = pDraw->pPalette24;
@@ -91,6 +161,10 @@ void renderCanvasRow(const uint8_t* grayRow, int srcY, GifContext& ctx) {
     int error = 0;
     const int outXBase = ctx.config->x;
     const bool useDithering = ctx.config->useDithering;
+#if CROSSPOINT_ACCELERATED_IMAGES
+    const bool packed = ctx.packedWriter.has_value();
+    if (packed) memset(ctx.packedRow.get(), 0, (ctx.packedWidth + 3) / 4);
+#endif
 
     for (int dstX = 0; dstX < ctx.dstWidth; ++dstX) {
       const int outX = outXBase + dstX;
@@ -103,7 +177,12 @@ void renderCanvasRow(const uint8_t* grayRow, int srcY, GifContext& ctx) {
           ditheredGray = gray / 85;
           if (ditheredGray > 3) ditheredGray = 3;
         }
-        pw.writePixel(outX, ditheredGray);
+#if CROSSPOINT_ACCELERATED_IMAGES
+        if (packed)
+          ctx.packedRow[dstX / 4] |= ditheredGray << (6 - (dstX % 4) * 2);
+        else
+#endif
+          pw.writePixel(outX, ditheredGray);
         if (caching) cw.writePixel(outX, ditheredGray);
       }
 
@@ -117,6 +196,9 @@ void renderCanvasRow(const uint8_t* grayRow, int srcY, GifContext& ctx) {
         }
       }
     }
+#if CROSSPOINT_ACCELERATED_IMAGES
+    if (packed) ctx.packedWriter->writeRow(ctx.packedRow.get(), outY);
+#endif
   }
 }
 
@@ -336,6 +418,9 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     }
   }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  preparePackedRows(ctx);
+#endif
   int delayMs = 0;
   ctx.lastYieldMs = millis();
   const int frameState = gif->playFrame(false, &delayMs, &ctx);
@@ -356,6 +441,9 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     warnUnsupportedFeature("animation (using first frame only)", imagePath);
   }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  if (ctx.packedWriter) ctx.packedWriter->flush();
+#endif
   if (ctx.caching && !ctx.cache.finalize()) {
     LOG_ERR("GIF", "Failed to finalize pixel cache: %s", config.cachePath.c_str());
     return false;

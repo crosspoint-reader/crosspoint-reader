@@ -3,6 +3,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <ImageOpsConfig.h>
 #include <JPEGDEC.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -11,6 +12,11 @@
 #include <cstdlib>
 #include <memory>
 #include <new>
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+#include "PortraitImageRows.h"
+#include "PortraitImageWriter.h"
+#endif
 
 #include "DirectPixelWriter.h"
 #include "DitherUtils.h"
@@ -51,7 +57,73 @@ struct JpegContext {
   bool caching{false};
 
   uint32_t lastYieldMs{0};  // throttle state for yieldDuringDecode()
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+  portraitImage::LevelRows levelRows;
+#endif
 };
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+bool canBatchPortrait(const JpegContext& ctx, const DirectPixelWriter& pixels) {
+  // Larger targets retain the scalar writer's existing 16-bit byte-offset behavior.
+  const bool fitsLegacyOffsets = pixels.displayWidthBytes > 0 && pixels.clipRows >= 0 &&
+                                 static_cast<uint64_t>(pixels.clipRows) * pixels.displayWidthBytes <= 65536;
+  return ctx.config->useDithering && !ctx.config->preserveAlpha && !pixels.ditherBw && pixels.fb && fitsLegacyOffsets &&
+         pixels.phyXStepX == 0 && (pixels.phyYStepX == 1 || pixels.phyYStepX == -1) &&
+         (pixels.phyXStepY == 1 || pixels.phyXStepY == -1) && ctx.config->x >= 0 && ctx.config->y >= 0 &&
+         ctx.config->x < ctx.screenWidth && ctx.config->y < ctx.screenHeight && ctx.dstWidth > 0 && ctx.dstHeight > 0;
+}
+
+void allocatePortraitLevels(JpegContext& ctx) {
+  DirectPixelWriter pixels;
+  pixels.init(*ctx.renderer);
+  if (!canBatchPortrait(ctx, pixels)) return;
+  ctx.levelRows.allocate(std::min(ctx.dstWidth, ctx.screenWidth - ctx.config->x), "JPG");
+}
+
+// Only this callback's completed rectangle is pending; never retain MCU pieces.
+struct JpegPortraitBatch {
+  DirectPixelWriter& pixels;
+  DirectCacheWriter* const cache;
+  uint8_t* const levels;
+  const size_t stride;
+  const int x, width;
+  int y{0}, rows{0};
+
+  JpegPortraitBatch(JpegContext& ctx, DirectPixelWriter& pixels, DirectCacheWriter* cache, int x, int width)
+      : pixels(pixels),
+        cache(cache),
+        levels(ctx.levelRows.data() && width <= ctx.levelRows.width() && canBatchPortrait(ctx, pixels)
+                   ? ctx.levelRows.data()
+                   : nullptr),
+        stride(ctx.levelRows.stride()),
+        x(x),
+        width(width) {}
+  JpegPortraitBatch(const JpegPortraitBatch&) = delete;
+  JpegPortraitBatch& operator=(const JpegPortraitBatch&) = delete;
+  ~JpegPortraitBatch() { flush(); }
+
+  uint8_t* beginRow(int outY) {
+    if (!levels) return nullptr;
+    if (rows == 0) y = outY;
+    return levels + rows * stride;
+  }
+
+  void endRow(int outY) {
+    if (!levels) return;
+    auto* row = levels + rows * stride;
+    portraitImage::finishDitheredRow(row, width, x, outY, cache);
+    ++rows;
+    if (rows == portraitImage::batchRows(pixels, y, 8)) flush();
+  }
+
+  void flush() {
+    if (rows == 0) return;
+    portraitImage::writeLevels(pixels, levels, stride, rows, width, x, y);
+    rows = 0;
+  }
+};
+#endif
 
 // File I/O callbacks use pFile->fHandle to access the HalFile*,
 // avoiding the need for global file state.
@@ -198,16 +270,29 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
     }
   }
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+  JpegPortraitBatch batch(*ctx, pw, caching ? &cw : nullptr, cfgX + dstXStart, dstXEnd - dstXStart);
+#endif
+
   // === 1:1 fast path: no scaling math ===
   if (fineScaleFPX == FP_ONE && fineScaleFPY == FP_ONE) {
     for (int dstY = dstYStart; dstY < dstYEnd; dstY++) {
       const int outY = cfgY + dstY;
       pw.beginRow(outY);
       if (caching) cw.beginRow(outY, cacheOriginY);
+#if CROSSPOINT_ACCELERATED_IMAGES
+      uint8_t* grayRow = batch.beginRow(outY);
+#endif
       const uint8_t* row = &pixels[(dstY - blockY) * stride];
       for (int dstX = dstXStart; dstX < dstXEnd; dstX++) {
         const int outX = cfgX + dstX;
         uint8_t gray = row[dstX - blockX];
+#if CROSSPOINT_ACCELERATED_IMAGES
+        if (grayRow) {
+          grayRow[dstX - dstXStart] = gray;
+          continue;
+        }
+#endif
         uint8_t dithered;
         if (useDithering) {
           dithered = applyBayerDither4Level(gray, outX, outY);
@@ -218,6 +303,9 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         pw.writePixel(outX, dithered);
         if (caching) cw.writePixel(outX, dithered);
       }
+#if CROSSPOINT_ACCELERATED_IMAGES
+      batch.endRow(outY);
+#endif
     }
     return 1;
   }
@@ -238,6 +326,9 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
       const int outY = cfgY + dstY;
       pw.beginRow(outY);
       if (caching) cw.beginRow(outY, cacheOriginY);
+#if CROSSPOINT_ACCELERATED_IMAGES
+      uint8_t* grayRow = batch.beginRow(outY);
+#endif
       const int32_t srcFyFP = dstY * invScaleFPY;
       const int32_t fy = srcFyFP & FP_MASK;
       const int32_t fyInv = FP_ONE - fy;
@@ -267,6 +358,12 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         int bot = ((int)row1[lx0] * fxInv + (int)row1[lx1] * fx) >> FP_SHIFT;
         uint8_t gray = (uint8_t)((top * fyInv + bot * fy) >> FP_SHIFT);
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+        if (grayRow) {
+          grayRow[dstX - dstXStart] = gray;
+          continue;
+        }
+#endif
         uint8_t dithered;
         if (useDithering) {
           dithered = applyBayerDither4Level(gray, outX, outY);
@@ -290,6 +387,12 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         int bot = ((int)row1[lx0] * fxInv + (int)row1[lx0 + 1] * fx) >> FP_SHIFT;
         uint8_t gray = (uint8_t)((top * fyInv + bot * fy) >> FP_SHIFT);
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+        if (grayRow) {
+          grayRow[dstX - dstXStart] = gray;
+          continue;
+        }
+#endif
         uint8_t dithered;
         if (useDithering) {
           dithered = applyBayerDither4Level(gray, outX, outY);
@@ -316,6 +419,12 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         int bot = ((int)row1[lx0] * fxInv + (int)row1[lx1] * fx) >> FP_SHIFT;
         uint8_t gray = (uint8_t)((top * fyInv + bot * fy) >> FP_SHIFT);
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+        if (grayRow) {
+          grayRow[dstX - dstXStart] = gray;
+          continue;
+        }
+#endif
         uint8_t dithered;
         if (useDithering) {
           dithered = applyBayerDither4Level(gray, outX, outY);
@@ -326,6 +435,9 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
         pw.writePixel(outX, dithered);
         if (caching) cw.writePixel(outX, dithered);
       }
+#if CROSSPOINT_ACCELERATED_IMAGES
+      batch.endRow(outY);
+#endif
     }
     return 1;
   }
@@ -335,6 +447,9 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
     const int outY = cfgY + dstY;
     pw.beginRow(outY);
     if (caching) cw.beginRow(outY, cacheOriginY);
+#if CROSSPOINT_ACCELERATED_IMAGES
+    uint8_t* grayRow = batch.beginRow(outY);
+#endif
     const int32_t srcFyFP = dstY * invScaleFPY;
     int ly = (srcFyFP >> FP_SHIFT) - blockY;
     if (ly < 0) ly = 0;
@@ -349,6 +464,12 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
       if (lx >= validW) lx = validW - 1;
       uint8_t gray = row[lx];
 
+#if CROSSPOINT_ACCELERATED_IMAGES
+      if (grayRow) {
+        grayRow[dstX - dstXStart] = gray;
+        continue;
+      }
+#endif
       uint8_t dithered;
       if (useDithering) {
         dithered = applyBayerDither4Level(gray, outX, outY);
@@ -359,6 +480,9 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
       pw.writePixel(outX, dithered);
       if (caching) cw.writePixel(outX, dithered);
     }
+#if CROSSPOINT_ACCELERATED_IMAGES
+    batch.endRow(outY);
+#endif
   }
 
   return 1;
@@ -515,6 +639,11 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
       ctx.caching = false;
     }
   }
+
+#if CROSSPOINT_ACCELERATED_IMAGES
+  // Preserve cache allocation priority; this optional tile can always fail safely.
+  allocatePortraitLevels(ctx);
+#endif
 
   unsigned long decodeStart = millis();
   ctx.lastYieldMs = decodeStart;

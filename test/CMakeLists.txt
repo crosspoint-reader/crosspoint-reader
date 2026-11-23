@@ -91,8 +91,10 @@ add_subdirectory(txt_to_html)
 add_subdirectory(absolute_grayscale)
 
 add_subdirectory(gif_support)
+add_subdirectory(image_cache_replay)
 
 add_subdirectory(bmp_to_bmp)
+add_subdirectory(png_to_bmp)
 
 add_subdirectory(sd_card_font)
 add_subdirectory(sd_font_registry)
@@ -108,6 +110,9 @@ add_subdirectory(plugin_picker_layout)
 add_subdirectory(protected_paths)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME ImageOps COMMAND ${CMAKE_COMMAND} -E env "CXX=${CMAKE_CXX_COMPILER}"
+  "CXX_COMPILER_ARG1=${CMAKE_CXX_COMPILER_ARG1}"
+  ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/image_ops/run_image_ops.py)
 add_test(NAME translation_spacing COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_translation_spacing.py)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)
 add_test(NAME RemoteButtonInputIntegration COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_remote_button_input.py)

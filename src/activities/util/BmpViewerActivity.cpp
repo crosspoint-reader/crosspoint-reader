@@ -8,6 +8,7 @@
 #include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Logging.h>
 #include <Memory.h>
 
 #include <algorithm>
@@ -223,8 +224,23 @@ void BmpViewerActivity::onEnter() {
 
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
+      const auto drawBitmap = [&]() __attribute__((always_inline)) {
+#if defined(ENABLE_SERIAL_LOG) && LOG_LEVEL >= 2
+        const unsigned long decodeStart = millis();
+#endif
+        const bool decoded = renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
+#if defined(ENABLE_SERIAL_LOG) && LOG_LEVEL >= 2
+        const unsigned long decodeTime = millis() - decodeStart;
+        if (decoded) {
+          LOG_DBG("BMP", "BMP decoding complete - render time: %lu ms (mode %d): %s", decodeTime,
+                  static_cast<int>(renderer.getRenderMode()), filePath.c_str());
+        }
+#endif
+        return decoded;
+      };
+
       renderer.clearScreen();
-      if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
+      if (!drawBitmap()) {
         renderer.clearScreen();
         renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -246,7 +262,7 @@ void BmpViewerActivity::onEnter() {
           }
           renderer.clearScreen(absolute ? 0xFF : 0x00);
           renderer.setRenderMode(mode);
-          if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
+          if (!drawBitmap()) {
             planesReady = false;
             break;
           }
@@ -262,8 +278,7 @@ void BmpViewerActivity::onEnter() {
         // Rebuild the BW framebuffer for popups and subsequent differential updates.
         renderer.setRenderMode(GfxRenderer::BW);
         renderer.clearScreen();
-        if (bitmap.rewindToData() != BmpReaderError::Ok ||
-            !renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
+        if (bitmap.rewindToData() != BmpReaderError::Ok || !drawBitmap()) {
           LOG_ERR("BMP", "Failed to rewind bitmap to restore the BW framebuffer");
           renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
           planesReady = false;
