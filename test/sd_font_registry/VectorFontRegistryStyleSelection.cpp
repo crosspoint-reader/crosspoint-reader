@@ -2,6 +2,7 @@
 #include <SdCardFontRegistry.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <string>
 
 namespace {
@@ -415,6 +416,52 @@ TEST_F(VectorFontRegistryTest, TruncatedCollectionDoesNotMakeScanInconclusive) {
   fake::add("/fonts/Family/Truncated.ttc", std::string("ttcf\0\x01\0\0", 8));
   EXPECT_FALSE(registry.discover());
   EXPECT_FALSE(registry.hadUnavailableVectorFonts());
+}
+
+TEST_F(VectorFontRegistryTest, EveryDiscoveryInvalidatesPreviousScanGeneration) {
+  const auto initial = registry.scanGeneration();
+  EXPECT_FALSE(registry.discover());
+  const auto emptyScan = registry.scanGeneration();
+  EXPECT_NE(emptyScan, initial);
+
+  addFace("Family-Regular.ttf", 400, false);
+  fake::failRead = 0;
+  EXPECT_FALSE(registry.discover());
+  const auto failedScan = registry.scanGeneration();
+  EXPECT_NE(failedScan, emptyScan);
+
+  EXPECT_TRUE(registry.discover("Family"));
+  const auto recoveredScan = registry.scanGeneration();
+  EXPECT_NE(recoveredScan, failedScan);
+  EXPECT_NE(recoveredScan, 0u);
+}
+
+TEST_F(VectorFontRegistryTest, RetryScanKeepsReaderAndUiFamiliesAtTheLimit) {
+  for (int i = 0; i < SdCardFontRegistry::MAX_SD_FAMILIES - 1; ++i) {
+    const auto name = "Family" + std::to_string(i);
+    fake::add("/fonts/" + name + "/" + name + "_14.cpfont");
+  }
+  fake::add("/fonts/ZReader/ZReader_14.cpfont");
+  ASSERT_TRUE(registry.discover());
+  ASSERT_NE(registry.findFamily("ZReader"), nullptr);
+
+  fake::add("/fonts/ARecovered/ARecovered_14.cpfont");
+  ASSERT_TRUE(registry.discover("ZReader", "ARecovered"));
+  EXPECT_EQ(registry.getFamilyCount(), SdCardFontRegistry::MAX_SD_FAMILIES);
+  EXPECT_NE(registry.findFamily("ARecovered"), nullptr);
+  EXPECT_NE(registry.findFamily("ZReader"), nullptr);
+
+  ASSERT_TRUE(registry.discover());
+  EXPECT_EQ(registry.findFamily("ZReader"), nullptr);
+
+  fake::add("/fonts/ZUi/ZUi_14.cpfont");
+  ASSERT_TRUE(registry.discover("ZReader", "ZUi"));
+  EXPECT_EQ(registry.getFamilyCount(), SdCardFontRegistry::MAX_SD_FAMILIES);
+  EXPECT_NE(registry.findFamily("ZReader"), nullptr);
+  EXPECT_NE(registry.findFamily("ZUi"), nullptr);
+  const auto& families = registry.getFamilies();
+  EXPECT_TRUE(
+      std::is_sorted(families.begin(), families.end(), [](const auto& a, const auto& b) { return a.name < b.name; }));
 }
 
 TEST_F(VectorFontRegistryTest, InferredBoldCannotBeLighterThanRegular) {

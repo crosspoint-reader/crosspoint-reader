@@ -73,7 +73,12 @@ class SdCardFontRegistry {
 
   // Scan SD card, populate families_. Invalidates pointers and references
   // obtained from getFamilies()/findFamily(). Returns true if any families found.
+#if CROSSPOINT_VECTOR_FONTS
+  // Keep the requested families, if found, even when the family limit is reached.
+  bool discover(std::string_view retainReaderFamily = {}, std::string_view retainUiFamily = {});
+#else
   bool discover();
+#endif
 
   const std::vector<SdCardFontFamilyInfo>& getFamilies() const { return families_; }
   const SdCardFontFamilyInfo* findFamily(std::string_view name) const;
@@ -82,6 +87,8 @@ class SdCardFontRegistry {
 #if CROSSPOINT_VECTOR_FONTS
   // A candidate could not be inspected in the latest scan; absence is inconclusive.
   bool hadUnavailableVectorFonts() const { return unavailableVectorFonts_; }
+  // Changes on every scan, including empty or incomplete scans.
+  uint32_t scanGeneration() const { return scanGeneration_; }
 
   // FtFont::ReadFn over a HalFile* ctx (absolute-offset reads; count 0 is a
   // seek probe). Shared by face inspection here and streamed TTF sources
@@ -98,6 +105,7 @@ class SdCardFontRegistry {
   static bool isCanonicalCpfontName(const char* filename, const std::string& family, uint8_t size);
 #if CROSSPOINT_VECTOR_FONTS
   bool unavailableVectorFonts_ = false;
+  uint32_t scanGeneration_ = 0;
   // Match a loose vector font filename (.ttf/.otf/.ttc, case-insensitive) and
   // return the length of the base name (extension stripped) in `baseLen`.
   static bool parseVectorFontName(const char* filename, size_t& baseLen);

@@ -533,10 +533,15 @@ void SdCardFontRegistry::scanRoot(const char* rootPath) {
   }
 }
 
+#if CROSSPOINT_VECTOR_FONTS
+bool SdCardFontRegistry::discover(const std::string_view retainReaderFamily, const std::string_view retainUiFamily) {
+#else
 bool SdCardFontRegistry::discover() {
+#endif
   families_.clear();
 #if CROSSPOINT_VECTOR_FONTS
   unavailableVectorFonts_ = false;
+  if (++scanGeneration_ == 0) ++scanGeneration_;  // Zero means no shareable sources.
 #endif
 
   // Hidden root is scanned first so it wins on name collisions, matching the
@@ -550,6 +555,23 @@ bool SdCardFontRegistry::discover() {
 
   // Cap at MAX_SD_FAMILIES
   if (static_cast<int>(families_.size()) > MAX_SD_FAMILIES) {
+#if CROSSPOINT_VECTOR_FONTS
+    if (!retainReaderFamily.empty() || !retainUiFamily.empty()) {
+      const auto keep = [&](const SdCardFontFamilyInfo& family) {
+        return family.name == retainReaderFamily || family.name == retainUiFamily;
+      };
+      // Reserve slots only for families that were actually found. Stable
+      // compaction keeps the retained families in alphabetical order.
+      auto remaining = MAX_SD_FAMILIES - std::count_if(families_.begin(), families_.end(), keep);
+      const auto firstDropped = std::remove_if(families_.begin(), families_.end(), [&](const auto& family) {
+        if (keep(family)) return false;
+        if (remaining == 0) return true;
+        --remaining;
+        return false;
+      });
+      families_.erase(firstDropped, families_.end());
+    }
+#endif
     families_.resize(MAX_SD_FAMILIES);
   }
   shrinkToFit(families_);  // the list is read-only until the next scan

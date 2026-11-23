@@ -133,7 +133,11 @@ void SdCardFontSystem::begin(GfxRenderer& renderer, const EpdFontFamily& small, 
   }
 
   // The optional UI faces must fit alongside the saved reader font.
-  applyUiFont(renderer, SETTINGS.uiFontFamilyName);
+  const char* savedUiFamily = SETTINGS.uiFontFamilyName;
+  applyUiFont(renderer, savedUiFamily);
+#if CROSSPOINT_VECTOR_FONTS
+  uiFontRetryPending_ = *savedUiFamily && registry_.hadUnavailableVectorFonts() && !registry_.findFamily(savedUiFamily);
+#endif
   LOG_DBG("SDFS", "SD font system ready (%d families discovered)", registry_.getFamilyCount());
 }
 
@@ -153,18 +157,44 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, [[maybe_unused]] cons
   // Track whether we just re-discovered so we can force a reload below even
   // when the wanted family/size still maps to the same point size — the file
   // contents on disk may have changed (e.g. user re-uploaded a new build).
-  const char* wantedFamily = SETTINGS.sdFontFamilyName;
   bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
 #if CROSSPOINT_VECTOR_FONTS
   // Retry an inconclusive scan only when the saved family is still missing.
-  registryWasDirty = registryWasDirty || (retryUnavailable && wantedFamily[0] != '\0' &&
-                                          registry_.hadUnavailableVectorFonts() && !registry_.findFamily(wantedFamily));
+  const char* wantedFamily = SETTINGS.sdFontFamilyName;
+  const char* savedUiFamily = SETTINGS.uiFontFamilyName;
+  if (!*savedUiFamily) uiFontRetryPending_ = false;
+  if (retryUnavailable && !registryWasDirty && registry_.hadUnavailableVectorFonts()) {
+    registryWasDirty = *wantedFamily && !registry_.findFamily(wantedFamily);
+  }
 #endif
   if (registryWasDirty) {
     LOG_DBG("SDFS", "Re-discovering fonts");
     registry_.discover();
   }
 
+  ensureReaderFontLoaded(renderer, registryWasDirty);
+
+#if CROSSPOINT_VECTOR_FONTS
+  if (retryUnavailable && uiFontRetryPending_) {
+    const auto* uiFamily = registry_.findFamily(savedUiFamily);
+    if (!uiFamily && !registryWasDirty && registry_.hadUnavailableVectorFonts()) {
+      // A UI-only retry must not force a working reader font to reload.
+      registry_.discover(SETTINGS.sdFontFamilyName, savedUiFamily);
+      uiFamily = registry_.findFamily(savedUiFamily);
+    }
+    if (uiFamily) {
+      // Attempt once after the reader loads, so it has first claim on memory.
+      uiFontRetryPending_ = false;
+      applyUiFont(renderer, savedUiFamily);
+    } else if (!registry_.hadUnavailableVectorFonts()) {
+      uiFontRetryPending_ = false;
+    }
+  }
+#endif
+}
+
+void SdCardFontSystem::ensureReaderFontLoaded(GfxRenderer& renderer, const bool registryWasDirty) {
+  const char* wantedFamily = SETTINGS.sdFontFamilyName;
 #if CROSSPOINT_VECTOR_FONTS
   // Vector (.ttf/.otf) family selected: route through the FreeInkFont path and
   // drop any pre-rasterized (.cpfont) font that was loaded.
@@ -383,6 +413,9 @@ bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer, const char* want) {
       const bool loaded = loadUiCpfonts(*family, renderer);
 #endif
       if (loaded) {
+#if CROSSPOINT_VECTOR_FONTS
+        uiFontRetryPending_ = false;
+#endif
         snprintf(activeUiFontName_, sizeof(activeUiFontName_), "%s", want);
         LOG_DBG("SDFS", "UI font: %s", want);
         return true;
@@ -524,11 +557,18 @@ SdCardFontSystem::TtfSource* SdCardFontSystem::unusedTtfSources(const TtfSource*
   return other == sourceSlots_[0] ? sourceSlots_[1] : sourceSlots_[0];
 }
 
+bool SdCardFontSystem::canShareTtfSources(const TtfSource* sources) const {
+  if (!sources) return false;
+  const uint32_t generation = sourceSlotGenerations_[sources == sourceSlots_[1]];
+  return generation != 0 && generation == registry_.scanGeneration();
+}
+
 void SdCardFontSystem::releaseTtfSources(TtfSource*& sources, const TtfSource* other) {
   if (!sources || sources == other) {
     sources = nullptr;
     return;
   }
+  sourceSlotGenerations_[sources == sourceSlots_[1]] = 0;
   for (uint8_t st = 0; st < 4; ++st) {
     TtfSource& s = sources[st];
     s.bytes.clear();
@@ -619,7 +659,7 @@ bool SdCardFontSystem::openTtfSource(TtfSource& s, const std::string& path) {
     if (s.file.seek(0) && static_cast<size_t>(s.file.read(s.bytes.data(), prefix)) == prefix) {
       LOG_DBG("SDFS", "Cached %u KB TTF prefix in PSRAM", static_cast<unsigned>(prefix / 1024));
     } else {
-      s.bytes.clear();  // fall back to pure streaming
+      freeink::font::PsramVector<uint8_t>().swap(s.bytes);  // fall back to pure streaming
     }
   }
   LOG_DBG("SDFS", "Streaming TTF %s (%u KB) from SD", path.c_str(), static_cast<unsigned>(len / 1024));
@@ -669,15 +709,19 @@ bool SdCardFontSystem::openTtfFamilySources(const SdCardFontFamilyInfo& family, 
   // regular; TtfEpdFont then derives bold/italic from the wght axis or an
   // oblique shear. Extra files upgrade those styles to the real designs.
   char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
+  const uint32_t generation = registry_.scanGeneration();
+  bool complete = true;
   for (const auto& file : family.files) {
     const uint8_t role = file.style < 4 ? file.style : 0;
     if (sources[role].present) continue;  // registry already deduped by role
     if (!family.filePath(file, path, sizeof(path))) {
       LOG_ERR("SDFS", "Vector font path too long in family %s", family.name.c_str());
+      complete = false;
       continue;
     }
-    openTtfSource(sources[role], path);
+    if (!openTtfSource(sources[role], path)) complete = false;
   }
+  sourceSlotGenerations_[sources == sourceSlots_[1]] = complete && sources[0].present ? generation : 0;
   return sources[0].present;
 }
 
@@ -698,7 +742,7 @@ void SdCardFontSystem::unloadUiTtf(GfxRenderer& renderer) {
 
 bool SdCardFontSystem::loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer& renderer) {
   static_assert(std::size(kUiFontSizes) == sizeof(uiTtf_) / sizeof(uiTtf_[0]), "one face per UI font slot");
-  if (ttfSources_ && family.name == ttfFamily_) {
+  if (family.name == ttfFamily_ && canShareTtfSources(ttfSources_)) {
     uiTtfSources_ = ttfSources_;
   } else {
     uiTtfSources_ = unusedTtfSources(ttfSources_);
@@ -841,7 +885,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     return;
   }
 
-  const bool reuseUiSource = uiTtfSources_ && family.name == activeUiFontName_;
+  const bool reuseUiSource = family.name == activeUiFontName_ && canShareTtfSources(uiTtfSources_);
   ttfSources_ = reuseUiSource ? uiTtfSources_ : unusedTtfSources(uiTtfSources_);
   if (!reuseUiSource && !openTtfFamilySources(family, ttfSources_)) {
     // Possibly a transient SD read failure: keep the user's selection so the

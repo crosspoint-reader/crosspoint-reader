@@ -36,6 +36,7 @@ class SdCardFontSystem {
 
   /// Ensure the correct SD font family is loaded for the current settings.
   /// Call before entering the reader or after settings change.
+  /// The caller holds RenderLock after startup.
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).
   /// Settings previews can defer retries so the displayed family list stays stable.
   void ensureLoaded(GfxRenderer& renderer, bool retryUnavailable = true);
@@ -81,6 +82,7 @@ class SdCardFontSystem {
   void restoreBuiltinUiFonts(GfxRenderer& renderer);
   void clearCpfontUiFallbacks(GfxRenderer& renderer);
   void handleMissingFamily() const;
+  void ensureReaderFontLoaded(GfxRenderer& renderer, bool registryWasDirty);
 
   // Load the active SD family at the built-in UI point sizes and register each
   // as a size-matched script fallback for the corresponding UI font, so book
@@ -111,12 +113,13 @@ class SdCardFontSystem {
   // Returns false on open/read failure.
   static bool openTtfSource(TtfSource& s, const std::string& path);
   // Open every style file the family ships. False if regular failed to open.
-  static bool openTtfFamilySources(const SdCardFontFamilyInfo& family, TtfSource* sources);
+  bool openTtfFamilySources(const SdCardFontFamilyInfo& family, TtfSource* sources);
   // Register every present source with `font` (shared bytes / file handles).
   static void addTtfSources(TtfEpdFont& font, TtfSource* sources);
   // Close/free all style sources.
-  static void releaseTtfSources(TtfSource*& sources, const TtfSource* other);
+  void releaseTtfSources(TtfSource*& sources, const TtfSource* other);
   TtfSource* unusedTtfSources(const TtfSource* other);
+  bool canShareTtfSources(const TtfSource* sources) const;
   // Load `family` at the three UI sizes and bind the UI font slots to it.
   bool loadUiTtf(const SdCardFontFamilyInfo& family, GfxRenderer& renderer);
   // Unbind and free the vector UI font, if one is loaded.
@@ -153,6 +156,7 @@ class SdCardFontSystem {
   std::atomic<bool> registryDirty_{false};
 
 #if CROSSPOINT_VECTOR_FONTS
+  bool uiFontRetryPending_ = false;
   std::atomic<bool> uiTtfFailed_{false};
 
   // One style source file. SMALL files are read fully into `bytes` (resident,
@@ -172,6 +176,8 @@ class SdCardFontSystem {
   // Sources outlive the FreeType faces that borrow them. The reader and UI
   // can each use a slot or share one slot when both use the same family.
   TtfSource sourceSlots_[2][4];
+  // Zero for an unused slot or one missing a selected style.
+  uint32_t sourceSlotGenerations_[2] = {};
   std::unique_ptr<TtfEpdFont> ttf_;
   TtfSource* ttfSources_ = nullptr;
   std::string ttfFamily_;     // loaded vector family name ("" = none)
@@ -192,7 +198,7 @@ class SdCardFontSystem {
   bool loadTtfVariant(uint8_t pointSize, int fontId);
   void clearTtfVariants(GfxRenderer& renderer);
 
-  // UI and reader share the sources when they use the same family.
+  // UI and reader can share a current, complete source slot for the same family.
   // uiTtf_[0] owns the FreeType faces; the other two are sized variants of it.
   TtfSource* uiTtfSources_ = nullptr;
   std::unique_ptr<TtfEpdFont> uiTtf_[3];

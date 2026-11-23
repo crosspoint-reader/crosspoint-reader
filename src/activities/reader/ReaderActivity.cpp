@@ -19,6 +19,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "XtcReaderActivity.h"
+#include "activities/RenderLock.h"
 #include "sync/ReadingSessionLog.h"
 #include "util/PluginEvents.h"
 
@@ -75,7 +76,10 @@ void ReaderActivity::onEnter() {
     APP_STATE.saveToFile();
   }
 
-  sdFontSystem.ensureLoaded(renderer);
+  {
+    RenderLock lock;
+    sdFontSystem.ensureLoaded(renderer);
+  }
   applyInitialOrientation();
 
   if (!loadBook()) {
