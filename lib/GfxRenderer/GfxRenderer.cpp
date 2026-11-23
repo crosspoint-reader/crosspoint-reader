@@ -127,11 +127,8 @@ void appendShapedRtlTokens(const char* text, std::string& shapedOut) {
 }  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
-  // Vector (TTF) fonts: the glyph bitmap lives in the font's own cache, keyed by
-  // the EpdGlyph the miss handler returned. Checked first so it never reaches the
-  // SdCardFont overflow cast below. nullptr = zero-width glyph (e.g. space).
-  if (fontData->vectorBitmapHandler != nullptr) {
-    return fontData->vectorBitmapHandler(fontData->glyphMissCtx, glyph);
+  if (fontData->bitmapHandler != nullptr) {
+    return fontData->bitmapHandler(fontData->glyphMissCtx, glyph);
   }
   if (fontData->groups != nullptr) {
     auto* fd = fontCacheManager_ ? fontCacheManager_->getDecompressor() : nullptr;
@@ -145,18 +142,7 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
     // must consume it (draw the glyph) before requesting another bitmap.
     return fd->getBitmap(fontData, glyph, glyphIndex);
   }
-  // For SD card fonts, check if the glyph was loaded on demand into the overflow
-  // buffer.  getOverflowBitmap() returns:
-  //   - bitmap pointer for overflow glyphs with bitmap data
-  //   - nullptr for overflow glyphs without bitmap data (e.g. space: width=0, height=0)
-  //   - nullptr for non-overflow glyphs (normal prewarmed path)
-  // We distinguish overflow-with-no-bitmap from non-overflow by checking isOverflowGlyph().
-  if (fontData->glyphMissCtx) {
-    auto* sdFont = SdCardFont::fromMissCtx(fontData->glyphMissCtx);
-    if (sdFont->isOverflowGlyph(glyph)) {
-      return sdFont->getOverflowBitmap(glyph);  // may be nullptr for zero-width glyphs
-    }
-  }
+  if (!fontData->bitmap || glyph->dataLength == 0) return nullptr;
   return &fontData->bitmap[glyph->dataOffset];
 }
 
@@ -525,12 +511,14 @@ static void renderCharScaled(const GfxRenderer& renderer, const EpdFontFamily& f
   const int baseX = cursorX + glyph->left * scaleNum / scaleDen;
   const int baseY = cursorY - glyph->top * scaleNum / scaleDen;
   const bool halving = scaleNum * 2 == scaleDen;
+  const bool is4Bit = fontData->is4Bit;
   const bool is2Bit = fontData->is2Bit;
 
-  // Raw sample value: 1-bit fonts read 0 or 3, 2-bit fonts 0 (white) .. 3 (black).
+  // Normalized sample value: 0 (white) .. 15 (black).
   const auto sample = [&](const int pos) -> uint8_t {
-    if (is2Bit) return (bitmap[pos >> 2] >> ((3 - (pos & 3)) * 2)) & 0x3;
-    return ((bitmap[pos >> 3] >> (7 - (pos & 7))) & 1) ? 3 : 0;
+    if (is4Bit) return (bitmap[pos >> 1] >> (4 - (pos & 1) * 4)) & 0x0Fu;
+    if (is2Bit) return static_cast<uint8_t>(((bitmap[pos >> 2] >> ((3 - (pos & 3)) * 2)) & 0x03u) * 5u);
+    return ((bitmap[pos >> 3] >> (7 - (pos & 7))) & 1) ? 15u : 0u;
   };
 
   for (int dstY = 0; dstY < dstH; dstY++) {
@@ -550,8 +538,8 @@ static void renderCharScaled(const GfxRenderer& renderer, const EpdFontFamily& f
           samples++;
         }
       }
-      const bool ink = halving ? (is2Bit ? (maxRaw >= 2 || coverage >= 2) : maxRaw != 0)
-                               : samples > 0 && coverage * 2 >= samples * 3;
+      const bool ink = halving ? ((is2Bit || is4Bit) ? (maxRaw >= 10 || coverage >= 10) : maxRaw != 0)
+                               : samples > 0 && coverage * 2 >= samples * 15;
       if (ink) renderer.drawPixel(baseX + dstX, baseY + dstY, pixelState);
     }
   }
@@ -570,7 +558,7 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   }
 
   const EpdFontData* fontData = fontFamily.getData(style);
-  const bool is2Bit = fontData->is2Bit;
+  const uint8_t bitsPerPixel = epdBitsPerPixel(*fontData);
   const uint8_t width = glyph->width;
   const uint8_t height = glyph->height;
   const int left = glyph->left;
@@ -613,7 +601,7 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   } else {
     frame = {cursorX + left, cursorY - top, 1, 0, 0, 1};
   }
-  renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
+  renderer.drawGlyphBitmap(bitmap, width, height, frame, bitsPerPixel, renderMode, pixelState);
 }
 
 // Draw an unscaled glyph placed by a logical frame. Equivalent to calling
@@ -621,7 +609,7 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 // strip-band check and address math are resolved once per glyph rather than
 // once per pixel.
 void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const int height,
-                                  const glyphBitmap::Frame& frame, const bool twoBit, const RenderMode mode,
+                                  const glyphBitmap::Frame& frame, const uint8_t bitsPerPixel, const RenderMode mode,
                                   const bool state) const {
   // Apply the logical clip rectangle before rotating, in glyph-local pixels.
   glyphBitmap::Clip clip{0, 0, width, height};
@@ -646,7 +634,7 @@ void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const 
   const glyphBitmap::Plane plane = mode == BW              ? glyphBitmap::Plane::BW
                                    : mode == GRAYSCALE_MSB ? glyphBitmap::Plane::GrayMSB
                                                            : glyphBitmap::Plane::GrayLSB;
-  glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, clip);
+  glyphBitmap::draw(bitmap, width, height, bitsPerPixel, plane, state, target, clip);
 }
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
@@ -2411,13 +2399,15 @@ int GfxRenderer::drawScaledCodepoint(const int fontId, const uint32_t cp, const 
 
   const int srcW = glyph->width;
   const int srcH = glyph->height;
+  const bool is4Bit = fontData->is4Bit;
   const bool is2Bit = fontData->is2Bit;
-  // Raw coverage: 1-bit fonts read 0 or 3, 2-bit fonts 0 (white) .. 3 (black); 0 outside the bitmap.
+  // Normalized coverage: 0 (white) .. 15 (black); 0 outside the bitmap.
   const auto sample = [&](const int sx, const int sy) -> int {
     if (sx < 0 || sy < 0 || sx >= srcW || sy >= srcH) return 0;
     const int pos = sy * srcW + sx;
-    if (is2Bit) return (bitmap[pos >> 2] >> ((3 - (pos & 3)) * 2)) & 0x3;
-    return ((bitmap[pos >> 3] >> (7 - (pos & 7))) & 1) ? 3 : 0;
+    if (is4Bit) return (bitmap[pos >> 1] >> (4 - (pos & 1) * 4)) & 0x0F;
+    if (is2Bit) return ((bitmap[pos >> 2] >> ((3 - (pos & 3)) * 2)) & 0x03) * 5;
+    return ((bitmap[pos >> 3] >> (7 - (pos & 7))) & 1) ? 15 : 0;
   };
 
   const int dstW = (srcW * scale256 + 255) / 256;
@@ -2437,8 +2427,8 @@ int GfxRenderer::drawScaledCodepoint(const int fontId, const uint32_t cp, const 
       const int fx = (sx >> 8) & 0xFF;
       const int upper = sample(x0, y0) * (256 - fx) + sample(x0 + 1, y0) * fx;
       const int lower = sample(x0, y0 + 1) * (256 - fx) + sample(x0 + 1, y0 + 1) * fx;
-      // Ink where interpolated coverage reaches half of full black (3).
-      if ((upper * (256 - fy) + lower * fy) * 2 >= 3 * 256 * 256) drawPixel(left + dx, top + dy, true);
+      // Ink where interpolated coverage reaches half of full black (15).
+      if ((upper * (256 - fy) + lower * fy) * 2 >= 15 * 256 * 256) drawPixel(left + dx, top + dy, true);
     }
   }
   return advance;

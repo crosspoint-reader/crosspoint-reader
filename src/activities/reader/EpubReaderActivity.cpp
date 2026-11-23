@@ -2176,6 +2176,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // its own SD pass after the scope ends.
   renderStatusBar();
   scope.endScanAndPrewarm();
+  // Reclaim unused SD-font styles, trailing 4bpp slabs, and idle layout tables
+  // before grayscale strip scratch or image decode buffers allocate.
+  fcm->compactAfterPrewarm(!section || !section->isBuilding());
   const auto tPrewarm = millis();
 
   // Black & White images: the page turns as plain B/W, images dither in the
