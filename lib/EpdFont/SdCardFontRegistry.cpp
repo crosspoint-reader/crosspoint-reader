@@ -254,8 +254,8 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
   // - Pick regular first, promoting italic, bold, or bold-italic if needed (in that order).
   //   Fill other roles from unused files, matching italics; never reuse a file.
   using freeink::font::FtFont;
+  char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
   const auto invalid = [&](SdCardFontFileInfo& file) {
-    char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
     snprintf(path, sizeof(path), "%s/%s", dirPath, file.name.get());
     HalFile f = Storage.open(path);
     FtFont::FaceInfo face;
