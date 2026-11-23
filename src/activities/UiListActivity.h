@@ -91,8 +91,6 @@ class UiListActivity : public Activity, protected UiAppHost {
   // activeNav() in shared code; `nav` is the single-list default storage.
   freeink::ui::ListNav nav;
   ButtonNavigator buttonNavigator;
-  // The next render uses a cleanup (HALF) refresh instead of a fast one.
-  bool cleanNextRefresh = false;
 
  private:
   static void screenTrampoline(UiScreen& screen, void* user);

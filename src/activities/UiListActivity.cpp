@@ -5,7 +5,6 @@
 #include <Logging.h>
 
 #include <algorithm>
-#include <utility>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -262,5 +261,5 @@ void UiListActivity::render(RenderLock&&) {
     renderUi();
   }
   drawFooter();
-  renderer.displayBuffer(std::exchange(cleanNextRefresh, false) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
