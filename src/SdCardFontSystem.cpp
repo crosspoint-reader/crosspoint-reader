@@ -79,7 +79,7 @@ void SdCardFontSystem::begin(GfxRenderer& renderer, const EpdFontFamily& small, 
   builtinUiFonts_[0] = &small;
   builtinUiFonts_[1] = &ui10;
   builtinUiFonts_[2] = &ui12;
-  registry_.discover();
+  refreshRegistry();
   renderer_ = &renderer;
   cpfontVariants_.reserve(MAX_CPFONT_VARIANTS);
 #if CROSSPOINT_VECTOR_FONTS
@@ -133,17 +133,44 @@ void SdCardFontSystem::begin(GfxRenderer& renderer, const EpdFontFamily& small, 
   }
 
   // The optional UI faces must fit alongside the saved reader font.
-  const char* savedUiFamily = SETTINGS.uiFontFamilyName;
-  applyUiFont(renderer, savedUiFamily);
-#if CROSSPOINT_VECTOR_FONTS
-  uiFontRetryPending_ = *savedUiFamily && registry_.hadUnavailableVectorFonts() && !registry_.findFamily(savedUiFamily);
-#endif
+  applyUiFont(renderer, SETTINGS.uiFontFamilyName);
   LOG_DBG("SDFS", "SD font system ready (%d families discovered)", registry_.getFamilyCount());
 }
 
+void SdCardFontSystem::refreshIfDirty() {
+  if (registryDirty_.exchange(false, std::memory_order_acquire)) refreshRegistry();
+}
+
+void SdCardFontSystem::refreshRegistry() {
+#if CROSSPOINT_VECTOR_FONTS
+  scanSavedFamilies(/*automaticRetry=*/false);
+#else
+  registry_.discover();
+#endif
+}
+
+#if CROSSPOINT_VECTOR_FONTS
+void SdCardFontSystem::scanSavedFamilies(const bool automaticRetry) {
+  // The same scan serves both roles that were already waiting for discovery.
+  readerFontRetrySpent_ = automaticRetry && (readerFontRetrySpent_ || readerFontUnavailable_);
+  uiFontRetrySpent_ = automaticRetry && (uiFontRetrySpent_ || uiFontRecoveryPending_);
+
+  SdCardFontRegistry::SavedFamilies saved{SETTINGS.sdFontFamilyName, SETTINGS.uiFontFamilyName,
+                                          /*retain=*/automaticRetry};
+  registry_.discover(&saved);
+
+  readerFontUnavailable_ = saved.readerUnavailable;
+  if (saved.uiUnavailable) {
+    uiFontRecoveryPending_ = true;
+  } else if (saved.ui.empty() || !registry_.findFamily(saved.ui)) {
+    uiFontRecoveryPending_ = false;
+  }
+}
+#endif
+
 void SdCardFontSystem::handleMissingFamily() const {
 #if CROSSPOINT_VECTOR_FONTS
-  if (registry_.hadUnavailableVectorFonts()) {
+  if (readerFontUnavailable_) {
     LOG_DBG("SDFS", "SD font scan incomplete; keeping selection: %s", SETTINGS.sdFontFamilyName);
     return;
   }
@@ -157,37 +184,39 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer, [[maybe_unused]] cons
   // Track whether we just re-discovered so we can force a reload below even
   // when the wanted family/size still maps to the same point size — the file
   // contents on disk may have changed (e.g. user re-uploaded a new build).
-  bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
-#if CROSSPOINT_VECTOR_FONTS
-  // Retry an inconclusive scan only when the saved family is still missing.
-  const char* wantedFamily = SETTINGS.sdFontFamilyName;
-  const char* savedUiFamily = SETTINGS.uiFontFamilyName;
-  if (!*savedUiFamily) uiFontRetryPending_ = false;
-  if (retryUnavailable && !registryWasDirty && registry_.hadUnavailableVectorFonts()) {
-    registryWasDirty = *wantedFamily && !registry_.findFamily(wantedFamily);
-  }
-#endif
+  const bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
   if (registryWasDirty) {
     LOG_DBG("SDFS", "Re-discovering fonts");
-    registry_.discover();
+    refreshRegistry();
   }
+
+#if CROSSPOINT_VECTOR_FONTS
+  const char* wantedFamily = SETTINGS.sdFontFamilyName;
+  const char* savedUiFamily = SETTINGS.uiFontFamilyName;
+  if (!*savedUiFamily || (uiFontRecoveryPending_ && strcmp(savedUiFamily, activeUiFontName_) == 0)) {
+    uiFontRecoveryPending_ = false;
+  }
+  if (readerFontUnavailable_ && (!*wantedFamily || registry_.findFamily(wantedFamily))) {
+    readerFontUnavailable_ = false;
+  }
+  const bool retryReader = retryUnavailable && !registryWasDirty && readerFontUnavailable_ && !readerFontRetrySpent_;
+  if (retryReader) {
+    scanSavedFamilies(/*automaticRetry=*/true);
+  }
+#endif
 
   ensureReaderFontLoaded(renderer, registryWasDirty);
 
 #if CROSSPOINT_VECTOR_FONTS
-  if (retryUnavailable && uiFontRetryPending_) {
-    const auto* uiFamily = registry_.findFamily(savedUiFamily);
-    if (!uiFamily && !registryWasDirty && registry_.hadUnavailableVectorFonts()) {
+  if (retryUnavailable && uiFontRecoveryPending_) {
+    if (!registryWasDirty && !retryReader && !uiFontRetrySpent_ && !registry_.findFamily(savedUiFamily)) {
       // A UI-only retry must not force a working reader font to reload.
-      registry_.discover(SETTINGS.sdFontFamilyName, savedUiFamily);
-      uiFamily = registry_.findFamily(savedUiFamily);
+      scanSavedFamilies(/*automaticRetry=*/true);
     }
-    if (uiFamily) {
+    if (registry_.findFamily(savedUiFamily)) {
       // Attempt once after the reader loads, so it has first claim on memory.
-      uiFontRetryPending_ = false;
+      uiFontRecoveryPending_ = false;
       applyUiFont(renderer, savedUiFamily);
-    } else if (!registry_.hadUnavailableVectorFonts()) {
-      uiFontRetryPending_ = false;
     }
   }
 #endif
@@ -203,6 +232,11 @@ void SdCardFontSystem::ensureReaderFontLoaded(GfxRenderer& renderer, const bool 
     if (wantedFam && wantedFam->vector) {
       if (!manager_.currentFamilyName().empty()) unloadCpfonts(renderer);
       loadTtfFamily(*wantedFam, renderer, registryWasDirty);
+      return;
+    }
+    // An opportunistic scan can lose a family whose open source files still work.
+    if (!wantedFam && readerFontUnavailable_ && !registryWasDirty && ttf_ && ttfFamily_ == wantedFamily &&
+        ttfPointSize_ == SETTINGS.fontPointSize) {
       return;
     }
   }
@@ -414,7 +448,7 @@ bool SdCardFontSystem::applyUiFont(GfxRenderer& renderer, const char* want) {
 #endif
       if (loaded) {
 #if CROSSPOINT_VECTOR_FONTS
-        uiFontRetryPending_ = false;
+        uiFontRecoveryPending_ = false;
 #endif
         snprintf(activeUiFontName_, sizeof(activeUiFontName_), "%s", want);
         LOG_DBG("SDFS", "UI font: %s", want);

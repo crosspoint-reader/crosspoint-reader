@@ -240,7 +240,7 @@ unsigned long SdCardFontRegistry::halFileRead(void* ctx, const unsigned long off
   return n < 0 ? 0 : static_cast<unsigned long>(n);
 }
 
-void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
+bool SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
   static constexpr int WGHT_REGULAR = 400;
   static constexpr int WGHT_DIST_BOLD = 300;
   static constexpr size_t MIN_FONT_HEADER_SIZE = 12;  // SFNT or TTC header.
@@ -257,6 +257,7 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
   //   Fill other roles from unused files, matching italics; never reuse a file.
   using freeink::font::FtFont;
   char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
+  bool unavailable = false;
   const auto invalid = [&](SdCardFontFileInfo& file) {
     snprintf(path, sizeof(path), "%s/%s", dirPath, file.name.get());
     HalFile f = Storage.open(path);
@@ -269,7 +270,7 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
       }
     }
     if (!f || result == FtFont::InspectResult::Unavailable) {
-      unavailableVectorFonts_ = true;
+      unavailable = true;
       LOG_ERR("SDREG", "Unable to inspect font: %s", path);
       return true;
     }
@@ -283,7 +284,7 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
     return false;
   };
   files.erase(std::remove_if(files.begin(), files.end(), invalid), files.end());
-  if (files.empty()) return;
+  if (files.empty()) return unavailable;
   const size_t missing = files.size();
   size_t picks[VECTOR_STYLE_COUNT] = {missing, missing, missing, missing};
   const auto pickUnused = [&](const size_t role) {
@@ -351,13 +352,24 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
             static_cast<unsigned>(files.size()));
   }
   files = std::move(selected);
+  return unavailable;
 }
 
 #endif  // CROSSPOINT_VECTOR_FONTS
 
+#if CROSSPOINT_VECTOR_FONTS
+bool SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family) {
+#else
 void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family) {
+#endif
   HalFile dir = Storage.open(dirPath);
-  if (!dir || !dir.isDirectory()) return;
+  if (!dir || !dir.isDirectory()) {
+#if CROSSPOINT_VECTOR_FONTS
+    return false;
+#else
+    return;
+#endif
+  }
 
   // Collect .cpfont and vector (.ttf/.otf/.ttc) candidates separately in one
   // pass (the dir handle is forward-only), then commit whichever kind the folder
@@ -436,17 +448,23 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
   }
 #if CROSSPOINT_VECTOR_FONTS
   else if (!vectorFiles.empty()) {
-    refineVectorStyles(dirPath, vectorFiles);
+    const bool unavailable = refineVectorStyles(dirPath, vectorFiles);
     family.vector = true;
     family.files = std::move(vectorFiles);
+    return unavailable;
   }
+  return false;
 #endif
 }
 
 // Scan a single root (e.g. "/.fonts") and append its families to `out`.
 // Skips families whose names already exist in `out` (de-duplicates between
 // the hidden and visible roots — first scan wins).
+#if CROSSPOINT_VECTOR_FONTS
+void SdCardFontRegistry::scanRoot(const char* rootPath, SavedFamilies* saved) {
+#else
 void SdCardFontRegistry::scanRoot(const char* rootPath) {
+#endif
   HalFile root = Storage.open(rootPath);
   if (!root) {
     LOG_DBG("SDREG", "Fonts directory not found: %s", rootPath);
@@ -482,7 +500,15 @@ void SdCardFontRegistry::scanRoot(const char* rootPath) {
       family.name = nameBuffer;
       family.root = rootPath;
       std::string subDirPath = std::string(rootPath) + "/" + nameBuffer;
+#if CROSSPOINT_VECTOR_FONTS
+      const bool unavailable = scanDirectory(subDirPath.c_str(), family);
+      if (saved && unavailable && family.files.empty()) {
+        if (saved->reader == family.name) saved->readerUnavailable = true;
+        if (saved->ui == family.name) saved->uiUnavailable = true;
+      }
+#else
       scanDirectory(subDirPath.c_str(), family);
+#endif
 
       if (!family.files.empty()) {
         families_.push_back(std::move(family));
@@ -524,8 +550,14 @@ void SdCardFontRegistry::scanRoot(const char* rootPath) {
         continue;
       }
       family.files.push_back(std::move(info));
-      refineVectorStyles(rootPath, family.files);
-      if (family.files.empty()) continue;
+      const bool unavailable = refineVectorStyles(rootPath, family.files);
+      if (family.files.empty()) {
+        if (saved && unavailable) {
+          if (saved->reader == famName) saved->readerUnavailable = true;
+          if (saved->ui == famName) saved->uiUnavailable = true;
+        }
+        continue;
+      }
       families_.push_back(std::move(family));
       LOG_DBG("SDREG", "Found vector font: %s in %s", famName.c_str(), rootPath);
 #endif  // CROSSPOINT_VECTOR_FONTS — loose .ttf/.otf files are ignored without the engine
@@ -534,20 +566,25 @@ void SdCardFontRegistry::scanRoot(const char* rootPath) {
 }
 
 #if CROSSPOINT_VECTOR_FONTS
-bool SdCardFontRegistry::discover(const std::string_view retainReaderFamily, const std::string_view retainUiFamily) {
+bool SdCardFontRegistry::discover(SavedFamilies* saved) {
 #else
 bool SdCardFontRegistry::discover() {
 #endif
   families_.clear();
 #if CROSSPOINT_VECTOR_FONTS
-  unavailableVectorFonts_ = false;
+  if (saved) saved->readerUnavailable = saved->uiUnavailable = false;
   if (++scanGeneration_ == 0) ++scanGeneration_;  // Zero means no shareable sources.
 #endif
 
   // Hidden root is scanned first so it wins on name collisions, matching the
   // sleep-folder pattern (/.sleep preferred over /sleep).
+#if CROSSPOINT_VECTOR_FONTS
+  scanRoot(FONTS_DIR_HIDDEN, saved);
+  scanRoot(FONTS_DIR_VISIBLE, saved);
+#else
   scanRoot(FONTS_DIR_HIDDEN);
   scanRoot(FONTS_DIR_VISIBLE);
+#endif
 
   // Sort families alphabetically
   std::sort(families_.begin(), families_.end(),
@@ -556,9 +593,9 @@ bool SdCardFontRegistry::discover() {
   // Cap at MAX_SD_FAMILIES
   if (static_cast<int>(families_.size()) > MAX_SD_FAMILIES) {
 #if CROSSPOINT_VECTOR_FONTS
-    if (!retainReaderFamily.empty() || !retainUiFamily.empty()) {
+    if (saved && saved->retain) {
       const auto keep = [&](const SdCardFontFamilyInfo& family) {
-        return family.name == retainReaderFamily || family.name == retainUiFamily;
+        return family.name == saved->reader || family.name == saved->ui;
       };
       // Reserve slots only for families that were actually found. Stable
       // compaction keeps the retained families in alphabetical order.
@@ -575,6 +612,12 @@ bool SdCardFontRegistry::discover() {
     families_.resize(MAX_SD_FAMILIES);
   }
   shrinkToFit(families_);  // the list is read-only until the next scan
+#if CROSSPOINT_VECTOR_FONTS
+  if (saved) {
+    if (saved->readerUnavailable && findFamily(saved->reader)) saved->readerUnavailable = false;
+    if (saved->uiUnavailable && findFamily(saved->ui)) saved->uiUnavailable = false;
+  }
+#endif
 
   LOG_DBG("SDREG", "Discovery complete: %d families", static_cast<int>(families_.size()));
   return !families_.empty();

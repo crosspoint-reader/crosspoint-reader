@@ -61,8 +61,7 @@ class SdCardFontSystem {
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
   int resolveFontId(const char* familyName, uint8_t pointSize) const;
 
-  /// Non-const access to the registry (for FontInstaller).
-  SdCardFontRegistry& registry() { return registry_; }
+  const SdCardFontRegistry& registry() const { return registry_; }
 
   /// Mark the registry as needing re-discovery.
   /// Thread-safe: can be called from the web server task.
@@ -71,11 +70,10 @@ class SdCardFontSystem {
   /// If the registry is dirty, re-scan the SD card now and clear the flag.
   /// Used by the web UI so uploaded/deleted fonts appear in the list
   /// without waiting for the reader activity to run ensureLoaded().
-  void refreshIfDirty() {
-    if (registryDirty_.exchange(false, std::memory_order_acquire)) {
-      registry_.discover();
-    }
-  }
+  void refreshIfDirty();
+
+  /// Re-scan after an explicit font refresh, rearming transient retries.
+  void refreshRegistry();
 
  private:
   bool loadUiCpfonts(const SdCardFontFamilyInfo& family, GfxRenderer& renderer);
@@ -156,7 +154,12 @@ class SdCardFontSystem {
   std::atomic<bool> registryDirty_{false};
 
 #if CROSSPOINT_VECTOR_FONTS
-  bool uiFontRetryPending_ = false;
+  void scanSavedFamilies(bool automaticRetry);
+  bool readerFontUnavailable_ = false;
+  bool uiFontRecoveryPending_ = false;
+  // A successful scan must not rearm the other role's spent retry.
+  bool readerFontRetrySpent_ = false;
+  bool uiFontRetrySpent_ = false;
   std::atomic<bool> uiTtfFailed_{false};
 
   // One style source file. SMALL files are read fully into `bytes` (resident,

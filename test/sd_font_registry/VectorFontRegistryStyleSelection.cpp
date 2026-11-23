@@ -349,9 +349,11 @@ TEST_F(VectorFontRegistryTest, EmptyFilesAreUnsupportedWithoutMakingDiscoveryInc
     fake::add(std::string("/fonts/Family/") + filename, "");
   }
 
-  EXPECT_FALSE(registry.discover());
+  SdCardFontRegistry::SavedFamilies saved{"Family", "Family"};
+  EXPECT_FALSE(registry.discover(&saved));
   EXPECT_EQ(registry.findFamily("Family"), nullptr);
-  EXPECT_FALSE(registry.hadUnavailableVectorFonts());
+  EXPECT_FALSE(saved.readerUnavailable);
+  EXPECT_FALSE(saved.uiUnavailable);
 }
 
 TEST_F(VectorFontRegistryTest, InvalidLexicalFirstSuffixDoesNotHideValidDuplicate) {
@@ -389,9 +391,11 @@ TEST_F(VectorFontRegistryTest, ReadFailureDoesNotReserveAnExplicitRole) {
   addFace("Z-Regular.ttf", 400, false);
   fake::failRead = 0;
 
-  ASSERT_TRUE(registry.discover());
+  SdCardFontRegistry::SavedFamilies saved{"Family", "Family"};
+  ASSERT_TRUE(registry.discover(&saved));
   expectFace(0, "Z-Regular.ttf");
-  EXPECT_TRUE(registry.hadUnavailableVectorFonts());
+  EXPECT_FALSE(saved.readerUnavailable);
+  EXPECT_FALSE(saved.uiUnavailable);
 }
 
 TEST_F(VectorFontRegistryTest, TemporarilyUnavailableFamilyCanReturnOnRescan) {
@@ -402,20 +406,79 @@ TEST_F(VectorFontRegistryTest, TemporarilyUnavailableFamilyCanReturnOnRescan) {
     fake::add(loose ? "/fonts/Family.ttf" : "/fonts/Family/Family-Regular.ttf", std::string(bytes, sizeof(bytes)));
     fake::failRead = 0;
 
-    EXPECT_FALSE(registry.discover());
+    SdCardFontRegistry::SavedFamilies saved{"Family", "Family"};
+    EXPECT_FALSE(registry.discover(&saved));
     EXPECT_EQ(registry.findFamily("Family"), nullptr);
-    EXPECT_TRUE(registry.hadUnavailableVectorFonts());
+    EXPECT_TRUE(saved.readerUnavailable);
+    EXPECT_TRUE(saved.uiUnavailable);
 
-    ASSERT_TRUE(registry.discover());
+    ASSERT_TRUE(registry.discover(&saved));
     EXPECT_NE(registry.findFamily("Family"), nullptr);
-    EXPECT_FALSE(registry.hadUnavailableVectorFonts());
+    EXPECT_FALSE(saved.readerUnavailable);
+    EXPECT_FALSE(saved.uiUnavailable);
   }
 }
 
 TEST_F(VectorFontRegistryTest, TruncatedCollectionDoesNotMakeScanInconclusive) {
   fake::add("/fonts/Family/Truncated.ttc", std::string("ttcf\0\x01\0\0", 8));
-  EXPECT_FALSE(registry.discover());
-  EXPECT_FALSE(registry.hadUnavailableVectorFonts());
+  SdCardFontRegistry::SavedFamilies saved{"Family", "Family"};
+  EXPECT_FALSE(registry.discover(&saved));
+  EXPECT_FALSE(saved.readerUnavailable);
+  EXPECT_FALSE(saved.uiUnavailable);
+}
+
+TEST_F(VectorFontRegistryTest, UnrelatedUnavailableFontDoesNotMaskMissingSelections) {
+  addFace("Family-Regular.ttf", 400, false);
+  fake::failRead = 0;
+  SdCardFontRegistry::SavedFamilies saved{"DeletedReader", "DeletedUi"};
+  EXPECT_FALSE(registry.discover(&saved));
+  EXPECT_TRUE(fake::failureTriggered);
+  EXPECT_FALSE(saved.readerUnavailable);
+  EXPECT_FALSE(saved.uiUnavailable);
+}
+
+TEST_F(VectorFontRegistryTest, FailureInOneSavedFamilyDoesNotMaskOtherMissingSelection) {
+  addFace("Family-Regular.ttf", 400, false);
+  fake::failRead = 0;
+  SdCardFontRegistry::SavedFamilies saved{"DeletedReader", "Family"};
+  EXPECT_FALSE(registry.discover(&saved));
+  EXPECT_FALSE(saved.readerUnavailable);
+  EXPECT_TRUE(saved.uiUnavailable);
+}
+
+TEST_F(VectorFontRegistryTest, FamilyFoundInOtherRootIsNotUnavailable) {
+  const char bytes[12] = {'\x01', '\x90', '\0'};
+  fake::add("/.fonts/Family.ttf", std::string(bytes, sizeof(bytes)));
+  addFace("Family-Regular.ttf", 400, false);
+  fake::failRead = 0;
+  SdCardFontRegistry::SavedFamilies saved{"Family", "Family"};
+  ASSERT_TRUE(registry.discover(&saved));
+  EXPECT_TRUE(fake::failureTriggered);
+  EXPECT_NE(registry.findFamily("Family"), nullptr);
+  EXPECT_FALSE(saved.readerUnavailable);
+  EXPECT_FALSE(saved.uiUnavailable);
+}
+
+TEST_F(VectorFontRegistryTest, AlternateCopyOutsideCapCanRecoverOnRetry) {
+  for (int i = 0; i < SdCardFontRegistry::MAX_SD_FAMILIES; ++i) {
+    const auto name = "Family" + std::to_string(i);
+    fake::add("/fonts/" + name + "/" + name + "_14.cpfont");
+  }
+  const char bytes[12] = {'\x01', '\x90', '\0'};
+  fake::add("/.fonts/ZUi.ttf", std::string(bytes, sizeof(bytes)));
+  fake::add("/fonts/ZUi.ttf", std::string(bytes, sizeof(bytes)));
+  fake::failRead = 0;
+  SdCardFontRegistry::SavedFamilies saved{"", "ZUi"};
+  ASSERT_TRUE(registry.discover(&saved));
+  EXPECT_EQ(registry.findFamily("ZUi"), nullptr);
+  EXPECT_TRUE(saved.uiUnavailable);
+
+  saved.retain = true;
+  fake::failRead = 0;
+  ASSERT_TRUE(registry.discover(&saved));
+  ASSERT_NE(registry.findFamily("ZUi"), nullptr);
+  EXPECT_STREQ(registry.findFamily("ZUi")->root, SdCardFontRegistry::FONTS_DIR_VISIBLE);
+  EXPECT_FALSE(saved.uiUnavailable);
 }
 
 TEST_F(VectorFontRegistryTest, EveryDiscoveryInvalidatesPreviousScanGeneration) {
@@ -430,7 +493,7 @@ TEST_F(VectorFontRegistryTest, EveryDiscoveryInvalidatesPreviousScanGeneration) 
   const auto failedScan = registry.scanGeneration();
   EXPECT_NE(failedScan, emptyScan);
 
-  EXPECT_TRUE(registry.discover("Family"));
+  EXPECT_TRUE(registry.discover());
   const auto recoveredScan = registry.scanGeneration();
   EXPECT_NE(recoveredScan, failedScan);
   EXPECT_NE(recoveredScan, 0u);
@@ -446,7 +509,8 @@ TEST_F(VectorFontRegistryTest, RetryScanKeepsReaderAndUiFamiliesAtTheLimit) {
   ASSERT_NE(registry.findFamily("ZReader"), nullptr);
 
   fake::add("/fonts/ARecovered/ARecovered_14.cpfont");
-  ASSERT_TRUE(registry.discover("ZReader", "ARecovered"));
+  SdCardFontRegistry::SavedFamilies saved{"ZReader", "ARecovered", /*retain=*/true};
+  ASSERT_TRUE(registry.discover(&saved));
   EXPECT_EQ(registry.getFamilyCount(), SdCardFontRegistry::MAX_SD_FAMILIES);
   EXPECT_NE(registry.findFamily("ARecovered"), nullptr);
   EXPECT_NE(registry.findFamily("ZReader"), nullptr);
@@ -455,7 +519,8 @@ TEST_F(VectorFontRegistryTest, RetryScanKeepsReaderAndUiFamiliesAtTheLimit) {
   EXPECT_EQ(registry.findFamily("ZReader"), nullptr);
 
   fake::add("/fonts/ZUi/ZUi_14.cpfont");
-  ASSERT_TRUE(registry.discover("ZReader", "ZUi"));
+  saved.ui = "ZUi";
+  ASSERT_TRUE(registry.discover(&saved));
   EXPECT_EQ(registry.getFamilyCount(), SdCardFontRegistry::MAX_SD_FAMILIES);
   EXPECT_NE(registry.findFamily("ZReader"), nullptr);
   EXPECT_NE(registry.findFamily("ZUi"), nullptr);

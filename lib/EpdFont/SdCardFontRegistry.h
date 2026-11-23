@@ -56,6 +56,13 @@ class SdCardFontRegistry {
  public:
   static constexpr int MAX_SD_FAMILIES = 128;
   static constexpr size_t FAMILY_NAME_CAPACITY = 128;
+  struct SavedFamilies {
+    std::string_view reader;
+    std::string_view ui;
+    bool retain = false;
+    bool readerUnavailable = false;
+    bool uiUnavailable = false;
+  };
   // Two top-level roots are scanned at discovery time. Hidden is preferred
   // when creating new installs; both are read from if present.
   static constexpr const char* FONTS_DIR_HIDDEN = "/.fonts";
@@ -74,8 +81,8 @@ class SdCardFontRegistry {
   // Scan SD card, populate families_. Invalidates pointers and references
   // obtained from getFamilies()/findFamily(). Returns true if any families found.
 #if CROSSPOINT_VECTOR_FONTS
-  // Keep the requested families, if found, even when the family limit is reached.
-  bool discover(std::string_view retainReaderFamily = {}, std::string_view retainUiFamily = {});
+  // Report unavailable saved families; optionally keep found selections at the cap.
+  bool discover(SavedFamilies* saved = nullptr);
 #else
   bool discover();
 #endif
@@ -85,8 +92,6 @@ class SdCardFontRegistry {
   int getFamilyCount() const { return static_cast<int>(families_.size()); }
 
 #if CROSSPOINT_VECTOR_FONTS
-  // A candidate could not be inspected in the latest scan; absence is inconclusive.
-  bool hadUnavailableVectorFonts() const { return unavailableVectorFonts_; }
   // Changes on every scan, including empty or incomplete scans.
   uint32_t scanGeneration() const { return scanGeneration_; }
 
@@ -104,7 +109,6 @@ class SdCardFontRegistry {
   // filePath() rebuilds without a stored string.
   static bool isCanonicalCpfontName(const char* filename, const std::string& family, uint8_t size);
 #if CROSSPOINT_VECTOR_FONTS
-  bool unavailableVectorFonts_ = false;
   uint32_t scanGeneration_ = 0;
   // Match a loose vector font filename (.ttf/.otf/.ttc, case-insensitive) and
   // return the length of the base name (extension stripped) in `baseLen`.
@@ -114,9 +118,11 @@ class SdCardFontRegistry {
   // Reject inspection failures, then prefer suffixes over filename hints OR metadata.
   // Rank nearest 400 (unsuffixed italic: regular weight) or regular weight + 300 for bold.
   // Ties prefer heavier, then lexical. No file reuse.
-  void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
-#endif
-  void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
-  // Scan one root (e.g. "/.fonts"), appending families and deduplicating by name.
+  static bool refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
+  static bool scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
+  void scanRoot(const char* rootPath, SavedFamilies* saved);
+#else
+  static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
   void scanRoot(const char* rootPath);
+#endif
 };
