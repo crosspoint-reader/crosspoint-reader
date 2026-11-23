@@ -69,6 +69,7 @@ bool BmpToBmpConverter::bmpFileToBmpStream(HalFile& bmpFile, Print& bmpOut, cons
   const int dstH = layout.height;
   const bool upscale = dstW > srcW;
   const bool oneBit = src.is1Bit();
+  const bool directNative = src.hasNativePalette() && srcW == dstW && srcH == dstH;
   const int bits = oneBit ? 1 : 2;
   const uint32_t outRowBytes = (static_cast<uint32_t>(dstW) * bits + 31) / 32 * 4;
 
@@ -85,14 +86,16 @@ bool BmpToBmpConverter::bmpFileToBmpStream(HalFile& bmpFile, Print& bmpOut, cons
   }
   std::unique_ptr<AtkinsonDitherer> dither2;
   std::unique_ptr<Atkinson1BitDitherer> dither1;
-  if (oneBit) {
-    dither1 = makeUniqueNoThrow<Atkinson1BitDitherer>(dstW);
-  } else {
-    dither2 = makeUniqueNoThrow<AtkinsonDitherer>(dstW, originalThresholds);
-  }
-  if (oneBit ? (!dither1 || !dither1->isValid()) : (!dither2 || !dither2->isValid())) {
-    LOG_ERR("BMP", "OOM: BMP conversion ditherer (width %d)", dstW);
-    return false;
+  if (!directNative) {
+    if (oneBit) {
+      dither1 = makeUniqueNoThrow<Atkinson1BitDitherer>(dstW);
+    } else {
+      dither2 = makeUniqueNoThrow<AtkinsonDitherer>(dstW, originalThresholds);
+    }
+    if (oneBit ? (!dither1 || !dither1->isValid()) : (!dither2 || !dither2->isValid())) {
+      LOG_ERR("BMP", "OOM: BMP conversion ditherer (width %d)", dstW);
+      return false;
+    }
   }
 
   // Emit rows in source file order so SD reads stay sequential.
@@ -158,15 +161,21 @@ bool BmpToBmpConverter::bmpFileToBmpStream(HalFile& bmpFile, Print& bmpOut, cons
     memset(outRow.get(), 0, outRowBytes);
     for (int x = 0; x < dstW; ++x) {
       if (oneBit) {
-        outRow[x / 8] |= dither1->processPixel(accum[x], x) << (7 - x % 8);
+        const uint8_t level =
+            directNative ? (adjustPixel(accum[x]) >= 128 ? 1 : 0) : dither1->processPixel(accum[x], x);
+        outRow[x / 8] |= level << (7 - x % 8);
       } else {
-        outRow[x / 4] |= dither2->processPixel(adjustPixel(accum[x]), x) << (6 - (x % 4) * 2);
+        const uint8_t level = directNative ? static_cast<uint8_t>(adjustPixel(accum[x]) >> 6)
+                                           : dither2->processPixel(adjustPixel(accum[x]), x);
+        outRow[x / 4] |= level << (6 - (x % 4) * 2);
       }
     }
-    if (oneBit)
-      dither1->nextRow();
-    else
-      dither2->nextRow();
+    if (!directNative) {
+      if (oneBit)
+        dither1->nextRow();
+      else
+        dither2->nextRow();
+    }
 
     if (bmpOut.write(outRow.get(), outRowBytes) != outRowBytes) {
       LOG_ERR("BMP", "Short BMP row write");
