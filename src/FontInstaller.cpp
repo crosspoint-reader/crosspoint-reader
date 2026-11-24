@@ -8,7 +8,7 @@
 
 #include "CrossPointSettings.h"
 
-FontInstaller::FontInstaller(SdCardFontRegistry& registry) : registry_(registry) {}
+FontInstaller::FontInstaller(const SdCardFontRegistry& registry) : registry_(registry) {}
 
 bool FontInstaller::isValidFamilyName(const char* name) {
   if (name == nullptr || name[0] == '\0') return false;
@@ -152,8 +152,6 @@ FontInstaller::Error FontInstaller::deleteFamily(const char* familyName) {
 
   return Error::OK;
 }
-
-void FontInstaller::refreshRegistry() { registry_.discover(); }
 
 bool FontInstaller::isFamilyInstalled(const char* familyName) const {
   return registry_.findFamily(familyName) != nullptr;
