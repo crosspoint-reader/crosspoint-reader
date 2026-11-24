@@ -8,16 +8,16 @@ using UrlUtils::isForeignHost;
 using UrlUtils::resolveServerPath;
 
 TEST(BuildUrl, AppendsGetVarsToExistingQuery) {
-  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "/catalog", {"size=15", "sort=title"}),
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "catalog", {"size=15", "sort=title"}),
             "https://example.com/opds/catalog?size=15&sort=title");
-  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "/catalog?page=2", {"size=15", "sort=title"}),
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "catalog?page=2", {"size=15", "sort=title"}),
             "https://example.com/opds/catalog?page=2&size=15&sort=title");
-  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "/catalog?", {"size=15", "sort=title"}),
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "catalog?", {"size=15", "sort=title"}),
             "https://example.com/opds/catalog?size=15&sort=title");
 }
 
 TEST(BuildUrl, PreservesBaseQueryWhenJoiningPath) {
-  EXPECT_EQ(UrlUtils::buildUrl("https://example.com?size=15", "/catalog", {"sort=title"}),
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com?size=15", "catalog", {"sort=title"}),
             "https://example.com/catalog?size=15&sort=title");
   EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds?size=15", "catalog", {"sort=title"}),
             "https://example.com/opds/catalog?size=15&sort=title");
