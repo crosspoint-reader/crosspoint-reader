@@ -327,6 +327,28 @@ static uchar stype(ucschar c) {
   return SU;
 }
 
+/* Visual fallback forms for joining characters that have no encoded Unicode
+ * presentation form, so the lookups in shape_form cannot shape them.  The
+ * connected (final) form borrows a visually compatible donor glyph; every
+ * other context keeps the base codepoint (these are right-joining, so only
+ * ISOLATED and FINAL occur).  These are renderer compatibility substitutions,
+ * not Unicode character equivalences.  Sorted by cp. */
+typedef struct {
+  ucschar cp;
+  ucschar final_form;
+} contextual_fallback;
+
+static const contextual_fallback contextual_fallbacks[] = {
+    {0x06D5, 0xFEEA}, /* ARABIC LETTER AE -> visually compatible HEH final form */
+};
+
+static ucschar fallback_shape_form(ucschar c, uchar form) {
+  if (form != SHAPE_FINAL) return c;
+  for (int i = 0; i < lengthof(contextual_fallbacks); i++)
+    if (c == contextual_fallbacks[i].cp) return contextual_fallbacks[i].final_form;
+  return c;
+}
+
 /* SISOLATED/SFINAL/SINITIAL/SMEDIAL equivalent.
    form is one of the SHAPE_* offsets; returns c unchanged when the letter
    has no presentation form allocated for that context. */
@@ -346,7 +368,7 @@ static ucschar shape_form(ucschar c, uchar form) {
     else
       return form < xshapeforms[k].forms ? xshapeforms[k].isolated + form : c;
   }
-  return c;
+  return fallback_shape_form(c, form);
 }
 
 /* CrossPoint deviation 1: NSM marks (harakat) sit between letters in our
