@@ -102,7 +102,7 @@ std::string buildUrl(const std::string& serverUrl, const std::string& path, cons
     return encodeUnsafeUrlChars(pathy + allGetVars);
   }
 
-  if (pathy.front() == '/') {
+  if (pathy.size() > 0 && pathy.front() == '/') {
     // absolute path
     return encodeUnsafeUrlChars(extractHost(urlWithProtocol) + pathy + allGetVars);
   }
