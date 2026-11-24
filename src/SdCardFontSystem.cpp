@@ -94,7 +94,6 @@ size_t computeTtfPrefixBytes(HalFile& file, const size_t fileLen, const size_t m
       const uint32_t length = readBe32(rec + 12);
       if (offset > fileLen || length > fileLen - offset) continue;
       const size_t end = static_cast<size_t>(offset) + length;
-      if (end > maxPrefix) continue;
       switch (tag) {
         case sfntTag('h', 'e', 'a', 'd'):
         case sfntTag('h', 'h', 'e', 'a'):
@@ -109,6 +108,10 @@ size_t computeTtfPrefixBytes(HalFile& file, const size_t fileLen, const size_t m
         case sfntTag('c', 'v', 't', ' '):
         case sfntTag('f', 'p', 'g', 'm'):
         case sfntTag('p', 'r', 'e', 'p'):
+          if (end > maxPrefix) {
+            if (offset < maxPrefix) return fallback;
+            break;
+          }
           neededEnd = std::max(neededEnd, end);
           foundCoreTable = true;
           break;
