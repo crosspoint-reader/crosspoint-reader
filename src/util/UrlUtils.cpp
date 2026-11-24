@@ -73,37 +73,38 @@ std::string encodeUnsafeUrlChars(const std::string& url) {
 std::string buildUrl(const std::string& serverUrl, const std::string& path) { return buildUrl(serverUrl, path, {}); }
 
 std::string buildUrl(const std::string& serverUrl, const std::string& path, const std::vector<std::string>& getVars) {
-  const std::string urlWithProtocol = ensureProtocol(serverUrl);
-  const size_t getPos = serverUrl.find('?');
+  std::string urlWithProtocol = ensureProtocol(serverUrl);
+  std::string pathy = path;
+  size_t getPos = urlWithProtocol.find('?');
+  size_t getPathPos = path.find('?');
   std::string allGetVars = "?";
 
   if (getPos != std::string::npos) {
     if (allGetVars.size() > 1) {
       allGetVars += "&";
     }
-    allGetVars += serverUrl.substr(getPos);
+    allGetVars += urlWithProtocol.substr(getPos + 1);
+    urlWithProtocol.resize(getPos);
+  }
+  if (getPathPos != std::string::npos) {
+    if (allGetVars.size() > 1) {
+      allGetVars += "&";
+    }
+    allGetVars += pathy.substr(getPathPos + 1);
+    pathy.resize(getPathPos);
   }
   for (auto var : getVars) {
-    if (allGetVars.size() > 1 && allGetVars.back() != '&') {
+    if (allGetVars.size() > 1 && allGetVars.back() != '&' && var.front() != '&') {
       allGetVars += "&";
     }
     allGetVars += var;
   }
 
   // Relative path - strip query string from base before appending
-  std::string base = urlWithProtocol;
-  if (path.empty() || path[0] == '/') {
-    // Absolute path - use just the host
-    return encodeUnsafeUrlChars(extractHost(urlWithProtocol) + (path.empty() ? "/" : path) + allGetVars);
+  if (urlWithProtocol.back() == '/' || pathy.front() == '/') {
+    return encodeUnsafeUrlChars(urlWithProtocol + (pathy.empty() ? "" : pathy) + allGetVars);
   }
-  const size_t queryPos = base.find('?');
-  if (queryPos != std::string::npos) {
-    base.resize(queryPos);
-  }
-  if (base.back() == '/') {
-    return encodeUnsafeUrlChars(base + path + allGetVars);
-  }
-  return encodeUnsafeUrlChars(base + "/" + path + allGetVars);
+  return encodeUnsafeUrlChars(urlWithProtocol + "/" + (pathy.empty() ? "" : pathy) + allGetVars);
 }
 
 bool resolveServerPath(std::string& path, const std::string& requestUrl) {
