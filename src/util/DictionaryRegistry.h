@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,11 @@ struct DictionaryEntry {
 };
 
 namespace DictionaryRegistry {
+
+// Buffer size, in bytes with the terminator, for a dictionary folder name or
+// index stem read from the SD card. SETTINGS.dictionaryName is the same size,
+// so every folder the registry lists can be stored as the selected dictionary.
+inline constexpr size_t MAX_NAME_BYTES = 128;
 
 // Scan /dictionaries/*/ and /.dictionaries/*/ for dictionaries. Folders with
 // multiple index stems are ambiguous and skipped. Result is sorted

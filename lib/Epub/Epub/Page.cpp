@@ -226,7 +226,10 @@ std::unique_ptr<PageDropCap> PageDropCap::deserialize(HalFile& file) {
 }
 
 void PageBorderBox::renderBackground(GfxRenderer& renderer, const int xOffset, const int yOffset) const {
-  if (shaded) renderer.fillRectDither(xPos + xOffset, yPos + yOffset, width, height, Color::LightGray);
+  // The B/W base already contains the fill when grayscale is an overlay.
+  if (shaded && (renderer.getRenderMode() == GfxRenderer::BW || renderer.grayPlanesAreAbsolute())) {
+    renderer.fillRectDither(xPos + xOffset, yPos + yOffset, width, height, Color::LightGray);
+  }
 }
 
 void PageBorderBox::render(GfxRenderer& renderer, const int, const int xOffset, const int yOffset) {

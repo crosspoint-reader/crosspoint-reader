@@ -26,6 +26,8 @@ jobs:
             asset: firmware-eego_a4.bin
           - pio_env: picco-gh_release_rc
             asset: firmware-picco.bin
+          - pio_env: onepage-gh_release_rc
+            asset: firmware-onepage.bin
     steps:
       - uses: actions/checkout@v6
         with:

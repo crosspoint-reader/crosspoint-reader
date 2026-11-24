@@ -2004,6 +2004,50 @@ TEST_F(ChapterBlockDecorationTest, AncestorShadePaintsBeforeNestedBorders) {
   }
 }
 
+TEST_F(ChapterBlockDecorationTest, ShadedBoxSkipsGrayscaleOverlay) {
+  open("div", "background: #efeff0");
+  text("Inside");
+  close("div");
+  ASSERT_NE(parser.currentPage, nullptr);
+
+  for (const auto plane : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+    SCOPED_TRACE(plane);
+    renderer.renderMode = plane;
+    renderer.absoluteGrayPlanes = false;
+    renderer.boxPaints.clear();
+    parser.currentPage->render(renderer, 0, 0, 0);
+    EXPECT_TRUE(renderer.boxPaints.empty());
+
+    renderer.absoluteGrayPlanes = true;
+    renderer.boxPaints.clear();
+    parser.currentPage->render(renderer, 0, 0, 0);
+    EXPECT_EQ(renderer.boxPaints, "s");
+  }
+}
+
+TEST_F(ChapterBlockDecorationTest, UnshadedTextAndBordersRenderInEveryPass) {
+  open("p", nullptr);
+  text("Plain");
+  close("p");
+  open("div", "background: #fff; border: 1px solid");
+  text("Bordered");
+  close("div");
+  ASSERT_NE(parser.currentPage, nullptr);
+
+  for (const auto mode : {GfxRenderer::BW, GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+    SCOPED_TRACE(mode);
+    renderer.renderMode = mode;
+    renderer.boxPaints.clear();
+    renderer.textDraws.clear();
+    parser.currentPage->render(renderer, 0, 0, 0);
+
+    EXPECT_EQ(renderer.boxPaints, "bbbb");
+    ASSERT_EQ(renderer.textDraws.size(), 2u);
+    EXPECT_EQ(renderer.textDraws[0].text, "Plain");
+    EXPECT_EQ(renderer.textDraws[1].text, "Bordered");
+  }
+}
+
 }  // namespace
 
 TEST(ParagraphIndentation, OverridesNonnegativeCssAndPreservesHangingIndent) {

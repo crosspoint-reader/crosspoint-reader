@@ -29,7 +29,7 @@ int SdCardFontManager::computeFontId(uint32_t contentHash, const char* familyNam
 }
 
 int SdCardFontManager::loadFile(const SdCardFontFamilyInfo& family, const SdCardFontFileInfo& file,
-                                GfxRenderer& renderer, const int fontIdOverride) {
+                                GfxRenderer& renderer, const int fontIdOverride, const EpdFontFamily* glyphFallback) {
   char path[SdCardFontFamilyInfo::PATH_BUFFER_SIZE];
   if (!family.filePath(file, path, sizeof(path))) {
     LOG_ERR("SDMGR", "Font path too long in family %s", family.name.c_str());
@@ -64,6 +64,7 @@ int SdCardFontManager::loadFile(const SdCardFontFamilyInfo& family, const SdCard
 
   EpdFontFamily fontFamily(file.pointSize, font->getEpdFont(0), font->getEpdFont(1), font->getEpdFont(2),
                            font->getEpdFont(3));
+  fontFamily.setGlyphFallback(glyphFallback);
   renderer.insertFont(fontId, fontFamily);
   return fontId;
 }
@@ -102,9 +103,10 @@ int SdCardFontManager::loadFamilyExtraSize(const SdCardFontFamilyInfo& family, G
 }
 
 bool SdCardFontManager::loadFamilyVariant(const SdCardFontFamilyInfo& family, GfxRenderer& renderer,
-                                          const uint8_t pointSize, const int fontId) {
+                                          const uint8_t pointSize, const int fontId,
+                                          const EpdFontFamily* glyphFallback) {
   const SdCardFontFileInfo* file = family.findFile(pointSize);
-  return file && loadFile(family, *file, renderer, fontId) != 0;
+  return file && loadFile(family, *file, renderer, fontId, glyphFallback) != 0;
 }
 
 void SdCardFontManager::unloadFont(GfxRenderer& renderer, const int fontId) {
@@ -118,9 +120,6 @@ void SdCardFontManager::unloadFont(GfxRenderer& renderer, const int fontId) {
 }
 
 void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
-  // Drop UI CJK fallbacks before the SD fonts they point at are freed.
-  renderer.clearFallbackFonts();
-  renderer.clearSdCardFonts();
   for (auto& lf : loaded_) {
     renderer.removeFont(lf.fontId);
     delete lf.font;

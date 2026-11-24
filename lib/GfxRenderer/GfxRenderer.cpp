@@ -70,7 +70,8 @@ struct VisualText {
 
 VisualText resolveVisualText(const char* text, std::string& visualBuffer, BidiUtils::BidiBaseDir baseDir,
                              const std::map<int, EpdFontFamily>& fonts, int fontId, EpdFontFamily::Style style);
-VisualText resolveComplexText(const char* text, std::string& visualBuffer, const EpdFontData* shapingFont);
+VisualText resolveComplexText(const char* text, std::string& visualBuffer, const EpdFontFamily* font,
+                              EpdFontFamily::Style style);
 const char* replaceTokenPlanes(const char* text, std::string& visualBuffer);
 VisualText resolveLaidOutText(const GfxRenderer::LaidOutText& text, std::string& visualBuffer,
                               BidiUtils::BidiBaseDir baseDir, const std::map<int, EpdFontFamily>& fonts, int fontId,
@@ -87,12 +88,6 @@ int8_t kernUnlessShaped(const EpdFontFamily& font, const uint32_t leftCp, const 
 int trackingUnlessShaped(const uint32_t leftCp, const uint32_t rightCp, const int8_t tracking, const bool shaped) {
   if (shaped && shaping::isGlyphToken(leftCp) && shaping::isGlyphToken(rightCp)) return 0;
   return trackingBetween(leftCp, rightCp, tracking);
-}
-
-const EpdFontData* fontDataFor(const std::map<int, EpdFontFamily>& fonts, const int fontId,
-                               const EpdFontFamily::Style style) {
-  const auto it = fonts.find(fontId);
-  return it == fonts.end() ? nullptr : it->second.getData(style);
 }
 
 // Appends the shaped visual form of every RTL token in `text` to `shapedOut`.
@@ -325,6 +320,7 @@ int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const Epd
     return fontId;  // unknown primary or fallback not loaded — let the caller handle it
   }
   const EpdFontFamily& primary = fontIt->second;
+  if (primary.hasGlyphFallback()) return fontId;
   const EpdFontFamily& fallback = fallbackIt->second;
   const char* cursor = text;
   uint32_t cp;
@@ -347,16 +343,17 @@ void GfxRenderer::prewarmFallbackText(const int fontId, const TextGetter getter,
   if (getter == nullptr || textCount == 0) {
     return;
   }
-  // Resolve the fallback id from the first string that actually redirects; a
-  // screen with no non-Latin strings resolves nothing and this is a no-op.
   int fallbackFontId = fontId;
-  for (uint32_t i = 0; i < textCount && fallbackFontId == fontId; i++) {
-    const char* text = getter(ctx, i);
-    if (text == nullptr || *text == '\0') continue;
-    fallbackFontId = resolveTextFontId(fontId, text, style);
-  }
-  if (fallbackFontId == fontId) {
-    return;
+  const auto primary = fontMap.find(fontId);
+  if (primary == fontMap.end()) return;
+  if (!primary->second.hasGlyphFallback()) {
+    // Default can redirect a whole string to the reader's SD font.
+    for (uint32_t i = 0; i < textCount && fallbackFontId == fontId; i++) {
+      const char* text = getter(ctx, i);
+      if (!text || !*text) continue;
+      fallbackFontId = resolveTextFontId(fontId, text, style);
+    }
+    if (fallbackFontId == fontId) return;
   }
   const auto sdIt = sdCardFonts_.find(fallbackFontId);
   if (sdIt == sdCardFonts_.end()) {
@@ -503,10 +500,9 @@ static void renderCharScaled(const GfxRenderer& renderer, const EpdFontFamily& f
                              int cursorX, int cursorY, const bool pixelState, const EpdFontFamily::Style style,
                              const int scaleNum, const int scaleDen) {
   EpdGlyph solidFallback;
-  const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, solidFallback, style);
+  const EpdFontData* fontData = nullptr;
+  const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, solidFallback, style, &fontData);
   if (!glyph) return;
-
-  const EpdFontData* fontData = fontFamily.getData(style);
   if (glyph == &solidFallback) {
     renderer.fillRect(cursorX + glyph->left * scaleNum / scaleDen, cursorY - glyph->top * scaleNum / scaleDen,
                       (glyph->width * scaleNum + scaleDen - 1) / scaleDen,
@@ -563,13 +559,13 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
                            const bool pixelState, const EpdFontFamily::Style style) {
   if (renderer.grayPlanesAreAbsolute()) renderMode = GfxRenderer::BW;
   EpdGlyph solidFallback;
-  const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, solidFallback, style);
+  const EpdFontData* fontData = nullptr;
+  const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, solidFallback, style, &fontData);
   if (!glyph) {
-    LOG_ERR("GFX", "No glyph for codepoint %d", cp);
+    if (!fontFamily.hasGlyphFallback()) LOG_ERR("GFX", "No glyph for codepoint %d", cp);
     return;
   }
 
-  const EpdFontData* fontData = fontFamily.getData(style);
   const bool is2Bit = fontData->is2Bit;
   const uint8_t width = glyph->width;
   const uint8_t height = glyph->height;
@@ -709,7 +705,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   // Redirected to the SD fallback: batch-load the string's glyphs so the
   // per-codepoint measurement loop below doesn't fault them in one SD read
   // at a time (#2725).
-  if (resolvedFontId != fontId) {
+  if (resolvedFontId != fontId || fontIt->second.hasGlyphFallback()) {
     ensureSdGlyphsResident(resolvedFontId, renderedText, style, true);
   }
 
@@ -776,18 +772,16 @@ void GfxRenderer::drawVisualText(const int fontId, const int resolvedFontId, con
     return;
   }
 
-  // Redirected to the SD fallback: batch-load the string's glyphs so the draw
-  // loop below doesn't fault them in one SD read at a time (#2725).
-  if (resolvedFontId != fontId) {
-    ensureSdGlyphsResident(resolvedFontId, renderedText, style, false);
-  }
-
   const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", resolvedFontId);
     return;
   }
   const auto& font = fontIt->second;
+  // Batch-load SD UI glyphs before the loop so a label uses one prewarm pass.
+  if (resolvedFontId != fontId || font.hasGlyphFallback()) {
+    ensureSdGlyphsResident(resolvedFontId, renderedText, style, false);
+  }
 
   const char* textCursor = renderedText;
   uint32_t cp;
@@ -825,6 +819,11 @@ void GfxRenderer::drawVisualText(const int fontId, const int resolvedFontId, con
       cp = font.applyLigatures(cp, textCursor, style);
     }
 
+    EpdGlyph solidFallback;
+    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
+    // Neither the UI font nor its built-in fallback covers cp.
+    if (!glyph && !isShapedGlyph && font.hasGlyphFallback()) continue;
+
     // Differential rounding: snap (previous advance + current kern) as one unit so
     // identical character pairs always produce the same pixel step regardless of
     // where they fall on the line.
@@ -832,9 +831,6 @@ void GfxRenderer::drawVisualText(const int fontId, const int resolvedFontId, con
       const auto kernFP = kernUnlessShaped(font, prevCp, cp, style, shapedText);  // 4.4 fixed-point kern
       lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP) + trackingUnlessShaped(prevCp, cp, tracking, shapedText);
     }
-
-    EpdGlyph solidFallback;
-    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
@@ -900,10 +896,25 @@ const char* replaceTokenPlanes(const char* text, std::string& visualBuffer) {
 // be drawn with: glyph tokens are only meaningful to the font that made them.
 // Fonts that cannot shape fall back to reordering Indic vowel signs. `text`
 // contains a complex script (utf8ScanText).
-VisualText resolveComplexText(const char* text, std::string& visualBuffer, const EpdFontData* shapingFont) {
+VisualText resolveComplexText(const char* text, std::string& visualBuffer, const EpdFontFamily* font,
+                              const EpdFontFamily::Style style) {
+  const auto* shapingFont = font ? font->getData(style) : nullptr;
+  bool canShape = shapingFont && shapingFont->shapeHandler;
+  if (canShape && font->hasGlyphFallback()) {
+    // A missing input character would become a glyph ID of zero, losing the
+    // original codepoint before the per-glyph fallback can see it.
+    const EpdFont face(shapingFont);
+    auto* cursor = reinterpret_cast<const uint8_t*>(text);
+    while (const uint32_t cp = utf8NextCodepoint(&cursor)) {
+      const bool visibleIndic = indic::scriptOf(cp) || (indic::isShared(cp) && cp != indic::ZWJ && cp != indic::ZWNJ);
+      if (visibleIndic && !face.hasCodepoint(cp)) {
+        canShape = false;
+        break;
+      }
+    }
+  }
   std::string rewritten;
-  const bool shaped = shapingFont != nullptr && shapingFont->shapeHandler != nullptr &&
-                      shapingFont->shapeHandler(shapingFont->glyphMissCtx, text, &rewritten);
+  const bool shaped = canShape && shapingFont->shapeHandler(shapingFont->glyphMissCtx, text, &rewritten);
   if (!shaped && !indicReorderForDisplay(text, rewritten)) return {text, false};
   visualBuffer.swap(rewritten);
   return {visualBuffer.c_str(), shaped};
@@ -919,7 +930,8 @@ VisualText resolveVisualText(const char* text, std::string& visualBuffer, const 
       scan.rtl || baseDir == BidiUtils::BidiBaseDir::RTL ? resolveBidiText(text, visualBuffer, baseDir) : text;
   if (scan.tokenPlanes) plain = replaceTokenPlanes(plain, visualBuffer);
   if (!scan.complexScript) return {plain, false};
-  return resolveComplexText(plain, visualBuffer, fontDataFor(fonts, fontId, style));
+  const auto it = fonts.find(fontId);
+  return resolveComplexText(plain, visualBuffer, it == fonts.end() ? nullptr : &it->second, style);
 }
 
 // A laid-out word draws its stored display form as is. Without one it was
@@ -2275,7 +2287,8 @@ int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, c
         continue;
       }
       // RTL vowel marks (niqqud/harakat) and combining marks are zero-advance overlays in drawText.
-      if (BidiUtils::isTransparentMark(cp) || utf8IsCombiningMark(cp)) {
+      if (BidiUtils::isTransparentMark(cp) || utf8IsCombiningMark(cp) ||
+          (font.hasGlyphFallback() && !font.hasCodepoint(cp, style))) {
         continue;
       }
       const uint32_t smallCapCp = (style & EpdFontFamily::SMALL_CAPS) ? utf8SmallCapsUpper(cp) : cp;
@@ -2308,6 +2321,7 @@ int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, c
   int widthPx = 0;
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
   const auto& font = fontIt->second;
+  if (font.hasGlyphFallback()) ensureSdGlyphsResident(resolvedFontId, text, style, true);
   shaping::PendingGlyph shaped;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     if (shapedText && shaped.consume(cp)) continue;
@@ -2324,17 +2338,19 @@ int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, c
       cp = font.applyLigatures(cp, text, style);
     }
 
+    // Shaped glyphs carry their advance; only fetch the glyph when they don't.
+    EpdGlyph solidFallback;
+    const EpdGlyph* glyph =
+        isShapedGlyph && shaped.advanceFP >= 0 ? nullptr : font.getGlyphMetrics(cp, solidFallback, style);
+    // Neither the UI font nor its built-in fallback covers cp.
+    if (!glyph && !isShapedGlyph && font.hasGlyphFallback()) continue;
+
     // Differential rounding: snap (previous advance + current kern) together,
     // matching drawText so measurement and rendering agree exactly.
     if (prevCp != 0) {
       const auto kernFP = kernUnlessShaped(font, prevCp, cp, style, shapedText);  // 4.4 fixed-point kern
       widthPx += fp4::toPixel(prevAdvanceFP + kernFP) + trackingUnlessShaped(prevCp, cp, tracking, shapedText);
     }
-
-    // Shaped glyphs carry their advance; only fetch the glyph when they don't.
-    EpdGlyph solidFallback;
-    const EpdGlyph* glyph =
-        isShapedGlyph && shaped.advanceFP >= 0 ? nullptr : font.getGlyphMetrics(cp, solidFallback, style);
     prevAdvanceFP = shaped.advanceOr(glyph ? glyph->advanceX : 0);
     shaped.reset();
     if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
@@ -2501,11 +2517,11 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   const Utf8TextScan scan = utf8ScanText(text);
   if (scan.tokenPlanes) text = replaceTokenPlanes(text, visual);
   const VisualText visualText =
-      scan.complexScript ? resolveComplexText(text, visual, font.getData(style)) : VisualText{text, false};
+      scan.complexScript ? resolveComplexText(text, visual, &font, style) : VisualText{text, false};
   text = visualText.text;
   // Redirected to the SD fallback: batch-load the string's glyphs so the draw
   // loop below doesn't fault them in one SD read at a time (#2725).
-  if (resolvedFontId != fontId) {
+  if (resolvedFontId != fontId || font.hasGlyphFallback()) {
     ensureSdGlyphsResident(resolvedFontId, text, style, false);
   }
 
@@ -2545,15 +2561,17 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     if (!isShapedGlyph) cp = font.applyLigatures(cp, text, style);
 
+    EpdGlyph solidFallback;
+    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
+    // Neither the UI font nor its built-in fallback covers cp.
+    if (!glyph && !isShapedGlyph && font.hasGlyphFallback()) continue;
+
     // Differential rounding: snap (previous advance + current kern) as one unit,
     // subtracting for the rotated coordinate direction.
     if (prevCp != 0) {
       const auto kernFP = kernUnlessShaped(font, prevCp, cp, style, visualText.shaped);  // 4.4 fixed-point kern
       lastBaseY -= fp4::toPixel(prevAdvanceFP + kernFP);  // snap 12.4 fixed-point to nearest pixel
     }
-
-    EpdGlyph solidFallback;
-    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;

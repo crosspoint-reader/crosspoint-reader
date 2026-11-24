@@ -442,9 +442,11 @@ void TtfEpdFont::releaseResidentCaches() {
 }
 
 const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool allowFlush) {
+  if (glyphLoadFailed_ && glyphLoadFailed_->load(std::memory_order_relaxed)) return nullptr;
   if (!f.inited || (master_ && !master_->faces_[&f - faces_].ready)) initFace(f);
   if (!f.ready) {
     f.faultFailed = true;
+    if (glyphLoadFailed_) glyphLoadFailed_->store(true, std::memory_order_relaxed);
     return nullptr;
   }
   {
@@ -469,6 +471,10 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
   freeink::font::FtFont::GlyphMetrics gm;
   const bool haveMetrics = f.ft->metricsGlyph26_6(gid, size26_6, gm);
   const freeink::font::GlyphBitmap* g = f.ft->rasterizeGlyph26_6(gid, size26_6);
+  if (glyphLoadFailed_ && (!haveMetrics || !g)) {
+    glyphLoadFailed_->store(true, std::memory_order_relaxed);
+    return nullptr;
+  }
   uint32_t px = (g && g->pixels) ? static_cast<uint32_t>(g->width) * g->height : 0;
   size_t bytes = px ? (f.twoBit ? (px + 3) / 4 : (px + 7) / 8) : 0;
   if (bytes > f.cap) {
@@ -529,6 +535,7 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
     evictOthers();
     if (!growTables()) {
       f.faultFailed = true;
+      if (glyphLoadFailed_) glyphLoadFailed_->store(true, std::memory_order_relaxed);
       return nullptr;
     }
   }
@@ -540,6 +547,10 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp, const bool al
   if (px && !reserveChecked(bmpVec, bmpUsed + bytes, 4096, bmpCap)) {
     evictOthers();
     if (!reserveChecked(bmpVec, bmpUsed + bytes, 4096, bmpCap)) {
+      if (glyphLoadFailed_) {
+        glyphLoadFailed_->store(true, std::memory_order_relaxed);
+        return nullptr;
+      }
       bytes = 0;
       px = 0;
       f.miniMetadataOnly = true;
@@ -768,13 +779,26 @@ const uint8_t* TtfEpdFont::bitmapThunk(void* ctx, const EpdGlyph* glyph) {
   return f->coreBmp.data() + glyph->dataOffset;
 }
 bool TtfEpdFont::coverageThunk(void* ctx, const uint32_t codepoint) {
-  // All styles share one file → coverage comes from the always-live regular face.
-  Face& reg = static_cast<Face*>(ctx)->owner->faces_[0];
+  auto& face = *static_cast<Face*>(ctx);
+  auto* owner = face.owner;
   if (shaping::isGlyphToken(codepoint)) return true;  // only shapers emit them, from this font's own tables
-  if (reg.ft->hasGlyph(codepoint)) return true;
+  // Custom UI fonts fall back one glyph at a time, so coverage must match
+  // the actual style. Other callers keep the always-live regular-face probe.
+  auto& probe = owner->glyphLoadFailed_ ? face : owner->faces_[0];
+  if (owner->glyphLoadFailed_) {
+    if (owner->glyphLoadFailed_->load(std::memory_order_relaxed)) return false;
+    if (!probe.inited || (owner->master_ && !owner->master_->faces_[&probe - owner->faces_].ready)) {
+      owner->initFace(probe);
+    }
+    if (!probe.ready) {
+      owner->glyphLoadFailed_->store(true, std::memory_order_relaxed);
+      return false;
+    }
+  }
+  if (probe.ft->hasGlyph(codepoint)) return true;
   // Ligature presentation codepoints resolvable through GSUB despite no cmap
   // entry (some EPUBs carry literal U+FB01/U+FB02 in their text).
-  return codepoint >= 0xFB00u && codepoint <= 0xFB04u && reg.ligGid[codepoint - 0xFB00u] != 0;
+  return codepoint >= 0xFB00u && codepoint <= 0xFB04u && probe.ligGid[codepoint - 0xFB00u] != 0;
 }
 
 EpdFontFamily TtfEpdFont::family() const {

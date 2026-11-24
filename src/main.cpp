@@ -570,6 +570,10 @@ void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
+  // Light off first: plugin delivery and Sync On Sleep below can hold the device
+  // awake for a long time. SETTINGS.frontlightOn keeps the preference for wake.
+  Frontlight.setOn(false);
+
   // Sleep may end in a power-off (battery death, latch); persist the clock
   // floor now so a later cold boot resumes from it.
   trustedtime::note();
@@ -610,9 +614,6 @@ void enterDeepSleep(bool fromTimeout = false) {
   }
 
 #if FREEINK_DEVICE_PICCO
-  // The I2C LED driver keeps its state through deep sleep; switch it off here
-  // (SETTINGS.frontlightOn keeps the preference for restore-on-wake).
-  Frontlight.setOn(false);
   const bool wakeOnHeldButton = holdSleepWhileUsbPowered();
 #else
   const bool wakeOnHeldButton = false;
@@ -661,8 +662,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
 
-  // Discover and load SD card fonts
-  sdFontSystem.begin(renderer);
+  sdFontSystem.begin(renderer, smallFontFamily, ui10FontFamily, ui12FontFamily);
 
   LOG_DBG("MAIN", "Fonts setup");
 }
@@ -1097,7 +1097,10 @@ void loop() {
     if (!mappedInputManager.powerSleepRequested()) return;
   }
 
-  if (mappedInputManager.powerSleepClick()) {
+  if (loopStartTime < allowSleepAt && BoardConfig::isPaperMono()) {
+    // The PMIC wake click can arrive after setup. Drop it before it can outlast the sleep guard.
+    mappedInputManager.resetPowerButtonInput();
+  } else if (mappedInputManager.powerSleepClick()) {
     enterDeepSleep();
     return;
   }
@@ -1139,7 +1142,7 @@ void loop() {
   // power-button meaning and shut down; explicit alternate bindings still win.
   if ((SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP ||
        SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::IGNORE) &&
-      millis() >= allowSleepAt && mappedInputManager.wasPowerSingleClick()) {
+      loopStartTime >= allowSleepAt && mappedInputManager.wasPowerSingleClick()) {
     enterDeepSleep();
     return;
   }
