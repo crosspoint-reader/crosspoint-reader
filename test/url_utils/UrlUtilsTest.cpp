@@ -23,6 +23,12 @@ TEST(BuildUrl, PreservesBaseQueryWhenJoiningPath) {
             "https://example.com/opds/catalog?size=15&sort=title");
 }
 
+TEST(BuildUrl, UsesPathWhenItIsAnAbsolutepath) {
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "/catalog"), "https://example.com/catalog?");
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds?page=1", "/catalog?size=15"),
+            "https://example.com/catalog?page=1&size=15");
+}
+
 TEST(BuildUrl, UsesPathWhenItIsAnAbsoluteUrl) {
   EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "https://cdn.example.com/book.epub?download=1"),
             "https://cdn.example.com/book.epub?download=1");

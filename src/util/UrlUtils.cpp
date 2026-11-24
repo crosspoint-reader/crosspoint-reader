@@ -90,20 +90,24 @@ std::string buildUrl(const std::string& serverUrl, const std::string& path, cons
     allGetVars += pathy.substr(getPathPos + 1);
     pathy.resize(getPathPos);
   }
-  for (const auto var : getVars) {
+  for (const auto& var : getVars) {
     if (allGetVars.size() > 1 && allGetVars.back() != '&' && (var.size() > 0 && var.front() != '&')) {
       allGetVars += "&";
     }
     allGetVars += var;
   }
 
-  if (path.find("://") != std::string::npos) {
+  if (pathy.find("://") != std::string::npos) {
     // If path is already an absolute URL (has protocol), use it directly
     return encodeUnsafeUrlChars(pathy + allGetVars);
   }
 
-  // Relative path - strip query string from base before appending
-  if (urlWithProtocol.back() == '/' || (pathy.size() > 0 && pathy.front() == '/')) {
+  if (pathy.front() == '/') {
+    // absolute path
+    return encodeUnsafeUrlChars(extractHost(urlWithProtocol) + pathy + allGetVars);
+  }
+
+  if (urlWithProtocol.back() == '/') {
     return encodeUnsafeUrlChars(urlWithProtocol + (pathy.empty() ? "" : pathy) + allGetVars);
   }
   return encodeUnsafeUrlChars(urlWithProtocol + "/" + (pathy.empty() ? "" : pathy) + allGetVars);
