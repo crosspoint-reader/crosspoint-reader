@@ -757,6 +757,73 @@ TEST_F(ChapterBlockDecorationTest, LeadingBreakDoesNotAddBlankSpace) {
   EXPECT_EQ(lines[0]->yPos, 0);
 }
 
+// Some publishers put the pagebreak attribute on the block that starts the print page
+// (#3116): a text-bearing block renders normally.
+TEST_F(ChapterHtmlSlimParserTest, PagebreakAttributeOnTextBlockKeepsItsText) {
+  EXPECT_EQ(parseToParagraphText("<p>before</p><p epub:type=\"pagebreak\" title=\"5\">Real paragraph</p>"),
+            "before\nReal paragraph");
+  EXPECT_EQ(parseToParagraphText("<h2 role=\"doc-pagebreak\" title=\"9\">Part Two</h2><p>body</p>"), "Part Two\nbody");
+  EXPECT_EQ(parseToParagraphText("<blockquote epub:type=\"pagebreak\" title=\"3\">Quoted</blockquote>"), "Quoted");
+}
+
+// A list item marker is still skipped as on develop: no bullet, no counter step.
+TEST_F(ChapterHtmlSlimParserTest, PagebreakListItemIsSkipped) {
+  const std::string plain = parseToParagraphText("<ol><li>one</li><li>two</li></ol>");
+  EXPECT_EQ(parseToParagraphText("<ol><li>one</li><li role=\"doc-pagebreak\" title=\"4\"/>"
+                                 "<li epub:type=\"pagebreak\">5</li><li>two</li></ol>"),
+            plain);
+}
+
+// An empty block marker adds no line and no spacing.
+TEST_F(ChapterBlockDecorationTest, EmptyBlockPagebreakMarkersAddNoSpace) {
+  const XML_Char* marker[] = {"epub:type", "pagebreak", "title", "5", nullptr};
+  // The first two lines have no marker between them: their gap is the control.
+  const char* markerTags[] = {nullptr, nullptr, "p", "blockquote", "h2"};
+  for (const char* tag : markerTags) {
+    if (tag) {
+      ChapterHtmlSlimParser::startElement(&parser, tag, marker);
+      close(tag);
+    }
+    open("p", nullptr);
+    text("Line");
+    close("p");
+  }
+  const auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 5u);
+  const int gap = lines[1]->yPos - lines[0]->yPos;
+  EXPECT_GT(gap, 0);
+  for (size_t i = 2; i < lines.size(); i++) {
+    EXPECT_EQ(lines[i]->yPos - lines[i - 1]->yPos, gap);
+  }
+}
+
+// Inline and other markers keep develop's behavior: the whole subtree is skipped,
+// labels and any prose inside alike (prose recovery is out of scope here).
+TEST_F(ChapterHtmlSlimParserTest, InlinePagebreakMarkersRenderNothing) {
+  EXPECT_EQ(parseToParagraphText("<p>one <span epub:type=\"pagebreak\" id=\"p11\"/>two "
+                                 "<span epub:type=\"pagebreak\" title=\"12\">12</span>three</p>"),
+            "one two three");
+  EXPECT_EQ(parseToParagraphText("<p>before <span role=\"doc-pagebreak\" aria-label=\"136\">"
+                                 "<span class=\"page-number\">136</span></span> after</p>"),
+            "before after");
+  EXPECT_EQ(parseToParagraphText("<p>It went <span epub:type=\"pagebreak\" title=\"7\">on and on</span> here.</p>"
+                                 "<div epub:type=\"pagebreak\" title=\"8\">8</div><p>next</p>"),
+            "It went here.\nnext");
+}
+
+TEST_F(ChapterBlockDecorationTest, PagebreakMarkerHoldingOnlyBreakAddsNoLine) {
+  const XML_Char* marker[] = {"epub:type", "pagebreak", nullptr};
+  open("p", nullptr);
+  text("First ");
+  ChapterHtmlSlimParser::startElement(&parser, "span", marker);
+  open("br", nullptr);
+  close("br");
+  close("span");
+  text("Second");
+  close("p");
+  EXPECT_EQ(elementsWithTag(TAG_PageLine).size(), 1u);
+}
+
 TEST_F(ChapterBlockDecorationTest, BreakAfterHeadingAddsOneLine) {
   open("h2", nullptr);
   text("Heading");
