@@ -22,6 +22,7 @@
 #include "components/HeaderBackTapTarget.h"
 #include "components/UiAppHelpers.h"
 #include "home/CrashActivity.h"
+#include "home/DictionarySearchActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
 #include "library/LibraryListActivity.h"
@@ -321,6 +322,10 @@ void ActivityManager::goToLibrary() {
     return;
   }
   replaceActivity(std::move(activity));
+}
+
+void ActivityManager::goToDictionarySearch() {
+  replaceActivity(std::make_unique<DictionarySearchActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::goToBrowser() {

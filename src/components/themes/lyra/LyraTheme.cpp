@@ -22,6 +22,7 @@
 #include "components/icons/hotspot.h"
 #include "components/icons/library.h"
 #include "components/icons/recent.h"
+#include "components/icons/search.h"
 #include "components/icons/settings2.h"
 #include "components/icons/transfer.h"
 #include "components/icons/wifi.h"
@@ -59,6 +60,8 @@ const uint8_t* iconForName(UIIcon icon) {
       return BookmarkIcon;
     case UIIcon::Blocks:
       return BlocksIcon;
+    case UIIcon::Search:
+      return SearchIcon;
     default:
       return nullptr;
   }

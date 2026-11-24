@@ -65,7 +65,7 @@ void DictionaryWordSelectActivity::performLookup() {
       popup = Popup::None;
       page.reset();
     }
-    if (SETTINGS.vocabularyHistoryEnabled &&
+    if (recordVocabulary && SETTINGS.vocabularyHistoryEnabled &&
         !VocabularyStore::append(vocabulary, lookupText, headword, definition, dict.definitionsAreHtml())) {
       LOG_ERR("VOCAB", "Could not save successful dictionary lookup");
     }

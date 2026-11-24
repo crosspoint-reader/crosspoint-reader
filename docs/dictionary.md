@@ -1,6 +1,6 @@
 # Dictionary
 
-Look up words and phrases while reading an EPUB using an offline StarDict dictionary stored on the SD card.
+Look up words and phrases while reading an EPUB, or type a word to search from the Home screen, using an offline StarDict dictionary stored on the SD card.
 
 ## Supported Format
 
@@ -32,6 +32,8 @@ Two ways to start a lookup while reading:
 
 - Open the reader menu (**Confirm**) and choose **Look Up**.
 - Or set **Settings → Controls → Front buttons → Menu long press** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
+
+To search without a book, choose **Dictionary** on the Home screen and type a word. After the definition or a "Not found" message, the keyboard opens again with the last word, ready for the next search. Press **Back** on the keyboard, or hold **Back** on a definition, to return Home. If no dictionary is selected, a "No Dictionary Set" message appears. Home searches are not added to the vocabulary history.
 
 ### Selecting Text
 
