@@ -23,8 +23,21 @@ TEST(BuildUrl, PreservesBaseQueryWhenJoiningPath) {
             "https://example.com/opds/catalog?size=15&sort=title");
 }
 
+TEST(BuildUrl, PreservesServerUrlWhenPathIsEmpty) {
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/api/v1/opds", ""), "https://example.com/api/v1/opds");
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/api/v1/opds?size=15", ""),
+            "https://example.com/api/v1/opds?size=15");
+}
+
+TEST(BuildUrl, DoesNotAppendAnEmptyQuery) {
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "catalog"), "https://example.com/opds/catalog");
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "https://cdn.example.com/catalog"),
+            "https://cdn.example.com/catalog");
+}
+
 TEST(BuildUrl, UsesPathWhenItIsAnAbsolutepath) {
-  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "/catalog"), "https://example.com/catalog?");
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "/catalog"), "https://example.com/catalog");
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds?page=1", "/catalog"), "https://example.com/catalog?page=1");
   EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds?page=1", "/catalog?size=15"),
             "https://example.com/catalog?page=1&size=15");
 }

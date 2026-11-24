@@ -27,6 +27,14 @@ bool shouldEncode(const unsigned char c) {
       return false;
   }
 }
+
+void appendQueryVars(std::string& query, const std::string& vars) {
+  if (vars.empty()) return;
+  if (!query.empty() && query.back() != '&' && vars.front() != '&') {
+    query += "&";
+  }
+  query += vars;
+}
 }  // namespace
 
 std::string ensureProtocol(const std::string& url) {
@@ -75,42 +83,42 @@ std::string buildUrl(const std::string& serverUrl, const std::string& path) { re
 std::string buildUrl(const std::string& serverUrl, const std::string& path, const std::vector<std::string>& getVars) {
   std::string urlWithProtocol = ensureProtocol(serverUrl);
   std::string pathy = path;
-  size_t getPos = urlWithProtocol.find('?');
-  size_t getPathPos = path.find('?');
-  std::string allGetVars = "?";
+  const size_t getPos = urlWithProtocol.find('?');
+  const size_t getPathPos = path.find('?');
+  std::string allGetVars;
 
   if (getPos != std::string::npos) {
-    allGetVars += urlWithProtocol.substr(getPos + 1);
+    appendQueryVars(allGetVars, urlWithProtocol.substr(getPos + 1));
     urlWithProtocol.resize(getPos);
   }
   if (getPathPos != std::string::npos) {
-    if (allGetVars.size() > 1) {
-      allGetVars += "&";
-    }
-    allGetVars += pathy.substr(getPathPos + 1);
+    appendQueryVars(allGetVars, pathy.substr(getPathPos + 1));
     pathy.resize(getPathPos);
   }
   for (const auto& var : getVars) {
-    if (allGetVars.size() > 1 && allGetVars.back() != '&' && (var.size() > 0 && var.front() != '&')) {
-      allGetVars += "&";
-    }
-    allGetVars += var;
+    appendQueryVars(allGetVars, var);
+  }
+
+  const std::string querySuffix = allGetVars.empty() ? "" : "?" + allGetVars;
+
+  if (pathy.empty()) {
+    return encodeUnsafeUrlChars(urlWithProtocol + querySuffix);
   }
 
   if (pathy.find("://") != std::string::npos) {
     // If path is already an absolute URL (has protocol), use it directly
-    return encodeUnsafeUrlChars(pathy + allGetVars);
+    return encodeUnsafeUrlChars(pathy + querySuffix);
   }
 
-  if (pathy.size() > 0 && pathy.front() == '/') {
+  if (pathy.front() == '/') {
     // absolute path
-    return encodeUnsafeUrlChars(extractHost(urlWithProtocol) + pathy + allGetVars);
+    return encodeUnsafeUrlChars(extractHost(urlWithProtocol) + pathy + querySuffix);
   }
 
   if (urlWithProtocol.back() == '/') {
-    return encodeUnsafeUrlChars(urlWithProtocol + (pathy.empty() ? "" : pathy) + allGetVars);
+    return encodeUnsafeUrlChars(urlWithProtocol + pathy + querySuffix);
   }
-  return encodeUnsafeUrlChars(urlWithProtocol + "/" + (pathy.empty() ? "" : pathy) + allGetVars);
+  return encodeUnsafeUrlChars(urlWithProtocol + "/" + pathy + querySuffix);
 }
 
 bool resolveServerPath(std::string& path, const std::string& requestUrl) {
