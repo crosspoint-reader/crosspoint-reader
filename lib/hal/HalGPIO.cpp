@@ -108,6 +108,9 @@ void HalGPIO::begin() {
 #else
   _deviceType = DeviceType::X4;
 #endif
+  if (BoardConfig::ACTIVE.usbDetect >= 0 && !BoardConfig::ACTIVE.usbDetectActiveHigh) {
+    pinMode(BoardConfig::ACTIVE.usbDetect, INPUT_PULLUP);
+  }
   inputMgr.begin();
 #if FREEINK_DEVICE_LILYGO
   // T5S3 IO48 key sits behind the PCA9535 expander. Mirrors BoardT5S3::begin(), which also
@@ -160,11 +163,7 @@ bool HalGPIO::rawInputActive() {
       if (pin >= 0 && digitalRead(pin) == LOW) return true;
     }
   }
-  InputManager::ButtonAdcSample g1{}, g2{};
-  inputMgr.readButtonAdc(g1, g2);
-  // The Xteink ladder idles at the ADC full-scale rail (~4095); every button band sits below 3900.
-  constexpr int kIdleRailMin = 4000;
-  return (g1.raw >= 0 && g1.raw < kIdleRailMin) || (g2.raw >= 0 && g2.raw < kIdleRailMin);
+  return inputMgr.isAdcLadderPhysicallyPressed();
 }
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
@@ -248,7 +247,7 @@ bool HalGPIO::verifyPowerButtonWakeup() {
 
 bool HalGPIO::isUsbConnected() const {
   if (!deviceIsX3() && BoardConfig::ACTIVE.usbDetect >= 0) {
-    return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
+    return digitalRead(BoardConfig::ACTIVE.usbDetect) == (BoardConfig::ACTIVE.usbDetectActiveHigh ? HIGH : LOW);
   }
   // X3 uses GPIO20 for I2C, not USB detection. Boards without a digital
   // USB-detect line (e.g. Sticky, whose PWR_IN_VOLT is an analog

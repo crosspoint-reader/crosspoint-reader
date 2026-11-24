@@ -9,6 +9,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalMemory.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -422,9 +423,16 @@ bool EpubReaderActivity::makeRoomForChapterBuild() {
 }
 
 bool EpubReaderActivity::buildTickHeapGate() {
-  const size_t freeHeap = ESP.getFreeHeap();
-  const size_t maxBlock = ESP.getMaxAllocHeap();
-  buildHeapPaused = freeHeap < BACKGROUND_BUILD_MIN_FREE_HEAP || maxBlock < BACKGROUND_BUILD_MIN_MAX_ALLOC;
+  // The heap the build's malloc and new draw from. With PSRAM, small requests fall back to it once internal
+  // RAM runs out, so internal RAM alone paused builds for good (OnePage). Without PSRAM both are the same.
+  const auto heap = HalMemory::getDefaultHeap();
+  const bool paused =
+      heap.freeBytes < BACKGROUND_BUILD_MIN_FREE_HEAP || heap.largestBlockBytes < BACKGROUND_BUILD_MIN_MAX_ALLOC;
+  if (paused && !buildHeapPaused) {
+    LOG_DBG("ERS", "Background build paused: heap free=%u largest=%u", static_cast<unsigned>(heap.freeBytes),
+            static_cast<unsigned>(heap.largestBlockBytes));
+  }
+  buildHeapPaused = paused;
   return !buildHeapPaused;
 }
 

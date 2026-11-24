@@ -80,7 +80,7 @@ def inject_version(env):
     # Only applies to development environments; release envs set the
     # version via build_flags in platformio.ini and are unaffected.
     if env['PIOENV'] not in (
-        'default', 'sticky', 'x4pro', 'x4c', 'metalio_eink4', 'papermono', 'eego_a4', 'picco'
+        'default', 'sticky', 'x4pro', 'x4c', 'metalio_eink4', 'papermono', 'eego_a4', 'picco', 'onepage'
     ):
         return
 
