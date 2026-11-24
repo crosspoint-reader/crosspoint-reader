@@ -20,8 +20,8 @@
 
 namespace {
 
-// English hyphenation patterns (3/3 minimum prefix/suffix length)
-LanguageHyphenator englishHyphenator(en_patterns, isLatinLetter, toLowerLatin, 3, 3);
+// English hyphenation patterns (2/3 minimum prefix/suffix length)
+LanguageHyphenator englishHyphenator(en_patterns, isLatinLetter, toLowerLatin, 2, 3);
 LanguageHyphenator frenchHyphenator(fr_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator germanHyphenator(de_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator russianHyphenator(ru_patterns, isCyrillicLetter, toLowerCyrillic);
