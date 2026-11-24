@@ -80,9 +80,6 @@ std::string buildUrl(const std::string& serverUrl, const std::string& path, cons
   std::string allGetVars = "?";
 
   if (getPos != std::string::npos) {
-    if (allGetVars.size() > 1) {
-      allGetVars += "&";
-    }
     allGetVars += urlWithProtocol.substr(getPos + 1);
     urlWithProtocol.resize(getPos);
   }
@@ -93,15 +90,20 @@ std::string buildUrl(const std::string& serverUrl, const std::string& path, cons
     allGetVars += pathy.substr(getPathPos + 1);
     pathy.resize(getPathPos);
   }
-  for (auto var : getVars) {
-    if (allGetVars.size() > 1 && allGetVars.back() != '&' && var.front() != '&') {
+  for (const auto var : getVars) {
+    if (allGetVars.size() > 1 && allGetVars.back() != '&' && (var.size() > 0 && var.front() != '&')) {
       allGetVars += "&";
     }
     allGetVars += var;
   }
 
+  if (path.find("://") != std::string::npos) {
+    // If path is already an absolute URL (has protocol), use it directly
+    return encodeUnsafeUrlChars(pathy + allGetVars);
+  }
+
   // Relative path - strip query string from base before appending
-  if (urlWithProtocol.back() == '/' || pathy.front() == '/') {
+  if (urlWithProtocol.back() == '/' || (pathy.size() > 0 && pathy.front() == '/')) {
     return encodeUnsafeUrlChars(urlWithProtocol + (pathy.empty() ? "" : pathy) + allGetVars);
   }
   return encodeUnsafeUrlChars(urlWithProtocol + "/" + (pathy.empty() ? "" : pathy) + allGetVars);

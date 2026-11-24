@@ -23,6 +23,13 @@ TEST(BuildUrl, PreservesBaseQueryWhenJoiningPath) {
             "https://example.com/opds/catalog?size=15&sort=title");
 }
 
+TEST(BuildUrl, UsesPathWhenItIsAnAbsoluteUrl) {
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds", "https://cdn.example.com/book.epub?download=1"),
+            "https://cdn.example.com/book.epub?download=1");
+  EXPECT_EQ(UrlUtils::buildUrl("https://example.com/opds?size=15", "https://cdn.example.com/book.epub?download=1"),
+            "https://cdn.example.com/book.epub?size=15&download=1");
+}
+
 std::string resolved(std::string path, const std::string& requestUrl) {
   resolveServerPath(path, requestUrl);
   return path;
