@@ -24,6 +24,11 @@ class GfxRenderer {
   mutable size_t fontPreparations = 0;
   std::function<void()> onFontPrepare;
   enum class TextMeasureMode { Layout, Rendered };
+  enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
+  RenderMode renderMode = BW;
+  bool absoluteGrayPlanes = false;
+  RenderMode getRenderMode() const { return renderMode; }
+  bool grayPlanesAreAbsolute() const { return absoluteGrayPlanes; }
   // The fixture has no framebuffer to lend; image probes run as without a loan.
   class FrameBufferLoan {
    public:
