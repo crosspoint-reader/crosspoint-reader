@@ -11,6 +11,11 @@ bool PersistableStoreBase::writeDocToFile(const char* path, const JsonDocument& 
   Storage.mkdir("/.crosspoint");
   String json;
   serializeJson(doc, json);
+  // String drops text it cannot allocate; a short result must not replace the file.
+  if (json.length() != measureJson(doc)) {
+    LOG_ERR("PERSIST", "Out of memory writing %s", path);
+    return false;
+  }
   if (!Storage.writeFile(path, json)) {
     LOG_ERR("PERSIST", "Failed to write %s", path);
     return false;

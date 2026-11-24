@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "VectorFontSupport.h"
@@ -14,11 +15,11 @@ struct SdCardFontFileInfo {
   // for the canonical name, so downloaded families keep no per-file heap strings
   // and the entry is two pointers wide (8 bytes on the ESP32-C3).
   std::unique_ptr<char[]> name;
-  uint8_t pointSize;  // parsed from filename: 14 (0 for size-free vector fonts)
-  uint8_t style;      // .cpfont: always 0 (all 4 styles bundled in one file).
-                      // Vector family in a folder: the style ROLE of this file —
-                      // 0=regular, 1=bold, 2=italic, 3=bold-italic (parsed from
-                      // the filename). A loose vector file is always role 0.
+  uint8_t pointSize;      // parsed from filename: 14 (0 for size-free vector fonts)
+  uint8_t style;          // .cpfont: always 0 (all 4 styles bundled in one file).
+                          // Vector family: resolved role (0=regular, 1=bold,
+                          // 2=italic, 3=bold-italic). A loose file is always role 0.
+  uint16_t weight = 400;  // Vector metadata weight (unused for .cpfont).
 };
 
 struct SdCardFontFamilyInfo {
@@ -54,6 +55,14 @@ struct SdCardFontFamilyInfo {
 class SdCardFontRegistry {
  public:
   static constexpr int MAX_SD_FAMILIES = 128;
+  static constexpr size_t FAMILY_NAME_CAPACITY = 128;
+  struct SavedFamilies {
+    std::string_view reader;
+    std::string_view ui;
+    bool retain = false;
+    bool readerUnavailable = false;
+    bool uiUnavailable = false;
+  };
   // Two top-level roots are scanned at discovery time. Hidden is preferred
   // when creating new installs; both are read from if present.
   static constexpr const char* FONTS_DIR_HIDDEN = "/.fonts";
@@ -71,14 +80,21 @@ class SdCardFontRegistry {
 
   // Scan SD card, populate families_. Invalidates pointers and references
   // obtained from getFamilies()/findFamily(). Returns true if any families found.
+#if CROSSPOINT_VECTOR_FONTS
+  // Report unavailable saved families; optionally keep found selections at the cap.
+  bool discover(SavedFamilies* saved = nullptr);
+#else
   bool discover();
+#endif
 
   const std::vector<SdCardFontFamilyInfo>& getFamilies() const { return families_; }
-  const SdCardFontFamilyInfo* findFamily(const std::string& name) const;
-  int getFamilyIndex(const std::string& name) const;
+  const SdCardFontFamilyInfo* findFamily(std::string_view name) const;
   int getFamilyCount() const { return static_cast<int>(families_.size()); }
 
 #if CROSSPOINT_VECTOR_FONTS
+  // Changes on every scan, including empty or incomplete scans.
+  uint32_t scanGeneration() const { return scanGeneration_; }
+
   // FtFont::ReadFn over a HalFile* ctx (absolute-offset reads; count 0 is a
   // seek probe). Shared by face inspection here and streamed TTF sources
   // (SdCardFontSystem).
@@ -93,18 +109,20 @@ class SdCardFontRegistry {
   // filePath() rebuilds without a stored string.
   static bool isCanonicalCpfontName(const char* filename, const std::string& family, uint8_t size);
 #if CROSSPOINT_VECTOR_FONTS
+  uint32_t scanGeneration_ = 0;
   // Match a loose vector font filename (.ttf/.otf/.ttc, case-insensitive) and
   // return the length of the base name (extension stripped) in `baseLen`.
   static bool parseVectorFontName(const char* filename, size_t& baseLen);
-  // Style role (0=regular, 1=bold, 2=italic, 3=bold-italic) inferred from a
-  // vector font's base name (case-insensitive "bold"/"italic"/"oblique" tokens).
-  static uint8_t parseVectorStyle(const char* baseName, size_t baseLen);
-  // Refine each vector file's style role from its real face metadata
-  // (FtFont::inspectStream: OS/2 weight + italic flag), keeping the
-  // filename-derived role when the face can't be read. Then dedup by role.
-  static void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
-#endif
+  // Bits 0-1: filename bold/italic hints. Bits 2-5: explicit suffix role.
+  static uint8_t guessVectorStyle(const char* baseName, size_t baseLen);
+  // Reject inspection failures, then prefer suffixes over filename hints OR metadata.
+  // Rank nearest 400 (unsuffixed italic: regular weight) or regular weight + 300 for bold.
+  // Ties prefer heavier, then lexical. No file reuse.
+  static bool refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
+  static bool scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
+  void scanRoot(const char* rootPath, SavedFamilies* saved);
+#else
   static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
-  // Scan one root (e.g. "/.fonts"), append families to `out`, dedup by name.
-  static void scanRoot(const char* rootPath, std::vector<SdCardFontFamilyInfo>& out);
+  void scanRoot(const char* rootPath);
+#endif
 };

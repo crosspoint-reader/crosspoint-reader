@@ -200,6 +200,11 @@ bool HalPowerManager::holdWhileUsbPowered(HalGPIO& gpio, void (*onStatus)(bool c
 }
 #endif
 
+bool HalPowerManager::readBatteryPercentage(uint16_t& percent) const {
+  static const BatteryMonitor battery;
+  return battery.readPercentageChecked(percent);
+}
+
 uint16_t HalPowerManager::getBatteryPercentage() const {
   static const BatteryMonitor battery;
   if (BoardConfig::ACTIVE.batteryGauge.gaugeAddr != 0) {

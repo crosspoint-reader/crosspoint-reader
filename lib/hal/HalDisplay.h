@@ -13,6 +13,7 @@ class HalDisplay {
   using GrayscaleBase = freeink::GrayscaleBase;
   using GrayscaleEncoding = freeink::GrayscaleEncoding;
 
+  // When checking stripUploads, pass the grayscale mode used for the planes.
   GrayscaleCapabilities grayscaleCapabilities(GrayscaleMode mode = GrayscaleMode::Overlay) const;
   // Controller of the driver chosen at boot (null if the driver does not say).
   const char* controllerName() const { return einkDisplay.getControllerName(); }
@@ -57,8 +58,6 @@ class HalDisplay {
   void clearScreen(uint8_t color = 0xFF) const;
   void drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                  bool fromProgmem = false) const;
-  void drawImageTransparent(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                            bool fromProgmem = false) const;
 
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
   // Non-blocking refresh (shadow-free): starts the panel waveform and returns
@@ -72,15 +71,10 @@ class HalDisplay {
   // True when displayBufferAsync() genuinely overlaps (panel driver defers);
   // false where it falls back to a blocking refresh.
   bool supportsAsyncRefresh() const;
-  // True when an ordinary deferred B/W refresh is suitable as the base for a
-  // grayscale pass. X3 needs its controller-specific grayscale base waveform.
-  bool supportsAsyncGrayscaleBase() const;
-  void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   // Output polarity. The framebuffer remains in normal polarity; inversion is
   // applied by the display driver while sending it to the panel.
   void setInverted(bool inverted);
-  bool toggleInverted();
   bool isInverted() const;
 
   // Power management
@@ -113,7 +107,6 @@ class HalDisplay {
   void displayGrayscaleBase(RefreshMode fallback = HALF_REFRESH, bool turnOffScreen = false);
   bool displayGrayscaleBase(GrayscaleMode mode, RefreshMode fallback = HALF_REFRESH, bool turnOffScreen = false);
 
-  void copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer);
   void copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer);
   void copyGrayscaleMsbBuffers(const uint8_t* msbBuffer);
   void cleanupGrayscaleBuffers(const uint8_t* bwBuffer);
@@ -121,17 +114,9 @@ class HalDisplay {
   void displayGrayBuffer(bool turnOffScreen = false);
 
   // Tiled grayscale: stream one band of a plane (lsbPlane selects LSB/MSB RAM)
-  // straight to the controller; supportsStripGrayscale() gates the path. See
-  // EInkDisplay::writeGrayscalePlaneStrip.
+  // straight to the controller. Check grayscaleCapabilities(mode).stripUploads
+  // with the same grayscale mode used for the planes.
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows);
-  bool supportsStripGrayscale() const;
-
-  // True when displayGrayscaleBase() defers the base activation so the gray
-  // planes join it in a single waveform (Paper Mono). Callers should then route
-  // the base of a grayscale page through displayGrayscaleBase() instead of
-  // displayBuffer(): a separate B/W refresh first makes the gray pass re-drive
-  // the whole text body (a visible flash).
-  bool combinesGrayscaleBase() const;
 
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;

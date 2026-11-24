@@ -18,6 +18,8 @@ struct FileInfo {
   bool isDirectory;
 };
 
+class GfxRenderer;
+
 class CrossPointWebServer {
  public:
   struct WsUploadStatus {
@@ -54,7 +56,7 @@ class CrossPointWebServer {
   ~CrossPointWebServer();
 
   // Start the web server (call after WiFi is connected)
-  void begin();
+  void begin(GfxRenderer& renderer);
 
   // Stop the web server
   void stop();
@@ -70,9 +72,6 @@ class CrossPointWebServer {
   // An HTTP upload holds handleClient() until its body is read, so this is polled on each chunk.
   // Returning true drops the client: the upload aborts and its partial file is removed.
   void setUploadCancelCheck(std::function<bool()> check) { uploadCancelCheck = std::move(check); }
-
-  // Get the port number
-  uint16_t getPort() const { return port; }
 
  private:
   std::unique_ptr<WebServer> server = nullptr;

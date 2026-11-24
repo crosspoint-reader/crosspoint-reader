@@ -24,6 +24,10 @@ FetchContent_MakeAvailable(googletest)
 
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
+# lib/OtShaper, the Indic shaping engine, for tests that shape.
+file(GLOB OT_SHAPER_SOURCES ${REPO_ROOT}/lib/OtShaper/*.cpp)
+set(OT_SHAPER_INCLUDE_DIR ${REPO_ROOT}/lib/OtShaper)
+
 add_library(crosspoint_test_common INTERFACE)
 target_include_directories(crosspoint_test_common INTERFACE
   ${REPO_ROOT}
@@ -43,6 +47,11 @@ add_subdirectory(release_json_parser)
 add_subdirectory(differential_rounding)
 add_subdirectory(hyphenation_eval)
 add_subdirectory(utf8_compose)
+add_subdirectory(indic_text)
+add_subdirectory(ot_shaper)
+add_subdirectory(complex_shaper)
+add_subdirectory(flash_blob_cache)
+add_subdirectory(text_block_display)
 add_subdirectory(opds_filename)
 add_subdirectory(url_utils)
 add_subdirectory(opds_feed_error)
@@ -89,6 +98,7 @@ add_subdirectory(sd_card_font)
 add_subdirectory(sd_font_registry)
 add_subdirectory(clipping_preview)
 add_subdirectory(glyph_bitmap)
+add_subdirectory(bmp_stream_writer)
 
 add_subdirectory(clipping_store)
 add_subdirectory(reader_session)
@@ -98,6 +108,7 @@ add_subdirectory(plugin_picker_layout)
 add_subdirectory(protected_paths)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME VectorFontIdentity COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vector_font_identity.py)
 add_test(NAME translation_spacing COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_translation_spacing.py)
 add_test(NAME TrustedTimeTimezone COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_trusted_time.py)
 add_test(NAME RemoteButtonInputIntegration COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_remote_button_input.py)

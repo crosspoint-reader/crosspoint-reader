@@ -90,7 +90,6 @@ class Epub {
   BookMetadataCache::TocEntry getTocItem(int tocIndex) const;
   int getSpineItemsCount() const;
   int getTocItemsCount() const;
-  int getSpineIndexForTocIndex(int tocIndex) const;
   int getTocIndexForSpineIndex(int spineIndex) const;
   size_t getCumulativeSpineItemSize(int spineIndex) const;
   // First spine index whose cumulative size reaches `bytes`, or -1 past the end.

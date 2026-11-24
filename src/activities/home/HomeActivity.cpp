@@ -25,6 +25,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookProgress.h"
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Library, File transfer, Settings
@@ -255,6 +256,9 @@ void HomeActivity::onEnter() {
                        : slot == HomeMenuItem::OPDS_BROWSER ? CoverGridHomeUi::SlotTab::OPDS
                                                             : CoverGridHomeUi::SlotTab::NONE,
                        hasContinueReading);
+  } else if (hasContinueReading &&
+             (SETTINGS.uiTheme == CrossPointSettings::LYRA || SETTINGS.uiTheme == CrossPointSettings::COVER_GRID)) {
+    continueReadingProgress = loadBookProgress(recentBooks.front().path);
   }
 
   const auto base = static_cast<int>(recentBooks.size());
@@ -546,7 +550,7 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawRecentBookCover(renderer, Rect{content.x, metrics.homeTopPadding, content.width, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
-                          std::bind(&HomeActivity::storeCoverBuffer, this));
+                          std::bind(&HomeActivity::storeCoverBuffer, this), continueReadingProgress);
 
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_LIBRARY), tr(STR_FILE_TRANSFER),
