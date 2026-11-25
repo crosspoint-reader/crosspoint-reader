@@ -685,26 +685,19 @@ On the **Xteink X3**, the gyroscope can be used to turn pages by tilting the dev
 ### Top-corner shortcuts (touch devices)
 
 On a touch device, the two top corners can run shortcuts while reading an EPUB,
-TXT, or Markdown book (XTC books are not affected):
-
-| Gesture | Default action |
-| --- | --- |
-| Tap the top-left corner | Disabled (keeps the normal tap behavior) |
-| Press and hold the top-left corner | Disabled (starts word selection) |
-| Tap the top-right corner | Toggle Bookmark |
-| Press and hold the top-right corner | Bookmarks |
+TXT, or Markdown book (XTC books are not affected). Gestures without a saved
+binding default to **Disabled** and behave normally. Saved bindings stay
+unchanged.
 
 Each corner gesture is assigned independently in **Settings → Controls → Taps
-and gestures → Corner actions**. The top-left corner starts disabled, so an
-upgrade keeps the normal tap behavior and word selection there. A bound tap no
-longer turns the page, and a bound long press replaces word selection in that
-corner: set that gesture to **Disabled** to restore its normal meaning. Tap and
-long press are separate, so a corner can run its shortcut on a tap and still
-start word selection on a long press (or the reverse). The target is a small
-square (15% of the shorter screen side) in each top corner, so holding a word
-elsewhere on the page still starts word selection. A link directly under the
-corner keeps priority on a tap, and the shortcuts follow **Touch controls while
-reading**.
+and gestures → Corner actions**. A bound tap no longer turns the page, and a
+bound long press replaces word selection in that corner: set that gesture to
+**Disabled** to restore its normal meaning. Tap and long press are separate, so
+a corner can run its shortcut on a tap and still start word selection on a
+long press (or the reverse). The target is a small square (15% of the shorter
+screen side) in each top corner, so holding a word elsewhere on the page still
+starts word selection. A link directly under the corner keeps priority on a
+tap, and the shortcuts follow **Touch controls while reading**.
 An unavailable shortcut falls back to the normal zone behavior. A lookup that
 cannot open despite having a dictionary, or a bookmark save that fails, does
 not fall back. If a tap during a page refresh does nothing, tap again after the

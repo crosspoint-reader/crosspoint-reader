@@ -429,14 +429,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // up-swipe). Only surfaced on home-key boards, where Home is the capacitive
   // key and the bottom edge is free; elsewhere it stays at the Tap default.
   uint8_t showReaderMenu = READER_MENU_TAP;
-  // Top-corner touch shortcuts while reading (CORNER_ACTION). Each gesture is
-  // independent; Disabled leaves that corner to the normal tap zones.
-  // The top-left corner starts disabled: an upgrade keeps the previous tap
-  // behavior and still starts word selection on a hold there.
+  // Top-corner shortcuts are opt-in so unassigned gestures behave normally.
   uint8_t cornerTopLeftTap = CORNER_ACTION_DISABLED;
   uint8_t cornerTopLeftHold = CORNER_ACTION_DISABLED;
-  uint8_t cornerTopRightTap = CORNER_ACTION_TOGGLE_BOOKMARK;
-  uint8_t cornerTopRightHold = CORNER_ACTION_BOOKMARKS;
+  uint8_t cornerTopRightTap = CORNER_ACTION_DISABLED;
+  uint8_t cornerTopRightHold = CORNER_ACTION_DISABLED;
   // Frontlight quick-panel state. Category-less SettingsList entries persist
   // these without adding them to the regular Settings screen.
   uint8_t frontlightBrightness = 60;

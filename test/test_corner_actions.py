@@ -362,11 +362,14 @@ int main() {
   assert(topCornerAt(landscape, 728, 0) == TopCorner::Right);
   assert(topCornerAt(landscape, 799, 0) == TopCorner::Right);
 
-  // The persisted defaults are part of the requirement: the top-left corner
-  // starts disabled so an upgrade keeps the tap and word selection there.
+  // All four shortcuts are opt-in.
   assert(cornerActionAt(x4, 0, 0, false) == CrossPointSettings::CORNER_ACTION_DISABLED);
   assert(cornerActionAt(x4, 0, 0, true) == CrossPointSettings::CORNER_ACTION_DISABLED);
-  assert(cornerActionAt(x4, 479, 0, false) == CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK);
+  assert(cornerActionAt(x4, 479, 0, false) == CrossPointSettings::CORNER_ACTION_DISABLED);
+  assert(cornerActionAt(x4, 479, 0, true) == CrossPointSettings::CORNER_ACTION_DISABLED);
+
+  SETTINGS.cornerTopRightTap = CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK;
+  SETTINGS.cornerTopRightHold = CrossPointSettings::CORNER_ACTION_BOOKMARKS;
   assert(cornerActionAt(x4, 479, 0, true) == CrossPointSettings::CORNER_ACTION_BOOKMARKS);
 
   // Outside the corners every binding is Disabled, so page turns stay untouched.

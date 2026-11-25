@@ -14,11 +14,10 @@ options depend on the device.
   right tap**, **Top right long press**).
 
 **Top-corner shortcuts** run while reading an EPUB, TXT, or Markdown book (XTC
-books do not use them). Each corner gesture is assigned independently; the
-top-left corner starts **Disabled**, which keeps the normal tap behavior and
-word selection there, while top-right tap runs **Toggle Bookmark** and
-top-right long press runs **Bookmarks**. Each target is a square whose side is
-15% of the screen's shorter dimension. A bound tap is removed from the
+books do not use them). The tap and long press in each top corner can be
+assigned independently. Gestures without a saved binding default to
+**Disabled**; saved bindings stay unchanged. Each target is a square whose
+side is 15% of the screen's shorter dimension. A bound tap is removed from the
 page-turn tap zone under it, so it runs its action instead of turning the page;
 a bound long press replaces word selection in that corner. Set that gesture to
 **Disabled** to give the spot back to its normal meaning. Tap and long press
