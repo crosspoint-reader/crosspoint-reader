@@ -254,6 +254,7 @@ void readPluginMetadata(const std::string& path, PluginRef& ref, const bool clas
   JsonDocument filter;
   filter["title"] = true;
   filter["description"] = true;
+  filter["version"] = true;
   if (classifyDevice) {
     filter["browse"]["url"] = true;
     filter["events"] = true;
@@ -262,6 +263,14 @@ void readPluginMetadata(const std::string& path, PluginRef& ref, const bool clas
   if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) return;
   if (doc["title"].is<const char*>()) ref.title = doc["title"].as<const char*>();
   if (doc["description"].is<const char*>()) ref.description = doc["description"].as<const char*>();
+  if (ref.version.empty()) {
+    const char* version = doc["version"] | "";
+    const std::string_view value(version);
+    const auto numeric = value.starts_with('v') || value.starts_with('V') ? value.substr(1) : value;
+    uint32_t parts[3];
+    if (numeric.size() <= 32 && PluginLocations::parseVersion(std::string(numeric), parts))
+      ref.version = "v" + std::string(numeric);
+  }
   if (classifyDevice) {
     const char* browseUrl = doc["browse"]["url"] | "";
     const bool hasEvents = !doc["events"].as<JsonObjectConst>().isNull() && doc["events"].size() > 0;
@@ -1994,21 +2003,12 @@ void PluginCatalogActivity::rebuildRowItems() {
   if (state == State::PLUGIN_PICKER) {
     if (showPluginHubInstallRow) addRow(tr(STR_PLUGIN_HUB), tr(STR_PLUGIN_HUB_DESCRIPTION), ">");
     for (const auto& plugin : installedPlugins) {
-      //   None       -> web-only hint; chevron only with a readme
-      //   Catalog    -> browsable, own description, chevron
-      //   Background -> events-only, own description, chevron only with a readme
-      const char* subtitle = plugin.description.empty() ? nullptr : plugin.description.c_str();
-      switch (plugin.deviceKind) {
-        case PluginLocations::DeviceKind::None:
-          addRow(plugin.title.c_str(), tr(STR_PLUGIN_WEB_ONLY), plugin.readmePath.empty() ? nullptr : ">");
-          break;
-        case PluginLocations::DeviceKind::Catalog:
-          addRow(plugin.title.c_str(), subtitle, ">");
-          break;
-        case PluginLocations::DeviceKind::Background:
-          addRow(plugin.title.c_str(), subtitle, plugin.readmePath.empty() ? nullptr : ">");
-          break;
-      }
+      const bool catalog = plugin.deviceKind == PluginLocations::DeviceKind::Catalog;
+      const char* subtitle =
+          plugin.deviceKind == PluginLocations::DeviceKind::None ? tr(STR_PLUGIN_WEB_ONLY) : plugin.description.c_str();
+      const char* value = plugin.version.c_str();
+      if (plugin.version.empty() && (catalog || !plugin.readmePath.empty())) value = ">";
+      addRow(plugin.title.c_str(), subtitle, value);
     }
   } else if (state == State::LIST_PICKER) {
     for (const auto& list : manifest.browseLists) addRow(list.title.c_str());

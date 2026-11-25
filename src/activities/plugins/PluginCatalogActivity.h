@@ -24,6 +24,7 @@ struct PluginRef {
   std::string dir;           // exact discovered installation directory
   std::string title;         // from device.json or manifest.json (falls back to name)
   std::string description;   // one-line summary, if provided
+  std::string version;       // installed version, if valid
   std::string manifestPath;  // device.json path, "" for a web-only plugin
   std::string readmePath;    // README.md path when present
   PluginLocations::DeviceKind deviceKind = PluginLocations::DeviceKind::None;
