@@ -17,6 +17,7 @@
 #include <cstring>
 #include <iterator>
 
+#include "BookFontSystem.h"
 #include "CrossPointSettings.h"
 #include "ReaderFontSizes.h"
 #include "fontIds.h"
@@ -175,7 +176,17 @@ void SdCardFontSystem::begin(GfxRenderer& renderer, const EpdFontFamily& small, 
   provider.resolve = [](void* ctx, const int fontId, const float scale) {
     return static_cast<SdCardFontSystem*>(ctx)->resolveVariant(fontId, scale);
   };
-  provider.load = [](void* ctx, const int fontId) { return static_cast<SdCardFontSystem*>(ctx)->loadVariant(fontId); };
+  provider.load = [](void* ctx, const int fontId) {
+#if CROSSPOINT_VECTOR_FONTS
+    if (bookFontSystem.load(fontId)) return true;
+#endif
+    return static_cast<SdCardFontSystem*>(ctx)->loadVariant(fontId);
+  };
+#if CROSSPOINT_VECTOR_FONTS
+  provider.resolveFamily = [](void*, const uint32_t family, const float scale) {
+    return bookFontSystem.resolve(family, scale);
+  };
+#endif
   renderer.setFontVariantProvider(provider);
 
   // Register this system as the SD font ID resolver in settings.
