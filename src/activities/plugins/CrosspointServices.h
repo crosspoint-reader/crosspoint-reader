@@ -80,6 +80,10 @@ class CrosspointServices : public dessen::Services {
 
   // ---- loop-task side, driven by DessenAppActivity ----
   bool wantsKeyboard() const { return pending_ == Op::TextInput && !done_; }
+  bool needsNetworkHeap() const {
+    return !done_ && (pending_ == Op::Net || pending_ == Op::Fetch || pending_ == Op::WifiStart ||
+                      pending_ == Op::WifiConnecting);
+  }
   // Run work on the loop task. True when render can resume the VM.
   bool serviceAsyncWork();
   // The keyboard prompt the app asked for.
