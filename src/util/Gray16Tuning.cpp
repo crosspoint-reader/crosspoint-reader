@@ -137,8 +137,8 @@ bool handleGray16Command(const String& command) {
     display.setGray16Levels(nullptr);
     tuningOn = false;
     logSerial.printf("GRAY16: off\n");
-  } else if (strcmp(verb, "SET") == 0 && fields == 5 && a >= 0 && a <= 15 && b >= 0 && b <= 63 && c >= 0 &&
-             c <= 63 && d >= 0 && d <= 63) {
+  } else if (strcmp(verb, "SET") == 0 && fields == 5 && a >= 0 && a <= 15 && b >= 0 && b <= 63 && c >= 0 && c <= 63 &&
+             d >= 0 && d <= 63) {
     const uint8_t previous[3] = {levelPaths[a][0], levelPaths[a][1], levelPaths[a][2]};
     levelPaths[a][0] = static_cast<uint8_t>(b);
     levelPaths[a][1] = static_cast<uint8_t>(c);
