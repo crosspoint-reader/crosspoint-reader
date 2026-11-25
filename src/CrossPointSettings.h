@@ -255,10 +255,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     QUICK_RESUME_SLEEP_SCREEN_COUNT
   };
 
+  enum NIGHT_MODE : uint8_t {
+    NIGHT_MODE_OFF = 0,
+    NIGHT_MODE_ON = 1,
+    NIGHT_MODE_MENU_ONLY = 2,
+    NIGHT_MODE_READER_ONLY = 3,
+    NIGHT_MODE_COUNT
+  };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
-  // Night mode: inverted output polarity, applied to every activity per
-  // render by ActivityManager. The sleep screen opts out itself.
+  // Night mode polarity scope, applied per render by ActivityManager.
   uint8_t screenInverted = 0;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;

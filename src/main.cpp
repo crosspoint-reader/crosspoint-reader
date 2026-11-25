@@ -240,7 +240,9 @@ void handleSlideSwitch() {
   appliedOn = on;
   switch (SETTINGS.slideSwitchAction) {
     case CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE:
-      if ((SETTINGS.screenInverted != 0) == on) return;
+      if (SETTINGS.screenInverted ==
+          (on ? CrossPointSettings::NIGHT_MODE_ON : CrossPointSettings::NIGHT_MODE_OFF))
+        return;
       SETTINGS.screenInverted = on ? 1 : 0;
       break;
     case CrossPointSettings::SLIDE_SWITCH_TOUCH_CONTROLS:
