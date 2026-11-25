@@ -346,7 +346,7 @@ TEST_F(LibraryBuilderTest, FolderHeavyUnchangedReconciliationIoScalesLinearly) {
   EXPECT_LT(largeIo, smallIo * 3u);
 }
 
-TEST_F(LibraryBuilderTest, DirectoryEntriesAreEnumeratedOnce) {
+TEST_F(LibraryBuilderTest, DirectoryEntriesAreEnumeratedOnceWithoutReopeningDirectories) {
   fake::add("/folder/c.txt");
 
   ASSERT_TRUE(buildLibraryIndex("/", stats, false));
@@ -355,16 +355,39 @@ TEST_F(LibraryBuilderTest, DirectoryEntriesAreEnumeratedOnce) {
   EXPECT_EQ(fake::directoryEntriesByPath["/b.epub"], 1u);
   EXPECT_EQ(fake::directoryEntriesByPath["/folder"], 1u);
   EXPECT_EQ(fake::directoryEntriesByPath["/folder/c.txt"], 1u);
+  EXPECT_EQ(fake::directoryOpensByPath.size(), 1u);
+  EXPECT_EQ(fake::directoryOpensByPath["/"], 1u);
 }
 
-TEST_F(LibraryBuilderTest, DirectoryResumeFailureRetainsPreviousIndex) {
-  initial();
-  const auto old = fake::files[INDEX]->bytes;
-  fake::add("/aa-folder/c.txt");
-  fake::failDirectorySeek = true;
+TEST_F(LibraryBuilderTest, DirectoryWalkResumesAtEachLevelAndStopsAtDepthLimit) {
+  fake::add("/a/b/c/d/e/f/too-deep.txt");
+  fake::add("/a/b/c/d/e/within-depth.txt");
+  fake::add("/a/b/c/d/sibling.txt");
 
-  EXPECT_FALSE(buildLibraryIndex("/", stats, false));
-  EXPECT_EQ(fake::files[INDEX]->bytes, old);
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+
+  EXPECT_EQ(stats.books, 4);
+  EXPECT_EQ(fake::directoryEntriesByPath["/a/b/c/d/e/within-depth.txt"], 1u);
+  EXPECT_EQ(fake::directoryEntriesByPath["/a/b/c/d/sibling.txt"], 1u);
+  EXPECT_EQ(fake::directoryEntriesByPath["/b.epub"], 1u);
+  EXPECT_EQ(fake::directoryEntriesByPath.count("/a/b/c/d/e/f/too-deep.txt"), 0u);
+}
+
+TEST_F(LibraryBuilderTest, DirectoryWalkPreservesPathLookupForNamesTrimmedBySdFat) {
+  fake::add("/ Leading/ignored.txt");
+  fake::add("/Trailing space /ignored.txt");
+  fake::add("/Trailing dot./ignored.txt");
+  fake::add("/Trailing dot/book.txt");
+  fake::openPathAliases = {
+      {"/ Leading", "/Leading"}, {"/Trailing space ", "/Trailing space"}, {"/Trailing dot.", "/Trailing dot"}};
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+
+  EXPECT_EQ(stats.books, 4);
+  EXPECT_EQ(fake::directoryEntriesByPath["/Trailing dot/book.txt"], 2u);
+  EXPECT_EQ(fake::directoryEntriesByPath.count("/ Leading/ignored.txt"), 0u);
+  EXPECT_EQ(fake::directoryEntriesByPath.count("/Trailing space /ignored.txt"), 0u);
+  EXPECT_EQ(fake::directoryEntriesByPath.count("/Trailing dot./ignored.txt"), 0u);
 }
 
 TEST_F(LibraryBuilderTest, StagingAndIndexWritesAreBatched) {

@@ -469,19 +469,9 @@ struct DedupFrame {
   ~DedupFrame() { state.activeDedupCount = base; }
 };
 
-void walk(WalkState& st, const std::string& path, const int depth) {
-  if (st.failed || depth > LIBRARY_MAX_DEPTH || st.books >= CLIX_MAX_RECORDS) return;
-  if (isLibrarySkipped(path)) return;
-
+void walk(WalkState& st, HalFile& dir, const std::string& path, const int depth) {
   const uint16_t dedupBase = st.activeDedupCount;
   const DedupFrame dedupFrame{st, dedupBase};
-
-  HalFile dir = Storage.open(path.c_str());
-  if (!dir || !dir.isDirectory()) {
-    if (dir) dir.close();
-    return;
-  }
-  dir.rewindDirectory();
 
   // Identities already staged from THIS directory. A damaged FAT can enumerate
   // the same entry twice; the second one would be a phantom book the user cannot
@@ -513,24 +503,24 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     const bool isDir = entry.isDirectory();
     const uint32_t size = isDir ? 0 : static_cast<uint32_t>(entry.fileSize());
     const uint32_t modificationTime = isDir ? 0 : entry.modificationTime();
-    entry.close();
+    if (!isDir) entry.close();
 
     if (st.nameBuf[0] == '\0' || isHiddenOrSidecar(st.nameBuf)) continue;
     const std::string name(st.nameBuf);
 
     if (isDir) {
-      const size_t resumePosition = dir.position();
-      dir.close();
-      walk(st, joinLibraryPath(path, name), depth + 1);
-      if (st.failed || st.books >= CLIX_MAX_RECORDS) return;
-
-      dir = Storage.open(path.c_str());
-      if (!dir || !dir.isDirectory() || !dir.seekSet(resumePosition)) {
-        if (dir) dir.close();
-        LOG_ERR("LIBIDX", "cannot resume directory %s at %u", path.c_str(), static_cast<unsigned>(resumePosition));
-        st.failed = true;
-        return;
+      if (depth >= LIBRARY_MAX_DEPTH) continue;
+      const std::string childPath = joinLibraryPath(path, name);
+      if (isLibrarySkipped(childPath)) continue;
+      // SdFat trims these characters during path lookup. Scan the directory
+      // that the stored book paths will open.
+      if (name.front() == ' ' || name.back() == ' ' || name.back() == '.') {
+        entry.close();
+        entry = Storage.open(childPath.c_str());
+        if (!entry || !entry.isDirectory()) continue;
       }
+      walk(st, entry, childPath, depth + 1);
+      if (st.failed || st.books >= CLIX_MAX_RECORDS) break;
       continue;
     }
     if (!isLibraryBookFile(name)) continue;
@@ -589,7 +579,6 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     }
     if (!stageRecord(st, name, size, myFolderId, joinLibraryPath(path, name), modificationTime)) break;
   }
-  dir.close();
 }
 
 // Shared by the offset and write passes so the name-blob layout has one source of
@@ -1225,7 +1214,10 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   {
     serialization::BufferedFileWriter stageOut(st.stage, LIBRARY_IO_BUFFER_SIZE);
     st.stageOut = &stageOut;
-    walk(st, rootPath, 0);
+    if (!isLibrarySkipped(rootPath)) {
+      HalFile root = Storage.open(rootPath);
+      if (root && root.isDirectory()) walk(st, root, rootPath, 0);
+    }
     st.stageOut = nullptr;
     stageFlushed = stageOut.flush();
   }
