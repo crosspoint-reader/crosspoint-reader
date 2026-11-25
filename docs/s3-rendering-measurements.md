@@ -145,8 +145,8 @@ If allocation fails, it uses the previous smaller-buffer path.
 ### Draw both gray planes together
 
 Previously, the reader walked the page once for each gray plane.
-Text pages now produce both gray planes during one walk through the page.
-This uses the two PSRAM buffers, while image pages keep their separate drawing passes.
+Most text pages produce both gray planes in the same drawing pass using two PSRAM buffers.
+Image pages and EEGO A4 pages with visible clipping highlights draw each plane separately.
 
 ### Send consecutive display bytes together
 
@@ -183,7 +183,7 @@ It adds no display task or queue, so it also avoids the stock firmware's extra p
 | Change | Guard and reason |
 | --- | --- |
 | Full-height gray buffers | `BOARD_HAS_PSRAM`. Allocate in PSRAM only and retain the 80-row fallback. |
-| Draw both gray planes together | `BOARD_HAS_PSRAM`. Use the two retained planes for text pages. |
+| Draw both gray planes together | `BOARD_HAS_PSRAM` and two available PSRAM buffers. |
 | Group nearby SD-font reads | `BOARD_HAS_PSRAM`. Use a bounded 16 KiB buffer without internal-memory fallback. |
 | DMA and 4 KiB transfer batches | Arduino + `BOARD_HAS_PSRAM` + ESP32-S3. Also require an exclusive display bus and successful setup. |
 | Contiguous UC8279 visible-plane writes | No PSRAM guard. Reuse existing bytes and preserve padding, inversion, and row order. |

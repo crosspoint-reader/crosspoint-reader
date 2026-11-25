@@ -2241,7 +2241,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.clearScreen();
   }
 
-  drawClippingHighlights(*page, fontId, orientedMarginTop, orientedMarginLeft);
+  [[maybe_unused]] const bool drewClippingHighlights =
+      drawClippingHighlights(*page, fontId, orientedMarginTop, orientedMarginLeft);
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
   const auto tBwRender = millis();
@@ -2338,8 +2339,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
     if (lsbPlaneBuf) {
 #ifdef BOARD_HAS_PSRAM
-      // Image decoding and image plane encoding retain the established two-pass path.
-      if (grayPlanes && !page->hasImages()) {
+      // Images and EEGO A4 clipping highlights need separate plane passes.
+      if (grayPlanes && !page->hasImages() && (!drewClippingHighlights || !BoardConfig::isEegoA4())) {
         renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
         renderer.beginGrayPairTarget(lsbPlaneBuf, msbPlaneBuf, gh);
         renderer.clearScreen(absoluteImageGrayscale ? 0xFF : 0x00);
@@ -2512,17 +2513,17 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
   return -1;
 }
 
-void EpubReaderActivity::drawClippingHighlights(const Page& page, const int fontId, const int orientedMarginTop,
+bool EpubReaderActivity::drawClippingHighlights(const Page& page, const int fontId, const int orientedMarginTop,
                                                 const int orientedMarginLeft) const {
   if (!section || !CLIPPINGS.hasClippings() || section->currentPage < 0 || section->currentPage >= section->pageCount) {
-    return;
+    return false;
   }
 
   size_t chapterClippings = 0;
   for (size_t i = 0; i < CLIPPINGS.clippingCount(); ++i) {
     if (CLIPPINGS.clippingAt(i)->spineIndex == currentSpineIndex) ++chapterClippings;
   }
-  if (!chapterClippings) return;
+  if (!chapterClippings) return false;
 
   const auto started = millis();
   size_t highlightedWords = 0;
@@ -2599,6 +2600,7 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
   }
   LOG_DBG("CLIP", "Highlight pass: chapter_clips=%u highlighted_words=%u time=%lums",
           static_cast<unsigned>(chapterClippings), static_cast<unsigned>(highlightedWords), millis() - started);
+  return highlightedWords != 0;
 }
 
 void EpubReaderActivity::renderStatusBar() const {

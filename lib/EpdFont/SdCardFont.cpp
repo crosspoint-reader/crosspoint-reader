@@ -1617,7 +1617,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
           }
           lastBitmapEnd = batchEnd;
         }
-        memcpy(s.miniBitmap + miniBitmapOffset, bitmapReadBuffer_.get() + fileOff - batchStart, glyph.dataLength);
+        memcpy(s.miniBitmap + miniBitmapOffset, bitmapReadBuffer_.get() + (fileOff - batchStart), glyph.dataLength);
       } else
 #endif
       {
