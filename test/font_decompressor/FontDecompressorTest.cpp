@@ -27,10 +27,8 @@ struct FontCase {
 
 // FNV-1a of the original uncompressed bitmaps, before enabling compression.
 constexpr FontCase UI_FONTS[] = {
-    {&ubuntu_10_bold, 1313, 0xb24201ba64fc7bcaULL},
-    {&ubuntu_10_regular, 1313, 0xe8cffa32a0a1e1a1ULL},
-    {&ubuntu_12_bold, 1313, 0x5c4b9b1083abff1cULL},
-    {&ubuntu_12_regular, 1313, 0xa6086bf6b46a7ff6ULL},
+    {&ubuntu_10_bold, 1313, 0xb24201ba64fc7bcaULL},   {&ubuntu_10_regular, 1313, 0xe8cffa32a0a1e1a1ULL},
+    {&ubuntu_12_bold, 1313, 0x5c4b9b1083abff1cULL},   {&ubuntu_12_regular, 1313, 0xa6086bf6b46a7ff6ULL},
     {&ubuntu_8_regular, 1313, 0x3fc9991f93cfe07cULL},
 };
 
