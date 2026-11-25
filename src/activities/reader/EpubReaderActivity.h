@@ -18,7 +18,6 @@
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
 #include "ReaderToolbarUi.h"
-#include "activities/settings/TextSettingsActivity.h"
 #include "components/OptionPopup.h"
 
 class EpubReaderActivity final : public ReaderActivity {
@@ -205,8 +204,6 @@ class EpubReaderActivity final : public ReaderActivity {
   // A menu font held back while a page action runs (see openReaderMenu()).
   int deferredMenuFontFamily = -1;
   uint8_t deferredMenuFontSize = 0;
-  // Text Settings from the list menu; the chapter is laid out again on return.
-  void openTextSettings(TextSettingsActivity::Tab tab);
   // More panel rows.
   void buildMoreActions();
   std::string moreRowName(int row) const;

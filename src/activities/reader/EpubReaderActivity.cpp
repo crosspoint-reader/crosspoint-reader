@@ -415,23 +415,6 @@ void EpubReaderActivity::openReaderMenu() {
   });
 }
 
-void EpubReaderActivity::openTextSettings(const TextSettingsActivity::Tab tab) {
-  startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(), tab),
-                         [this](const ActivityResult&) {
-                           {
-                             RenderLock lock;
-                             if (section) {
-                               rememberCurrentContentOffset();
-                               cachedSpineIndex = currentSpineIndex;
-                               cachedChapterTotalPageCount = section->pageCount;
-                               nextPageNumber = section->currentPage;
-                             }
-                             section.reset();
-                           }
-                           openReaderMenu();
-                         });
-}
-
 // Runs on the render task, under its lock, right before every chapter build. The page turner's
 // radio holds about 50 KB while it runs, and no heap figure taken before a build tells whether the
 // build fits next to it (X3: with the radio up, 55 KB free and a 47 KB block, a 6 KB chapter ran
@@ -1338,15 +1321,22 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       openFootnoteSelect(true);
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS:
-    case EpubReaderMenuActivity::MenuAction::FONT_FAMILY: {
-      // FONT_FAMILY/FONT_SIZE arrive here only when their list is longer than
-      // the popup holds.
-      openTextSettings(TextSettingsActivity::Tab::Family);
-      break;
-    }
-    case EpubReaderMenuActivity::MenuAction::FONT_SIZE: {
-      openTextSettings(TextSettingsActivity::Tab::Size);
+    case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS: {
+      startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
+                                                                    TextSettingsActivity::Tab::Family),
+                             [this](const ActivityResult&) {
+                               {
+                                 RenderLock lock;
+                                 if (section) {
+                                   rememberCurrentContentOffset();
+                                   cachedSpineIndex = currentSpineIndex;
+                                   cachedChapterTotalPageCount = section->pageCount;
+                                   nextPageNumber = section->currentPage;
+                                 }
+                                 section.reset();
+                               }
+                               openReaderMenu();
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BLUETOOTH:

@@ -296,10 +296,6 @@ class OptionPopup {
   bool isActive() const { return active; }
   const char* optionLabel(int index) const { return ownedStrings[index].c_str(); }
 
-  // False when show() got more options than the popup lists (MAX_OPTIONS);
-  // a caller with a longer list offers another screen.
-  bool holdsAllOptions() const { return ownedStrings.size() <= MAX_OPTIONS; }
-
   // Close without firing the callback (the surface under the popup is going
   // away, e.g. its host screen closes from outside the popup's own input).
   void dismiss() {

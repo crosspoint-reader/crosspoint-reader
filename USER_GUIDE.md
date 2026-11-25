@@ -740,7 +740,7 @@ Available options include:
 - **Reader Font Size** – Pick one of the sizes the current font provides.
 - **Text Settings** – Change the font, size, spacing and other text options without leaving the book.
 
-These last three are at the bottom of the list, so pressing **Up** from the top of the menu reaches them quickly. Font family and size changes from the menu apply when you close it. Long lists scroll; if there are more than 16 choices, **Text Settings** opens instead.
+These last three are at the bottom of the list, so pressing **Up** from the top of the menu reaches them quickly. Font family and size changes from the menu apply when you close it. Long lists scroll.
 
 Press **Back** at any time to close the menu and return to your current page.
 

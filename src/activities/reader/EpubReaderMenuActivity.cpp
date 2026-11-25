@@ -188,7 +188,7 @@ void EpubReaderMenuActivity::showFontSizePicker() {
     labels.push_back(std::to_string(sizes[i]) + " pt");
     if (sizes[i] == pendingFontPointSize) current = static_cast<int>(i);
   }
-  optionPopup.show(StrId::STR_FONT_SIZE, labels, current, [this, sizes = std::move(sizes)](int idx) {
+  optionPopup.show(StrId::STR_FONT_SIZE, std::move(labels), current, [this, sizes = std::move(sizes)](int idx) {
     if (idx < 0 || idx >= static_cast<int>(sizes.size())) return;
     setPendingFont(pendingFontFamily, sizes[idx]);
     requestUpdate();
@@ -228,13 +228,6 @@ void EpubReaderMenuActivity::activateIndex(const int index) {
       showFontFamilyPicker();
     } else {
       showFontSizePicker();
-    }
-    if (!optionPopup.holdsAllOptions()) {
-      // The reader opens the matching Text Settings tab, whose list has no cap.
-      optionPopup.dismiss();
-      setResult(makeResult(static_cast<int>(selectedAction)));
-      finish();
-      return;
     }
     requestUpdate();
     return;
