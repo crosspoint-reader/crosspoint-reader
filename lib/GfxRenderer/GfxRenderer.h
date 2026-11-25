@@ -409,6 +409,18 @@ class GfxRenderer {
 
  public:
   int getFontAscenderSize(int fontId) const;
+  // Loads glyph metrics (no bitmaps) for the texts from getter(ctx, 0..textCount-1) of an SD card font, so
+  // getGlyphInkBounds reads resident metrics instead of faulting glyphs one file open at a time. A getter returning
+  // null skips that index. No-op for built-in fonts.
+  void ensureSdGlyphMetrics(int fontId, TextGetter getter, const void* ctx, uint32_t textCount,
+                            uint8_t styleMask) const;
+  // Vertical ink extent of one glyph, relative to the top passed to drawText.
+  // measured is false when the glyph has no ink (blank or missing).
+  struct InkBounds {
+    int top = 0, bottom = 0;
+    bool measured = false;
+  };
+  InkBounds getGlyphInkBounds(int fontId, uint32_t cp, EpdFontFamily::Style style) const;
   int getLineHeight(int fontId) const;
   // Explicit line spacing scales font size; the one-argument form returns font metrics.
   int getLineHeight(int fontId, float compression) const;

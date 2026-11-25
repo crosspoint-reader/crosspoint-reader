@@ -31,8 +31,8 @@ extract_words = method("bool ClipSelectionActivity::extractWords", "int ClipSele
 gap_draw = method("void ClipSelectionActivity::ditherGapBetween", "bool ClipSelectionActivity::renderIncremental")
 incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void ClipSelectionActivity::drawSelection")
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
-word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
-word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
+word_rect_source = (ROOT / "src/clippings/ClippingWordRect.h").read_text()
+word_rect_helpers = word_rect_source[word_rect_source.rfind("\n", 0, word_rect_source.index("inline int clippingWordFont")) + 1:]
 saved_hit = method("int EpubReaderActivity::clippingAtPoint", "void EpubReaderActivity::drawClippingHighlights", reader_source)
 saved_draw = method("void EpubReaderActivity::drawClippingHighlights", "void EpubReaderActivity::renderStatusBar", reader_source)
 
@@ -45,6 +45,7 @@ harness = r"""
 #include <climits>
 #include <cstdio>
 #include <memory>
+#include <map>
 #include <set>
 #include <span>
 #include <string>
@@ -131,7 +132,7 @@ struct Renderer {
   using LaidOutText = ::LaidOutText;
   enum RenderMode { BW, GRAYSCALE_MSB };
   enum class DitherMode { Replace, PreserveInk };
-  struct Draw { int x, width, tracking; };
+  struct Draw { int x, width, tracking, y = 0, height = 0; };
   mutable std::vector<Draw> draws;
   mutable std::vector<Draw> fills;
   mutable std::set<std::pair<int, int>> ink;
@@ -161,6 +162,21 @@ struct Renderer {
   bool isSdCardFont(int) const { return sdFont; }
   int getFontAscenderSize(int) const { return 12; }
   int getLineHeight(int) const { return 16; }
+  struct InkBounds { int top = 0, bottom = 0; bool measured = false; };
+  mutable size_t metricPrewarms = 0;
+  void ensureSdGlyphMetrics(int, const char* (*getter)(const void*, uint32_t), const void* ctx, uint32_t count,
+                            uint8_t) const {
+    ++metricPrewarms;
+    for (uint32_t i = 0; i < count; ++i) getter(ctx, i);
+  }
+  bool measureAll = true;  // false: only glyphInk entries have ink (a font without the usual letters)
+  std::map<uint32_t, InkBounds> glyphInk;
+  InkBounds getGlyphInkBounds(int, uint32_t cp, EpdFontFamily::Style) const {
+    if (const auto it = glyphInk.find(cp); it != glyphInk.end()) return it->second;
+    return measureAll ? InkBounds{2, 14, true} : InkBounds{};
+  }
+  int linePitch = 16;
+  int getLineHeight(int, float) const { return linePitch; }
   RenderMode getRenderMode() const { return BW; }
   void getOrientedViewableTRBL(int* top, int* right, int* bottom, int* left) const {
     *top = *right = *bottom = *left = 0;
@@ -208,7 +224,7 @@ struct Renderer {
   }
   void fillRectDither(int x, int y, int width, int height, Color,
                       DitherMode mode = DitherMode::Replace) const {
-    fills.push_back({x, width, 0});
+    fills.push_back({x, width, 0, y, height});
     if (mode == DitherMode::Replace) clearInk(x, y, width, height);
     for (int py = y; py < y + height; ++py)
       for (int px = x; px < x + width; ++px)
@@ -269,6 +285,7 @@ unsigned long millis() { return 0; }
 struct Settings {
   int screenMargin = 0;
   int getReaderFontId() const { return 0; }
+  float getReaderLineCompression() const { return 1.0f; }
   ReaderRenderSpec readerRenderSpec(int width, int height) const {
     ReaderRenderSpec spec;
     spec.viewportWidth = width;
@@ -293,7 +310,7 @@ bool selectionLowMemory(const int first, const int last) {
 """ + memory_guard + r"""
   return lowMemory;
 }
-""" + clean_word + r"""
+""" + clean_word + "\n" + word_rect_helpers + r"""
 struct ClipSelectionActivity {
 """ + word_box + action_helpers + r"""
   std::unique_ptr<WordBox[]> words = makeUniqueNoThrow<WordBox[]>(240);
@@ -337,7 +354,7 @@ struct EpubReaderActivity {
   int clippingAtPoint(const Page&, int, int) const;
   void drawClippingHighlights(const Page&, int, int, int) const;
 };
-""" + word_font + word_rect + saved_hit + saved_draw + r"""
+""" + saved_hit + saved_draw + r"""
 int loadLine(ClipSelectionActivity& activity, const std::vector<std::string>& logical,
              bool rtl, int first = 0, uint32_t offset = 0, uint16_t row = 0) {
   std::vector<uint16_t> visual;
@@ -448,6 +465,49 @@ int main() {
     page->elements.push_back(std::move(line));
     decorated.pages.push_back(std::move(page));
     assert(decorated.extractWords());
+    // Selection box hugs the measured ink (top 2, bottom 14), not the full line advance.
+    const int inkY = decorated.words[0].y;
+    assert(decorated.words[0].height == 12);
+    // Last line on the page: the box is the full measured ink (top 2, bottom 14), whatever the line pitch.
+    for (const int pitch : {10, 14, 15, 20}) {
+      decorated.renderer.linePitch = pitch;
+      assert(decorated.extractWords());
+      assert(decorated.words[0].height == 12 && decorated.words[0].y == inkY);
+    }
+    // A following line closer than the ink is tall: the excess is cut half from each side, so boxes never overlap.
+    auto next = std::make_unique<PageLine>();
+    next->yPos = 5 + 8;
+    next->block.packedText = std::string("x\0", 2);
+    next->block.positions = {0};
+    next->block.styles = {EpdFontFamily::REGULAR};
+    decorated.pages[0]->elements.push_back(std::move(next));
+    assert(decorated.extractWords());
+    assert(decorated.words[0].height == 8 && decorated.words[0].y == inkY + 2);
+    // A gap at least as tall as the ink (e.g. paragraph spacing) leaves the box untouched.
+    decorated.pages[0]->elements.back()->yPos = 5 + 12;
+    assert(decorated.extractWords());
+    assert(decorated.words[0].height == 12 && decorated.words[0].y == inkY);
+    decorated.pages[0]->elements.back()->yPos = 5 + 40;
+    assert(decorated.extractWords());
+    assert(decorated.words[0].height == 12 && decorated.words[0].y == inkY);
+    decorated.pages[0]->elements.pop_back();
+    // Nothing measurable (e.g. glyphs not loaded): a neutral one-pitch box from the top.
+    decorated.renderer.measureAll = false;
+    for (const int pitch : {10, 16, 20}) {
+      decorated.renderer.linePitch = pitch;
+      assert(decorated.extractWords());
+      assert(decorated.words[0].height == pitch && decorated.words[0].y == inkY - 2);
+    }
+    // Ink is the union over the line's words, so both words share one box regardless of script.
+    decorated.renderer.linePitch = 16;
+    decorated.renderer.glyphInk = {{'o', {4, 12, true}}, {'t', {1, 15, true}}};
+    assert(decorated.extractWords());
+    assert(decorated.words[0].y == inkY - 1 && decorated.words[0].height == 14);
+    assert(decorated.words[1].y == decorated.words[0].y && decorated.words[1].height == 14);
+    decorated.renderer.measureAll = true;
+    decorated.renderer.glyphInk.clear();
+    decorated.renderer.linePitch = 16;
+    assert(decorated.extractWords());
     const auto originalInk = decorated.renderer.ink;
     decorated.rangeStart = 0;
     decorated.selected = 1;
@@ -488,6 +548,7 @@ int main() {
     assert(cold.words[0].pageOffset == 0);
     assert(cold.words[239].pageOffset == 1);
     assert(cold.renderer.coldMeasurements == 0);
+    assert(cold.renderer.metricPrewarms > 0 && cold.renderer.metricPrewarms < cold.wordCount);  // once per line
     cold.mode = ClipSelectionActivity::Mode::DefinitionLookup;
     cold.borrowedPages = cold.pages;
     HalMemory::stats = {1024 * 1024, 1024 * 1024};
@@ -524,6 +585,22 @@ int main() {
     assert(dense.words[299].pageOffset == 0);
     assert(dense.words[300].pageOffset == 1);
     assert(dense.words[309].pageOffset == 1);
+  }
+  {
+    ClipSelectionActivity emSpace;
+    auto page = std::make_unique<Page>();
+    auto line = std::make_unique<PageLine>();
+    for (const char* word : {"\xe2\x80\x83", "word"}) {  // a lone em-space has no width left after its indent
+      line->block.packedText += word;
+      line->block.packedText += '\0';
+      line->block.styles.push_back(EpdFontFamily::REGULAR);
+    }
+    page->elements.push_back(std::move(line));
+    emSpace.pages.push_back(std::move(page));
+    assert(emSpace.extractWords());
+    assert(emSpace.wordCount == 1);
+    assert(emSpace.words[0].width > 0);
+    assert(emSpace.words[0].pageWordIndex == 1);  // the skipped em-space still takes index 0
   }
   HalMemory::stats = {5908, 3444};  // Physical X3 crash workload.
   assert(selectionLowMemory(0, 0));
@@ -577,6 +654,9 @@ int main() {
     assert(activity.renderer.fills.size() == 1);
     const int width = activity.words[0].width;
     assert(activity.renderer.fills[0].width == width);
+    // Saved highlights and live selection share one box: same top and height.
+    assert(activity.renderer.fills[0].y == activity.words[0].y);
+    assert(activity.renderer.fills[0].height == activity.words[0].height);
     assert(reader.clippingAtPoint(*activity.pages[0], width - 1, 8) == 0);
     assert(reader.clippingAtPoint(*activity.pages[0], width, 8) == -1);
   }
