@@ -14,8 +14,6 @@ class JpegToBmpConverter {
   static bool jpegFileToBmpStream(HalFile& jpegFile, Print& bmpOut, bool crop = true, bool originalThresholds = false);
   // The same picture as 8-bit grayscale, with the same size and crop
   static bool jpegFileToGray8BmpStream(HalFile& jpegFile, Print& bmpOut, bool crop = true);
-  // Convert with custom target size (for thumbnails)
-  static bool jpegFileToBmpStreamWithSize(HalFile& jpegFile, Print& bmpOut, int targetMaxWidth, int targetMaxHeight);
   // Convert to 1-bit BMP (black and white only, no grays) for fast home screen rendering
   static bool jpegFileTo1BitBmpStreamWithSize(HalFile& jpegFile, Print& bmpOut, int targetMaxWidth,
                                               int targetMaxHeight);

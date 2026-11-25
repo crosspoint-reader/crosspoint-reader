@@ -89,8 +89,9 @@ class HalGPIO {
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
   // True when any button contact is closed right now, read straight from the
-  // hardware (ADC ladder off its idle rail, the power GPIO asserted, or the T5S3
-  // expander key, one I2C read), without going through the debounced state.
+  // hardware (ADC ladder off its idle rail, the power GPIO asserted, a button
+  // GPIO low on non-ladder boards, or the T5S3 expander key, one I2C read),
+  // without going through the debounced state.
   // Cheap enough to call every few ms.
   bool rawInputActive();
   bool hasTouch() const;

@@ -52,14 +52,6 @@ bool HalClock::localTime(struct tm& out) const {
   return true;
 }
 
-bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
-  struct tm local;
-  if (!localTime(local)) return false;
-  hour = static_cast<uint8_t>(local.tm_hour);
-  minute = static_cast<uint8_t>(local.tm_min);
-  return true;
-}
-
 bool HalClock::formatTime(char* buf, size_t bufSize, bool use12Hour) const {
   if (bufSize < (use12Hour ? 9u : 6u)) return false;
   struct tm local;

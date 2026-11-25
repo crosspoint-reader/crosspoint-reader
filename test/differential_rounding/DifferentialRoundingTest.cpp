@@ -6,6 +6,7 @@
 
 #include "lib/EpdFont/EpdFont.h"
 #include "lib/EpdFont/EpdFontData.h"
+#include "lib/EpdFont/EpdFontFamily.h"
 
 // ============================================================================
 // Synthetic test font
@@ -508,4 +509,47 @@ TEST(EpdFont, MissingTurnedCommaUsesQuoteAndNativeGlyphWins) {
   data.intervals = intervals;
   data.intervalCount = 2;
   EXPECT_EQ(font.getGlyph(0x02BB), &glyphs[0]);
+}
+
+TEST(UiFontFallback, MixesGlyphsAndOmitsUnsupportedCharacters) {
+  EpdFontData customData = kTestFontData;
+  customData.intervals = kIntervals + 1;
+  customData.intervalCount = 1;  // Only 'a'.
+  EpdFont custom(&customData);
+  EpdFontFamily builtin(10, &testFont());
+  EpdFontFamily family(10, &custom);
+  family.setGlyphFallback(&builtin);
+
+  EpdGlyph solid;
+  const EpdFontData* source = nullptr;
+  EXPECT_EQ(family.getGlyphMetrics('T', solid, EpdFontFamily::REGULAR, &source), &kGlyphs[0]);
+  EXPECT_EQ(source, &kTestFontData);
+  EXPECT_EQ(family.getGlyphMetrics('a', solid, EpdFontFamily::REGULAR, &source), &kGlyphs[1]);
+  EXPECT_EQ(source, &customData);
+  EXPECT_EQ(family.getGlyphMetrics('?', solid), nullptr);
+  EXPECT_EQ(family.getKerning('T', 'a'), 0);
+  int width = 0;
+  int height = 0;
+  family.getTextDimensions("T?a", &width, &height);
+  EXPECT_EQ(width, fp4::toPixel(kGlyphs[0].advanceX) + kGlyphs[1].width);
+  EXPECT_EQ(height, kGlyphs[0].height);
+}
+
+TEST(UiFontFallback, SwitchesToBuiltinsWhenGlyphLoadFails) {
+  EpdFontData customData = kTestFontData;
+  customData.ascender = 20;
+  EpdFont custom(&customData);
+  EpdFontFamily builtin(10, &testFont());
+  EpdFontFamily family(10, &custom);
+  std::atomic<bool> failed = false;
+  family.setGlyphFallback(&builtin);
+  family.setGlyphLoadFailureFlag(&failed);
+  EXPECT_EQ(family.getData(), &customData);
+  failed = true;
+  EXPECT_EQ(family.getData(), &kTestFontData);
+  EpdGlyph solid;
+  const EpdFontData* source = nullptr;
+  EXPECT_EQ(family.getGlyphMetrics('a', solid, EpdFontFamily::REGULAR, &source), &kGlyphs[1]);
+  EXPECT_EQ(source, &kTestFontData);
+  EXPECT_EQ(family.getGlyphMetrics('?', solid), nullptr);
 }

@@ -27,9 +27,6 @@ SettingsListActivity::SettingsListActivity(GfxRenderer& renderer, MappedInputMan
 
 void SettingsListActivity::onEnter() {
   UiListActivity::onEnter();
-  // EEGO A4: a fast refresh leaves the previous screen ghosting in the
-  // dithered areas.
-  cleanNextRefresh = BoardConfig::isEegoA4();
   rebuildRows();
 }
 

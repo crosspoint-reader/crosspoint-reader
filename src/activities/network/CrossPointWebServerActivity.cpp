@@ -74,6 +74,7 @@ void CrossPointWebServerActivity::onEnter() {
   // demand — release them up front instead of aborting in startWebServer()
   // when the heap comes up short (observed on X3 with a Korean SD font).
   if (auto* fcm = renderer.getFontCacheManager()) {
+    RenderLock lock;
     fcm->releaseSdFontCaches();
     LOG_DBG("WEBACT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
   }
@@ -113,6 +114,7 @@ void CrossPointWebServerActivity::onExit() {
   LOG_DBG("WEBACT", "Free heap at onExit start: %d bytes", ESP.getFreeHeap());
 
   state = WebServerActivityState::SHUTTING_DOWN;
+  webServer.reset();
   stopDnsServer();
   MDNS.end();
 
@@ -304,14 +306,6 @@ void CrossPointWebServerActivity::startAccessPoint() {
 void CrossPointWebServerActivity::startWebServer() {
   LOG_DBG("WEBACT", "Starting web server...");
 
-  // Repeat the release right before the allocation: the WiFi selection screen
-  // rendered since onEnter(), and a CJK SSID repopulates the SD-font caches.
-  if (auto* fcm = renderer.getFontCacheManager()) {
-    LOG_DBG("WEBACT", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
-    fcm->releaseSdFontCaches();
-    LOG_DBG("WEBACT", "Free heap before server alloc: %d bytes", ESP.getFreeHeap());
-  }
-
   // Create the web server instance
   webServer.reset(new CrossPointWebServer());
   // An upload holds loop() inside handleClient(), so input is sampled on each received chunk instead. On a slow
@@ -326,7 +320,7 @@ void CrossPointWebServerActivity::startWebServer() {
                      mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasHomeGesture();
     return leaveRequested;
   });
-  webServer->begin();
+  webServer->begin(renderer);
 
   if (webServer->isRunning()) {
     state = WebServerActivityState::SERVER_RUNNING;

@@ -185,5 +185,47 @@ TEST(RadioVerdictS3Test, TheFirstPairingStartsFromTheSettingsScreen) {
   EXPECT_EQ(radioVerdict(in, kX3Profile), Why::HeapInPieces) << "(the old behavior, kept for the X3)";
 }
 
+// OnePage (C61), 18/11/2026: the S3 profile refused every start in a book (required_free=75180), then rolled
+// back every start on the settings screen (required_largest=24576) though the stack had come up.
+TEST(RadioVerdictS3Test, TheC61KeepsTheStackTheS3ProfileRolledBack) {
+  constexpr Heap kOnePageBook{55143, 47092};
+  RadioInputs in{};
+  in.phase = Phase::BeforeStart;
+  in.where = Where::Reader;
+  in.heap = kOnePageBook;
+  EXPECT_EQ(radioVerdict(in, kS3Profile), Why::HeapLow);
+  EXPECT_EQ(radioVerdict(in, kC61Profile), Why::Ok);
+  in.heap = {52383, 26612};
+  EXPECT_EQ(radioVerdict(in, kC61Profile), Why::Ok) << "the second start of the same visit";
+  in.heap = {kC61Profile.startFreeBytes - 1, kOnePageBook.largestBlock};
+  EXPECT_EQ(radioVerdict(in, kC61Profile), Why::HeapLow);
+  in.phase = Phase::JustStarted;
+  in.heap = {15443, 13300};
+  EXPECT_EQ(radioVerdict(in, kS3Profile), Why::HeapInPieces);
+  EXPECT_EQ(radioVerdict(in, kC61Profile), Why::Ok);
+  in.heap = {15443, kC61Profile.minimumLargest - 1};
+  EXPECT_EQ(radioVerdict(in, kC61Profile), Why::HeapInPieces);
+  in.where = Where::Home;
+  in.phase = Phase::Idle;
+  in.enabled = true;
+  in.pageShown = true;
+  in.hasBond = true;
+  EXPECT_EQ(radioVerdict(in, kC61Profile), Why::NotReading) << "no start at Home";
+}
+
+TEST(RadioVerdictS3Test, TheC61CountsRefusalsWithEnoughTotalMemoryTowardARestart) {
+  RadioInputs in{};
+  in.phase = Phase::BeforeStart;
+  in.where = Where::Reader;
+  in.heap = {kC61Profile.startFreeBytes - 1, kC61Profile.minimumLargest - 1};
+  EXPECT_EQ(radioVerdict(in, kC61Profile), Why::HeapLow);
+  ++in.heap.freeBytes;
+  const auto refusal = radioVerdict(in, kC61Profile);
+  EXPECT_EQ(refusal, Why::HeapInPieces);
+  EXPECT_TRUE(shouldRestart(refusal, kRefusalsBeforeRestart, false));
+  ++in.heap.largestBlock;
+  EXPECT_EQ(radioVerdict(in, kC61Profile), Why::Ok);
+}
+
 }  // namespace
 }  // namespace bleturner

@@ -113,6 +113,8 @@ jobs:
             asset: firmware-picco.bin
           - env: metalio_eink4_plus
             asset: firmware-metalio_eink4_plus.bin
+          - env: onepage
+            asset: firmware-onepage.bin
     steps:
       - uses: actions/checkout@v6
         with:

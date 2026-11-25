@@ -71,8 +71,18 @@ constexpr bool buildFitsBesideRadio(const Heap& heap, const Profile& profile) {
   return profile.buildsBesideStack && heap.largestBlock >= profile.minimumLargest &&
          heap.freeBytes >= kBuildBesideRadioFreeBytes;
 }
+// C61 (OnePage, FREEINK_BLE_PROFILE_C61), measured 18/11/2026 on the settings screen: the stack took 36,620 to
+// 37,244 B of internal RAM, most of it from IDF's 64 KiB internal pool (CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL).
+// Malloc and new take internal RAM for requests up to 4,096 B and fall back to PSRAM once it runs out, so the
+// reader needs no internal block of its own. The block kept after the start is for two more 4 KiB task stacks
+// or DMA buffers.
+inline constexpr size_t kC61StackBytes = 37244 + 4096;  // measured, plus a margin of one allocator page
+inline constexpr size_t kC61MinimumLargest = 2 * 4096;
+inline constexpr Profile kC61Profile{kC61StackBytes, kC61StackBytes + kC61MinimumLargest, kC61MinimumLargest, 0, false};
 #if defined(FREEINK_BLE_STACK_S31)
 inline constexpr const Profile& activeProfile() { return kS31Profile; }
+#elif defined(FREEINK_BLE_PROFILE_C61)
+inline constexpr const Profile& activeProfile() { return kC61Profile; }
 #elif defined(FREEINK_BLE_STACK_IN_PSRAM)
 inline constexpr const Profile& activeProfile() { return kS3Profile; }
 #else
@@ -134,7 +144,7 @@ constexpr Why radioVerdict(const RadioInputs& in, const Profile& profile = activ
       // A book still building its index needs the heap the radio would take; its keys work.
       if (in.bookIndexing) return Why::Indexing;
       return Why::Ok;
-    case Phase::BeforeStart:
+    case Phase::BeforeStart: {
       if (in.storageBusy) return Why::StorageBusy;
       // A start at Home needs the block the reader will want after the stack; a refusal there is HeapLow, which
       // never asks for a restart into the book (there is none to restart into).
@@ -146,7 +156,10 @@ constexpr Why radioVerdict(const RadioInputs& in, const Profile& profile = activ
       // block beside the stack: the same verdict the rollback right after the start gave before
       // 07/10/2026, so the restart comes as it did. A heap short in total is not this: a restart
       // cannot give back bytes the book really uses.
-      return in.heap.freeBytes >= kMinimumFreeBytes ? Why::HeapInPieces : Why::HeapLow;
+      const size_t restartFloor =
+          profile.startFreeBytes < kMinimumFreeBytes ? profile.startFreeBytes : kMinimumFreeBytes;
+      return in.heap.freeBytes >= restartFloor ? Why::HeapInPieces : Why::HeapLow;
+    }
     case Phase::JustStarted:
       if (in.storageBusy) return Why::StorageBusy;
       // The stack may come up and take the reader's last large block. The check before the start

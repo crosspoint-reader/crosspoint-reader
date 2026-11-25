@@ -11,6 +11,7 @@
 
 #include "Epub/BookMetadataCache.h"
 #include "ZipFile.h"
+#include "test/ScopedTempDir.h"
 
 // Counting allocator: heap bytes allocated while `counting` is set and not yet freed.
 namespace heap {
@@ -60,14 +61,8 @@ uint32_t chapterBytes(const int i) {
   return (i % 37 == 5 || (i >= 30 && i < 35)) ? 0 : 1500 + static_cast<uint32_t>(i) * 7919 % 30000;
 }
 
-std::string cacheDir() {
-  return testing::TempDir() + "book_metadata_cache_" + testing::UnitTest::GetInstance()->current_test_info()->name();
-}
-
 // Writes book.bin through the cache's own writer; returns every chapter's cumulative size.
 std::vector<uint32_t> buildBook(const std::string& dir, const int spineCount) {
-  std::filesystem::remove_all(dir);
-  std::filesystem::create_directories(dir);
   zipEntrySizes.clear();
   std::vector<uint32_t> cumulative;
   for (int i = 0; i < spineCount; i++) {
@@ -91,8 +86,10 @@ std::vector<uint32_t> buildBook(const std::string& dir, const int spineCount) {
 TEST(BookMetadataCacheHeap, ResidentHeapDoesNotGrowWithSpineCount) {
   size_t resident[2] = {};
   for (const int spineCount : {30, 5000}) {
-    const std::vector<uint32_t> cumulative = buildBook(cacheDir(), spineCount);
-    BookMetadataCache cache(cacheDir());
+    const ScopedTempDir tempDir;
+    const auto cacheDir = tempDir.path().string();
+    const std::vector<uint32_t> cumulative = buildBook(cacheDir, spineCount);
+    BookMetadataCache cache(cacheDir);
     heap::live = 0;
     heap::counting = true;
     EXPECT_TRUE(cache.load());
@@ -107,13 +104,15 @@ TEST(BookMetadataCacheHeap, ResidentHeapDoesNotGrowWithSpineCount) {
 
 // book.bin cut short inside a window: the window answers the total before it, never less.
 TEST(BookMetadataCacheSizes, TruncatedWindowFallsBackToTheTotalBeforeIt) {
-  const std::vector<uint32_t> cumulative = buildBook(cacheDir(), 100);
-  const std::string path = cacheDir() + "/book.bin";
+  const ScopedTempDir tempDir;
+  const auto cacheDir = tempDir.path().string();
+  const std::vector<uint32_t> cumulative = buildBook(cacheDir, 100);
+  const auto path = tempDir.path() / "book.bin";
   std::ifstream in(path, std::ios::binary);
   const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
   const size_t href = bytes.find(chapterHref(64));
   ASSERT_NE(href, std::string::npos);
-  BookMetadataCache cache(cacheDir());
+  BookMetadataCache cache(cacheDir);
   ASSERT_TRUE(cache.load());
   EXPECT_EQ(cache.getCumulativeSize(0), cumulative[0]);
   std::filesystem::resize_file(path, href + chapterHref(64).size());  // just before item 64's size
@@ -130,9 +129,11 @@ TEST(BookMetadataCacheSizes, TruncatedWindowFallsBackToTheTotalBeforeIt) {
 // The lookup answers what a scan of every item answers, for every boundary, and reads at most one window.
 TEST(BookMetadataCacheSizes, SpineIndexForSizeMatchesLinearScan) {
   for (const int spineCount : {100, 5000}) {
-    const std::vector<uint32_t> cumulative = buildBook(cacheDir(), spineCount);
-    BookMetadataCache scanned(cacheDir());
-    BookMetadataCache cache(cacheDir());
+    const ScopedTempDir tempDir;
+    const auto cacheDir = tempDir.path().string();
+    const std::vector<uint32_t> cumulative = buildBook(cacheDir, spineCount);
+    BookMetadataCache scanned(cacheDir);
+    BookMetadataCache cache(cacheDir);
     ASSERT_TRUE(scanned.load() && cache.load());
     std::vector<uint32_t> totals;
     for (int i = 0; i < spineCount; i++) totals.push_back(scanned.getCumulativeSize(i));

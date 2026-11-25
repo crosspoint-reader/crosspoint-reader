@@ -15,10 +15,12 @@
 #include "CrossPointSettings.h"
 #include "HapticFeedback.h"
 #include "OpdsServerStore.h"
+#include "SdCardFontSystem.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "components/HeaderBackTapTarget.h"
+#include "components/UiAppHelpers.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -110,6 +112,16 @@ void ActivityManager::renderTaskLoop() {
 }
 
 void ActivityManager::loop() {
+#if CROSSPOINT_VECTOR_FONTS
+  if (sdFontSystem.uiTtfFailed()) {
+    RenderLock lock(RenderLock::Mode::Try);
+    if (lock.ownsLock()) {
+      sdFontSystem.recoverUiFont(renderer);
+      refreshSharedUiThemeTokens(makeUiTarget(renderer));
+      requestUpdate();
+    }
+  }
+#endif
   if (mappedInput.consumeSuppressedRelease()) return;
 
   if (currentActivity && currentActivity->requiresExclusiveStorageLoop()) {
@@ -123,7 +135,8 @@ void ActivityManager::loop() {
     return;
   }
 
-  if (currentActivity) {
+  // Radio shutdown can defer a screen change after the outgoing activity has released its resources.
+  if (currentActivity && pendingAction == PendingAction::None) {
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
       if (currentActivity->handleHomeGesture()) {
         return;

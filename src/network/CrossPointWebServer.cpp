@@ -47,6 +47,7 @@
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
 #include "WifiPowerSaveGuard.h"
+#include "activities/RenderLock.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -121,7 +122,6 @@ void releaseRequestArguments(WebServer* server) {
   static_cast<CrossPointHttpServer*>(server)->releaseRequestArguments();
 }
 
-constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
 // Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
@@ -370,7 +370,7 @@ class CrossPointWebServer::RouteHandler final : public RequestHandler {
   CrossPointWebServer& owner_;
 };
 
-void CrossPointWebServer::begin() {
+void CrossPointWebServer::begin(GfxRenderer& renderer) {
   if (running) {
     LOG_DBG("WEB", "Web server already running");
     return;
@@ -379,11 +379,17 @@ void CrossPointWebServer::begin() {
   // Check if we have a valid network connection (either STA connected or AP mode)
   const wifi_mode_t wifiMode = WiFi.getMode();
   const bool isStaConnected = (wifiMode & WIFI_MODE_STA) && (WiFi.status() == WL_CONNECTED);
-  const bool isInApMode = (wifiMode & WIFI_MODE_AP) && (WiFi.softAPgetStationNum() >= 0);  // AP is running
+  const bool isInApMode = (wifiMode & WIFI_MODE_AP) != 0;
 
   if (!isStaConnected && !isInApMode) {
     LOG_DBG("WEB", "Cannot start webserver - no valid network (mode=%d, status=%d)", wifiMode, WiFi.status());
     return;
+  }
+
+  {
+    RenderLock lock;
+    // Any transfer route can replace or delete a file that a loaded font reads.
+    sdFontSystem.releaseForStorage(renderer);
   }
 
   // Store AP mode flag for later use (e.g., in handleStatus)
@@ -1183,6 +1189,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearBookCache(filePath.c_str());
+        sleepImageChanged(filePath.c_str());
         if (library::isLibraryBookFile(filePath.c_str())) library::markLibraryIndexDirty();
       }
     }
@@ -1344,6 +1351,7 @@ void CrossPointWebServer::handleRename() const {
   const bool success = ClippingStore::moveBook(itemPath.c_str(), newPath.c_str());
 
   if (success) {
+    sleepImageChanged(newPath.c_str());
     LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Renamed successfully");
   } else {
@@ -1442,6 +1450,7 @@ void CrossPointWebServer::handleMove() const {
   const bool success = ClippingStore::moveBook(itemPath.c_str(), newPath.c_str());
 
   if (success) {
+    sleepImageChanged(newPath.c_str());
     LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Moved successfully");
   } else {
@@ -2117,30 +2126,39 @@ bool CrossPointWebServer::rejectIfPluginsDisabled() const {
   return true;
 }
 
-// GET /api/plugins -> [{ "name", "title", "mount" }, ...]. Only plugins with a
-// plugin.js are listed (the page loads it); optional manifest.json supplies the
-// title and mount point.
+// GET /api/plugins -> all installed plugins, including native-only plugins.
+// Browser hosts check hasPluginJs before loading a script.
 void CrossPointWebServer::handlePluginList() const {
   JsonDocument doc;
   JsonArray arr = doc.to<JsonArray>();
+  JsonDocument filter;
+  for (const char* field : {"title", "version", "author", "mount"}) filter[field] = true;
 
   for (const auto& e : PluginLocations::scanPlugins()) {
-    if (!e.hasPluginJs) continue;
     JsonObject obj = arr.add<JsonObject>();
     obj["name"] = e.name;
     obj["dir"] = e.dir;         // the plugin keeps its own files here
     obj["title"] = e.name;      // overridden by manifest below
     obj["mount"] = "settings";  // default mount point
-    std::string manifest;
-    if (e.hasManifest && Storage.readFileToString("WEB", e.dir + "/manifest.json", 64 * 1024, manifest)) {
-      JsonDocument m;
-      if (deserializeJson(m, manifest) == DeserializationError::Ok) {
-        if (m["title"].is<const char*>()) obj["title"] = m["title"];
-        if (m["mount"].is<const char*>()) obj["mount"] = m["mount"];
+    obj["hasPluginJs"] = e.hasPluginJs;
+    const auto readMetadata = [&](const char* filename) {
+      std::string raw;
+      const size_t maxBytes = strcmp(filename, "manifest.json") == 0 ? 64 * 1024 : 8192;
+      if (!Storage.readFileToString("WEB", e.dir + "/" + filename, maxBytes, raw)) return;
+      JsonDocument metadata;
+      if (deserializeJson(metadata, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) return;
+      for (const char* field : {"title", "version", "author", "mount"}) {
+        if (metadata[field].is<const char*>()) obj[field] = metadata[field].as<String>();
       }
-    }
+    };
+    if (e.hasManifest) readMetadata("manifest.json");
+    if (e.hasDevice) readMetadata("device.json");
   }
 
+  if (doc.overflowed()) {
+    server->send(503, "application/json", "{\"error\":\"out of memory\"}");
+    return;
+  }
   sendJson(doc);
 }
 
@@ -2744,8 +2762,9 @@ void CrossPointWebServer::handleFetch() {
     Storage.remove(part.c_str());
     complete = false;
     resp["error"] = "sd write failed";
-  } else if (complete && library::isLibraryBookFile(dest)) {
-    library::markLibraryIndexDirty();
+  } else if (complete) {
+    sleepImageChanged(dest.c_str());
+    if (library::isLibraryBookFile(dest)) library::markLibraryIndexDirty();
   }
   resp["status"] = status;
   resp["bytes"] = written;
@@ -2828,8 +2847,9 @@ void CrossPointWebServer::handlePluginFsUpload() {
         fail(400, "empty body");
       } else if (!Storage.replaceFile(st.tmp.c_str(), st.path.c_str())) {
         fail(500, "sd write failed");
-      } else if (library::isLibraryBookFile(st.path)) {
-        library::markLibraryIndexDirty();
+      } else {
+        sleepImageChanged(st.path.c_str());
+        if (library::isLibraryBookFile(st.path)) library::markLibraryIndexDirty();
       }
       return;
     case UPLOAD_FILE_ABORTED:

@@ -90,6 +90,7 @@ class Bitmap {
   // pixel data and no "<path>.nogray" marker beside it: its 8-bit gray copy
   // has not been attempted yet.
   static bool lacksGrayCopy(const std::string& path);
+  bool hasNativePalette() const { return nativePalette; }
 
  private:
   static uint16_t readLE16(HalFile& f);

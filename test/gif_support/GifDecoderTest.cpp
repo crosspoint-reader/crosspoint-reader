@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "test/ScopedTempDir.h"
+
 namespace {
 // Original, uniform images encoded with Pillow; the first has a four-entry palette.
 const char* SMALL_GIF = "474946383761010001008100000000000000000000000000002c000000000100010000080400010404003b";
@@ -25,12 +27,8 @@ std::vector<uint8_t> fromHex(const std::string& hex) {
 
 class GifDecoderTest : public ::testing::Test {
  protected:
-  std::filesystem::path path;
-  void SetUp() override {
-    path = std::filesystem::temp_directory_path() /
-           (std::string("crosspoint-gif-") + ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".gif");
-  }
-  void TearDown() override { std::filesystem::remove(path); }
+  ScopedTempDir tempDir;
+  const std::filesystem::path path = tempDir.path() / "input.gif";
   bool inspect(const std::vector<uint8_t>& bytes, GifBasicInfo& info) {
     {
       std::ofstream stream(path, std::ios::binary);

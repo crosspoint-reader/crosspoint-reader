@@ -316,15 +316,13 @@ void TextSettingsActivity::applyFamily(int listIndex) {
   if (font.isBuiltin) {
     SETTINGS.fontFamily = font.settingIndex;
     SETTINGS.sdFontFamilyName[0] = '\0';
-    sdFontSystem.ensureLoaded(renderer);  // unloads the previously resident SD font
+    sdFontSystem.ensureLoaded(renderer, /*retryUnavailable=*/false);
     currentFamilyIndex_ = listIndex;
   } else if (registry_) {
-    const int sdIdx = font.settingIndex - CrossPointSettings::BUILTIN_FONT_COUNT;
-    const auto& families = registry_->getFamilies();
-    if (sdIdx < static_cast<int>(families.size())) {
-      strncpy(SETTINGS.sdFontFamilyName, families[sdIdx].name.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
+    if (registry_->findFamily(font.name)) {
+      strncpy(SETTINGS.sdFontFamilyName, font.name.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
       SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
-      sdFontSystem.ensureLoaded(renderer);
+      sdFontSystem.ensureLoaded(renderer, /*retryUnavailable=*/false);
       currentFamilyIndex_ = listIndex;
     }
   }
@@ -341,7 +339,7 @@ void TextSettingsActivity::applyFamily(int listIndex) {
 void TextSettingsActivity::activateRow(int row) {
   switch (tab_) {
     case Tab::Family:
-      if (row != currentFamilyIndex_) {
+      if (row != currentFamilyIndex_ || (fonts_[row].isBuiltin && SETTINGS.sdFontFamilyName[0] != '\0')) {
         applyFamily(row);
         // Persist immediately (like SettingsActivity's per-change saves): the
         // parent's result callback only runs on a normal finish(), so relying
@@ -379,7 +377,7 @@ void TextSettingsActivity::applySize(int listIndex) {
 
   currentSizeIndex_ = listIndex;
   SETTINGS.fontPointSize = sizes_[listIndex].pointSize;
-  sdFontSystem.ensureLoaded(renderer);
+  sdFontSystem.ensureLoaded(renderer, /*retryUnavailable=*/false);
 }
 
 void TextSettingsActivity::confirmLayoutRow(int row) {

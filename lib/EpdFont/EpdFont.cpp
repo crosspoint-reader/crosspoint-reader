@@ -4,8 +4,10 @@
 
 #include <algorithm>
 
+#include "ShapingTokens.h"
+
 void EpdFont::getTextBounds(const char* string, const int startX, const int startY, int* minX, int* minY, int* maxX,
-                            int* maxY) const {
+                            int* maxY, const EpdFont* fallback) const {
   *minX = startX;
   *minY = startY;
   *maxX = startX;
@@ -22,26 +24,34 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
   uint32_t cp;
   uint32_t prevCp = 0;
+  shaping::PendingGlyph shaped;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
-    const bool isCombining = utf8IsCombiningMark(cp);
+    if (shaped.consume(cp)) continue;
+    const bool isShaped = shaping::isGlyphToken(cp);
+    const bool isCombining = !isShaped && utf8IsCombiningMark(cp);
 
-    if (!isCombining) {
+    if (!isCombining && !isShaped && (!fallback || hasCodepoint(cp))) {
       cp = applyLigatures(cp, string);
     }
 
     EpdGlyph solidFallback;
-    const EpdGlyph* glyph = getGlyphMetrics(cp, solidFallback);
+    const EpdFont* face = fontForCodepoint(cp, fallback);
+    if (fallback && !face) continue;
+    const EpdGlyph* glyph = face->getGlyphMetrics(cp, solidFallback);
     if (!glyph) {
       // Keep cursor movement stable when a base glyph is missing, but don't attach subsequent
       // combining marks to stale base metrics.
       if (!isCombining) {
         lastBaseX += fp4::toPixel(prevAdvanceFP);  // flush pending advance before resetting
+        // A missing shaped glyph still moves the pen by its shaped advance, as in drawText.
+        if (isShaped) lastBaseX += fp4::toPixel(shaped.advanceOr(0));
         prevCp = 0;
         prevAdvanceFP = 0;
         lastBaseLeft = 0;
         lastBaseWidth = 0;
         lastBaseTop = 0;
       }
+      shaped.reset();
       continue;
     }
 
@@ -49,14 +59,16 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
     const int raiseBy = isCombining ? combiningMark::raiseAboveBase(anchor, glyph->top, glyph->height, lastBaseTop) : 0;
 
     if (!isCombining && prevCp != 0) {
-      const auto kernFP = getKerning(prevCp, cp);  // 4.4 fixed-point kern
+      const auto kernFP = isShaped || shaping::isGlyphToken(prevCp) || face != fontForCodepoint(prevCp, fallback)
+                              ? 0
+                              : face->getKerning(prevCp, cp);  // 4.4 kern
       lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);
     }
 
     const int glyphBaseX = isCombining ? combiningMark::anchorOver(anchor, lastBaseX, lastBaseLeft, lastBaseWidth,
                                                                    glyph->left, glyph->width)
-                                       : lastBaseX;
-    const int glyphBaseY = startY - raiseBy;
+                                       : lastBaseX + shaped.dx;
+    const int glyphBaseY = startY - raiseBy + shaped.dy;
 
     *minX = std::min(*minX, glyphBaseX + glyph->left);
     *maxX = std::max(*maxX, glyphBaseX + glyph->left + glyph->width);
@@ -67,16 +79,17 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       lastBaseLeft = glyph->left;
       lastBaseWidth = glyph->width;
       lastBaseTop = glyph->top;
-      prevAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
+      prevAdvanceFP = shaped.advanceOr(glyph->advanceX);  // 12.4 fixed-point
       prevCp = cp;
     }
+    shaped.reset();
   }
 }
 
-void EpdFont::getTextDimensions(const char* string, int* w, int* h) const {
+void EpdFont::getTextDimensions(const char* string, int* w, int* h, const EpdFont* fallback) const {
   int minX = 0, minY = 0, maxX = 0, maxY = 0;
 
-  getTextBounds(string, 0, 0, &minX, &minY, &maxX, &maxY);
+  getTextBounds(string, 0, 0, &minX, &minY, &maxX, &maxY, fallback);
 
   *w = maxX - minX;
   *h = maxY - minY;
@@ -209,6 +222,11 @@ uint32_t EpdFont::applyLigatures(uint32_t cp, const char*& text) const {
     cp = lig;
   }
   return cp;
+}
+
+const EpdFont* EpdFont::fontForCodepoint(const uint32_t cp, const EpdFont* fallback) const {
+  if (!fallback || hasCodepoint(cp)) return this;
+  return fallback != this && fallback->hasCodepoint(cp) ? fallback : nullptr;
 }
 
 const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {

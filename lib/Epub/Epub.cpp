@@ -1,11 +1,11 @@
 #include "Epub.h"
 
+#include <Bitmap.h>
 #include <FsHelpers.h>
 #include <GifImageLayout.h>
 #include <GifLimitedWriter.h>
 #include <GifToBmpConverter.h>
 #include <HalDisplay.h>
-#include <Bitmap.h>
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
@@ -884,8 +884,8 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
   }
 
   if (Txt::isTxtOrMd(filepath)) {
-    const bool converted = Txt::convertCoverImageToBmp(coverImageHref, getCoverBmpPath(cropped, originalThresholds),
-                                                       0, cropped, originalThresholds);
+    const bool converted = Txt::convertCoverImageToBmp(coverImageHref, getCoverBmpPath(cropped, originalThresholds), 0,
+                                                       cropped, originalThresholds);
 #if CROSSPOINT_GRAY_UI
     if (converted) markCoverWithoutGray(getCoverBmpPath(cropped, originalThresholds));
 #endif
@@ -1295,27 +1295,6 @@ int Epub::getTocItemsCount() const {
   }
 
   return bookMetadataCache->getTocCount();
-}
-
-// work out the section index for a toc index
-int Epub::getSpineIndexForTocIndex(const int tocIndex) const {
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    LOG_ERR("EBP", "getSpineIndexForTocIndex called but cache not loaded");
-    return 0;
-  }
-
-  if (tocIndex < 0 || tocIndex >= bookMetadataCache->getTocCount()) {
-    LOG_ERR("EBP", "getSpineIndexForTocIndex: tocIndex %d out of range", tocIndex);
-    return 0;
-  }
-
-  const int spineIndex = bookMetadataCache->getTocEntry(tocIndex).spineIndex;
-  if (spineIndex < 0) {
-    LOG_DBG("EBP", "Section not found for TOC index %d", tocIndex);
-    return 0;
-  }
-
-  return spineIndex;
 }
 
 int Epub::getTocIndexForSpineIndex(const int spineIndex) const { return getSpineItem(spineIndex).tocIndex; }

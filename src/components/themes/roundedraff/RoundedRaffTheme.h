@@ -7,8 +7,8 @@ class GfxRenderer;
 namespace RoundedRaffMetrics {
 constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .batteryHeight = 12,
-                                 // Fit the 23px SMALL_FONT_ID line box and lift it one pixel while
-                                 // keeping the 12px battery glyph at y=19, aligned with Lyra.
+                                 // Keep RoundedRaff's own title/content sizing while the firmware
+                                 // places the battery and clock in Lyra's status slot.
                                  .topPadding = 13,
                                  .batteryBarHeight = 24,
                                  .headerHeight = 84,
@@ -30,8 +30,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .headerUnderlineSize = 0,
                                  .headerTitleAlign = 0,  // left
                                  .headerBatterySide = 0,
-                                 // A centered clock needs no left title reserve, so RoundedRaff
-                                 // can show one after all.
+                                 // The header clock always stays in Lyra's top-left slot; RoundedRaff
+                                 // keeps its own title styling below that slot.
                                  .headerShowsClock = true,
                                  .menuRowHeight = 42,  // not authoritative: getMenuRowHeight() derives the drawn height
                                  .menuSpacing = 6,
@@ -42,12 +42,12 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .scrollBarRightOffset = 5,
                                  // Tall enough that the home band's centered book title clears the
                                  // battery strip above and keeps padding below.
-                                 .homeTopPadding = 64,
+                                 .homeTopPadding = 80,
                                  // Smaller cover tile so the home menu sits higher (fits 5 items
                                  // without overlap); shrunk by the homeTopPadding growth above so
                                  // the menu keeps its position.
                                  .homeCoverHeight = 300,
-                                 .homeCoverTileHeight = 341,
+                                 .homeCoverTileHeight = 325,
                                  .homeRecentBooksCount = 1,
                                  .homeContinueReadingInMenu = true,
                                  .homeMenuTopOffset = 20,
@@ -95,7 +95,7 @@ class RoundedRaffTheme : public BaseTheme {
                   bool backButton = true) const override;
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
-                           std::function<bool()> storeCoverBuffer) const override;
+                           std::function<bool()> storeCoverBuffer, int) const override;
   int getMenuRowHeight(const GfxRenderer& renderer) const override;
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                       const std::function<std::string(int index)>& buttonLabel,
@@ -104,5 +104,4 @@ class RoundedRaffTheme : public BaseTheme {
                      int contentStartX = 0, int contentWidth = 0) const override;
   void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                        const char* btn4) const override;
-  bool homeMenuShowsContinueReading() const { return true; }
 };

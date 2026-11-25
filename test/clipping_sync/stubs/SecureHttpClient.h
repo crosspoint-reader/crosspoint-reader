@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "BuildScratch.h"
+#include "HalMemory.h"
 
 namespace fake {
 using Headers = std::vector<std::pair<std::string, std::string>>;

@@ -27,6 +27,7 @@ class HomeActivity final : public Activity {
     return hasOpdsServers ? HomeMenuItem::OPDS_BROWSER : HomeMenuItem::NONE;
   }
   bool hasContinueReading = false;
+  int continueReadingProgress = -1;
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
