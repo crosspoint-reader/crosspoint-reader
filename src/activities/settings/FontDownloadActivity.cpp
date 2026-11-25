@@ -9,11 +9,13 @@
 #include <Memory.h>
 #include <WiFi.h>
 #include <esp_rom_crc.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
@@ -159,13 +161,14 @@ bool FontDownloadActivity::internString(const char* text, StrRef& outRef) {
 
 bool FontDownloadActivity::fetchAndParseManifest() {
   if (auto* fcm = renderer.getFontCacheManager()) {
+    RenderLock lock(*this);
     fcm->releaseSdFontCaches();
   }
   // Rescan installed families before any TLS or JSON buffers exist. The rescan
   // frees and reallocates every registry entry, which fragments the heap if it
   // runs while the manifest DOM and the catalog arena are live.
   clearManifest();
-  fontInstaller_.refreshRegistry();
+  sdFontSystem.refreshRegistry();
 
   // Download manifest to a temp file on SD card to avoid holding both
   // TLS buffers and the full JSON string in RAM simultaneously.
@@ -523,6 +526,15 @@ bool FontDownloadActivity::computeFileCrc32(const char* path, uint32_t& outCrc) 
   return true;
 }
 
+void FontDownloadActivity::suspendFontsForMutation(const char* familyName) {
+  if (fontsSuspended_ || (strcasecmp(familyName, SETTINGS.uiFontFamilyName) != 0 &&
+                          strcasecmp(familyName, SETTINGS.sdFontFamilyName) != 0))
+    return;
+  RenderLock lock(*this);
+  sdFontSystem.releaseForStorage(renderer);
+  fontsSuspended_ = true;
+}
+
 void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   {
     RenderLock lock(*this);
@@ -539,9 +551,11 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   // hold tens of KB the TLS session needs; release them up front rather than
   // starving the transfer. They repopulate on demand after the download.
   if (auto* fcm = renderer.getFontCacheManager()) {
+    RenderLock lock(*this);
     fcm->releaseSdFontCaches();
     LOG_DBG("FONT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
   }
+  suspendFontsForMutation(str(family.name));
 
   // Check before touching the family directory so a failed update leaves the
   // installed family unchanged.
@@ -668,7 +682,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     currentFileIndex_++;
   }
 
-  fontInstaller_.refreshRegistry();
+  sdFontSystem.refreshRegistry();
   family.installed = true;
   family.hasUpdate = false;
 
@@ -704,12 +718,13 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
   }
   auto& family = families_[familyIndex];
 
+  suspendFontsForMutation(str(family.name));
   if (fontInstaller_.deleteFamily(str(family.name)) != FontInstaller::Error::OK) {
     RenderLock lock(*this);
     state_ = ERROR;
     errorMessage_ = "Failed to delete font";
   } else {
-    fontInstaller_.refreshRegistry();
+    sdFontSystem.refreshRegistry();
     family.installed = false;
     family.hasUpdate = false;
     // Unlike the other family_ mutations, this one stays in FAMILY_LIST (no

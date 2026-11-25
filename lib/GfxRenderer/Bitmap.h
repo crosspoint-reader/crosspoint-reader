@@ -80,6 +80,7 @@ class Bitmap {
   int getRowBytes() const { return rowBytes; }
   bool is1Bit() const { return bpp == 1; }
   uint16_t getBpp() const { return bpp; }
+  bool hasNativePalette() const { return nativePalette; }
 
  private:
   static uint16_t readLE16(HalFile& f);

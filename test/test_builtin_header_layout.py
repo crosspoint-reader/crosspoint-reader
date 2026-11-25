@@ -56,6 +56,37 @@ for padding, content_strip in ((5, 20), (10, 20), (13, 24)):
             content_strip // 2 + int((board_offset - shift) / 2))
         assert abs(new_center2 - old_center2) <= 2, (padding, board_offset)
 
+# A taller RoundedRaff Home band separates the clock from the book title
+# without moving the bottom of its cover tile and menu.
+assert ".homeTopPadding = 80," in rounded_metrics
+assert ".homeCoverTileHeight = 325," in rounded_metrics
+assert 80 + 325 == 64 + 341
+assert "props.sidePadding = props.status.edgeInset;" in base
+assert "props.titleText.align == fui::TextAlign::Left" in base
+
+# Only a titled, left-aligned compact Home header with a visible clock gets
+# optical balancing. The clock, band, cover and menu remain untouched.
+assert "title && props.status.clockText && rect.height < UITheme::getInstance().getMetrics().headerHeight" in base
+assert "ui.target.inkBounds(props.status.battery.text.font, props.status.clockText" in base
+assert "ui.target.inkBounds(props.titleText.font, title, props.titleText)" in base
+assert "constexpr int clockTitleGap = 12;" in base
+assert "const int targetTop = std::min(clockTop + clockInk.height + clockTitleGap," in base
+assert "band.bottom() - titleInk.height - 6);" in base
+assert "props.titleOffsetY = static_cast<int16_t>(std::max(0, targetTop - titleTop));" in base
+
+# The ink-based target gives the title 12px clearance from the clock
+# whenever the compact band's cover-clearance bound does not intervene.
+for band_y, band_h, clock_h, title_h, title_line_h, title_ink_y in (
+        (16, 64, 12, 18, 24, 3), (10, 70, 12, 18, 24, 3), (18, 62, 11, 20, 27, 4)):
+    clock_top = band_y + (20 - clock_h) // 2
+    title_top = band_y + (band_h - title_line_h) // 2 + title_ink_y
+    target = min(clock_top + clock_h + 12, band_y + band_h - title_h - 6)
+    offset = max(0, target - title_top)
+    assert title_top + offset == target
+    assert target + title_h + 6 <= band_y + band_h
+    if target == clock_top + clock_h + 12:
+        assert target - (clock_top + clock_h) == 12
+
 # RoundedRaff's Home screen must not suppress the shared status line when
 # it draws a header without a book title.
 header = rounded.split("void RoundedRaffTheme::drawHeader(", 1)[1].split(

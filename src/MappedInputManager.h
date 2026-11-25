@@ -2,6 +2,8 @@
 
 #include <HalGPIO.h>
 
+#include <array>
+
 #include "util/HomeButtonInput.h"
 #include "util/PowerButtonClickInput.h"
 #include "util/PowerButtonInput.h"
@@ -146,6 +148,8 @@ class MappedInputManager {
   // using the same live-orientation transform as ScreenLeft/Right/Up/Down.
   Labels mapDirectionalLabels(const char* back, const char* confirm, const char* left, const char* right,
                               const char* up, const char* down) const;
+  // Raw front button indices from left to right on the device.
+  static std::array<uint8_t, 4> frontButtonsInPhysicalOrder();
   // Returns the raw front button index that was pressed this frame (or -1 if none).
   int getPressedFrontButton() const;
 

@@ -153,12 +153,9 @@ void ButtonRemapActivity::render(RenderLock&&) {
                    Rect{0, topOffset + 4 * metrics.listRowHeight + 5 * metrics.verticalSpacing + 20, pageWidth, 20},
                    tr(STR_REMAP_CANCEL_HINT));
 
-  // Live preview of logical labels under front buttons.
-  // This mirrors the on-device front button order: Back, Confirm, Left, Right.
-  GUI.drawButtonHints(renderer, labelForHardware(CrossPointSettings::FRONT_HW_BACK),
-                      labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM),
-                      labelForHardware(CrossPointSettings::FRONT_HW_LEFT),
-                      labelForHardware(CrossPointSettings::FRONT_HW_RIGHT));
+  const auto buttons = MappedInputManager::frontButtonsInPhysicalOrder();
+  GUI.drawButtonHints(renderer, labelForHardware(buttons[0]), labelForHardware(buttons[1]),
+                      labelForHardware(buttons[2]), labelForHardware(buttons[3]));
   renderer.displayBuffer();
 }
 
@@ -229,16 +226,16 @@ const char* ButtonRemapActivity::getRoleName(const uint8_t roleIndex) {
 }
 
 const char* ButtonRemapActivity::getHardwareName(const uint8_t buttonIndex) const {
-  switch (buttonIndex) {
-    case CrossPointSettings::FRONT_HW_BACK:
-      return tr(STR_HW_BACK_LABEL);
-    case CrossPointSettings::FRONT_HW_CONFIRM:
-      return tr(STR_HW_CONFIRM_LABEL);
-    case CrossPointSettings::FRONT_HW_LEFT:
-      return tr(STR_HW_LEFT_LABEL);
-    case CrossPointSettings::FRONT_HW_RIGHT:
-      return tr(STR_HW_RIGHT_LABEL);
-    default:
-      return "Unknown";
+  static constexpr StrId standardNames[] = {StrId::STR_HW_BACK_LABEL, StrId::STR_HW_CONFIRM_LABEL,
+                                            StrId::STR_HW_LEFT_LABEL, StrId::STR_HW_RIGHT_LABEL};
+  static constexpr StrId onePageNames[] = {StrId::STR_HW_BACK_LABEL, StrId::STR_HW_ONEPAGE_LEFT_LABEL,
+                                           StrId::STR_HW_ONEPAGE_RIGHT_LABEL, StrId::STR_HW_ONEPAGE_CONFIRM_LABEL};
+  const auto buttons = MappedInputManager::frontButtonsInPhysicalOrder();
+  const auto* names = BoardConfig::isOnePage() ? onePageNames : standardNames;
+  for (size_t i = 0; i < buttons.size(); ++i) {
+    if (buttons[i] == buttonIndex) {
+      return I18N.get(names[i]);
+    }
   }
+  return "Unknown";
 }

@@ -18,6 +18,8 @@ struct FileInfo {
   bool isDirectory;
 };
 
+class GfxRenderer;
+
 class CrossPointWebServer {
  public:
   struct WsUploadStatus {
@@ -54,7 +56,7 @@ class CrossPointWebServer {
   ~CrossPointWebServer();
 
   // Start the web server (call after WiFi is connected)
-  void begin();
+  void begin(GfxRenderer& renderer);
 
   // Stop the web server
   void stop();

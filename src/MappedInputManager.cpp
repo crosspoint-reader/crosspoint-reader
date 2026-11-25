@@ -568,8 +568,16 @@ MappedInputManager::Labels MappedInputManager::mapFrontLabels(const char* back, 
     return "";
   };
 
-  return {labelForHardware(HalGPIO::BTN_BACK), labelForHardware(HalGPIO::BTN_CONFIRM),
-          labelForHardware(HalGPIO::BTN_LEFT), labelForHardware(HalGPIO::BTN_RIGHT)};
+  const auto buttons = frontButtonsInPhysicalOrder();
+  return {labelForHardware(buttons[0]), labelForHardware(buttons[1]), labelForHardware(buttons[2]),
+          labelForHardware(buttons[3])};
+}
+
+std::array<uint8_t, 4> MappedInputManager::frontButtonsInPhysicalOrder() {
+  if (BoardConfig::isOnePage()) {
+    return {HalGPIO::BTN_BACK, HalGPIO::BTN_LEFT, HalGPIO::BTN_RIGHT, HalGPIO::BTN_CONFIRM};
+  }
+  return {HalGPIO::BTN_BACK, HalGPIO::BTN_CONFIRM, HalGPIO::BTN_LEFT, HalGPIO::BTN_RIGHT};
 }
 
 int MappedInputManager::getPressedFrontButton() const {

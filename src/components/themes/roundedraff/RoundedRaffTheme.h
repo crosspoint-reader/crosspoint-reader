@@ -42,12 +42,12 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .scrollBarRightOffset = 5,
                                  // Tall enough that the home band's centered book title clears the
                                  // battery strip above and keeps padding below.
-                                 .homeTopPadding = 64,
+                                 .homeTopPadding = 80,
                                  // Smaller cover tile so the home menu sits higher (fits 5 items
                                  // without overlap); shrunk by the homeTopPadding growth above so
                                  // the menu keeps its position.
                                  .homeCoverHeight = 300,
-                                 .homeCoverTileHeight = 341,
+                                 .homeCoverTileHeight = 325,
                                  .homeRecentBooksCount = 1,
                                  .homeContinueReadingInMenu = true,
                                  .homeMenuTopOffset = 20,

@@ -45,6 +45,7 @@
 #include <FontPsram.h>
 #include <FtFont.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -100,9 +101,12 @@ class TtfEpdFont {
   // Retains existing glyph coverage and accumulates across scopes until capacity is
   // reached, topping up any earlier codepoints of the page if a flush occurs mid-pass.
   bool build(const char* utf8, uint8_t style = 0);
+  void setGlyphLoadFailureFlag(std::atomic<bool>* failure) { glyphLoadFailed_ = failure; }
   bool addCoverage(const char* utf8, uint8_t style = 0);
 
  private:
+  std::atomic<bool>* glyphLoadFailed_ = nullptr;
+
   // A borrowed source file (one per style role that the caller supplies).
   struct Source {
     bool present = false;

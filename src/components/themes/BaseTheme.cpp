@@ -355,16 +355,27 @@ void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::Head
   // The content row (title, back arrow, trailing action buttons) centers on
   // the region between the strip and the band bottom, so its padding reads
   // as balanced under the status line rather than against the full band.
-  // Text hangs low in its line cell by the font's internal leading; the icon
-  // buttons drop by that amount to align with the glyphs the user sees.
+  // Text hangs low in its line cell; the icon buttons drop to the centre of
+  // the title font's capitals to align with the glyphs the user sees.
   // Buttons keep a standard square (a band-8 button dwarfs its 24px icon);
   // the boxes are invisible and minTouchSize pads the tap target.
   constexpr int16_t headerButtonSize = 48;
   const int16_t bandHeight = static_cast<int16_t>(metrics.headerHeight);
   const int16_t strip = HEADER_STATUS_HEIGHT;
   const int titleFontId = uiScaleSpec().titleFontId;
-  const int16_t opticalDrop =
-      static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
+  int16_t opticalDrop = 0;
+  const auto titleFont = renderer.getFontMap().find(titleFontId);
+  if (titleFont != renderer.getFontMap().end()) {
+    const EpdFontData* face = titleFont->second.getData(EpdFontFamily::REGULAR);
+    const auto capital = titleFont->second.getGlyph('H', EpdFontFamily::REGULAR);
+    if (capital && face->advanceY > 0) {
+      // Twice the distance from the line cell's centre to the capital's, in
+      // the font's own pixels, then rounded into the renderer's line height.
+      const int drop2 = 2 * (face->ascender - capital->top) + capital->height - face->advanceY;
+      opticalDrop =
+          static_cast<int16_t>((drop2 * renderer.getLineHeight(titleFontId) + face->advanceY) / (2 * face->advanceY));
+    }
+  }
   props.leadingSize = headerButtonSize;
   props.trailingSize = headerButtonSize;
   props.leadingStyles = freeink::ui::plainStyles(freeink::ui::Paint::solid(freeink::ui::Color::Black));
@@ -462,9 +473,31 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   props.borderEdges = fui::EdgeBottom;
   props.titleText = tokens.titleText;
   props.titleText.align = tokens.headerTitleAlign;
+  // Compact Home titles use a 12px visible gap below the clock. Centering
+  // font line boxes in the short band does not achieve this because the clock
+  // and title have different ink metrics, especially on inset panels.
+  // Adjust only the title, never the clock, band bottom, cover, or menu.
+  if (title && props.status.clockText && rect.height < UITheme::getInstance().getMetrics().headerHeight &&
+      props.titleText.align == fui::TextAlign::Left) {
+    const fui::Rect clockInk =
+        ui.target.inkBounds(props.status.battery.text.font, props.status.clockText, props.status.battery.text);
+    const fui::Rect titleInk = ui.target.inkBounds(props.titleText.font, title, props.titleText);
+    const int clockTop = band.y + (props.status.stripHeight - clockInk.height) / 2;
+    const int titleTop = band.y + (band.height - ui.target.lineHeight(props.titleText.font)) / 2 + titleInk.y;
+    // Reserve six pixels under the visible title before the cover tile starts.
+    constexpr int clockTitleGap = 12;
+    const int targetTop = std::min(clockTop + clockInk.height + clockTitleGap, band.bottom() - titleInk.height - 6);
+    props.titleOffsetY = static_cast<int16_t>(std::max(0, targetTop - titleTop));
+  }
   props.subtitleText = tokens.smallText;
   props.styles = tokens.popup;
   props.sidePadding = tokens.headerSidePadding;
+  // Align compact Home book titles with the clock's actual left inset.
+  // Keep other headers and centered titles on their existing theme padding.
+  if (title && rect.height < UITheme::getInstance().getMetrics().headerHeight &&
+      props.titleText.align == fui::TextAlign::Left) {
+    props.sidePadding = props.status.edgeInset;
+  }
   // Underline only under a titled header: an untitled band (Lyra home screen)
   // historically drew no rule, and the old themes keyed the line on the title.
   if (title != nullptr && props.styles.normal.border.kind == fui::PaintKind::None && tokens.headerUnderline > 0) {
