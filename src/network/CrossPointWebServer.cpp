@@ -2585,7 +2585,6 @@ void CrossPointWebServer::handleFetch() {
   size_t nextHeapLog = written;
   bool sdFull = false;
   bool segmentBoundary = false;
-  bool rangeUnsupported = false;
   const unsigned long fetchStartedAt = millis();
   unsigned long lastBrowserHeartbeat = fetchStartedAt;
   bool browserResponseStarted = false;
@@ -2644,14 +2643,16 @@ void CrossPointWebServer::handleFetch() {
     return true;
   };
   sink.rewind = [&] {
-    // Range ignored: the body restarts from byte 0, which only a transfer
-    // that has not yet reported progress to the browser can follow.
+    // Range ignored: the body restarts from byte 0, so rewrite the .part from
+    // this one response. A later segment would restart again, so finish the
+    // whole body in this request.
     if (requestedOffset > 0) {
-      rangeUnsupported = true;
-      return false;
+      LOG_INF("WEB", "Fetch Range ignored at %u; downloading the whole body", (unsigned)requestedOffset);
+      segmentLimit = 0;
     }
     file.close();
     written = 0;
+    nextHeapLog = 0;
     return Storage.openFileForWrite("PLG", part, file);
   };
   // A failed single request's first bytes, so the plugin can tell why. The
@@ -2736,7 +2737,7 @@ void CrossPointWebServer::handleFetch() {
   if (!complete && ok2xx && !midSegment) {
     Storage.remove(part.c_str());
     char msg[96];
-    const char* error = sdFull ? "sd write failed" : rangeUnsupported ? "range unsupported" : "download truncated";
+    const char* error = sdFull ? "sd write failed" : "download truncated";
     // complete:false matters once the heartbeat has committed HTTP 200 chunked:
     // it is the only signal fetchToSd()'s resume loop still sees on this path
     // (it then detects zero progress and throws instead of returning success).
