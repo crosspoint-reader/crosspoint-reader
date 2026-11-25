@@ -66,7 +66,7 @@ class Epub {
   bool clearCache() const;
   bool clearCacheKeepingProgress() const;
   std::string parkedProgressPath() const;
-  void restoreParkedProgress() const;
+  bool restoreParkedProgress() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;
   const std::string& getPath() const;

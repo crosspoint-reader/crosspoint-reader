@@ -480,8 +480,12 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     return false;
   }
 
-  // A rebuild cut short by a power loss leaves progress.bin parked next to the cache.
-  restoreParkedProgress();
+  // A rebuild cut short by a power loss leaves progress.bin parked next to a partly removed
+  // cache; finish removing it so no chapter cache of the old file survives.
+  if (Storage.exists(parkedProgressPath().c_str())) {
+    LOG_DBG("EBP", "Finishing an interrupted cache rebuild: %s", filepath.c_str());
+    if (!clearCache() || !restoreParkedProgress()) return false;
+  }
 
   // Try to load existing cache first
   bool cacheLoaded = bookMetadataCache->load();
@@ -766,16 +770,21 @@ bool Epub::clearCache() const {
 // moved, never copied: a failed write or a power cut at any point leaves it in one of the two places.
 std::string Epub::parkedProgressPath() const { return cachePath + ".progress.bin"; }
 
-void Epub::restoreParkedProgress() const {
+bool Epub::restoreParkedProgress() const {
   const std::string parked = parkedProgressPath();
-  if (!Storage.exists(parked.c_str())) return;
+  if (!Storage.exists(parked.c_str())) return true;
   setupCacheDir();
   const std::string progressPath = cachePath + "/progress.bin";
   if (Storage.exists(progressPath.c_str())) {
     Storage.remove(parked.c_str());  // the reader saved a newer position since
-  } else if (!Storage.rename(parked.c_str(), progressPath.c_str())) {
-    LOG_ERR("EBP", "Could not restore parked reading progress: %s", parked.c_str());
+    return true;
   }
+  if (!Storage.rename(parked.c_str(), progressPath.c_str())) {
+    // Left in place: the next open tries again instead of starting the book over.
+    LOG_ERR("EBP", "Could not restore parked reading progress: %s", parked.c_str());
+    return false;
+  }
+  return true;
 }
 
 bool Epub::clearCacheKeepingProgress() const {
@@ -787,9 +796,7 @@ bool Epub::clearCacheKeepingProgress() const {
     LOG_ERR("EBP", "Could not park reading progress, keeping the old cache");
     return false;
   }
-  if (!clearCache()) return false;
-  restoreParkedProgress();
-  return true;
+  return clearCache() && restoreParkedProgress();
 }
 
 void Epub::setupCacheDir() const {
