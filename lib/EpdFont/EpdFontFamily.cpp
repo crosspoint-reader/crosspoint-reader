@@ -28,15 +28,10 @@ void EpdFontFamily::getTextDimensions(const char* string, int* w, int* h, const 
 
 const EpdFontData* EpdFontFamily::getData(const Style style) const { return getFont(style)->data; }
 
-const EpdGlyph* EpdFontFamily::getGlyph(const uint32_t cp, const Style style) const {
-  const auto* font = glyphFont(cp, style);
-  if (!font) return nullptr;
-  const auto* glyph = font->getGlyph(cp);
-  if (useFallbackOnly() && font != fallbackFont(style)) {
-    font = glyphFont(cp, style);
-    return font ? font->getGlyph(cp) : nullptr;
-  }
-  return glyph;
+std::optional<EpdGlyph> EpdFontFamily::getGlyph(const uint32_t cp, const Style style) const {
+  EpdGlyph scratch;
+  const auto* glyph = getGlyph(cp, scratch, style, nullptr);
+  return glyph ? std::optional<EpdGlyph>(*glyph) : std::nullopt;
 }
 
 bool EpdFontFamily::hasCodepoint(const uint32_t cp, const Style style) const {
@@ -69,15 +64,25 @@ const EpdFont* EpdFontFamily::glyphFont(const uint32_t cp, const Style style) co
   return getFont(style)->fontForCodepoint(cp, fallbackFont(style));
 }
 
-const EpdGlyph* EpdFontFamily::getGlyphMetrics(const uint32_t cp, EpdGlyph& solidFallback, const Style style,
-                                               const EpdFontData** glyphData) const {
+const EpdGlyph* EpdFontFamily::getGlyph(const uint32_t cp, EpdGlyph& scratch, const Style style,
+                                        GlyphBitmapSource* source) const {
+  return lookup(cp, scratch, style, source, false);
+}
+
+const EpdGlyph* EpdFontFamily::getGlyphMetrics(const uint32_t cp, EpdGlyph& scratch, const Style style,
+                                               GlyphBitmapSource* source) const {
+  return lookup(cp, scratch, style, source, true);
+}
+
+const EpdGlyph* EpdFontFamily::lookup(const uint32_t cp, EpdGlyph& scratch, const Style style,
+                                      GlyphBitmapSource* source, bool allowSolid) const {
+  const auto read = [&](const EpdFont* font) -> const EpdGlyph* {
+    if (source) source->font = font ? font->data : nullptr;
+    if (!font) return nullptr;
+    auto* index = source ? &source->index : nullptr;
+    return allowSolid ? font->getGlyphMetrics(cp, scratch, index) : font->getGlyph(cp, scratch, index);
+  };
   const auto* font = glyphFont(cp, style);
-  if (!font) return nullptr;
-  const auto* glyph = font->getGlyphMetrics(cp, solidFallback);
-  if (useFallbackOnly() && font != fallbackFont(style)) {
-    font = glyphFont(cp, style);
-    glyph = font ? font->getGlyphMetrics(cp, solidFallback) : nullptr;
-  }
-  if (glyphData && font) *glyphData = font->data;
-  return glyph;
+  const auto* glyph = read(font);
+  return useFallbackOnly() && font != fallbackFont(style) ? read(glyphFont(cp, style)) : glyph;
 }

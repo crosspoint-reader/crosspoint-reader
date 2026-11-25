@@ -21,7 +21,13 @@
 #include <VectorFontSupport.h>
 #include <WiFi.h>
 #include <XteinkDetect.h>
+#ifdef CROSSPOINT_PACKED_BUILTIN_FONTS
+#include <BuiltinFontsShared.generated.h>
+#else
+// Builds and runs, but without the shared tables and compact glyph records.
+#warning "share_builtin_tables.py did not run; built-in fonts are unpacked and use more flash"
 #include <builtinFonts/all.h>
+#endif
 #include <esp_heap_caps.h>
 #include <esp_wifi.h>
 #include <time.h>

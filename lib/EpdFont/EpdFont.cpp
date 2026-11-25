@@ -229,7 +229,7 @@ const EpdFont* EpdFont::fontForCodepoint(const uint32_t cp, const EpdFont* fallb
   return fallback != this && fallback->hasCodepoint(cp) ? fallback : nullptr;
 }
 
-const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
+const EpdGlyph* EpdFont::getGlyph(const uint32_t cp, EpdGlyph& scratch, uint32_t* index) const {
   const int count = data->intervalCount;
   if (count == 0 && !data->glyphMissHandler) return nullptr;
 
@@ -246,7 +246,9 @@ const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
     if (it != intervals) {
       const auto& interval = *(it - 1);
       if (cp <= interval.last) {
-        return &data->glyph[interval.offset + (cp - interval.first)];
+        const uint32_t i = interval.offset + (cp - interval.first);
+        if (index) *index = i;
+        return &data->glyphAt(i, scratch);
       }
     }
   }
@@ -254,14 +256,17 @@ const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
   // Codepoint not in interval table — try on-demand loading (SD card fonts).
   if (data->glyphMissHandler) {
     const EpdGlyph* loaded = data->glyphMissHandler(data->glyphMissCtx, cp);
-    if (loaded) return loaded;
+    if (loaded) {
+      if (index) *index = 0;  // SD/TTF use the returned cache address.
+      return loaded;
+    }
   }
 
   // The turned comma uses the matching quotation-mark shape when absent.
-  if (cp == 0x02BB && hasCodepoint(0x2018)) return getGlyph(0x2018);
+  if (cp == 0x02BB && hasCodepoint(0x2018)) return getGlyph(0x2018, scratch, index);
 
   if (cp != REPLACEMENT_GLYPH) {
-    return getGlyph(REPLACEMENT_GLYPH);
+    return getGlyph(REPLACEMENT_GLYPH, scratch, index);
   }
   return nullptr;
 }
@@ -284,11 +289,11 @@ bool EpdFont::hasCodepoint(const uint32_t cp) const {
   return false;
 }
 
-const EpdGlyph* EpdFont::getGlyphMetrics(const uint32_t cp, EpdGlyph& solidFallback) const {
-  if (!syntheticGlyph::isSolid(cp) || hasCodepoint(cp)) return getGlyph(cp);
+const EpdGlyph* EpdFont::getGlyphMetrics(const uint32_t cp, EpdGlyph& scratch, uint32_t* index) const {
+  if (!syntheticGlyph::isSolid(cp) || hasCodepoint(cp)) return getGlyph(cp, scratch, index);
 
   // Match the current font's em width and ascender without allocating a bitmap.
-  const EpdGlyph* emGlyph = hasCodepoint('M') ? getGlyph('M') : nullptr;
+  const EpdGlyph* emGlyph = hasCodepoint('M') ? getGlyph('M', scratch) : nullptr;
   const int ascender = data->ascender > 0 ? data->ascender : 8;
   const uint16_t advance = emGlyph && emGlyph->advanceX > 0
                                ? emGlyph->advanceX
@@ -299,12 +304,13 @@ const EpdGlyph* EpdFont::getGlyphMetrics(const uint32_t cp, EpdGlyph& solidFallb
   const int width = std::min(255, square ? std::min(height, advancePx) : advancePx);
   const int left = square ? std::max(0, (advancePx - width) / 2) : 0;
   const int top = square ? height + std::max(0, (ascender - height) / 2) : height;
-  solidFallback = {static_cast<uint8_t>(width),
-                   static_cast<uint8_t>(height),
-                   advance,
-                   static_cast<int16_t>(left),
-                   static_cast<int16_t>(top),
-                   0,
-                   0};
-  return &solidFallback;
+  if (index) *index = GlyphBitmapSource::SOLID;
+  scratch = {static_cast<uint8_t>(width),
+             static_cast<uint8_t>(height),
+             advance,
+             static_cast<int16_t>(left),
+             static_cast<int16_t>(top),
+             0,
+             0};
+  return &scratch;
 }
