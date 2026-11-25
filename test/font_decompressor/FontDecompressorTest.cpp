@@ -40,8 +40,7 @@ TEST(FontDecompressor, CompactCompressedGlyphsUseTheLookupIndex) {
   const auto compressed = rawDeflate(kAligned, sizeof(kAligned));
   const EpdBuiltinGlyph glyphs[] = {{5, 1, 80, 0, 1, 0}, {5, 1, 80, 0, 1, 2}, {5, 1, 80, 0, 1, 4}};
   const EpdUnicodeInterval intervals[] = {{'A', 'C', 0}};
-  const EpdFontGroup groups[] = {
-      {0, static_cast<uint32_t>(compressed.size()), sizeof(kAligned), 3, 0}};
+  const EpdFontGroup groups[] = {{0, static_cast<uint32_t>(compressed.size()), sizeof(kAligned), 3, 0}};
   EpdFontData builtinData{};
   builtinData.bitmap = compressed.data();
   builtinData.builtinGlyphs = glyphs;
