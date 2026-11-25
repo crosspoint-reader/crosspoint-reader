@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 #include <Epub/parsers/ChapterHtmlSlimParser.h>
+#include <FontCacheManager.h>
+#include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -263,6 +265,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
       ok = parser->parseAndBuildPages();  // closes the file on both outcomes
     }
   }
+  if (auto* fontCache = renderer.getFontCacheManager()) fontCache->releaseSdLayoutKernTables();
   Storage.remove(TMP_HTML_PATH);
 
   if (limitReason) {

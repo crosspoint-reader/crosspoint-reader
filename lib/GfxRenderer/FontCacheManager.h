@@ -30,6 +30,8 @@ class FontCacheManager {
     releaseCtx_ = ctx;
   }
   void releaseSdFontCaches();
+  // Free the SD fonts' layout kern tables, which only layout passes use.
+  void releaseSdLayoutKernTables();
   bool prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F, bool accumulate = true);
   // Recommended lookahead depth for idle prewarming. TTF fonts on PSRAM
   // accumulate glyphs across multiple pages; single-page SD fonts use 1.

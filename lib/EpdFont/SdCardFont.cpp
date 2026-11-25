@@ -410,6 +410,22 @@ bool readKernClasses(HalFile& file, const uint32_t offset, const uint16_t entryC
 }
 }  // namespace
 
+// Reads the left and right kern class of each sorted codepoint, filling the
+// style's block index on first use. `block` holds KERN_CLASS_BLOCK entries.
+bool SdCardFont::readStyleKernClasses(PerStyle& s, HalFile& file, const uint32_t* codepoints, const uint32_t cpCount,
+                                      uint8_t* leftClasses, uint8_t* rightClasses, EpdKernClassEntry* block) {
+  uint16_t* rightIndex =
+      s.kernBlockIndex ? s.kernBlockIndex + kernClassBlocks(s.header.kernLeftEntryCount) + 1 : nullptr;
+  if (!readKernClasses(file, s.kernLeftFileOffset, s.header.kernLeftEntryCount, s.header.kernLeftClassCount, codepoints,
+                       cpCount, leftClasses, block, s.kernBlockIndex, s.kernBlockIndexReady) ||
+      !readKernClasses(file, s.kernRightFileOffset, s.header.kernRightEntryCount, s.header.kernRightClassCount,
+                       codepoints, cpCount, rightClasses, block, rightIndex, s.kernBlockIndexReady)) {
+    return false;
+  }
+  s.kernBlockIndexReady = s.kernBlockIndex != nullptr;
+  return true;
+}
+
 // Build a small per-page kern matrix containing ONLY the (leftClass, rightClass)
 // pairs reachable from codepoints in the current text. Class IDs are renumbered
 // to a dense 1..N range so the resulting matrix is usedLeft × usedRight (typical
@@ -462,17 +478,11 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
   uint8_t* rightClasses = leftClasses + cpCount;
   uint8_t* io = rightClasses + cpCount;
   auto* block = reinterpret_cast<EpdKernClassEntry*>(io);
-  uint16_t* rightIndex =
-      s.kernBlockIndex ? s.kernBlockIndex + kernClassBlocks(s.header.kernLeftEntryCount) + 1 : nullptr;
-  if (!readKernClasses(file, s.kernLeftFileOffset, s.header.kernLeftEntryCount, s.header.kernLeftClassCount, codepoints,
-                       cpCount, leftClasses, block, s.kernBlockIndex, s.kernBlockIndexReady) ||
-      !readKernClasses(file, s.kernRightFileOffset, s.header.kernRightEntryCount, s.header.kernRightClassCount,
-                       codepoints, cpCount, rightClasses, block, rightIndex, s.kernBlockIndexReady)) {
+  if (!readStyleKernClasses(s, file, codepoints, cpCount, leftClasses, rightClasses, block)) {
     LOG_ERR("SDCF", "Failed to read kern classes");
     freeStyleMiniKern(s);
     return false;
   }
-  s.kernBlockIndexReady = s.kernBlockIndex != nullptr;
 
   // Step 1: mark used left/right classes and count the page's kerned codepoints.
   bool usedLeft[256] = {};
@@ -1665,12 +1675,21 @@ void SdCardFont::clearPersistentCache() {
     advanceTableSize_[i] = 0;
     advanceTableCapacity_[i] = 0;
   }
+  releaseLayoutKernTables();
 }
 
-bool SdCardFont::advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16_t* outAdvance) const {
+void SdCardFont::releaseLayoutKernTables() {
+  for (uint8_t i = 0; i < MAX_STYLES; i++) {
+    psramDeleteArray(layoutKern_[i].storage);
+    layoutKern_[i] = {};
+    layoutKernState_[i] = LayoutKern::NotLoaded;
+  }
+}
+
+const SdCardFont::AdvanceEntry* SdCardFont::advanceTableFind(const uint8_t styleIdx, const uint32_t codepoint) const {
   const AdvanceEntry* table = advanceTable_[styleIdx];
   const uint32_t size = advanceTableSize_[styleIdx];
-  if (!table || size == 0) return false;
+  if (!table || size == 0) return nullptr;
   uint32_t lo = 0, hi = size;
   while (lo < hi) {
     uint32_t mid = lo + (hi - lo) / 2;
@@ -1680,11 +1699,14 @@ bool SdCardFont::advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16
       hi = mid;
     }
   }
-  if (lo < size && table[lo].codepoint == codepoint) {
-    if (outAdvance) *outAdvance = table[lo].advanceX;
-    return true;
-  }
-  return false;
+  return lo < size && table[lo].codepoint == codepoint ? &table[lo] : nullptr;
+}
+
+bool SdCardFont::advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16_t* outAdvance) const {
+  const AdvanceEntry* entry = advanceTableFind(styleIdx, codepoint);
+  if (!entry) return false;
+  if (outAdvance) *outAdvance = entry->advanceX;
+  return true;
 }
 
 bool SdCardFont::growAdvanceTable(const uint8_t styleIdx, const uint32_t needed) {
@@ -1749,24 +1771,130 @@ bool SdCardFont::hasAdvanceTable() const {
 }
 
 uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
+  return getLayoutMetrics(codepoint, style).advanceX;
+}
+
+SdCardFont::LayoutMetrics SdCardFont::getLayoutMetrics(const uint32_t codepoint, uint8_t style) const {
   style &= (MAX_STYLES - 1);
-  if (!advanceTable_[style]) return 0;
-  const AdvanceEntry* table = advanceTable_[style];
-  const uint32_t size = advanceTableSize_[style];
-  // Binary search sorted by codepoint
-  uint32_t lo = 0, hi = size;
-  while (lo < hi) {
-    uint32_t mid = lo + (hi - lo) / 2;
-    if (table[mid].codepoint < codepoint) {
-      lo = mid + 1;
-    } else {
-      hi = mid;
-    }
-  }
-  if (lo < size && table[lo].codepoint == codepoint) {
-    return table[lo].advanceX;
+  const AdvanceEntry* entry = advanceTableFind(style, codepoint);
+  if (!entry) return {};
+  return {entry->advanceX, entry->kernLeftClass, entry->kernRightClass};
+}
+
+int8_t SdCardFont::getLayoutKerning(uint8_t style, const uint8_t leftClass, const uint8_t rightClass) const {
+  style &= (MAX_STYLES - 1);
+  const LayoutKernTable& table = layoutKern_[style];
+  if (leftClass == 0 || rightClass == 0 || !table.storage) return 0;
+  // The same row scan as EpdFont::getKerning's sparse path.
+  const auto target = static_cast<uint8_t>(rightClass - 1);
+  for (uint16_t i = table.rowOffsets[leftClass - 1]; i < table.rowOffsets[leftClass]; i++) {
+    if (table.cols[i] == target) return table.values[i];
+    if (table.cols[i] > target) break;
   }
   return 0;
+}
+
+void SdCardFont::loadLayoutKernTable(const uint8_t styleIdx) {
+  if (layoutKernState_[styleIdx] != LayoutKern::NotLoaded) return;
+  layoutKernState_[styleIdx] = LayoutKern::Unavailable;
+  const auto& s = styleData(styleIdx);
+  const uint8_t leftCount = s.header.kernLeftClassCount;
+  const uint8_t rightCount = s.header.kernRightClassCount;
+  if (s.header.kernLeftEntryCount == 0 || s.header.kernRightEntryCount == 0 || leftCount == 0 || rightCount == 0) {
+    return;
+  }
+
+  HalFile file;
+  if (!Storage.openFileForRead("SDCF", filePath_, file)) {
+    LOG_ERR("SDCF", "Failed to open .cpfont for layout kerning: %s", filePath_);
+    return;
+  }
+  // Streams the dense matrix in small chunks and calls onCell(row, column, value)
+  // for each positive cell, 0-based, in row-major order, until onCell returns
+  // false. Returns false only on a read error.
+  const auto scan = [&](auto&& onCell) {
+    if (!file.seekSet(s.kernMatrixFileOffset)) return false;
+    const uint32_t total = static_cast<uint32_t>(leftCount) * rightCount;
+    int8_t chunk[64];
+    for (uint32_t at = 0; at < total;) {
+      const int n = static_cast<int>(std::min<uint32_t>(sizeof(chunk), total - at));
+      if (file.read(reinterpret_cast<uint8_t*>(chunk), n) != n) return false;
+      for (int i = 0; i < n; i++, at++) {
+        if (chunk[i] > 0 && !onCell(at / rightCount, at % rightCount, chunk[i])) return true;
+      }
+    }
+    return true;
+  };
+
+  const uint32_t offsetBytes = (leftCount + 1u) * sizeof(uint16_t);
+  uint32_t cells = 0;
+  if (!scan([&](uint32_t, uint32_t, int8_t) { return offsetBytes + ++cells * 2 <= LAYOUT_KERN_LIMIT; })) {
+    LOG_ERR("SDCF", "Failed to read layout kern matrix (style %u)", styleIdx);
+    return;
+  }
+  if (cells == 0) return;
+  const uint32_t bytes = offsetBytes + cells * 2;
+  if (bytes > LAYOUT_KERN_LIMIT) {
+    LOG_DBG("SDCF", "Kern table too large for layout (%u bytes, style %u); measuring unkerned", bytes, styleIdx);
+    return;
+  }
+
+  uint8_t* storage = psramNewArray<uint8_t>(bytes);
+  if (!storage) {
+    LOG_ERR("SDCF", "Failed to allocate layout kern table (%u bytes)", bytes);
+    return;
+  }
+  auto* offsets = reinterpret_cast<uint16_t*>(storage);
+  uint8_t* cols = storage + offsetBytes;
+  auto* values = reinterpret_cast<int8_t*>(cols + cells);
+  memset(offsets, 0, offsetBytes);
+  uint32_t filled = 0;
+  const bool read = scan([&](const uint32_t row, const uint32_t col, const int8_t value) {
+    if (filled == cells) return false;
+    cols[filled] = static_cast<uint8_t>(col);
+    values[filled] = value;
+    offsets[row + 1] = static_cast<uint16_t>(++filled);
+    return true;
+  });
+  if (!read || filled != cells) {
+    LOG_ERR("SDCF", "Failed to read layout kern matrix (style %u)", styleIdx);
+    psramDeleteArray(storage);
+    return;
+  }
+  // A row without cells ends where the previous row ended.
+  for (uint16_t row = 1; row <= leftCount; row++) offsets[row] = std::max(offsets[row], offsets[row - 1]);
+
+  layoutKern_[styleIdx] = {storage, offsets, cols, values};
+  layoutKernState_[styleIdx] = LayoutKern::Loaded;
+}
+
+void SdCardFont::fetchLayoutKernClasses(const uint8_t styleIdx, HalFile& file, AdvanceEntry* entries,
+                                        const uint32_t count) {
+  if (!layoutKern_[styleIdx].storage || count == 0) return;
+  auto& s = styleData(styleIdx);
+
+  // Scratch: the class-table read block, the sorted codepoints, then their left and right classes.
+  const uint32_t blockBytes = KERN_CLASS_BLOCK * sizeof(EpdKernClassEntry);
+  const uint32_t bytes = blockBytes + count * (sizeof(uint32_t) + 2);
+  auto scratch = makeUniqueNoThrow<uint8_t[]>(bytes);
+  if (!scratch) {
+    LOG_ERR("SDCF", "Failed to allocate layout kern scratch (%u bytes)", bytes);
+    return;
+  }
+  auto* block = reinterpret_cast<EpdKernClassEntry*>(scratch.get());
+  auto* codepoints = reinterpret_cast<uint32_t*>(scratch.get() + blockBytes);
+  uint8_t* leftClasses = scratch.get() + blockBytes + count * sizeof(uint32_t);
+  uint8_t* rightClasses = leftClasses + count;
+  for (uint32_t i = 0; i < count; i++) codepoints[i] = entries[i].codepoint;
+
+  if (!readStyleKernClasses(s, file, codepoints, count, leftClasses, rightClasses, block)) {
+    LOG_ERR("SDCF", "Failed to read layout kern classes (style %u)", styleIdx);
+    return;
+  }
+  for (uint32_t i = 0; i < count; i++) {
+    entries[i].kernLeftClass = leftClasses[i];
+    entries[i].kernRightClass = rightClasses[i];
+  }
 }
 
 // Given a sorted array of unique codepoints, resolve glyph indices per style,
@@ -1858,18 +1986,21 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
         break;
       }
       lastReadIndex = gIdx;
+      staged[fetched] = {};
       staged[fetched].codepoint = mappings[i].codepoint;
       staged[fetched].advanceX = glyphEntryValid(s, tempGlyph, mappings[i].codepoint) ? tempGlyph.advanceX : 0;
       fetched++;
     }
-    file.close();
+    mappings.reset();  // before the kern-class scratch
 
     if (fetched > 0) {
       // Sort staged by codepoint, then merge into the persistent table.
       std::sort(staged.get(), staged.get() + fetched,
                 [](const AdvanceEntry& a, const AdvanceEntry& b) { return a.codepoint < b.codepoint; });
+      fetchLayoutKernClasses(si, file, staged.get(), fetched);
       mergeIntoAdvanceTable(si, staged.get(), fetched);
     }
+    file.close();
 
     LOG_DBG("SDCF", "Advance table style %u: +%u from SD, total=%u/%u", si, fetched, advanceTableSize_[si],
             ADVANCE_CACHE_LIMIT);
@@ -1889,10 +2020,12 @@ int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_
 
   // Grow nearly full tables now rather than during the merge: the merge runs
   // while the codepoint scratch below is live, and a table grown then lands
-  // above it, inside the hole the scratch leaves when it is freed.
+  // above it, inside the hole the scratch leaves when it is freed. The layout
+  // kern table is allocated here for the same reason.
   constexpr uint32_t ADVANCE_GROWTH_HEADROOM = 64;
   for (uint8_t si = 0; si < MAX_STYLES; si++) {
     if (!(styleMask & (1 << si)) || !hasStyle(si)) continue;
+    loadLayoutKernTable(si);
     const uint32_t size = advanceTableSize_[si];
     if (size < ADVANCE_CACHE_LIMIT && advanceTableCapacity_[si] - size < ADVANCE_GROWTH_HEADROOM) {
       if (!growAdvanceTable(si, std::min(size + ADVANCE_GROWTH_HEADROOM, ADVANCE_CACHE_LIMIT))) {

@@ -90,8 +90,9 @@ void makeFont(uint32_t glyphs = GLYPHS) {
 // holds their pairs. `extraEntries` appends entries for U+0100 onwards to both
 // class tables, so the tables span several read blocks. They use `extraClass`,
 // or classes 3..classCount in turn when it is 0. A `classCount` of 0 writes no
-// kern data. `ligature` adds one pair, E+F -> A.
-void makeKerningFont(uint16_t extraEntries = 0, uint8_t classCount = 2, uint8_t extraClass = 2, bool ligature = false) {
+// kern data. `ligature` adds one pair, E+F -> A. `fill` fills the rest of the matrix.
+void makeKerningFont(uint16_t extraEntries = 0, uint8_t classCount = 2, uint8_t extraClass = 2, bool ligature = false,
+                     int8_t fill = 0) {
   constexpr uint32_t KERN_GLYPHS = 7;
   constexpr size_t GLYPH_OFFSET = 64 + 24;
   constexpr size_t KERN_OFFSET = GLYPH_OFFSET + KERN_GLYPHS * sizeof(EpdGlyph);
@@ -143,6 +144,7 @@ void makeKerningFont(uint16_t extraEntries = 0, uint8_t classCount = 2, uint8_t 
       sdFontTestFile[at + 2] = extraClass ? extraClass : 3 + i % (classCount - 2);
     }
   }
+  std::memset(sdFontTestFile.data() + at, static_cast<uint8_t>(fill), matrixBytes);
   for (size_t row = 0; classCount > 0 && row < 2; ++row) {
     std::memcpy(sdFontTestFile.data() + at + row * classCount, MATRIX[row], sizeof(MATRIX[row]));
   }
@@ -179,6 +181,12 @@ uint32_t residentCount(SdCardFont& font) {
     count += data->intervals[i].last - data->intervals[i].first + 1;
   }
   return count;
+}
+
+// Kerning layout measures between two codepoints in the advance table.
+int8_t layoutKerning(const SdCardFont& font, uint32_t left, uint32_t right) {
+  return font.getLayoutKerning(0, font.getLayoutMetrics(left, 0).kernLeftClass,
+                               font.getLayoutMetrics(right, 0).kernRightClass);
 }
 
 void expectPageBitmaps(SdCardFont& font, uint32_t first, uint32_t count) {
@@ -298,7 +306,7 @@ TEST(SdCardFontTest, BitmapAllocationRetriesAfterEvictingRebuildableAdvances) {
   }
 }
 
-TEST(SdCardFontTest, PagesKernWithTheFontsClassMatrix) {
+TEST(SdCardFontTest, PagesAndLayoutKernWithTheFontsClassMatrix) {
   makeKerningFont();
   SdCardFont font;
   ASSERT_TRUE(font.load("fixture"));
@@ -310,6 +318,22 @@ TEST(SdCardFontTest, PagesKernWithTheFontsClassMatrix) {
   EXPECT_EQ(-5, epd->getKerning('C', 'D'));
   EXPECT_EQ(0, epd->getKerning('B', 'D'));
   EXPECT_EQ(0, epd->getKerning('E', 'B'));
+
+  // Layout reads the positive pairs, also across letters fetched in separate batches.
+  ASSERT_EQ(0, font.buildAdvanceTable("AB", 1));
+  ASSERT_EQ(0, font.buildAdvanceTable("CDEF", 1));
+  for (const char* left = "ABCDEF"; *left; ++left) {
+    for (const char* right = "ABCDEF"; *right; ++right) {
+      EXPECT_EQ(std::max<int8_t>(0, epd->getKerning(*left, *right)), layoutKerning(font, *left, *right))
+          << *left << *right;
+    }
+  }
+
+  // Released tables are read again by the next layout pass.
+  font.releaseLayoutKernTables();
+  EXPECT_EQ(0, layoutKerning(font, 'C', 'B'));
+  ASSERT_EQ(0, font.buildAdvanceTable("CB", 1));
+  EXPECT_EQ(4, layoutKerning(font, 'C', 'B'));
 }
 
 TEST(SdCardFontTest, KernRequestsServedFromAKernFreeMiniStillKern) {
@@ -349,6 +373,10 @@ TEST(SdCardFontTest, ClassIdsPastTheMatrixAreUnkerned) {
   EXPECT_EQ(0, epd->getKerning('A', 0x100));
   EXPECT_EQ(0, epd->getKerning(0x100, 'B'));
   EXPECT_EQ(-3, epd->getKerning('A', 'B'));
+  ASSERT_EQ(0, font.buildAdvanceTable(latinPage("ABCD", 0x100, 1).c_str(), 1));
+  EXPECT_EQ(0, layoutKerning(font, 'A', 0x100));
+  EXPECT_EQ(0, layoutKerning(font, 0x100, 'B'));
+  EXPECT_EQ(4, layoutKerning(font, 'C', 'B'));
   EXPECT_EQ(-5, epd->getKerning('C', 'D'));
 }
 
@@ -361,6 +389,20 @@ TEST(SdCardFontTest, PagesCanUseAll255KernClasses) {
   EXPECT_EQ(-3, epd->getKerning('A', 'B'));
   EXPECT_EQ(-5, epd->getKerning('C', 'D'));
   EXPECT_EQ(0, epd->getKerning(0x100, 0x1FC));
+
+  // Layout keeps only the positive cells, so a mostly empty 255×255 matrix fits.
+  ASSERT_EQ(0, font.buildAdvanceTable(latinPage("ABCD", 0x100, 253).c_str(), 1));
+  EXPECT_EQ(4, layoutKerning(font, 'C', 'B'));
+  EXPECT_EQ(0, layoutKerning(font, 'A', 'B'));
+  EXPECT_EQ(0, layoutKerning(font, 0x100, 0x1FC));
+
+  // A full positive one is over the layout limit, so layout measures that style unkerned.
+  makeKerningFont(253, 255, 0, false, 1);
+  SdCardFont full;
+  ASSERT_TRUE(full.load("fixture"));
+  ASSERT_EQ(0, full.buildAdvanceTable(latinPage("ABCD", 0x100, 253).c_str(), 1));
+  EXPECT_EQ(0, layoutKerning(full, 'A', 'B'));
+  EXPECT_EQ(0, layoutKerning(full, 0x100, 0x1FC));
 }
 
 TEST(SdCardFontTest, AFailedKernBuildKeepsTheLigatures) {

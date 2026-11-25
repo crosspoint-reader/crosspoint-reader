@@ -58,6 +58,7 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
       renderer, fontId, static_cast<uint16_t>(textWidth),
       [&layout](std::unique_ptr<TextBlock> line, uint32_t) { layout.lines.push_back(std::move(line)); }, true,
       SETTINGS.getCharacterSpacing(), SETTINGS.wordSpacing);
+  if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdLayoutKernTables();
 }
 
 }  // namespace

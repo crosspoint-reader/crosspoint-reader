@@ -88,7 +88,8 @@ namespace {
 //      marks, in the book's language; reordered vowel signs for fonts without shaping
 //      data), and TextBlocks store each complex-script word's drawn form so page turns
 //      never shape.
-constexpr uint8_t SECTION_FILE_VERSION = 76;
+// v77: SD-font layout measures words with the kerning drawing applies.
+constexpr uint8_t SECTION_FILE_VERSION = 77;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -111,6 +112,13 @@ constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(int8_t) +
                                  sizeof(uint8_t) + sizeof(uint8_t);
+
+// Layout kern tables can take tens of KB per SD font, and only layout reads them.
+void releaseLayoutKernTables(GfxRenderer& renderer) {
+  if (auto* fontCache = renderer.getFontCacheManager()) {
+    fontCache->releaseSdLayoutKernTables();
+  }
+}
 }  // namespace
 
 // Out-of-line so the unique_ptr<ChapterHtmlSlimParser> in BuildContext can be
@@ -782,6 +790,7 @@ bool Section::finalizeBuild() {
   build_.reset();
   if (!committed) {
     // commitBuildFile removed filePath before the failed swap, so nothing valid remains.
+    releaseLayoutKernTables(renderer);
     partial_ = false;
     partialPageCount_ = 0;
     pageCount = 0;
@@ -833,6 +842,7 @@ void Section::suspendBuild() {
     Storage.remove(build_->tmpHtmlPath.c_str());
   }
   build_.reset();
+  releaseLayoutKernTables(renderer);
   buildComplete_ = false;
   pageCount = partial_ ? partialPageCount_ : 0;
   builtPageCount_ = 0;
@@ -856,6 +866,7 @@ void Section::abandonBuild() {
     Storage.remove(build_->tmpHtmlPath.c_str());
   }
   build_.reset();
+  releaseLayoutKernTables(renderer);
   buildComplete_ = false;
   partial_ = false;
   partialPageCount_ = 0;

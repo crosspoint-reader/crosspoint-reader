@@ -247,6 +247,7 @@ bool ClipSelectionActivity::extractWords() {
     if (wordCount == capacity) break;
   }
 
+  if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdLayoutKernTables();
   return true;
 }
 
