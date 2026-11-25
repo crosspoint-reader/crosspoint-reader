@@ -576,7 +576,7 @@ class GfxRenderer {
   bool displayGray16Bitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
                            float cropY = 0) const;
 #else
-  bool isGrayFrame() const { return false; }
+  static bool isGrayFrame() { return false; }
 #endif
 
   // Grayscale functions

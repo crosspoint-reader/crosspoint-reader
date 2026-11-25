@@ -1,4 +1,4 @@
-"""Build the Arduino 3.3.11 and 4.0.0 NetworkManager with the DNS cache clear in TCP/IP context."""
+"""Build the Arduino 3.3.11, 3.3.12 and 4.0.0 NetworkManager with the DNS cache clear in TCP/IP context."""
 
 import json
 from pathlib import Path
@@ -28,7 +28,7 @@ def patch_network_manager(env, node):
         return node
     source = upstream.read_text(encoding="utf-8")
     version = json.loads((framework / "package.json").read_text())["version"]
-    if version not in ("3.3.11", "4.0.0") or source.count(BEFORE) != 1:
+    if version not in ("3.3.11", "3.3.12", "4.0.0") or source.count(BEFORE) != 1:
         raise RuntimeError("Review the Arduino DNS cache patch for this framework version")
 
     patched = source.replace(BEFORE, AFTER)

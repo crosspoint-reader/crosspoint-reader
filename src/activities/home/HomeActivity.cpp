@@ -135,6 +135,7 @@ static bool thumbWantsGrayCopy(const RecentBook&, const std::string&) { return f
 void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoading, Rect& popupRect) {
   const bool hadThumb =
       !book.coverBmpPath.empty() && Storage.exists(UITheme::getCoverThumbPath(book.coverBmpPath, height).c_str());
+  // cppcheck-suppress knownConditionTrueFalse // constant only in builds without gray copies
   if (hadThumb && !thumbWantsGrayCopy(book, UITheme::getCoverThumbPath(book.coverBmpPath, height))) return;
   // Only one parser lives at a time; EPUB/XTC objects exceed the stack budget.
   if (FsHelpers::hasReflowableBookExtension(book.path)) {
