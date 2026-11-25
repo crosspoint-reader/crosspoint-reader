@@ -355,16 +355,27 @@ void BaseTheme::applyHeaderStatus(const GfxRenderer& renderer, freeink::ui::Head
   // The content row (title, back arrow, trailing action buttons) centers on
   // the region between the strip and the band bottom, so its padding reads
   // as balanced under the status line rather than against the full band.
-  // Text hangs low in its line cell by the font's internal leading; the icon
-  // buttons drop by that amount to align with the glyphs the user sees.
+  // Text hangs low in its line cell; the icon buttons drop to the centre of
+  // the title font's capitals to align with the glyphs the user sees.
   // Buttons keep a standard square (a band-8 button dwarfs its 24px icon);
   // the boxes are invisible and minTouchSize pads the tap target.
   constexpr int16_t headerButtonSize = 48;
   const int16_t bandHeight = static_cast<int16_t>(metrics.headerHeight);
   const int16_t strip = HEADER_STATUS_HEIGHT;
   const int titleFontId = uiScaleSpec().titleFontId;
-  const int16_t opticalDrop =
-      static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
+  int16_t opticalDrop = 0;
+  const auto titleFont = renderer.getFontMap().find(titleFontId);
+  if (titleFont != renderer.getFontMap().end()) {
+    const EpdFontData* face = titleFont->second.getData(EpdFontFamily::REGULAR);
+    const auto capital = titleFont->second.getGlyph('H', EpdFontFamily::REGULAR);
+    if (capital && face->advanceY > 0) {
+      // Twice the distance from the line cell's centre to the capital's, in
+      // the font's own pixels, then rounded into the renderer's line height.
+      const int drop2 = 2 * (face->ascender - capital->top) + capital->height - face->advanceY;
+      opticalDrop =
+          static_cast<int16_t>((drop2 * renderer.getLineHeight(titleFontId) + face->advanceY) / (2 * face->advanceY));
+    }
+  }
   props.leadingSize = headerButtonSize;
   props.trailingSize = headerButtonSize;
   props.leadingStyles = freeink::ui::plainStyles(freeink::ui::Paint::solid(freeink::ui::Color::Black));
