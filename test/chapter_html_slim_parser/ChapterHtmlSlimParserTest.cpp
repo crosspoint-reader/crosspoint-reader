@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -15,6 +16,8 @@
 #include <string>
 #include <vector>
 
+#include "EpubBuilder.h"
+#include "XhtmlSanitizer.h"
 #include "src/ReaderFontSizes.h"
 #include "src/activities/settings/TextSettingsPreview.h"
 #include "src/clippings/ClippingText.h"
@@ -2624,5 +2627,58 @@ TEST(TextSpacingLayout, UsesShapingMemoOnlyForParagraphsWithIndicText) {
     EXPECT_GT(lines, 0u);
     const bool indic = std::strstr(word, "कि") != nullptr;
     EXPECT_EQ(GfxRenderer::shapingMemoStarts - before, indic ? 1u : 0u) << word;
+  }
+}
+
+// Readwise articles: the sanitizer's output, wrapped in the generated chapter
+// head/tail, must lay out through the real parser.
+namespace {
+std::string readwiseChapter(const std::string& html) {
+  std::string body;
+  readwise::XhtmlSanitizer s([&](const char* d, size_t n) {
+    body.append(d, n);
+    return true;
+  });
+  s.feed(html.data(), html.size());
+  s.finish();
+  readwise::ArticleMeta meta;
+  meta.title = "T & <t>";
+  meta.author = "A";
+  meta.language = "en";
+  return readwise::EpubBuilder::chapterHead(meta) + body + readwise::EpubBuilder::chapterTail();
+}
+}  // namespace
+
+TEST_F(ChapterHtmlSlimParserTest, ReadwiseArticleLaysOut) {
+  const ScopedTempDir tempDir;
+  auto layout = [&](const std::string& html, const std::string& name) {
+    const std::string chapter = readwiseChapter(html);
+    filepath = (tempDir.path() / name).string();
+    {
+      HalFile file;
+      EXPECT_TRUE(file.open(filepath.c_str(), "wb"));
+      EXPECT_EQ(file.write(chapter.data(), chapter.size()), chapter.size());
+    }
+    unsigned pages = 0;
+    parser.completePageFn = [&](std::unique_ptr<Page> page, auto, auto, auto) {
+      if (page) ++pages;
+    };
+    EXPECT_TRUE(parser.parseAndBuildPages()) << name;
+    EXPECT_GT(pages, 0u) << name;
+    parser.currentTextBlock = std::make_unique<ParsedText>();
+  };
+  layout(
+      "<p class=x>Q&A <b>bold<i>both</b> &nbsp;&mdash; <img src='a&b'> 1 < 2</p><ul><li>one<li>two</ul>"
+      "<table><tr><td>c</td></tr></table><figure><figcaption>cap</figcaption></figure>",
+      "synthetic.xhtml");
+  // Optional: real articles kept outside the repo (e.g. raw html_content dumps).
+  if (const char* dir = std::getenv("READWISE_SAMPLE_DIR")) {
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+      if (entry.path().extension() != ".html") continue;
+      std::ifstream in(entry.path(), std::ios::binary);
+      std::stringstream ss;
+      ss << in.rdbuf();
+      layout(ss.str(), entry.path().filename().string() + ".xhtml");
+    }
   }
 }

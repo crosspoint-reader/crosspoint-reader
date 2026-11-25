@@ -20,6 +20,7 @@ enum class SettingAction {
   CustomiseStatusBar,
   ClockSettings,
   KOReaderSync,
+  Readwise,
   OPDSBrowser,
   Network,
   Bluetooth,

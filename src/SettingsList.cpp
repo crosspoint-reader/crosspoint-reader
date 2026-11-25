@@ -3,6 +3,8 @@
 #include <array>
 #include <utility>
 
+#include "readwise/ReadwiseStore.h"
+
 void forEachBaseSetting(SettingVisitor visit, void* context) {
   // Load and save walk this list, so every condition here must be fixed before
   // settings load. Runtime probes belong in isHiddenOnDevice().
@@ -243,6 +245,23 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(SettingInfo::Value(StrId::STR_WARMTH, &CrossPointSettings::frontlightWarmth, {0, 100, 5}, "frontlightWarmth"));
 #endif
   emit(SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::frontlightOn, "frontlightOn"));
+
+  // --- Readwise (web-only, uses ReadwiseStore): paste the token from a computer ---
+  emit(SettingInfo::DynamicString(
+           StrId::STR_READWISE_TOKEN, [] { return READWISE_STORE.getToken(); },
+           [](const std::string& v) {
+             READWISE_STORE.setToken(v);
+             READWISE_STORE.saveToFile();
+           },
+           "rwToken", StrId::STR_READWISE)
+           .withObfuscated());
+  emit(SettingInfo::DynamicString(
+      StrId::STR_READWISE_FOLDER, [] { return READWISE_STORE.getFolder(); },
+      [](const std::string& v) {
+        READWISE_STORE.setFolder(v);
+        READWISE_STORE.saveToFile();
+      },
+      "rwFolder", StrId::STR_READWISE));
 
   // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
   emit(SettingInfo::DynamicString(
