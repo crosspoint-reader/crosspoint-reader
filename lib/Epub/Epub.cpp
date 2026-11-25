@@ -480,6 +480,9 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     return false;
   }
 
+  // A rebuild cut short by a power loss leaves progress.bin parked next to the cache.
+  restoreParkedProgress();
+
   // Try to load existing cache first
   bool cacheLoaded = bookMetadataCache->load();
   if (cacheLoaded && !bookMetadataCache->sourceUnchanged(filepath)) {
@@ -759,25 +762,33 @@ bool Epub::clearCache() const {
   return true;
 }
 
+// progress.bin is parked next to the cache directory while the directory is removed, so it is
+// moved, never copied: a failed write or a power cut at any point leaves it in one of the two places.
+std::string Epub::parkedProgressPath() const { return cachePath + ".progress.bin"; }
+
+void Epub::restoreParkedProgress() const {
+  const std::string parked = parkedProgressPath();
+  if (!Storage.exists(parked.c_str())) return;
+  setupCacheDir();
+  const std::string progressPath = cachePath + "/progress.bin";
+  if (Storage.exists(progressPath.c_str())) {
+    Storage.remove(parked.c_str());  // the reader saved a newer position since
+  } else if (!Storage.rename(parked.c_str(), progressPath.c_str())) {
+    LOG_ERR("EBP", "Could not restore parked reading progress: %s", parked.c_str());
+  }
+}
+
 bool Epub::clearCacheKeepingProgress() const {
   // Everything else in the directory is derived from the old file.
   const std::string progressPath = cachePath + "/progress.bin";
-  uint8_t progress[16];
-  int progressSize = 0;
-  if (Storage.exists(progressPath.c_str())) {
-    HalFile file;
-    if (Storage.openFileForRead("EBP", progressPath, file)) progressSize = file.read(progress, sizeof(progress));
+  const std::string parked = parkedProgressPath();
+  if (Storage.exists(progressPath.c_str()) && !Storage.exists(parked.c_str()) &&
+      !Storage.rename(progressPath.c_str(), parked.c_str())) {
+    LOG_ERR("EBP", "Could not park reading progress, keeping the old cache");
+    return false;
   }
-
   if (!clearCache()) return false;
-  if (progressSize <= 0) return true;
-
-  setupCacheDir();
-  HalFile file;
-  if (!Storage.openFileForWrite("EBP", progressPath, file) ||
-      file.write(progress, progressSize) != static_cast<size_t>(progressSize)) {
-    LOG_ERR("EBP", "Could not restore reading progress after cache reset");
-  }
+  restoreParkedProgress();
   return true;
 }
 

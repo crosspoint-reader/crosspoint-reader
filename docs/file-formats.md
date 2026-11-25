@@ -14,7 +14,10 @@ The current firmware writes this version from `BookMetadataCache`.
 Version 11 adds `sourceSize` and `sourceModified` to the header: the size and
 FAT modification time (`date << 16 | time`, 0 when unknown) of the book file the
 cache was built from. When either differs on open, the book's cache directory is
-rebuilt and only `progress.bin` is kept.
+rebuilt and only `progress.bin` is kept. While the directory is removed,
+`progress.bin` is moved next to it as `<cache dir>.progress.bin` and moved back
+afterwards; a rebuild cut short by a power loss is finished on the next open.
+A saved chapter past the rebuilt book's last chapter starts the book over.
 
 ImHex pattern:
 

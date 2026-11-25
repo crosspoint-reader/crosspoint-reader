@@ -65,6 +65,8 @@ class Epub {
   bool loadSyncMetadata(SyncMetadata& metadata);
   bool clearCache() const;
   bool clearCacheKeepingProgress() const;
+  std::string parkedProgressPath() const;
+  void restoreParkedProgress() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;
   const std::string& getPath() const;
