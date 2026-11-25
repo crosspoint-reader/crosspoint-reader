@@ -642,6 +642,12 @@ void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const 
   const glyphBitmap::Plane plane = mode == BW              ? glyphBitmap::Plane::BW
                                    : mode == GRAYSCALE_MSB ? glyphBitmap::Plane::GrayMSB
                                                            : glyphBitmap::Plane::GrayLSB;
+#ifdef BOARD_HAS_PSRAM
+  if (_grayPairMsb) {
+    glyphBitmap::drawGrayPair(bitmap, width, height, twoBit, absoluteGrayPlanes, state, target, _grayPairMsb, clip);
+    return;
+  }
+#endif
   glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, clip);
 }
 
@@ -673,6 +679,16 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
     rowY = static_cast<uint32_t>(phyY - _stripY0);
   }
 
+#ifdef BOARD_HAS_PSRAM
+  if (_grayPairMsb) {
+    const uint32_t byteIndex = rowY * panelWidthBytes + phyX / 8;
+    const uint8_t mask = 0x80u >> (phyX & 7);
+    if (state)
+      _grayPairMsb[byteIndex] &= static_cast<uint8_t>(~mask);
+    else
+      _grayPairMsb[byteIndex] |= mask;
+  }
+#endif
   // Calculate byte position and bit position
   const uint32_t byteIndex = rowY * panelWidthBytes + (phyX / 8);
   const uint8_t bitPosition = 7 - (phyX % 8);  // MSB first
@@ -1156,6 +1172,19 @@ void GfxRenderer::fillRectDither(const int x, const int y, const int width, cons
 template <Color C>
 void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const int height,
                                const DitherMode mode) const {
+#ifdef BOARD_HAS_PSRAM
+  if (_grayPairMsb) {
+    uint8_t* lsb = _stripBuf;
+    uint8_t* msb = _grayPairMsb;
+    _grayPairMsb = nullptr;
+    fillRectImpl<C>(x, y, width, height, mode);
+    _stripBuf = msb;
+    fillRectImpl<C>(x, y, width, height, mode);
+    _stripBuf = lsb;
+    _grayPairMsb = msb;
+    return;
+  }
+#endif
   if constexpr (C == Color::Clear) return;
   if (width <= 0 || height <= 0) return;
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
@@ -1818,6 +1847,9 @@ void GfxRenderer::clearScreen(const uint8_t color) const {
   if (_stripActive) {
     // Clear only the active band's scratch, not the shared framebuffer.
     memset(_stripBuf, color, static_cast<size_t>(panelWidthBytes) * _stripRows);
+#ifdef BOARD_HAS_PSRAM
+    if (_grayPairMsb) memset(_grayPairMsb, color, static_cast<size_t>(panelWidthBytes) * _stripRows);
+#endif
     return;
   }
   display.clearScreen(color);
@@ -1834,7 +1866,18 @@ void GfxRenderer::beginStripTarget(uint8_t* scratch, int stripY0, int stripRows)
   _stripActive = true;
 }
 
+#ifdef BOARD_HAS_PSRAM
+void GfxRenderer::beginGrayPairTarget(uint8_t* lsb, uint8_t* msb, int rows) const {
+  assert(msb != nullptr && msb != lsb && renderMode == GRAYSCALE_LSB);
+  beginStripTarget(lsb, 0, rows);
+  _grayPairMsb = msb;
+}
+#endif
+
 void GfxRenderer::endStripTarget() const {
+#ifdef BOARD_HAS_PSRAM
+  _grayPairMsb = nullptr;
+#endif
   _stripActive = false;
   _stripBuf = nullptr;
   _stripY0 = 0;

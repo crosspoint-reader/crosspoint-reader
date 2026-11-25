@@ -665,3 +665,35 @@ TEST(SdCardFontTest, ACorruptGlyphEntryDrawsAsMissing) {
     }
   }
 }
+
+#ifdef BOARD_HAS_PSRAM
+TEST(SdCardFontTest, BitmapBatchesReduceReadsAndKeepTheSamePixels) {
+  makeFont();
+  size_t batchedReads = 0;
+  for (bool failPsram : {false, true}) {
+    sdFontFailPsram = failPsram;
+    SdCardFont font;
+    ASSERT_TRUE(font.load("fixture"));
+    sdFontTestReads = 0;
+    ASSERT_EQ(0, font.prewarm(page(FIRST, 100).c_str(), 1, false, false, false));
+    const size_t reads = sdFontTestReads;
+    expectPageBitmaps(font, FIRST, 100);
+    if (!failPsram)
+      batchedReads = reads;
+    else
+      EXPECT_GE(reads, batchedReads + 90);
+    const std::string sparse = page(FIRST, 1) + page(FIRST + 100, 1) + page(FIRST + 250, 1);
+    ASSERT_EQ(0, font.prewarm(sparse.c_str(), 1, false, false, false));
+    expectPageBitmaps(font, FIRST, 1);
+    expectPageBitmaps(font, FIRST + 100, 1);
+    expectPageBitmaps(font, FIRST + 250, 1);
+    // A batch larger than 16 KiB must cross staging boundaries.
+    ASSERT_EQ(0, font.prewarm(page(FIRST, 300).c_str(), 1, false, false, false));
+    expectPageBitmaps(font, FIRST, 300);
+    font.releaseResidentCaches();
+    ASSERT_EQ(0, font.prewarm(page(FIRST + 310, 100).c_str(), 1, false, false, false));
+    expectPageBitmaps(font, FIRST + 310, 100);
+  }
+  sdFontFailPsram = false;
+}
+#endif

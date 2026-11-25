@@ -33,8 +33,8 @@ incremental_draw = method("bool ClipSelectionActivity::renderIncremental", "void
 selection_draw = method("void ClipSelectionActivity::drawSelection", "void ClipSelectionActivity::render(")
 word_font = method("int clippingWordFont", "Rect clippingWordRect", reader_source)
 word_rect = method("Rect clippingWordRect", "int clampPercent", reader_source)
-saved_hit = method("int EpubReaderActivity::clippingAtPoint", "void EpubReaderActivity::drawClippingHighlights", reader_source)
-saved_draw = method("void EpubReaderActivity::drawClippingHighlights", "void EpubReaderActivity::renderStatusBar", reader_source)
+saved_hit = method("int EpubReaderActivity::clippingAtPoint", "bool EpubReaderActivity::drawClippingHighlights", reader_source)
+saved_draw = method("bool EpubReaderActivity::drawClippingHighlights", "void EpubReaderActivity::renderStatusBar", reader_source)
 
 # Compile production extraction, export, and redraws with bounded UI/rendering stubs.
 harness = r"""
@@ -335,7 +335,7 @@ struct EpubReaderActivity {
   Section* section = &sectionData;
   int currentSpineIndex = 0, buildViewportWidth = 480, buildViewportHeight = 800;
   int clippingAtPoint(const Page&, int, int) const;
-  void drawClippingHighlights(const Page&, int, int, int) const;
+  bool drawClippingHighlights(const Page&, int, int, int) const;
 };
 """ + word_font + word_rect + saved_hit + saved_draw + r"""
 int loadLine(ClipSelectionActivity& activity, const std::vector<std::string>& logical,
@@ -573,12 +573,17 @@ int main() {
     savedClippings.clipping.startOffset = 0;
     savedClippings.clipping.endOffset = 3;
     activity.renderer.fills.clear();
-    reader.drawClippingHighlights(*activity.pages[0], 0, 0, 0);
+    assert(reader.drawClippingHighlights(*activity.pages[0], 0, 0, 0));
     assert(activity.renderer.fills.size() == 1);
     const int width = activity.words[0].width;
     assert(activity.renderer.fills[0].width == width);
     assert(reader.clippingAtPoint(*activity.pages[0], width - 1, 8) == 0);
     assert(reader.clippingAtPoint(*activity.pages[0], width, 8) == -1);
+    savedClippings.clipping.startOffset = 10;
+    savedClippings.clipping.endOffset = 13;
+    activity.renderer.fills.clear();
+    assert(!reader.drawClippingHighlights(*activity.pages[0], 0, 0, 0));
+    assert(activity.renderer.fills.empty());
   }
   for (const auto& logical : {std::vector<std::string>{"אחד", "alpha", "beta", "שני"},
                               std::vector<std::string>{"واحد", "alpha", "beta", "اثنان"}}) {

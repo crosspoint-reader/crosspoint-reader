@@ -4,6 +4,7 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/PageLink.h>
 #include <Epub/Section.h>
+#include <HalMemory.h>
 
 #include <atomic>
 #include <memory>
@@ -21,6 +22,11 @@
 #include "components/OptionPopup.h"
 
 class EpubReaderActivity final : public ReaderActivity {
+#ifdef BOARD_HAS_PSRAM
+  // Reused for this reader's lifetime; never consumes internal RAM.
+  HalMemory::PsramBuffer grayPlanes;
+  size_t grayPlaneCapacity = 0;
+#endif
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Epub::SyncMetadata> vocabularyMetadata;
   std::unique_ptr<Section> section = nullptr;
@@ -224,7 +230,7 @@ class EpubReaderActivity final : public ReaderActivity {
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
-  void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
+  bool drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
   void renderStatusBar() const;
   void applyOrientation(uint8_t orientation);
   void applyInitialOrientation() override;
