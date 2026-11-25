@@ -57,8 +57,25 @@ class GfxRenderer {
     LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
   };
 
+#if CROSSPOINT_HIRES_UI_ICONS
+  // A square 1-bit icon (`sourceSize` pixels a side) and the same artwork at
+  // `hiResSize`, in the same bit layout. An icon matches a row when it has the
+  // source's size and bytes.
+  struct HiResIcon {
+    const uint8_t* source;
+    const uint8_t* hiRes;
+    uint8_t sourceSize;
+    uint8_t hiResSize;
+  };
+#endif
+
  private:
   float uiScale_ = 1.0f;
+#if CROSSPOINT_HIRES_UI_ICONS
+  const HiResIcon* hiResIcons_ = nullptr;
+  size_t hiResIconCount_ = 0;
+  const HiResIcon* hiResIcon(const uint8_t* bits, int size) const;
+#endif
   mutable bool uiScaleActive_ = false;
   int sp(const int v) const { return static_cast<int>(lroundf(static_cast<float>(v) * uiScale_)); }
   int lp(const int v) const { return static_cast<int>(lroundf(static_cast<float>(v) / uiScale_)); }
@@ -387,6 +404,14 @@ class GfxRenderer {
                        bool roundBottomLeft, bool roundBottomRight, Color color) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawIcon(const uint8_t bitmap[], int x, int y, int size) const;
+#if CROSSPOINT_HIRES_UI_ICONS
+  // Under a UI scale, drawIcon and drawMask draw an icon's hi-res artwork when
+  // the table has it. The table must outlive the renderer.
+  void setHiResIcons(const HiResIcon* icons, size_t count) {
+    hiResIcons_ = icons;
+    hiResIconCount_ = count;
+  }
+#endif
 #if CROSSPOINT_GRAY_UI
   // Draw a 1-bit mask (row-major, MSB first, natural orientation) scaled to
   // width x height at (x, y). `inkIsZero` says which bit value is ink; black

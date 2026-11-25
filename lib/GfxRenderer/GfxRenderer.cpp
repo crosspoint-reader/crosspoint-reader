@@ -1097,6 +1097,11 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const LaidOutText& text, const bool black,
                            const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,
                            const int8_t tracking) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawText(fontId, sp(x), sp(y), text, black, style, baseDir, tracking);
+    return;
+  }
   if (text.text == nullptr || *text.text == '\0') {
     return;
   }
@@ -1973,9 +1978,28 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   display.drawImage(bitmap, rotatedX, rotatedY, width, height);
 }
 
+#if CROSSPOINT_HIRES_UI_ICONS
+const GfxRenderer::HiResIcon* GfxRenderer::hiResIcon(const uint8_t* bits, const int size) const {
+  // Icon arrays are static in their headers, so each caller has its own copy:
+  // match by content, not by address.
+  const size_t bytes = static_cast<size_t>((size + 7) / 8) * size;
+  for (size_t i = 0; i < hiResIconCount_; ++i) {
+    const HiResIcon& icon = hiResIcons_[i];
+    if (icon.sourceSize == size && (icon.source == bits || memcmp(icon.source, bits, bytes) == 0)) return &icon;
+  }
+  return nullptr;
+}
+#endif
+
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int size) const {
   if (uiScaleActive_) {
     const PhysicalScope off(*this);
+#if CROSSPOINT_HIRES_UI_ICONS
+    if (const HiResIcon* icon = hiResIcon(bitmap, size)) {
+      drawIconScaled(icon->hiRes, sp(x), sp(y), icon->hiResSize, sp(x + size) - sp(x));
+      return;
+    }
+#endif
     drawIconScaled(bitmap, sp(x), sp(y), size, sp(x + size) - sp(x));
     return;
   }
@@ -2050,6 +2074,12 @@ void GfxRenderer::drawMask(const uint8_t* bits, const int srcWidth, const int sr
   if (uiScaleActive_) {
     const PhysicalScope off(*this);
     spRect(x, y, width, height);
+#if CROSSPOINT_HIRES_UI_ICONS
+    if (const HiResIcon* icon = srcWidth == srcHeight && inkIsZero ? hiResIcon(bits, srcWidth) : nullptr) {
+      drawMask(icon->hiRes, icon->hiResSize, icon->hiResSize, inkIsZero, x, y, width, height, black);
+      return;
+    }
+#endif
     drawMask(bits, srcWidth, srcHeight, inkIsZero, x, y, width, height, black);
     return;
   }
@@ -2966,6 +2996,10 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 int GfxRenderer::getTextAdvanceX(const int fontId, const LaidOutText& text, const EpdFontFamily::Style style,
                                  const int8_t tracking, const BidiUtils::BidiBaseDir baseDir,
                                  const TextMeasureMode mode) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getTextAdvanceX(fontId, text, style, tracking, baseDir, mode));
+  }
   const int resolvedFontId = resolveTextFontId(fontId, text.text, style);
   std::string visual;
   const VisualText visualText = resolveLaidOutText(text, visual, baseDir, fontMap, resolvedFontId, style);

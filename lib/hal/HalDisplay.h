@@ -28,6 +28,17 @@
 #define CROSSPOINT_GRAY_UI_FULL_TONE 0
 #endif
 
+// Hi-res UI icons: a board with a UI scale draws an icon from artwork made at
+// twice its drawn size instead of enlarging the 1x icon. Compiled only for
+// the board that ships that artwork (src/components/icons/hiResIcons.h).
+#ifndef CROSSPOINT_HIRES_UI_ICONS
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+#define CROSSPOINT_HIRES_UI_ICONS 1
+#else
+#define CROSSPOINT_HIRES_UI_ICONS 0
+#endif
+#endif
+
 // Serial commands for calibrating 16-level drawing on the glass
 // (src/util/Gray16Tuning.h). A development tool: off unless the build asks.
 #ifndef CROSSPOINT_GRAY16_TUNING

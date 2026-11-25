@@ -143,11 +143,23 @@ struct UiFontSize {
   int fontId;
   uint8_t pointSize;
 };
+// The drawn size of a UI point size on this board.
+constexpr uint8_t uiPointSize(const int base) {
+  return static_cast<uint8_t>(base * BoardConfig::DEFAULT_DEVICE.uiScale + 0.5f);
+}
 constexpr UiFontSize kUiFontSizes[] = {
-    {SMALL_FONT_ID, 8},
-    {UI_10_FONT_ID, 10},
-    {UI_12_FONT_ID, 12},
+    {SMALL_FONT_ID, uiPointSize(8)},
+    {UI_10_FONT_ID, uiPointSize(10)},
+    {UI_12_FONT_ID, uiPointSize(12)},
 };
+
+// The size of a bitmap family to load for a UI slot. Bitmap families ship
+// fixed sizes, so a scaled board takes the nearest one (15 pt becomes 14 pt).
+uint8_t bitmapUiSize(const SdCardFontFamilyInfo& family, const uint8_t pointSize) {
+  if (BoardConfig::DEFAULT_DEVICE.uiScale == 1.0f) return pointSize;
+  const SdCardFontFileInfo* nearest = family.findNearestSize(pointSize);
+  return nearest ? nearest->pointSize : pointSize;
+}
 
 }  // namespace
 
@@ -426,8 +438,9 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   for (size_t i = 0; i < std::size(kUiFontSizes); ++i) {
     const auto& ui = kUiFontSizes[i];
     // Use the persisted CSS variant id so UI and reader text share one prewarm set.
-    const int id = variantFontId(manager_.getFontId(familyName), ui.pointSize);
-    const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, ui.pointSize, id);
+    const uint8_t size = bitmapUiSize(*family, ui.pointSize);
+    const int id = variantFontId(manager_.getFontId(familyName), size);
+    const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, size, id);
     if (sdFontId != 0) {
       cpfontUiIds_[i] = sdFontId;
       renderer.setFallbackFont(ui.fontId, sdFontId);
@@ -486,7 +499,7 @@ const char* SdCardFontSystem::activeUiFontName() const {
 bool SdCardFontSystem::supportsUiFont(const SdCardFontFamilyInfo& family) {
   if (family.vector) return CROSSPOINT_VECTOR_FONTS;
   return std::all_of(std::begin(kUiFontSizes), std::end(kUiFontSizes),
-                     [&](const UiFontSize& ui) { return family.hasSize(ui.pointSize); });
+                     [&](const UiFontSize& ui) { return family.hasSize(bitmapUiSize(family, ui.pointSize)); });
 }
 
 bool SdCardFontSystem::loadUiCpfonts(const SdCardFontFamilyInfo& family, GfxRenderer& renderer) {
@@ -494,7 +507,9 @@ bool SdCardFontSystem::loadUiCpfonts(const SdCardFontFamilyInfo& family, GfxRend
   for (size_t i = 0; i < std::size(kUiFontSizes); ++i) {
     const auto& ui = kUiFontSizes[i];
     renderer.removeFont(ui.fontId);
-    if (!uiCpfonts_.loadFamilyVariant(family, renderer, ui.pointSize, ui.fontId, builtinUiFonts_[i])) return false;
+    if (!uiCpfonts_.loadFamilyVariant(family, renderer, bitmapUiSize(family, ui.pointSize), ui.fontId,
+                                      builtinUiFonts_[i]))
+      return false;
     if (HalMemory::getInternalHeap().freeBytes < kMinInternalFree) {
       LOG_ERR("SDFS", "Not enough internal heap for the UI bitmap font");
       return false;

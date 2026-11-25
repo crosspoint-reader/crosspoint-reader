@@ -47,6 +47,7 @@
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
+#include "components/icons/hiResIcons.h"
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "sync/SyncEngine.h"
@@ -104,27 +105,37 @@ EpdFontFamily notosans18FontFamily(18, &notosans18RegularFont, &notosans18BoldFo
 
 #endif  // OMIT_FONTS
 
-// Boards with a UI scale draw the UI faces from 2-bit sources, scaled at
-// runtime (GfxRenderer::insertUiFont): their grey edges keep stem widths even
-// after scaling. Unscaled boards keep the 1-bit faces; the faces a build does
-// not pick are dropped by the linker.
+// Boards with a UI scale draw the UI faces from 2-bit data. A 1.5x board has
+// the faces at their drawn sizes (12, 15 and 18 pt); another scale gets the
+// 8, 10 and 12 pt faces scaled at runtime (GfxRenderer::insertUiFont).
+// Unscaled boards keep the 1-bit faces; the faces a build does not pick are
+// dropped by the linker.
 #include <builtinFonts/ubuntu_10_bold_2bit.h>
 #include <builtinFonts/ubuntu_10_regular_2bit.h>
 #include <builtinFonts/ubuntu_12_bold_2bit.h>
 #include <builtinFonts/ubuntu_12_regular_2bit.h>
+#include <builtinFonts/ubuntu_15_bold_2bit.h>
+#include <builtinFonts/ubuntu_15_regular_2bit.h>
+#include <builtinFonts/ubuntu_18_bold_2bit.h>
+#include <builtinFonts/ubuntu_18_regular_2bit.h>
 #include <builtinFonts/ubuntu_8_regular_2bit.h>
 constexpr bool kScaledUi = BoardConfig::DEFAULT_DEVICE.uiScale != 1.0f;
+constexpr bool kNativeUiFaces = BoardConfig::DEFAULT_DEVICE.uiScale == 1.5f;
 
-EpdFont smallFont(kScaledUi ? &ubuntu_8_regular_2bit : &ubuntu_8_regular);
-EpdFontFamily smallFontFamily(8, &smallFont);
+EpdFont smallFont(kNativeUiFaces ? &ubuntu_12_regular_2bit : kScaledUi ? &ubuntu_8_regular_2bit : &ubuntu_8_regular);
+EpdFontFamily smallFontFamily(kNativeUiFaces ? 12 : 8, &smallFont);
 
-EpdFont ui10RegularFont(kScaledUi ? &ubuntu_10_regular_2bit : &ubuntu_10_regular);
-EpdFont ui10BoldFont(kScaledUi ? &ubuntu_10_bold_2bit : &ubuntu_10_bold);
-EpdFontFamily ui10FontFamily(10, &ui10RegularFont, &ui10BoldFont);
+EpdFont ui10RegularFont(kNativeUiFaces ? &ubuntu_15_regular_2bit
+                        : kScaledUi    ? &ubuntu_10_regular_2bit
+                                       : &ubuntu_10_regular);
+EpdFont ui10BoldFont(kNativeUiFaces ? &ubuntu_15_bold_2bit : kScaledUi ? &ubuntu_10_bold_2bit : &ubuntu_10_bold);
+EpdFontFamily ui10FontFamily(kNativeUiFaces ? 15 : 10, &ui10RegularFont, &ui10BoldFont);
 
-EpdFont ui12RegularFont(kScaledUi ? &ubuntu_12_regular_2bit : &ubuntu_12_regular);
-EpdFont ui12BoldFont(kScaledUi ? &ubuntu_12_bold_2bit : &ubuntu_12_bold);
-EpdFontFamily ui12FontFamily(12, &ui12RegularFont, &ui12BoldFont);
+EpdFont ui12RegularFont(kNativeUiFaces ? &ubuntu_18_regular_2bit
+                        : kScaledUi    ? &ubuntu_12_regular_2bit
+                                       : &ubuntu_12_regular);
+EpdFont ui12BoldFont(kNativeUiFaces ? &ubuntu_18_bold_2bit : kScaledUi ? &ubuntu_12_bold_2bit : &ubuntu_12_bold);
+EpdFontFamily ui12FontFamily(kNativeUiFaces ? 18 : 12, &ui12RegularFont, &ui12BoldFont);
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
@@ -670,10 +681,19 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
 #endif  // OMIT_FONTS
+#if CROSSPOINT_HIRES_UI_ICONS
+  renderer.setHiResIcons(kHiResIcons, sizeof(kHiResIcons) / sizeof(kHiResIcons[0]));
+#endif
   // UI faces follow the board's UI scale; reader fonts keep their own sizes.
-  renderer.insertUiFont(UI_10_FONT_ID, ui10FontFamily);
-  renderer.insertUiFont(UI_12_FONT_ID, ui12FontFamily);
-  renderer.insertUiFont(SMALL_FONT_ID, smallFontFamily);
+  if (kNativeUiFaces) {
+    renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
+    renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
+    renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
+  } else {
+    renderer.insertUiFont(UI_10_FONT_ID, ui10FontFamily);
+    renderer.insertUiFont(UI_12_FONT_ID, ui12FontFamily);
+    renderer.insertUiFont(SMALL_FONT_ID, smallFontFamily);
+  }
 
   sdFontSystem.begin(renderer, smallFontFamily, ui10FontFamily, ui12FontFamily);
 
