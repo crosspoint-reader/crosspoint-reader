@@ -6,10 +6,15 @@ All POD fields are written in the ESP32 little-endian representation used by
 
 ## `book.bin`
 
-### Version 10
+### Version 11
 
 `book.bin` stores EPUB metadata plus lookup tables for spine and TOC entries.
 The current firmware writes this version from `BookMetadataCache`.
+
+Version 11 adds `sourceSize` and `sourceModified` to the header: the size and
+FAT modification time (`date << 16 | time`, 0 when unknown) of the book file the
+cache was built from. When either differs on open, the book's cache directory is
+rebuilt and only `progress.bin` is kept.
 
 ImHex pattern:
 
@@ -18,7 +23,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 10
+#define EXPECTED_VERSION 11
 #define MAX_STRING_LENGTH 65535
 
 struct String {
@@ -64,6 +69,8 @@ struct BookBin {
     u32 lutOffset [[comment("Offset to lookup tables")]];
     u16 spineCount;
     u16 tocCount;
+    u32 sourceSize [[comment("Book file size when the cache was built")]];
+    u32 sourceModified [[comment("Book file FAT date << 16 | time, 0 if unknown")]];
 
     Metadata metadata;
 

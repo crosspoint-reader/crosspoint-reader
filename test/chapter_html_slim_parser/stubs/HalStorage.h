@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sys/stat.h>
+
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -63,6 +65,12 @@ class HalFile {
     const long end = std::ftell(file_);
     std::fseek(file_, offset, SEEK_SET);
     return end > 0 ? static_cast<size_t>(end) : 0;
+  }
+
+  // Host modification time in seconds; 0 stands for "no time", as on the device.
+  uint32_t modificationTime() const {
+    struct stat st;
+    return file_ && fstat(fileno(file_), &st) == 0 ? static_cast<uint32_t>(st.st_mtime) : 0;
   }
 
   size_t write(const uint8_t* buffer, size_t count) { return write(static_cast<const void*>(buffer), count); }

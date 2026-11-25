@@ -481,7 +481,19 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   }
 
   // Try to load existing cache first
-  if (bookMetadataCache->load()) {
+  bool cacheLoaded = bookMetadataCache->load();
+  if (cacheLoaded && !bookMetadataCache->sourceUnchanged(filepath)) {
+    LOG_DBG("EBP", "Book file changed since it was indexed, rebuilding cache: %s", filepath.c_str());
+    bookMetadataCache.reset();  // closes book.bin before its directory is removed
+    if (!clearCacheKeepingProgress()) return false;
+    bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+    if (!bookMetadataCache) {
+      LOG_ERR("EBP", "OOM: metadata cache");
+      return false;
+    }
+    cacheLoaded = false;
+  }
+  if (cacheLoaded) {
     if (Txt::isTxtOrMd(filepath)) {
       if (!Txt::validateCache(filepath, cachePath, bookMetadataCache->getCumulativeSize(0))) {
         LOG_DBG("EBP", "TXT/MD cache invalid or outdated: %s", filepath.c_str());
@@ -744,6 +756,28 @@ bool Epub::clearCache() const {
   }
 
   LOG_DBG("EPB", "Cache cleared successfully");
+  return true;
+}
+
+bool Epub::clearCacheKeepingProgress() const {
+  // Everything else in the directory is derived from the old file.
+  const std::string progressPath = cachePath + "/progress.bin";
+  uint8_t progress[16];
+  int progressSize = 0;
+  if (Storage.exists(progressPath.c_str())) {
+    HalFile file;
+    if (Storage.openFileForRead("EBP", progressPath, file)) progressSize = file.read(progress, sizeof(progress));
+  }
+
+  if (!clearCache()) return false;
+  if (progressSize <= 0) return true;
+
+  setupCacheDir();
+  HalFile file;
+  if (!Storage.openFileForWrite("EBP", progressPath, file) ||
+      file.write(progress, progressSize) != static_cast<size_t>(progressSize)) {
+    LOG_ERR("EBP", "Could not restore reading progress after cache reset");
+  }
   return true;
 }
 
