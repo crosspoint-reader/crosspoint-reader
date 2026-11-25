@@ -230,13 +230,6 @@
     return changed;
   }
 
-  function updateSettingsVisibility() {
-    // Footnotes is display index 4 in both SettingsList.h Power option lists.
-    const footnotesSelected = getControlValue('shortPwrBtn') === 4 || getControlValue('doublePwrBtn') === 4;
-    const row = document.getElementById('row-setting-pwrBtnFootnoteBack');
-    if (row) row.style.display = footnotesSelected ? '' : 'none';
-  }
-
   function handleSettingChanged(key, source) {
     if (key === 'longPressButtonBehavior' && source) {
       getControl(key).value = source.value;
@@ -244,9 +237,6 @@
       if (duplicate) duplicate.value = source.value;
     }
     syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'quickResumeSleepScreen');
-    if (key === 'shortPwrBtn' || key === 'doublePwrBtn') {
-      updateSettingsVisibility();
-    }
     markChanged();
   }
 
@@ -320,7 +310,6 @@
       }
 
       container.innerHTML = html;
-      updateSettingsVisibility();
       document.getElementById('save-container').style.display = '';
       document.getElementById('saveBtn').disabled = true;
       preserveQuickResumeTimeoutOn = getControlValue('quickResumeSleepScreen') === 1;
