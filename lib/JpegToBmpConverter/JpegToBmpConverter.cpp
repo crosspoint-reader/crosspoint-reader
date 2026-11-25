@@ -239,8 +239,10 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
 
 // Internal implementation with configurable target size and bit depth
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& bmpOut, int targetWidth,
-                                                     int targetHeight, bool oneBit, bool crop,
-                                                     bool originalThresholds) {
+                                                     int targetHeight, bool oneBit, bool crop, bool originalThresholds,
+                                                     bool gray8Requested) {
+  // 8-bit output is used only for the gray copies stored after covers and thumbnails, on gray-UI builds.
+  const bool gray8 = CROSSPOINT_GRAY_UI && gray8Requested;
   LOG_DBG("JPG", "Converting JPEG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
@@ -317,7 +319,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
   ctx.blocksSinceYield = 0;
   ctx.error = false;
 
-  if (!ctx.output.begin(bmpOut, outWidth, outHeight, oneBit, originalThresholds)) return false;
+  if (!ctx.output.begin(bmpOut, outWidth, outHeight, oneBit, originalThresholds, gray8)) return false;
   if (!smoothUpscale && !ctx.scaler.begin(scaleSrcWidth, scaleSrcHeight, ctx.output)) return false;
 
   // MCU row buffer: MAX_MCU_HEIGHT rows × decoded srcWidth columns of grayscale
@@ -373,4 +375,17 @@ bool JpegToBmpConverter::jpegFileToBmpStream(HalFile& jpegFile, Print& bmpOut, b
 bool JpegToBmpConverter::jpegFileTo1BitBmpStreamWithSize(HalFile& jpegFile, Print& bmpOut, int targetMaxWidth,
                                                          int targetMaxHeight) {
   return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true);
+}
+
+// The 8-bit grayscale twin of jpegFileToBmpStream: same size and crop
+bool JpegToBmpConverter::jpegFileToGray8BmpStream(HalFile& jpegFile, Print& bmpOut, bool crop) {
+  const int targetWidth = display.getDisplayHeight();
+  const int targetHeight = display.getDisplayWidth();
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, false, crop, false, true);
+}
+
+// Convert to an 8-bit grayscale BMP of the same size and crop as the 1-bit thumbnail
+bool JpegToBmpConverter::jpegFileToGray8BmpStreamWithSize(HalFile& jpegFile, Print& bmpOut, int targetMaxWidth,
+                                                          int targetMaxHeight) {
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false, true, false, true);
 }

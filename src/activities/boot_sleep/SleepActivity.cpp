@@ -399,6 +399,7 @@ AlphaScanResult scanForUsefulAlpha(HalFile& file, const OverlayBmpInfo& info, ui
 
 AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& renderer, const char* pathForLog,
                                                   const Bitmap* grayCover) {
+  const GfxRenderer::PhysicalScope physical(renderer);
   OverlayBmpInfo info;
   if (!parseOverlayBmpHeader(file, info, false)) return AlphaOverlayResult::NotAlphaOverlay;
 
@@ -847,6 +848,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground) const {
+  const GfxRenderer::PhysicalScope physical(renderer);
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
@@ -862,6 +864,19 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   const bool hasGreyscale = (bitmap.hasGreyscale() || (preserveBackground && overlayGrayCover)) &&
                             (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
                                                        CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
+
+#if CROSSPOINT_GRAY_UI
+  // A plain, unfiltered cover that has real gray data goes up in the panel's
+  // 16 levels. Otherwise it is drawn in the four tones below.
+  if (!preserveBackground && overlayCover != &bitmap &&
+      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER) {
+    if (renderer.displayGray16Bitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY)) return;
+    if (bitmap.rewindToData() != BmpReaderError::Ok) {
+      renderer.displayBuffer(kSleepClean);
+      return;
+    }
+  }
+#endif
 
   if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, preserveBackground)) {
     renderer.displayBuffer(kSleepClean);
@@ -959,6 +974,7 @@ bool SleepActivity::renderSleepOverlayFile(HalFile& file, const char* pathForLog
 }
 
 bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
+  const GfxRenderer::PhysicalScope physical(renderer);
   ImageDimensions dimensions;
   if (!PngToFramebufferConverter::getDimensionsStatic(path, dimensions)) return false;
 

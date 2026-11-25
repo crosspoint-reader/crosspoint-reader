@@ -45,6 +45,14 @@ class HalPowerManager {
   // through the normal power-button wake path.
   void startDeepSleep(HalGPIO& gpio, bool wakeOnHeldButton = false) const;
 
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // Metalio Plus fallback for when the power switch did not cut power: deep
+  // sleep woken by the expander's INT (any key), or, if INT is held low, stay
+  // awake at the low-power clock until the power key. setup() calls it again
+  // straight away after a wake that was not the power key.
+  [[noreturn]] void sleepOnExpanderKey() const;
+#endif
+
 #if FREEINK_DEVICE_PICCO
   // While USB powers the device, light-sleep instead of deep sleep (deep sleep
   // cannot observe the charger), calling onStatus whenever the charging state

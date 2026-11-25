@@ -1,7 +1,13 @@
 #include "BookmarkUtil.h"
 
 #include <Utf8.h>
+#if __has_include(<mbedtls/sha256.h>)
 #include <mbedtls/sha256.h>
+#else
+// mbedTLS 4 (ESP-IDF 6) moved the one-shot SHA-256 API behind this opt-in.
+#define MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
+#include <mbedtls/private/sha256.h>
+#endif
 
 #include <algorithm>
 #include <cstdio>

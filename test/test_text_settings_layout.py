@@ -71,6 +71,10 @@ struct GfxRenderer {
 """ + orientation + r"""
   Orientation orientation = Portrait;
   int panelWidth = 800, panelHeight = 480;
+  // UI scale stays off here; the copied renderer methods only need the names.
+  mutable bool uiScaleActive_ = false;
+  int lp(int v) const { return v; }
+  struct PhysicalScope { explicit PhysicalScope(const GfxRenderer&) {} };
   Rect header{};
   mutable Rect preview{}, caption{};
   mutable std::string captionText;

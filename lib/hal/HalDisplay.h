@@ -3,6 +3,52 @@
 #include <BoardConfig.h>
 #include <EInkDisplay.h>
 
+// Gray UI: screens that ask for it are drawn as a 16-level image, with
+// anti-aliased text, icons and corners and flat grays, on panels that take
+// one. Compiled only where the board has one and the SDK provides the call.
+#ifndef CROSSPOINT_GRAY_UI
+#if defined(FREEINK_HAS_GRAY16) && FREEINK_DEVICE_METALIO_EINK4_PLUS
+#define CROSSPOINT_GRAY_UI 1
+#else
+#define CROSSPOINT_GRAY_UI 0
+#endif
+#endif
+
+// What a gray UI frame carries. 0 (the default): only two edge levels, on
+// glyph, icon and corner edges, with dithered fills and 1-bit covers. This is
+// the mode that has been judged on the Metalio E-Ink4-Plus. 1: all 16 levels,
+// with flat gray fills and gray cover thumbnails. Its table gives an even,
+// smooth ramp, but a smooth gray is reached by way of black, and with whole
+// areas doing that the screen changes looked bad on the device.
+#ifndef CROSSPOINT_GRAY_UI_FULL_TONE
+#define CROSSPOINT_GRAY_UI_FULL_TONE 0
+#endif
+#if !CROSSPOINT_GRAY_UI
+#undef CROSSPOINT_GRAY_UI_FULL_TONE
+#define CROSSPOINT_GRAY_UI_FULL_TONE 0
+#endif
+
+// Hi-res UI icons: a board with a UI scale draws an icon from artwork made at
+// twice its drawn size instead of enlarging the 1x icon. Compiled only for
+// the board that ships that artwork (src/components/icons/hiResIcons.h).
+#ifndef CROSSPOINT_HIRES_UI_ICONS
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+#define CROSSPOINT_HIRES_UI_ICONS 1
+#else
+#define CROSSPOINT_HIRES_UI_ICONS 0
+#endif
+#endif
+
+// Serial commands for calibrating 16-level drawing on the glass
+// (src/util/Gray16Tuning.h). A development tool: off unless the build asks.
+#ifndef CROSSPOINT_GRAY16_TUNING
+#define CROSSPOINT_GRAY16_TUNING 0
+#endif
+#if !CROSSPOINT_GRAY_UI
+#undef CROSSPOINT_GRAY16_TUNING
+#define CROSSPOINT_GRAY16_TUNING 0
+#endif
+
 class HalDisplay {
  public:
   using Controller = BoardConfig::DisplayController;
@@ -117,6 +163,23 @@ class HalDisplay {
   // straight to the controller. Check grayscaleCapabilities(mode).stripUploads
   // with the same grayscale mode used for the planes.
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows);
+
+#if CROSSPOINT_GRAY_UI
+  // 16-level image: 4 bpp, 0 = white .. 15 = darkest, left pixel in the high
+  // nibble, getDisplayWidth() / 2 bytes per panel row. fast drives only the
+  // pixels that change.
+  bool supportsGray16Image() const { return einkDisplay.supportsGray16Image(); }
+  bool displayGray16Image(const uint8_t* levels, bool fast) {
+    return einkDisplay.displayGray16Image(levels, true, fast);
+  }
+#endif
+#if CROSSPOINT_GRAY_UI
+  // Three numbers per level (0 = white .. 15 = darkest) that say how the panel
+  // drives it; nullptr returns to the built-in levels. See the SDK's driver
+  // for their meaning.
+  bool setGray16Levels(const uint8_t (*paths)[3]) { return einkDisplay.setGray16Levels(paths); }
+  bool getGray16Levels(uint8_t (*paths)[3]) const { return einkDisplay.getGray16Levels(paths); }
+#endif
 
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;

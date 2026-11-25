@@ -29,8 +29,7 @@ bool write32(Print& out, const uint32_t value) {
 
 bool write32Signed(Print& out, const int32_t value) { return write32(out, static_cast<uint32_t>(value)); }
 
-bool writeBmpHeader(Print& bmpOut, const int width, const int height, const bool oneBit) {
-  const int bitsPerPixel = oneBit ? 1 : 2;
+bool writeBmpHeader(Print& bmpOut, const int width, const int height, const int bitsPerPixel) {
   const int colors = 1 << bitsPerPixel;
   const int bytesPerRow = (width * bitsPerPixel + 31) / 32 * 4;
   const int imageSize = bytesPerRow * height;
@@ -46,7 +45,7 @@ bool writeBmpHeader(Print& bmpOut, const int width, const int height, const bool
   }
 
   for (int i = 0; i < colors; ++i) {
-    const auto gray = static_cast<uint8_t>(i * (oneBit ? 255 : 85));
+    const auto gray = static_cast<uint8_t>(i * 255 / (colors - 1));
     if (!writeByte(bmpOut, gray) || !writeByte(bmpOut, gray) || !writeByte(bmpOut, gray) || !writeByte(bmpOut, 0))
       return false;
   }
@@ -77,14 +76,16 @@ BmpStreamWriter::BmpStreamWriter() = default;
 BmpStreamWriter::~BmpStreamWriter() = default;
 
 bool BmpStreamWriter::begin(Print& output, const int width, const int height, const bool oneBit,
-                            const bool originalThresholds) {
+                            const bool originalThresholds, const bool gray8) {
   if (width <= 0 || height <= 0) return false;
 
   this->output = &output;
   this->width = width;
   this->height = height;
-  this->oneBit = oneBit;
-  bytesPerRow = (width * (oneBit ? 1 : 2) + 31) / 32 * 4;
+  this->oneBit = oneBit && !gray8;
+  this->gray8 = gray8;
+  const int bitsPerPixel = gray8 ? 8 : (this->oneBit ? 1 : 2);
+  bytesPerRow = (width * bitsPerPixel + 31) / 32 * 4;
 
   packedRow = makeUniqueNoThrow<uint8_t[]>(bytesPerRow);
   if (!packedRow) {
@@ -92,13 +93,13 @@ bool BmpStreamWriter::begin(Print& output, const int width, const int height, co
     return false;
   }
 
-  if (oneBit) {
+  if (this->oneBit) {
     atkinson1BitDitherer = makeUniqueNoThrow<Atkinson1BitDitherer>(width);
     if (!atkinson1BitDitherer || !atkinson1BitDitherer->isValid()) {
       LOG_ERR("BMP", "OOM: 1-bit ditherer");
       return false;
     }
-  } else {
+  } else if (!gray8) {
     atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(width, originalThresholds);
     if (!atkinsonDitherer || !atkinsonDitherer->isValid()) {
       LOG_ERR("BMP", "OOM: 2-bit ditherer");
@@ -106,7 +107,7 @@ bool BmpStreamWriter::begin(Print& output, const int width, const int height, co
     }
   }
 
-  if (!writeBmpHeader(output, width, height, oneBit)) {
+  if (!writeBmpHeader(output, width, height, bitsPerPixel)) {
     LOG_ERR("BMP", "Failed to write BMP header");
     return false;
   }
@@ -117,7 +118,9 @@ bool BmpStreamWriter::writeRow(const uint8_t* grayRow, const int y) {
   if (!output || !grayRow || y < 0 || y >= height) return false;
   memset(packedRow.get(), 0, bytesPerRow);
 
-  if (oneBit) {
+  if (gray8) {
+    for (int x = 0; x < width; x++) packedRow[x] = adjustPixel(grayRow[x]);
+  } else if (oneBit) {
     for (int x = 0; x < width; x++) {
       packedRow[x / 8] |= atkinson1BitDitherer->processPixel(grayRow[x], x) << (7 - x % 8);
     }

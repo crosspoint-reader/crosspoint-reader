@@ -18,7 +18,8 @@ class BmpStreamWriter {
   BmpStreamWriter(const BmpStreamWriter&) = delete;
   BmpStreamWriter& operator=(const BmpStreamWriter&) = delete;
 
-  bool begin(Print& output, int width, int height, bool oneBit, bool originalThresholds = false);
+  // gray8: 8-bit grayscale rows, no dithering (oneBit is ignored)
+  bool begin(Print& output, int width, int height, bool oneBit, bool originalThresholds = false, bool gray8 = false);
   bool writeRow(const uint8_t* grayRow, int y);
 
   int getWidth() const { return width; }
@@ -31,6 +32,7 @@ class BmpStreamWriter {
   int height{0};
   int bytesPerRow{0};
   bool oneBit{false};
+  bool gray8{false};
   uint8_t rowsSinceYield{0};
   std::unique_ptr<uint8_t[]> packedRow;
   std::unique_ptr<uint8_t[]> scratchRow;

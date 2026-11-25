@@ -17,6 +17,11 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <vector>
+
+#if CROSSPOINT_GRAY_UI
+#include <esp_heap_caps.h>
+#endif
 
 #include "../Memory/Memory.h"
 #include "FontCacheManager.h"
@@ -202,6 +207,8 @@ void GfxRenderer::ensureSdCardFontReady(const int fontId, const char* const* seg
 }
 
 void GfxRenderer::begin() {
+  uiScale_ = BoardConfig::ACTIVE.uiScale;
+  uiScaleActive_ = uiScale_ != 1.0f;
   frameBuffer = display.getFrameBuffer();
   if (!frameBuffer) {
     LOG_ERR("GFX", "!! No framebuffer");
@@ -303,6 +310,33 @@ void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   if (!result.second) {
     LOG_ERR("GFX", "Font ID %d already registered, ignoring duplicate", fontId);
   }
+}
+
+void GfxRenderer::insertUiFont(const int fontId, const EpdFontFamily& font) {
+  if (uiScale_ == 1.0f || fontMap.count(fontId) != 0) {
+    insertFont(fontId, font);
+    return;
+  }
+  // One scaled face per distinct source face; a style the family lacks stays
+  // null so the scaled family falls back the same way the source does.
+  const EpdFontData* regularData = font.getData(EpdFontFamily::REGULAR);
+  const EpdFont* faces[4] = {};
+  const EpdFontFamily::Style styles[4] = {EpdFontFamily::REGULAR, EpdFontFamily::BOLD, EpdFontFamily::ITALIC,
+                                          EpdFontFamily::BOLD_ITALIC};
+  for (int i = 0; i < 4; ++i) {
+    const EpdFontData* data = font.getData(styles[i]);
+    if (i > 0 && data == regularData) continue;
+    auto face = std::make_unique<ScaledFont>();
+    if (!face->init(*this, *data, uiScale_)) {
+      LOG_ERR("GFX", "Font %d: cannot scale, drawing it unscaled", fontId);
+      insertFont(fontId, font);
+      return;
+    }
+    faces[i] = face->font();
+    scaledFaces_.push_back(std::move(face));
+  }
+  const auto pointSize = static_cast<uint16_t>(font.getSizeInPixels() * uiScale_ * 72.0f / FONT_RASTER_DPI + 0.5f);
+  insertFont(fontId, EpdFontFamily(pointSize, faces[0], faces[1], faces[2], faces[3]));
 }
 
 int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const EpdFontFamily::Style style) const {
@@ -643,11 +677,321 @@ void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const 
                                    : mode == GRAYSCALE_MSB ? glyphBitmap::Plane::GrayMSB
                                                            : glyphBitmap::Plane::GrayLSB;
   glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, clip);
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && mode == BW && !_stripActive) {
+    recordGlyphInk(bitmap, width, height, physical, twoBit, state, clip.left, clip.top, clip.right, clip.bottom);
+  }
+#endif
 }
+
+#if CROSSPOINT_GRAY_UI
+uint8_t GfxRenderer::grayUnder(const int px, const int py) const {
+  const uint8_t ink = grayInk_[py * panelWidth + px];
+  if (ink != GRAY_FOLLOWS_FB) return ink;
+  return (frameBuffer[py * panelWidthBytes + (px >> 3)] & (0x80 >> (px & 7))) ? 0 : 15;
+}
+
+void GfxRenderer::grayBlend(const int x, const int y, const int target, const int coverage) const {
+  if (coverage <= 0 || x < clipLeft_ || y < clipTop_ || x >= clipRight_ || y >= clipBottom_) return;
+  int px, py;
+  rotateCoordinates(orientation, x, y, &px, &py, panelWidth, panelHeight);
+  if (px < 0 || px >= panelWidth || py < 0 || py >= panelHeight) return;
+  const int under = grayUnder(px, py);
+  grayInk_[py * panelWidth + px] = static_cast<uint8_t>(under + ((target - under) * std::min(coverage, 256)) / 256);
+}
+
+// Glyph coverage 1..3 of 3 (a 1-bit glyph is all 3) blended over what is under
+// it: black text toward full ink, white text toward paper. The framebuffer
+// already holds the glyph as solid, so where nothing recorded a level the page
+// under black text is taken as white and under white text as black.
+void GfxRenderer::recordGlyphInk(const uint8_t* bitmap, const int width, const int height,
+                                 const glyphBitmap::Frame& physical, const bool twoBit, const bool state, int left,
+                                 int top, int right, int bottom) const {
+  left = std::max(left, 0);
+  top = std::max(top, 0);
+  right = std::min(right, width);
+  bottom = std::min(bottom, height);
+  const int target = state ? 15 : 0;
+  for (int y = top; y < bottom; ++y) {
+    for (int x = left; x < right; ++x) {
+      const int source = y * width + x;
+      const int coverage = twoBit ? (bitmap[source >> 2] >> (6 - (source & 3) * 2)) & 3
+                                  : ((bitmap[source >> 3] >> (7 - (source & 7))) & 1) * 3;
+      if (coverage == 0) continue;
+      const int px = physical.x + x * physical.dxX + y * physical.dyX;
+      const int py = physical.y + x * physical.dxY + y * physical.dyY;
+      if (px < 0 || px >= panelWidth || py < 0 || py >= panelHeight) continue;
+      uint8_t& ink = grayInk_[py * panelWidth + px];
+      const int under = ink != GRAY_FOLLOWS_FB ? ink : 15 - target;
+      ink = static_cast<uint8_t>(under + ((target - under) * coverage) / 3);
+    }
+  }
+}
+
+void GfxRenderer::grayFill(const int phyX0, const int phyY0, const int phyX1, const int phyY1, const uint8_t ink,
+                           const bool preserve) const {
+  for (int py = phyY0; py <= phyY1; ++py) {
+    uint8_t* row = grayInk_ + py * panelWidth;
+    if (!preserve) {
+      memset(row + phyX0, ink, static_cast<size_t>(phyX1 - phyX0 + 1));
+      continue;
+    }
+    for (int px = phyX0; px <= phyX1; ++px) {
+      const uint8_t under = grayUnder(px, py);
+      if (under < ink) row[px] = ink;
+    }
+  }
+}
+
+// The row spans of an arc cover pixels whose centre is within `radius` of the
+// corner centre; the shape's true edge runs half a pixel further out. The
+// pixels in that last half-step, which the spans left alone, get part ink.
+void GfxRenderer::grayArcEdge(const int radius, const int innerRadius, const int cx, const int cy, const int xDir,
+                              const int yDir, const int ink) const {
+  for (int dy = 0; dy <= radius; ++dy) {
+    for (int dx = 0; dx <= radius; ++dx) {
+      const float d = sqrtf(static_cast<float>(dx * dx + dy * dy));
+      int coverage = 0;
+      if (d > radius) {
+        coverage = static_cast<int>((radius + 1 - d) * 256);
+      } else if (innerRadius > 0 && d < innerRadius) {
+        coverage = static_cast<int>((d - innerRadius + 1) * 256);
+      }
+      if (coverage > 0) grayBlend(cx + xDir * dx, cy + yDir * dy, ink, coverage);
+    }
+  }
+}
+
+// How the Metalio E-Ink4-Plus drives each level of a gray UI frame, measured on
+// the glass from photographed test ramps (see the SDK's EpdiyDriver for what
+// the three numbers mean). The panel's own table pushes a gray toward black
+// before clearing it, which showed the screen being left as a black-and-white
+// picture of itself; here a level is cleared with white frames alone. Row 0 is
+// the top-up for unchanged pixels and the timing (new ink drawn while old ink
+// clears).
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+// All 16 levels. Each gray is a push toward black and a pull back toward
+// white, which is smooth; the recipes were picked for an even ramp (measured
+// lightness 98, 87, 85, 78, 66, 65, 51, 49, 41, 41, 28, 18, 13, 8 of 100 for
+// levels 1..14). Neighbours that share a recipe are the same gray. The ramp
+// was measured; the screen changes with it were judged bad on the device,
+// since every gray area passes through black on its way in.
+static constexpr uint8_t kGrayUiLevels[16][3] = {
+    {1, 2, 1},                                          // 0
+    {10, 4, 8},  {8, 3, 8},   {4, 2, 8},   {10, 3, 8},  // 1..4
+    {6, 2, 9},   {6, 2, 9},   {8, 2, 9},   {8, 2, 9},   // 5..8
+    {10, 2, 10}, {10, 2, 10}, {6, 1, 10},  {8, 1, 10},  // 9..12
+    {10, 1, 11}, {12, 1, 11}, {10, 0, 11},              // 13..15
+};
+#else
+// Edge levels only: the UI sends GRAY_EDGE_LIGHT_INK (9), GRAY_EDGE_DARK_INK
+// (12) and 15. They go straight from white to their level, which is grainy
+// over an area and unnoticeable on an edge; the other rows keep the table
+// monotonic.
+static constexpr uint8_t kGrayUiLevels[16][3] = {
+    {1, 2, 1},                                                                                            // 0
+    {1, 0, 8},  {1, 0, 8},  {1, 0, 8}, {1, 0, 8}, {1, 0, 8}, {1, 0, 8}, {1, 0, 8}, {1, 0, 8}, {1, 0, 8},  // 1..9
+    {2, 0, 9},  {2, 0, 9},                                                                                // 10, 11
+    {3, 0, 10}, {3, 0, 10},                                                                               // 12, 13
+    {5, 0, 11},                                                                                           // 14
+    {8, 0, 11},                                                                                           // 15
+};
+#endif
+
+bool GfxRenderer::beginGrayFrame() const {
+  if (grayFrameActive_ || !frameBuffer || _stripActive || renderMode != BW || !display.supportsGray16Image()) {
+    return false;
+  }
+  const size_t pixels = static_cast<size_t>(panelWidth) * panelHeight;
+  if (!grayInk_) grayInk_ = static_cast<uint8_t*>(heap_caps_malloc(pixels, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!grayImage_)
+    grayImage_ = static_cast<uint8_t*>(heap_caps_malloc(pixels / 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!grayInk_ || !grayImage_) return false;
+  // Once: a panel without level tuning refuses and keeps its own table.
+  if (!grayLevelsApplied_) {
+    grayLevelsApplied_ = true;
+    display.setGray16Levels(kGrayUiLevels);
+  }
+  memset(grayInk_, GRAY_FOLLOWS_FB, pixels);
+  grayFrameActive_ = true;
+  return true;
+}
+
+// Same placement as the bitmap draw that just ran: display row and column,
+// less the crop, scaled, then offset.
+void GfxRenderer::recordBitmapGray(const Bitmap& bitmap, const int x, const int y, const float scale,
+                                   const bool isScaled, const int cropPixX, const int cropPixY) const {
+  Bitmap gray(bitmap.source(), false, false, bitmap.dataEnd());
+  if (gray.parseHeaders() != BmpReaderError::Ok || gray.getBpp() != 8 || gray.getWidth() != bitmap.getWidth() ||
+      gray.getHeight() != bitmap.getHeight()) {
+    return;
+  }
+  const int width = gray.getWidth();
+  // Night mode complements every level on its way to the panel, so an image's
+  // levels are stored complemented to come out positive, as its framebuffer
+  // bits are (see preserveImagePolarity).
+  const bool preInvert = display.isInverted();
+  auto scratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(width) + gray.getRowBytes());
+  if (!scratch) return;
+  uint8_t* const lum = scratch.get();
+  uint8_t* const raw = lum + width;
+  for (int row = cropPixY; row < gray.getHeight() - cropPixY; ++row) {
+    int screenY = row - cropPixY;
+    if (isScaled) screenY = static_cast<int>(std::floor(screenY * scale));
+    screenY += y;
+    if (screenY < 0) continue;
+    if (screenY >= getScreenHeight()) break;
+    if (gray.readRowGray(row, lum, raw) != BmpReaderError::Ok) return;
+    for (int col = cropPixX; col < width - cropPixX; ++col) {
+      int screenX = col - cropPixX;
+      if (isScaled) screenX = static_cast<int>(std::floor(screenX * scale));
+      screenX += x;
+      if (screenX < 0) continue;
+      if (screenX >= getScreenWidth()) break;
+      grayBlend(screenX, screenY, preInvert ? lum[col] / 17 : 15 - lum[col] / 17, 256);
+    }
+  }
+}
+
+bool GfxRenderer::displayGrayFrame(const HalDisplay::RefreshMode refreshMode) const {
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  const auto shown = [](const uint8_t ink) { return ink; };
+#else
+  // Edge pixels are shown at one of the two levels a book page's anti-aliasing
+  // uses (GRAY_EDGE_LIGHT_INK, GRAY_EDGE_DARK_INK); anything lighter than the
+  // light one is left as paper. Night mode complements the image on its way
+  // out, so there the levels are picked on the complemented ink.
+  static constexpr uint8_t kEdgeInk[16] = {0,
+                                           0,
+                                           0,
+                                           0,
+                                           GRAY_EDGE_LIGHT_INK,
+                                           GRAY_EDGE_LIGHT_INK,
+                                           GRAY_EDGE_LIGHT_INK,
+                                           GRAY_EDGE_LIGHT_INK,
+                                           GRAY_EDGE_LIGHT_INK,
+                                           GRAY_EDGE_DARK_INK,
+                                           GRAY_EDGE_DARK_INK,
+                                           GRAY_EDGE_DARK_INK,
+                                           GRAY_EDGE_DARK_INK,
+                                           GRAY_EDGE_DARK_INK,
+                                           15,
+                                           15};
+  const bool inverted = display.isInverted();
+  const auto shown = [inverted](const uint8_t ink) {
+    return inverted ? static_cast<uint8_t>(15 - kEdgeInk[15 - ink]) : kEdgeInk[ink];
+  };
+#endif
+  // Two pixels per byte, left one in the high nibble.
+  uint8_t* out = grayImage_;
+  for (int py = 0; py < panelHeight; ++py) {
+    for (int px = 0; px < panelWidth; px += 2) {
+      *out++ = static_cast<uint8_t>((shown(grayUnder(px, py)) << 4) | shown(grayUnder(px + 1, py)));
+    }
+  }
+  // FAST drives the pixels that changed; the cleanup modes drive every pixel.
+  return display.displayGray16Image(grayImage_, refreshMode == HalDisplay::FAST_REFRESH);
+}
+
+bool GfxRenderer::displayGray16Bitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight,
+                                      const float cropX, const float cropY) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, maxWidth, maxHeight);
+    if (std::abs(maxWidth - bitmap.getWidth()) <= 1) maxWidth = bitmap.getWidth();
+    if (std::abs(maxHeight - bitmap.getHeight()) <= 1) maxHeight = bitmap.getHeight();
+    return displayGray16Bitmap(bitmap, x, y, maxWidth, maxHeight, cropX, cropY);
+  }
+  if (!display.supportsGray16Image() || display.isInverted()) return false;
+
+  // Where the luminance comes from.
+  Bitmap copy(bitmap.source(), false, false, bitmap.dataEnd());
+  const Bitmap* gray = &bitmap;
+  if (bitmap.getBpp() < 8) {
+    if (copy.parseHeaders() != BmpReaderError::Ok || copy.getBpp() != 8 || copy.getWidth() != bitmap.getWidth() ||
+        copy.getHeight() != bitmap.getHeight()) {
+      return false;
+    }
+    gray = &copy;
+  }
+
+  const size_t imageBytes = static_cast<size_t>(panelWidth / 2) * panelHeight;
+  if (!grayImage_)
+    grayImage_ = static_cast<uint8_t*>(heap_caps_malloc(imageBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!grayImage_) return false;
+  memset(grayImage_, 0, imageBytes);  // white
+
+  // The placement drawBitmap() uses: crop, fit by scaling down only, offset.
+  const int width = gray->getWidth();
+  const int height = gray->getHeight();
+  const int cropPixX = static_cast<int>(std::floor(width * cropX / 2.0f));
+  const int cropPixY = static_cast<int>(std::floor(height * cropY / 2.0f));
+  const float croppedWidth = (1.0f - cropX) * static_cast<float>(width);
+  const float croppedHeight = (1.0f - cropY) * static_cast<float>(height);
+  float scale = 1.0f;
+  bool hasTargetBounds = false;
+  if (maxWidth > 0 && croppedWidth > 0.0f) {
+    scale = static_cast<float>(maxWidth) / croppedWidth;
+    hasTargetBounds = true;
+  }
+  if (maxHeight > 0 && croppedHeight > 0.0f) {
+    const float heightScale = static_cast<float>(maxHeight) / croppedHeight;
+    scale = hasTargetBounds ? std::min(scale, heightScale) : heightScale;
+    hasTargetBounds = true;
+  }
+  const bool isScaled = hasTargetBounds && scale < 1.0f;
+
+  auto scratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(width) + gray->getRowBytes());
+  if (!scratch) return false;
+  uint8_t* const lum = scratch.get();
+  uint8_t* const raw = lum + width;
+  // 256 gray values into 16 levels: an ordered dither between neighbouring
+  // levels keeps smooth shading from banding.
+  static constexpr uint8_t kBayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+  const int screenWidth = getScreenWidth();
+  const int screenHeight = getScreenHeight();
+  const int stride = panelWidth / 2;
+  for (int row = cropPixY; row < height - cropPixY; ++row) {
+    int screenY = row - cropPixY;
+    if (isScaled) screenY = static_cast<int>(std::floor(screenY * scale));
+    screenY += y;
+    if (screenY < 0) continue;
+    if (screenY >= screenHeight) break;
+    if (gray->readRowGray(row, lum, raw) != BmpReaderError::Ok) return false;
+    for (int col = cropPixX; col < width - cropPixX; ++col) {
+      int screenX = col - cropPixX;
+      if (isScaled) screenX = static_cast<int>(std::floor(screenX * scale));
+      screenX += x;
+      if (screenX < 0) continue;
+      if (screenX >= screenWidth) break;
+      int px, py;
+      rotateCoordinates(orientation, screenX, screenY, &px, &py, panelWidth, panelHeight);
+      if (px < 0 || px >= panelWidth || py < 0 || py >= panelHeight) continue;
+      const int fine = (255 - lum[col]) * 15;  // ink in 255ths of a level
+      int ink = fine / 255;
+      if ((fine % 255) * 32 > (kBayer[py & 3][px & 3] * 2 + 1) * 255) ++ink;
+      uint8_t& byte = grayImage_[py * stride + (px >> 1)];
+      const int shift = (px & 1) ? 0 : 4;
+      byte = static_cast<uint8_t>((byte & ~(0x0F << shift)) | (ink << shift));
+    }
+  }
+
+  // With the panel's own table for this one frame, then back to the UI's.
+  if (grayLevelsApplied_) display.setGray16Levels(nullptr);
+  const bool shown = display.displayGray16Image(grayImage_, false);
+  if (grayLevelsApplied_) display.setGray16Levels(kGrayUiLevels);
+  return shown;
+}
+#endif
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
 // efficient as possible.
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    fillRect(sp(x), sp(y), sp(x + 1) - sp(x), sp(y + 1) - sp(y), state);
+    return;
+  }
   if (x < clipLeft_ || y < clipTop_ || x >= clipRight_ || y >= clipBottom_) return;
   int phyX = 0;
   int phyY = 0;
@@ -673,6 +1017,10 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
     rowY = static_cast<uint32_t>(phyY - _stripY0);
   }
 
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && !_stripActive) grayInk_[phyY * panelWidth + phyX] = GRAY_FOLLOWS_FB;
+#endif
+
   // Calculate byte position and bit position
   const uint32_t byteIndex = rowY * panelWidthBytes + (phyX / 8);
   const uint8_t bitPosition = 7 - (phyX % 8);  // MSB first
@@ -686,6 +1034,10 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 
 int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontFamily::Style style,
                               const BidiUtils::BidiBaseDir baseDir) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getTextWidth(fontId, text, style, baseDir));
+  }
   if (text == nullptr || *text == '\0') {
     return 0;
   }
@@ -723,6 +1075,11 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,
                            const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,
                            const int8_t tracking) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawText(fontId, sp(x), sp(y), text, black, style, baseDir, tracking);
+    return;
+  }
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -740,6 +1097,11 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const LaidOutText& text, const bool black,
                            const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,
                            const int8_t tracking) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawText(fontId, sp(x), sp(y), text, black, style, baseDir, tracking);
+    return;
+  }
   if (text.text == nullptr || *text.text == '\0') {
     return;
   }
@@ -946,6 +1308,11 @@ VisualText resolveLaidOutText(const GfxRenderer::LaidOutText& text, std::string&
 }  // namespace
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawLine(sp(x1), sp(y1), sp(x2), sp(y2), spw(1), state);
+    return;
+  }
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
   if (x1 == x2) {
     if (y2 < y1) {
@@ -988,12 +1355,23 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
 }
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const int lineWidth, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawLine(sp(x1), sp(y1), sp(x2), sp(y2), spw(lineWidth), state);
+    return;
+  }
   for (int i = 0; i < lineWidth; i++) {
     drawLine(x1, y1 + i, x2, y2 + i, state);
   }
 }
 
-void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const bool state) const {
+void GfxRenderer::drawRect(int x, int y, int width, int height, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    drawRect(x, y, width, height, spw(1), state);
+    return;
+  }
   drawLine(x, y, x + width - 1, y, state);
   drawLine(x + width - 1, y, x + width - 1, y + height - 1, state);
   drawLine(x + width - 1, y + height - 1, x, y + height - 1, state);
@@ -1001,8 +1379,13 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
 }
 
 // Border is inside the rectangle
-void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const int lineWidth,
-                           const bool state) const {
+void GfxRenderer::drawRect(int x, int y, int width, int height, const int lineWidth, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    drawRect(x, y, width, height, spw(lineWidth), state);
+    return;
+  }
   // Keep the border inside [x, x+width) like the thin overload: the previous
   // right/bottom edges at x+width / y+height sat one pixel outside the rect,
   // so stroked boxes looked shifted against fills computed from the rect.
@@ -1016,6 +1399,11 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
 
 void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir,
                           const int lineWidth, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawArc(sp(maxRadius), sp(cx), sp(cy), xDir, yDir, spw(lineWidth), state);
+    return;
+  }
   const int stroke = std::min(lineWidth, maxRadius);
   const int innerRadius = std::max(maxRadius - stroke, 0);
   const int outerRadius = maxRadius;
@@ -1052,6 +1440,9 @@ void GfxRenderer::drawArc(const int maxRadius, const int cx, const int cy, const
 
     fillRect(left, py, width, 1, state);
   }
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_) grayArcEdge(outerRadius, innerRadius, cx, cy, xDir, yDir, state ? 15 : 0);
+#endif
 };
 
 // Border is inside the rectangle, rounded corners
@@ -1061,9 +1452,16 @@ void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, con
 }
 
 // Border is inside the rectangle, rounded corners
-void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, const int height, const int lineWidth,
-                                  const int cornerRadius, bool roundTopLeft, bool roundTopRight, bool roundBottomLeft,
-                                  bool roundBottomRight, bool state) const {
+void GfxRenderer::drawRoundedRect(int x, int y, int width, int height, const int lineWidth, const int cornerRadius,
+                                  bool roundTopLeft, bool roundTopRight, bool roundBottomLeft, bool roundBottomRight,
+                                  bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    drawRoundedRect(x, y, width, height, spw(lineWidth), sp(cornerRadius), roundTopLeft, roundTopRight, roundBottomLeft,
+                    roundBottomRight, state);
+    return;
+  }
   if (lineWidth <= 0 || width <= 0 || height <= 0) {
     return;
   }
@@ -1112,7 +1510,13 @@ void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, con
   }
 }
 
-void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
+void GfxRenderer::fillRect(int x, int y, int width, int height, const bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    fillRect(x, y, width, height, state);
+    return;
+  }
   if (state) {
     fillRectImpl<Color::Black>(x, y, width, height);
   } else {
@@ -1125,15 +1529,26 @@ void GfxRenderer::fillRect(const int x, const int y, const int width, const int 
 template <>
 void GfxRenderer::drawPixelDither<Color::LightGray>(const int x, const int y) const {
   drawPixel(x, y, x % 2 == 0 && y % 2 == 0);
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  if (grayFrameActive_ && !uiScaleActive_) grayBlend(x, y, GRAY_LIGHT_INK, 256);
+#endif
 }
 
 template <>
 void GfxRenderer::drawPixelDither<Color::DarkGray>(const int x, const int y) const {
   drawPixel(x, y, (x + y) % 2 == 0);  // TODO: maybe find a better pattern?
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  if (grayFrameActive_ && !uiScaleActive_) grayBlend(x, y, GRAY_DARK_INK, 256);
+#endif
 }
 
-void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color,
-                                 const DitherMode mode) const {
+void GfxRenderer::fillRectDither(int x, int y, int width, int height, Color color, const DitherMode mode) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    fillRectDither(x, y, width, height, color, mode);
+    return;
+  }
   if (mode == DitherMode::PreserveInk && color == Color::White) return;
   switch (color) {
     case Color::Clear:
@@ -1191,6 +1606,20 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
 
   // Bit/byte layout: MSB-first within a byte, so phyX → bit (7 - (phyX & 7)).
   // Head and tail masks cover only the in-rect bits of the first/last byte.
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && !_stripActive) {
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+    // Solid fills follow the framebuffer; the dither colors become a flat level.
+    const uint8_t ink = C == Color::LightGray ? GRAY_LIGHT_INK : C == Color::DarkGray ? GRAY_DARK_INK : GRAY_FOLLOWS_FB;
+    grayFill(phyX0, phyY0, phyX1, phyY1, ink, ink != GRAY_FOLLOWS_FB && mode == DitherMode::PreserveInk);
+#else
+    // Every fill, dithered ones included, follows the framebuffer. A dither
+    // added over existing ink leaves that ink's levels alone.
+    if (mode != DitherMode::PreserveInk) grayFill(phyX0, phyY0, phyX1, phyY1, GRAY_FOLLOWS_FB, false);
+#endif
+  }
+#endif
+
   const int byteStart = phyX0 >> 3;
   const int byteEnd = phyX1 >> 3;  // inclusive
   const uint8_t headMask = static_cast<uint8_t>(0xFFu >> (phyX0 & 7));
@@ -1334,8 +1763,14 @@ template void GfxRenderer::fillRectImpl<Color::White>(int, int, int, int, Dither
 template void GfxRenderer::fillRectImpl<Color::LightGray>(int, int, int, int, DitherMode) const;
 template void GfxRenderer::fillRectImpl<Color::DarkGray>(int, int, int, int, DitherMode) const;
 
-void GfxRenderer::maskRoundedRectOutsideCorners(const int x, const int y, const int width, const int height,
-                                                const int radius, const Color color) const {
+void GfxRenderer::maskRoundedRectOutsideCorners(int x, int y, int width, int height, const int radius,
+                                                const Color color) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    maskRoundedRectOutsideCorners(x, y, width, height, sp(radius), color);
+    return;
+  }
   if (radius <= 0 || color == Color::Clear) {
     return;
   }
@@ -1365,6 +1800,22 @@ void GfxRenderer::maskRoundedRectOutsideCorners(const int x, const int y, const 
           drawPixelDither<Color::DarkGray>(x + width - 1 - dx, y + height - 1 - dy);  // bottom-right
         }
       }
+#if CROSSPOINT_GRAY_UI
+      else if (grayFrameActive_ && (CROSSPOINT_GRAY_UI_FULL_TONE || color == Color::Black || color == Color::White)) {
+        // Kept pixels within half a pixel of the cut take part of the mask color.
+        const int coverage = static_cast<int>((sqrtf(static_cast<float>(tx * tx + ty * ty)) - rr + 0.5f) * 256);
+        if (coverage > 0) {
+          const int ink = color == Color::Black       ? 15
+                          : color == Color::DarkGray  ? GRAY_DARK_INK
+                          : color == Color::LightGray ? GRAY_LIGHT_INK
+                                                      : 0;
+          grayBlend(x + dx, y + dy, ink, coverage);
+          grayBlend(x + width - 1 - dx, y + dy, ink, coverage);
+          grayBlend(x + dx, y + height - 1 - dy, ink, coverage);
+          grayBlend(x + width - 1 - dx, y + height - 1 - dy, ink, coverage);
+        }
+      }
+#endif
     }
   }
 }
@@ -1406,6 +1857,16 @@ void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const
       fillRectDither(x0, py, width, 1, color);
     }
   }
+#if CROSSPOINT_GRAY_UI
+  // Without full tone the dither colors stay a dither, edge included.
+  if (grayFrameActive_ && (CROSSPOINT_GRAY_UI_FULL_TONE || color == Color::Black || color == Color::White)) {
+    const int ink = color == Color::Black       ? 15
+                    : color == Color::DarkGray  ? GRAY_DARK_INK
+                    : color == Color::LightGray ? GRAY_LIGHT_INK
+                                                : 0;
+    grayArcEdge(maxRadius, 0, cx, cy, xDir, yDir, ink);
+  }
+#endif
 }
 
 void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, const int height, const int cornerRadius,
@@ -1413,9 +1874,16 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
   fillRoundedRect(x, y, width, height, cornerRadius, true, true, true, true, color);
 }
 
-void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, const int height, const int cornerRadius,
-                                  bool roundTopLeft, bool roundTopRight, bool roundBottomLeft, bool roundBottomRight,
+void GfxRenderer::fillRoundedRect(int x, int y, int width, int height, const int cornerRadius, bool roundTopLeft,
+                                  bool roundTopRight, bool roundBottomLeft, bool roundBottomRight,
                                   const Color color) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+    fillRoundedRect(x, y, width, height, sp(cornerRadius), roundTopLeft, roundTopRight, roundBottomLeft,
+                    roundBottomRight, color);
+    return;
+  }
   if (width <= 0 || height <= 0) {
     return;
   }
@@ -1482,6 +1950,11 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
 }
 
 void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawImageScaled(bitmap, sp(x), sp(y), width, height, sp(x + width) - sp(x), sp(y + height) - sp(y));
+    return;
+  }
   int rotatedX = 0;
   int rotatedY = 0;
   rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, panelWidth, panelHeight);
@@ -1505,7 +1978,31 @@ void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, co
   display.drawImage(bitmap, rotatedX, rotatedY, width, height);
 }
 
+#if CROSSPOINT_HIRES_UI_ICONS
+const GfxRenderer::HiResIcon* GfxRenderer::hiResIcon(const uint8_t* bits, const int size) const {
+  // Icon arrays are static in their headers, so each caller has its own copy:
+  // match by content, not by address.
+  const size_t bytes = static_cast<size_t>((size + 7) / 8) * size;
+  for (size_t i = 0; i < hiResIconCount_; ++i) {
+    const HiResIcon& icon = hiResIcons_[i];
+    if (icon.sourceSize == size && (icon.source == bits || memcmp(icon.source, bits, bytes) == 0)) return &icon;
+  }
+  return nullptr;
+}
+#endif
+
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int size) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+#if CROSSPOINT_HIRES_UI_ICONS
+    if (const HiResIcon* icon = hiResIcon(bitmap, size)) {
+      drawIconScaled(icon->hiRes, sp(x), sp(y), icon->hiResSize, sp(x + size) - sp(x));
+      return;
+    }
+#endif
+    drawIconScaled(bitmap, sp(x), sp(y), size, sp(x + size) - sp(x));
+    return;
+  }
   // Plot the icon pixel-by-pixel through drawPixel (which applies the orientation
   // transform) instead of the byte-aligned framebuffer blit. The blit snaps the
   // icon's position to 8px (one byte) along the rotated axis, which prevents it
@@ -1513,20 +2010,155 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
   // Icons are square and 1bpp (MSB-first, bit==0 = ink). The (size-1-row, col)
   // mapping reproduces the Portrait orientation the blit produced; drawIcon is
   // only called by the UI themes, which all render in forced Portrait.
+  drawIconScaled(bitmap, x, y, size, size);
+}
+
+// Ink of output pixel (dstX, dstY) when a srcW x srcH 1-bit mask is scaled to
+// dstW x dstH: bilinear coverage of the four nearest source pixels, inked from
+// half coverage, so curves and diagonals step evenly instead of in blocks.
+template <typename InkAt>
+static bool smoothInk(const InkAt& inkAt, const int srcW, const int srcH, const int dstX, const int dstY,
+                      const int dstW, const int dstH) {
+  // Source position of the output pixel centre, 8.8 fixed point.
+  const int sx = ((2 * dstX + 1) * srcW * 128) / dstW - 128;
+  const int sy = ((2 * dstY + 1) * srcH * 128) / dstH - 128;
+  const int x0 = sx >> 8, y0 = sy >> 8, fx = sx & 0xFF, fy = sy & 0xFF;
+  const auto at = [&](const int x, const int y) {
+    return x >= 0 && y >= 0 && x < srcW && y < srcH && inkAt(x, y) ? 1 : 0;
+  };
+  const int upper = at(x0, y0) * (256 - fx) + at(x0 + 1, y0) * fx;
+  const int lower = at(x0, y0 + 1) * (256 - fx) + at(x0 + 1, y0 + 1) * fx;
+  return (upper * (256 - fy) + lower * fy) * 2 >= 256 * 256;
+}
+
+#if CROSSPOINT_GRAY_UI
+// The same bilinear coverage as smoothInk, 0..256 instead of thresholded.
+template <typename InkAt>
+static int smoothCoverage(const InkAt& inkAt, const int srcW, const int srcH, const int dstX, const int dstY,
+                          const int dstW, const int dstH) {
+  const int sx = ((2 * dstX + 1) * srcW * 128) / dstW - 128;
+  const int sy = ((2 * dstY + 1) * srcH * 128) / dstH - 128;
+  const int x0 = sx >> 8, y0 = sy >> 8, fx = sx & 0xFF, fy = sy & 0xFF;
+  const auto at = [&](const int x, const int y) {
+    return x >= 0 && y >= 0 && x < srcW && y < srcH && inkAt(x, y) ? 1 : 0;
+  };
+  const int upper = at(x0, y0) * (256 - fx) + at(x0 + 1, y0) * fx;
+  const int lower = at(x0, y0 + 1) * (256 - fx) + at(x0 + 1, y0 + 1) * fx;
+  return (upper * (256 - fy) + lower * fy) >> 8;
+}
+
+void GfxRenderer::plotCoverage(const int x, const int y, const bool black, const int coverage) const {
+  if (grayFrameActive_ && !_stripActive && coverage > 0 && coverage < 256) {
+    const int target = black ? 15 : 0;
+    if (coverage * 2 < 256) {
+      grayBlend(x, y, target, coverage);  // too light for the framebuffer: gray only
+      return;
+    }
+    // drawPixel() makes the pixel follow the framebuffer, so take what is
+    // under it first and record the blend afterwards.
+    int phyX, phyY;
+    rotateCoordinates(orientation, x, y, &phyX, &phyY, panelWidth, panelHeight);
+    const bool visible = phyX >= 0 && phyX < panelWidth && phyY >= 0 && phyY < panelHeight && x >= clipLeft_ &&
+                         y >= clipTop_ && x < clipRight_ && y < clipBottom_;
+    if (!visible) return;
+    const int under = grayUnder(phyX, phyY);
+    drawPixel(x, y, black);
+    grayInk_[phyY * panelWidth + phyX] = static_cast<uint8_t>(under + ((target - under) * coverage) / 256);
+    return;
+  }
+  if (coverage * 2 >= 256) drawPixel(x, y, black);
+}
+
+void GfxRenderer::drawMask(const uint8_t* bits, const int srcWidth, const int srcHeight, const bool inkIsZero, int x,
+                           int y, int width, int height, const bool black) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, width, height);
+#if CROSSPOINT_HIRES_UI_ICONS
+    if (const HiResIcon* icon = srcWidth == srcHeight && inkIsZero ? hiResIcon(bits, srcWidth) : nullptr) {
+      drawMask(icon->hiRes, icon->hiResSize, icon->hiResSize, inkIsZero, x, y, width, height, black);
+      return;
+    }
+#endif
+    drawMask(bits, srcWidth, srcHeight, inkIsZero, x, y, width, height, black);
+    return;
+  }
+  if (!bits || srcWidth <= 0 || srcHeight <= 0 || width <= 0 || height <= 0) return;
+  const int rowBytes = (srcWidth + 7) / 8;
+  const auto inkAt = [&](const int col, const int row) {
+    return (((bits[row * rowBytes + (col >> 3)] >> (7 - (col & 7))) & 1) == 0) == inkIsZero;
+  };
+  const bool exact = width == srcWidth && height == srcHeight;
+  for (int row = 0; row < height; ++row) {
+    for (int col = 0; col < width; ++col) {
+      const int coverage =
+          exact ? (inkAt(col, row) ? 256 : 0) : smoothCoverage(inkAt, srcWidth, srcHeight, col, row, width, height);
+      if (coverage > 0) plotCoverage(x + col, y + row, black, coverage);
+    }
+  }
+}
+#endif  // CROSSPOINT_GRAY_UI
+
+// drawIcon at outSize x outSize physical pixels, smoothly scaled from the
+// size x size source.
+void GfxRenderer::drawIconScaled(const uint8_t bitmap[], const int x, const int y, const int size,
+                                 const int outSize) const {
   const int rowBytes = (size + 7) / 8;
-  for (int row = 0; row < size; row++) {
-    for (int col = 0; col < size; col++) {
-      const uint8_t byte = bitmap[row * rowBytes + (col >> 3)];
-      const bool ink = ((byte >> (7 - (col & 7))) & 1) == 0;
+  const auto inkAt = [&](const int col, const int row) {
+    return ((bitmap[row * rowBytes + (col >> 3)] >> (7 - (col & 7))) & 1) == 0;
+  };
+  for (int row = 0; row < outSize; row++) {
+    for (int col = 0; col < outSize; col++) {
+#if CROSSPOINT_GRAY_UI
+      const int coverage =
+          size == outSize ? (inkAt(col, row) ? 256 : 0) : smoothCoverage(inkAt, size, size, col, row, outSize, outSize);
+      if (coverage > 0) plotCoverage(x + (outSize - 1 - row), y + col, true, coverage);
+#else
+      const bool ink = size == outSize ? inkAt(col, row) : smoothInk(inkAt, size, size, col, row, outSize, outSize);
       if (ink) {
-        drawPixel(x + (size - 1 - row), y + col, true);
+        drawPixel(x + (outSize - 1 - row), y + col, true);
       }
+#endif
     }
   }
 }
 
-bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY, const bool whiteAsTransparent) const {
+// drawImage of a width x height panel-native bitmap at outWidth x outHeight,
+// smoothly scaled through a temporary enlarged copy.
+void GfxRenderer::drawImageScaled(const uint8_t bitmap[], const int x, const int y, const int width, const int height,
+                                  const int outWidth, const int outHeight) const {
+  if (outWidth == width && outHeight == height) {
+    drawImage(bitmap, x, y, width, height);
+    return;
+  }
+  const int srcRowBytes = (width + 7) / 8;
+  const int outW = (outWidth + 7) & ~7;
+  const int outRowBytes = outW / 8;
+  std::vector<uint8_t> scaled(static_cast<size_t>(outRowBytes) * outHeight, 0xFF);
+  const auto inkAt = [&](const int col, const int row) {
+    return !(bitmap[row * srcRowBytes + (col >> 3)] & (0x80 >> (col & 7)));
+  };
+  for (int row = 0; row < outHeight; ++row) {
+    for (int col = 0; col < outWidth; ++col) {
+      if (smoothInk(inkAt, width, height, col, row, outWidth, outHeight)) {
+        scaled[row * outRowBytes + (col >> 3)] &= static_cast<uint8_t>(~(0x80 >> (col & 7)));
+      }
+    }
+  }
+  drawImage(scaled.data(), x, y, outW, outHeight);
+}
+
+bool GfxRenderer::drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, const float cropX,
+                             const float cropY, const bool whiteAsTransparent) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, maxWidth, maxHeight);
+    // A box sized from bitmapWidth()/bitmapHeight() rounds back to within a
+    // pixel of the bitmap; draw that 1:1 instead of resampling it.
+    if (std::abs(maxWidth - bitmap.getWidth()) <= 1) maxWidth = bitmap.getWidth();
+    if (std::abs(maxHeight - bitmap.getHeight()) <= 1) maxHeight = bitmap.getHeight();
+    return drawBitmap(bitmap, x, y, maxWidth, maxHeight, cropX, cropY, whiteAsTransparent);
+  }
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return false;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
@@ -1632,6 +2264,11 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     }
   }
 
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  if (grayFrameActive_ && renderMode == BW && bitmap.is1Bit() && !whiteAsTransparent) {
+    recordBitmapGray(bitmap, x, y, scale, isScaled, cropPixX, cropPixY);
+  }
+#endif
   const int sourceWidth = bitmap.getWidth() - cropPixX * 2;
   const int sourceHeight = bitmap.getHeight() - cropPixY * 2;
   const int renderedWidth = isScaled ? static_cast<int>(std::floor((sourceWidth - 1) * scale)) + 1 : sourceWidth;
@@ -1640,8 +2277,12 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   return true;
 }
 
-bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
-                                 const int maxHeight) const {
+bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, maxWidth, maxHeight);
+    return drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
+  }
   float scale = 1.0f;
   bool isScaled = false;
   if (maxWidth > 0 && bitmap.getWidth() > maxWidth) {
@@ -1705,6 +2346,9 @@ bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
     }
   }
 
+#if CROSSPOINT_GRAY_UI_FULL_TONE
+  if (grayFrameActive_ && renderMode == BW) recordBitmapGray(bitmap, x, y, scale, isScaled, 0, 0);
+#endif
   const int renderedWidth =
       isScaled ? static_cast<int>(std::floor((bitmap.getWidth() - 1) * scale)) + 1 : bitmap.getWidth();
   const int renderedHeight =
@@ -1753,6 +2397,16 @@ void GfxRenderer::preserveImagePolarity(const int x, const int y, const int widt
 }
 
 void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    std::vector<int> px(xPoints, xPoints + numPoints), py(yPoints, yPoints + numPoints);
+    for (int i = 0; i < numPoints; ++i) {
+      px[i] = sp(px[i]);
+      py[i] = sp(py[i]);
+    }
+    fillPolygon(px.data(), py.data(), numPoints, state);
+    return;
+  }
   if (numPoints < 3) return;
 
   // Find bounding box
@@ -1820,6 +2474,9 @@ void GfxRenderer::clearScreen(const uint8_t color) const {
     memset(_stripBuf, color, static_cast<size_t>(panelWidthBytes) * _stripRows);
     return;
   }
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_) memset(grayInk_, GRAY_FOLLOWS_FB, static_cast<size_t>(panelWidth) * panelHeight);
+#endif
   display.clearScreen(color);
 }
 
@@ -1872,11 +2529,17 @@ void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   refreshMode = applyPromotedRefresh(refreshMode);
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && displayGrayFrame(refreshMode)) return;
+#endif
   display.displayBuffer(refreshMode, fadingFix);
 }
 
 void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const {
   refreshMode = applyPromotedRefresh(refreshMode);
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_ && displayGrayFrame(refreshMode)) return;
+#endif
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
   if (fadingFix) {
@@ -1897,6 +2560,11 @@ HalDisplay::GrayscaleCapabilities GfxRenderer::grayscaleCapabilities(HalDisplay:
 }
 
 size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, w, h);
+    return readFramebufferRegion(x, y, w, h, dst, dstCapacity);
+  }
   if (dst == nullptr || w <= 0 || h <= 0) return 0;
 
   const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
@@ -1915,12 +2583,21 @@ size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* d
 }
 
 void GfxRenderer::writeFramebufferRegion(int x, int y, int w, int h, const uint8_t* src) {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(x, y, w, h);
+    writeFramebufferRegion(x, y, w, h, src);
+    return;
+  }
   if (src == nullptr || w <= 0 || h <= 0) return;
 
   const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
   if (!mem.valid) return;
 
   const size_t rowBytes = mem.w / 8;  // exact: mem.w is a multiple of 8
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_) grayFill(mem.x, mem.y, mem.x + mem.w - 1, mem.y + mem.h - 1, GRAY_FOLLOWS_FB, false);
+#endif
 
   for (uint16_t row = 0; row < mem.h; ++row) {
     const uint8_t* srcRow = src + (static_cast<size_t>(row) * rowBytes);
@@ -2044,6 +2721,10 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
 
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
 int GfxRenderer::getScreenWidth() const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getScreenWidth());
+  }
   switch (orientation) {
     case Portrait:
     case PortraitInverted:
@@ -2058,6 +2739,10 @@ int GfxRenderer::getScreenWidth() const {
 }
 
 int GfxRenderer::getScreenHeight() const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getScreenHeight());
+  }
   switch (orientation) {
     case Portrait:
     case PortraitInverted:
@@ -2098,6 +2783,9 @@ void GfxRenderer::tapToLogical(float nx, float ny, int& outX, int& outY) const {
       outY = phyY;
       break;
   }
+  // Input runs beside rendering; PhysicalScope must not change its logical coordinate space.
+  outX = lp(outX);
+  outY = lp(outY);
 }
 
 // Translate a logical rect through rotateCoordinates and take the bounding
@@ -2134,6 +2822,11 @@ static bool logicalRectToPhysicalBounds(GfxRenderer::Orientation orientation, in
 }
 
 size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(lx, ly, lw, lh);
+    return getRegionByteSize(lx, ly, lw, lh);
+  }
   int x0, y0, x1, y1;
   if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
     return 0;
@@ -2144,10 +2837,21 @@ size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
   const int byteX1 = x1 / 8;
   const int bytesPerRow = byteX1 - byteX0 + 1;
   const int rowCount = y1 - y0 + 1;
-  return static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
+  const size_t fbBytes = static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
+#if CROSSPOINT_GRAY_UI
+  // A snapshot taken during a gray frame also keeps each pixel's level: a
+  // flag byte, then one byte per pixel of the same byte-aligned rectangle.
+  if (display.supportsGray16Image()) return fbBytes + 1 + fbBytes * 8;
+#endif
+  return fbBytes;
 }
 
 bool GfxRenderer::copyRegionToBuffer(int lx, int ly, int lw, int lh, uint8_t* buf, size_t bufSize) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(lx, ly, lw, lh);
+    return copyRegionToBuffer(lx, ly, lw, lh, buf, bufSize);
+  }
   int x0, y0, x1, y1;
   if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
     return false;
@@ -2162,10 +2866,27 @@ bool GfxRenderer::copyRegionToBuffer(int lx, int ly, int lw, int lh, uint8_t* bu
     const uint8_t* src = frameBuffer + (y0 + row) * panelWidthBytes + byteX0;
     memcpy(buf + row * bytesPerRow, src, bytesPerRow);
   }
+#if CROSSPOINT_GRAY_UI
+  if (bufSize >= needed + 1 + needed * 8) {
+    uint8_t* levels = buf + needed;
+    *levels++ = grayFrameActive_ ? 1 : 0;
+    if (grayFrameActive_) {
+      for (int row = 0; row < rowCount; row++) {
+        memcpy(levels + static_cast<size_t>(row) * bytesPerRow * 8, grayInk_ + (y0 + row) * panelWidth + byteX0 * 8,
+               static_cast<size_t>(bytesPerRow) * 8);
+      }
+    }
+  }
+#endif
   return true;
 }
 
 bool GfxRenderer::copyBufferToRegion(int lx, int ly, int lw, int lh, const uint8_t* buf, size_t bufSize) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    spRect(lx, ly, lw, lh);
+    return copyBufferToRegion(lx, ly, lw, lh, buf, bufSize);
+  }
   int x0, y0, x1, y1;
   if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
     return false;
@@ -2176,6 +2897,17 @@ bool GfxRenderer::copyBufferToRegion(int lx, int ly, int lw, int lh, const uint8
   const int rowCount = y1 - y0 + 1;
   const size_t needed = static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
   if (bufSize < needed || !frameBuffer || !buf) return false;
+#if CROSSPOINT_GRAY_UI
+  if (grayFrameActive_) {
+    // A snapshot without levels cannot serve a gray frame: the caller redraws.
+    if (bufSize < needed + 1 + needed * 8 || buf[needed] != 1) return false;
+    const uint8_t* levels = buf + needed + 1;
+    for (int row = 0; row < rowCount; row++) {
+      memcpy(grayInk_ + (y0 + row) * panelWidth + byteX0 * 8, levels + static_cast<size_t>(row) * bytesPerRow * 8,
+             static_cast<size_t>(bytesPerRow) * 8);
+    }
+  }
+#endif
   for (int row = 0; row < rowCount; row++) {
     uint8_t* dst = frameBuffer + (y0 + row) * panelWidthBytes + byteX0;
     memcpy(dst, buf + row * bytesPerRow, bytesPerRow);
@@ -2184,6 +2916,10 @@ bool GfxRenderer::copyBufferToRegion(int lx, int ly, int lw, int lh, const uint8
 }
 
 int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style style) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getSpaceWidth(fontId, style));
+  }
   // Advance table fast-path for SD card fonts during layout
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
@@ -2202,6 +2938,10 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
 
 int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
                                  const EpdFontFamily::Style style) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getSpaceAdvance(fontId, leftCp, rightCp, style));
+  }
   // Advance table fast-path for SD card fonts during layout.
   // Kern data is not loaded during layout (consistent with previous metadataOnly behavior),
   // so we return just the space advance without kerning.
@@ -2224,6 +2964,10 @@ int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const 
 
 int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint32_t rightCp,
                             const EpdFontFamily::Style style, const int8_t tracking) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getKerning(fontId, leftCp, rightCp, style, tracking));
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return 0;
   const int kernFP = fontIt->second.getKerning(leftCp, rightCp, style);      // 4.4 fixed-point
@@ -2232,6 +2976,10 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style, const int8_t tracking,
                                  const BidiUtils::BidiBaseDir baseDir, const TextMeasureMode mode) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getTextAdvanceX(fontId, text, style, tracking, baseDir, mode));
+  }
   // Match the font drawText would use for non-Latin strings (see resolveTextFontId).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
   // Measure the exact codepoint stream drawText renders: bidi-reordered and
@@ -2248,6 +2996,10 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 int GfxRenderer::getTextAdvanceX(const int fontId, const LaidOutText& text, const EpdFontFamily::Style style,
                                  const int8_t tracking, const BidiUtils::BidiBaseDir baseDir,
                                  const TextMeasureMode mode) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getTextAdvanceX(fontId, text, style, tracking, baseDir, mode));
+  }
   const int resolvedFontId = resolveTextFontId(fontId, text.text, style);
   std::string visual;
   const VisualText visualText = resolveLaidOutText(text, visual, baseDir, fontMap, resolvedFontId, style);
@@ -2397,6 +3149,13 @@ GfxRenderer::ShapingMemoScope::~ShapingMemoScope() {
 
 bool GfxRenderer::getCodepointMetrics(const int fontId, const uint32_t cp, const EpdFontFamily::Style style,
                                       int32_t& advanceFP, int& top) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    const bool ok = getCodepointMetrics(fontId, cp, style, advanceFP, top);
+    advanceFP = static_cast<int32_t>(lroundf(advanceFP / uiScale_));
+    top = lp(top);
+    return ok;
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return false;
   const EpdGlyph* glyph = fontIt->second.getGlyph(cp, style);
@@ -2408,6 +3167,10 @@ bool GfxRenderer::getCodepointMetrics(const int fontId, const uint32_t cp, const
 
 int GfxRenderer::drawScaledCodepoint(const int fontId, const uint32_t cp, const EpdFontFamily::Style style, const int x,
                                      const int baselineY, const int scale256) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(drawScaledCodepoint(fontId, cp, style, sp(x), sp(baselineY), scale256));
+  }
   if (scale256 <= 0) return 0;
   if (fontCacheManager_ && fontCacheManager_->isScanning()) {
     char utf8[5] = {};
@@ -2461,6 +3224,10 @@ int GfxRenderer::drawScaledCodepoint(const int fontId, const uint32_t cp, const 
 }
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getFontAscenderSize(fontId));
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -2471,6 +3238,10 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
 }
 
 int GfxRenderer::getLineHeight(const int fontId) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getLineHeight(fontId));
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -2481,6 +3252,10 @@ int GfxRenderer::getLineHeight(const int fontId) const {
 }
 
 int GfxRenderer::getLineHeight(const int fontId, const float compression) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getLineHeight(fontId, compression));
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -2490,6 +3265,10 @@ int GfxRenderer::getLineHeight(const int fontId, const float compression) const 
 }
 
 int GfxRenderer::getTextHeight(const int fontId) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    return lp(getTextHeight(fontId));
+  }
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", fontId);
@@ -2500,6 +3279,11 @@ int GfxRenderer::getTextHeight(const int fontId) const {
 
 void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y, const char* text, const bool black,
                                       const EpdFontFamily::Style style) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    drawTextRotated90CW(fontId, sp(x), sp(y), text, black, style);
+    return;
+  }
   // Cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
     return;
@@ -2731,6 +3515,14 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
+  if (uiScaleActive_) {
+    const PhysicalScope off(*this);
+    getOrientedViewableTRBL(outTop, outRight, outBottom, outLeft);
+    for (int* v : {outTop, outRight, outBottom, outLeft}) {
+      if (v) *v = lp(*v);
+    }
+    return;
+  }
   // Board truth: the bezel insets live in the active profile (panel-native
   // portrait frame); this only rotates them into the current orientation.
   const BoardConfig::ViewableInsets& vi = BoardConfig::ACTIVE.viewableInsets;

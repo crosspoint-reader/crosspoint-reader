@@ -88,14 +88,14 @@ const char* Bitmap::errorToString(BmpReaderError err) {
 
 BmpReaderError Bitmap::parseHeaders() {
   if (!file) return BmpReaderError::FileInvalid;
-  if (!file.seek(0)) return BmpReaderError::SeekStartFailed;
+  if (!file.seek(baseOffset)) return BmpReaderError::SeekStartFailed;
 
   // --- BMP FILE HEADER ---
   const uint16_t bfType = readLE16(file);
   if (bfType != 0x4D42) return BmpReaderError::NotBMP;
 
   file.seekCur(8);
-  bfOffBits = readLE32(file);
+  bfOffBits = readLE32(file) + baseOffset;  // absolute, so every later seek lands in this bitmap
 
   // --- DIB HEADER ---
   const uint32_t biSize = readLE32(file);
@@ -137,7 +137,7 @@ BmpReaderError Bitmap::parseHeaders() {
 
   for (int i = 0; i < 256; i++) paletteLum[i] = static_cast<uint8_t>(i);
   // The palette follows the DIB header, which is longer than 40 bytes for V4/V5 files.
-  if (colorsUsed > 0 && !file.seek(14 + biSize)) return BmpReaderError::SeekPixelDataFailed;
+  if (colorsUsed > 0 && !file.seek(baseOffset + 14 + biSize)) return BmpReaderError::SeekPixelDataFailed;
   if (colorsUsed > 0) {
     for (uint32_t i = 0; i < colorsUsed; i++) {
       uint8_t rgb[4];
@@ -342,4 +342,14 @@ BmpReaderError Bitmap::rewindToData() const {
   if (atkinsonDitherer) atkinsonDitherer->reset();
 
   return BmpReaderError::Ok;
+}
+
+bool Bitmap::lacksGrayCopy(const std::string& path) {
+  HalFile file;
+  if (!Storage.openFileForRead("BMP", path, file)) return false;
+  Bitmap bitmap(file);
+  const bool lacks = bitmap.parseHeaders() == BmpReaderError::Ok && bitmap.getBpp() <= 2 &&
+                     file.size() <= bitmap.dataEnd() && !Storage.exists((path + ".nogray").c_str());
+  file.close();
+  return lacks;
 }

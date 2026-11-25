@@ -89,7 +89,14 @@ void ActivityManager::renderTaskLoop() {
       // The sleep screen forces normal polarity itself (SleepActivity).
       display.setInverted(SETTINGS.screenInverted != 0);
       const uint32_t renderingVisit = screenVisit;
+#if CROSSPOINT_GRAY_UI
+      // Frames this render shows go out as 16-level images.
+      const bool grayFrame = currentActivity->wantsGrayFrame() && renderer.beginGrayFrame();
+#endif
       currentActivity->render(std::move(lock));
+#if CROSSPOINT_GRAY_UI
+      if (grayFrame) renderer.endGrayFrame();
+#endif
       paintedVisit.store(renderingVisit, std::memory_order_release);
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
@@ -179,6 +186,7 @@ void ActivityManager::loop() {
         continue;
       }
 
+      mappedInput.discardBufferedTouch();
       ++screenVisit;
       ActivityResult pendingResult = std::move(currentActivity->result);
 
@@ -236,6 +244,7 @@ void ActivityManager::loop() {
         HeaderBackTapTarget::clear();
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
       }
+      mappedInput.discardBufferedTouch();
       ++screenVisit;
       pendingAction = PendingAction::None;
       currentActivity = std::move(pendingActivity);
@@ -278,6 +287,7 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
     pendingAction = PendingAction::Replace;
   } else {
     // No current activity, safe to launch immediately
+    mappedInput.discardBufferedTouch();
     currentActivity = std::move(newActivity);
     currentActivity->onEnter();
   }
@@ -388,6 +398,20 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
+#if FREEINK_DEVICE_METALIO_EINK4_PLUS
+  // Leaving a book: its anti-aliased greys and the fast page turns before them
+  // leave traces that a changed-pixels-only update keeps, so draw Home clean
+  // (every pixel), as the vendor firmware does on a screen change from greys.
+  // Screens opened from the book (menu, footnotes, dictionary, clip selection)
+  // sit on the stack above the reader, so look through it. Matches the reader
+  // activity names "EpubReader" and "XtcReader".
+  if (BoardConfig::isMetalioEInk4Plus()) {
+    const auto isReader = [](const Activity* a) { return a && (a->name == "EpubReader" || a->name == "XtcReader"); };
+    bool fromBook = isReader(currentActivity.get());
+    for (const auto& a : stackActivities) fromBook = fromBook || isReader(a.get());
+    if (fromBook) cleanInitialRefresh = true;
+  }
+#endif
   // EEGO A4: after a gray reader page, a fast refresh leaves the page ghosting
   // in Home's dithered areas.
   if (BoardConfig::isEegoA4() && isReaderActivity()) cleanInitialRefresh = true;

@@ -1009,6 +1009,15 @@ void EpubReaderActivity::loop() {
     }
   }
 
+  // Two-finger pinch steps the font size: spread apart = larger, pinch in = smaller.
+  // Metalio E-Ink4-Plus only until the other multi-touch boards are tested.
+  float pinchScale = 1.0f;
+  if (!atEndOfBook && SETTINGS.touchReaderControls && BoardConfig::isMetalioEInk4Plus() &&
+      mappedInput.wasPinch(pinchScale)) {
+    stepFontSize(pinchScale > 1.0f ? 1 : -1);
+    return;
+  }
+
   // Link taps take priority over the reader-menu and page-turn zones.
   if (!atEndOfBook && !currentPageLinks.empty() && SETTINGS.touchReaderControls && mappedInput.hasTouch()) {
     int touchX = 0;
@@ -2661,6 +2670,19 @@ void EpubReaderActivity::applyTextSettingLive() {
   requestUpdate();
 }
 
+// One step through the point sizes the active family ships, clamped at both ends.
+void EpubReaderActivity::stepFontSize(const int direction) {
+  const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.sdFontFamilyName);
+  if (sizes.empty()) return;
+  const uint8_t cur = snapToNearestPointSize(sizes, SETTINGS.fontPointSize);
+  const int idx = static_cast<int>(std::find(sizes.begin(), sizes.end(), cur) - sizes.begin());
+  const int next = std::clamp(idx + direction, 0, static_cast<int>(sizes.size()) - 1);
+  if (next == idx && sizes[next] == SETTINGS.fontPointSize) return;
+  SETTINGS.fontPointSize = sizes[next];
+  haptic_feedback::touchAction();
+  applyTextSettingLive();
+}
+
 // Settings-style option pickers for the Text panel's enum rows. Every
 // selection applies immediately to the page under the sheet.
 void EpubReaderActivity::showTextRowPopup(const int row) {
@@ -2673,10 +2695,7 @@ void EpubReaderActivity::showTextRowPopup(const int row) {
       labels.reserve(sizes.size());
       for (const uint8_t size : sizes) labels.push_back(std::to_string(size) + " pt");
       const uint8_t cur = snapToNearestPointSize(sizes, SETTINGS.fontPointSize);
-      int curIdx = 0;
-      for (size_t i = 0; i < sizes.size(); ++i) {
-        if (sizes[i] == cur) curIdx = static_cast<int>(i);
-      }
+      const int curIdx = static_cast<int>(std::find(sizes.begin(), sizes.end(), cur) - sizes.begin());
       overlayPopup.show(StrId::STR_FONT_SIZE, labels, curIdx, [this, sizes](int idx) {
         if (idx < 0 || idx >= static_cast<int>(sizes.size())) return;
         SETTINGS.fontPointSize = sizes[idx];
@@ -2715,12 +2734,25 @@ void EpubReaderActivity::discardOverlayPage() {
 // the chrome answers taps and buttons the moment it is visible instead of only
 // after a blocking displayBuffer() returns. Caller must hold the RenderLock.
 void EpubReaderActivity::pushOverlayRefresh() {
+  if (overlayGrayFrame) {
+    // A gray frame is shown in one blocking call; nothing is left pending.
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    endOverlayGrayFrame();
+    return;
+  }
   if (renderer.supportsAsyncRefresh()) {
     renderer.displayBufferAsync(HalDisplay::FAST_REFRESH);
     overlayRefreshPending = true;
   } else {
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   }
+}
+
+void EpubReaderActivity::endOverlayGrayFrame() {
+#if CROSSPOINT_GRAY_UI
+  if (overlayGrayFrame) renderer.endGrayFrame();
+#endif
+  overlayGrayFrame = false;
 }
 
 // Wait out a pending deferred overlay refresh and reseed the panel's
@@ -2828,6 +2860,11 @@ void EpubReaderActivity::closeOverlayToPage() {
 
 void EpubReaderActivity::renderOverlay() {
   if (!epub || !section || !toolbarUi) return;
+#if CROSSPOINT_GRAY_UI
+  // The page under the chrome stays as the framebuffer has it; only what is
+  // drawn from here on has its levels recorded.
+  if (!overlayGrayFrame) overlayGrayFrame = renderer.beginGrayFrame();
+#endif
 
   ReaderToolbarUi::Model model;
   // The toolbar's tool pill is the button-navigation cursor: tap-first (same
@@ -3306,6 +3343,7 @@ void EpubReaderActivity::activateMoreRow(int row) {
         RenderLock lock;  // the render task shares the framebuffer
         renderOverlay();
         renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+        endOverlayGrayFrame();
       }
       return;
     }

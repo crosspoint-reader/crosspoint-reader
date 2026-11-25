@@ -53,6 +53,10 @@ class Activity {
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
   virtual bool isHomeActivity() const { return false; }
+  // Every screen's displayBuffer() frames go out as a 16-level image on panels
+  // that take one (see GfxRenderer::beginGrayFrame). Book pages and screens
+  // that run their own grayscale passes over a full-screen image opt out.
+  virtual bool wantsGrayFrame() const { return !isReaderActivity(); }
   virtual bool handleHomeGesture() { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 

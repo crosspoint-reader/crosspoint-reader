@@ -1,5 +1,6 @@
 #include "LyraTheme.h"
 
+#include <FreeInkUIGfxRenderer.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
@@ -64,26 +65,6 @@ const uint8_t* iconForName(UIIcon icon) {
   }
 }
 }  // namespace
-
-void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const {
-  const bool charging = gpio.isUsbConnected();
-
-  if (charging) {
-    // Solid fill when charging so lightning bolt is visible
-    renderer.fillRect(rect.x + 2, rect.y + 2, rect.width - 5, rect.height - 4);
-    drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2);
-  } else {
-    if (percentage > 10) {
-      renderer.fillRect(rect.x + 2, rect.y + 2, 3, rect.height - 4);
-    }
-    if (percentage > 40) {
-      renderer.fillRect(rect.x + 6, rect.y + 2, 3, rect.height - 4);
-    }
-    if (percentage > 70) {
-      renderer.fillRect(rect.x + 10, rect.y + 2, 3, rect.height - 4);
-    }
-  }
-}
 
 void LyraTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {
   const int contentWidth = std::max(0, rect.width - LyraMetrics::values.contentSidePadding * 2);
@@ -234,7 +215,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
         if (Storage.openFileForRead("HOME", coverBmpPath, file)) {
           Bitmap bitmap(file);
           if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-            coverWidth = bitmap.getWidth();
+            coverWidth = renderer.bitmapWidth(bitmap);
             // Narrow covers come out taller than the slot; fill 1:1 and crop
             // vertically instead of rescaling the dither.
             drawCoverThumbFill(renderer, bitmap,
@@ -286,11 +267,12 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     const int titleBlockHeight = titleLineHeight * static_cast<int>(titleLines.size());
     const int authorHeight = book.author.empty() ? 0 : smallLineHeight * 3 / 2;
     constexpr int progressGap = 12;
-    constexpr int barGap = 2;
-    constexpr int barHeight = 4;
-    const bool showProgress =
-        progress >= 0 && textWidth >= renderer.getTextWidth(UI_10_FONT_ID, "100%", EpdFontFamily::BOLD);
-    const int progressHeight = showProgress ? progressGap + smallLineHeight + barGap + barHeight : 0;
+    // The progress row of the cover grid's book card: the percentage, then
+    // the bar on the same line.
+    constexpr int labelGap = 8;
+    constexpr int barHeight = 6;
+    const bool showProgress = progress >= 0 && textWidth > renderer.getTextWidth(UI_10_FONT_ID, "100%") + labelGap;
+    const int progressHeight = showProgress ? progressGap + smallLineHeight : 0;
     const int totalBlockHeight = titleBlockHeight + authorHeight + progressHeight;
     int titleY = tileY + tileHeight / 2 - totalBlockHeight / 2;
     const int textX = tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing;
@@ -307,11 +289,20 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       const int progressY = titleY + progressGap;
       char label[12];
       snprintf(label, sizeof(label), "%d%%", progress);
-      renderer.drawText(UI_10_FONT_ID, textX, progressY, label, true, EpdFontFamily::BOLD);
-      const int barY = progressY + smallLineHeight + barGap;
-      renderer.drawRect(textX, barY, textWidth, barHeight);
-      renderer.fillRect(textX + 1, barY + 1, textWidth - 2, barHeight - 2, false);
-      renderer.fillRect(textX + 1, barY + 1, (textWidth - 2) * progress / 100, barHeight - 2);
+      renderer.drawText(UI_10_FONT_ID, textX, progressY, label, true);
+      const int barX = textX + renderer.getTextWidth(UI_10_FONT_ID, label) + labelGap;
+      const int barY = progressY + (smallLineHeight - barHeight) / 2;
+      // Its gray track would vanish on the selection box's gray, so a selected
+      // tile gets a white one.
+      namespace fui = freeink::ui;
+      fui::GfxRendererFrame<1> ui(renderer, UI_10_FONT_ID);
+      fui::ProgressBarProps bar;
+      bar.value = progress;
+      bar.track = bookSelected ? fui::Paint::solid(fui::Color::White) : fui::Paint::dither(fui::Color::LightGray);
+      fui::progressBar(ui.frame,
+                       fui::Rect{static_cast<int16_t>(barX), static_cast<int16_t>(barY),
+                                 static_cast<int16_t>(textX + textWidth - barX), static_cast<int16_t>(barHeight)},
+                       bar);
     }
   } else {
     drawEmptyRecents(renderer, rect);
