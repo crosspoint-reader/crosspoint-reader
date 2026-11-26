@@ -478,7 +478,7 @@ void setLCGState(const SleepRecentKind kind, uint32_t seed, uint32_t state, uint
   }
 }
 
-bool findNextValidSleepImage(HalFile& dir, const SleepRecentKind recentKind, char* name) {
+HalFile findNextSleepCandidate(HalFile& dir, const SleepRecentKind recentKind, char* name) {
   for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
     if (dirFile.isDirectory()) continue;
 
@@ -492,22 +492,20 @@ bool findNextValidSleepImage(HalFile& dir, const SleepRecentKind recentKind, cha
       continue;
     }
 
-    const bool isValid = isBmp ? [&dirFile]() {
-      Bitmap bitmap(dirFile);
-      return bitmap.parseHeaders() == BmpReaderError::Ok;
-    }()
-                               : isValidPngHeader(dirFile);
-    if (!isValid) {
-      LOG_DBG("SLP", "Skipping invalid sleep image: %s", name);
-      continue;
-    }
-    return true;
+    return dirFile;
   }
-  return false;
+  return {};
+}
+
+bool isValidSleepCandidate(HalFile& file, const char* name) {
+  if (FsHelpers::hasPngExtension(std::string_view{name})) return isValidPngHeader(file);
+  Bitmap bitmap(file);
+  return bitmap.parseHeaders() == BmpReaderError::Ok;
 }
 
 bool selectRandomSleepFile(const char* firstDirPath, const char* secondDirPath, const SleepRecentKind recentKind,
                            std::string& selectedPath) {
+  selectedPath.clear();
   auto name = makeUniqueNoThrow<char[]>(MAX_SLEEP_FILE_NAME_LEN);
   if (!name) {
     LOG_ERR("SLP", "OOM: sleep filename buffer");
@@ -523,15 +521,13 @@ bool selectRandomSleepFile(const char* firstDirPath, const char* secondDirPath, 
     if (!dir || !dir.isDirectory()) continue;
 
     const auto remainingCapacity = static_cast<uint16_t>(UINT16_MAX - fileCount);
-    while (directoryCounts[i] < remainingCapacity && findNextValidSleepImage(dir, recentKind, name.get())) {
+    while (directoryCounts[i] < remainingCapacity && findNextSleepCandidate(dir, recentKind, name.get())) {
       directoryCounts[i]++;
     }
     fileCount = static_cast<uint16_t>(fileCount + directoryCounts[i]);
   }
 
   if (fileCount == 0) return false;
-
-  uint16_t randomFileIndex = 0;
 
   // Hull-Dobell theorem conditions for full period over mod 2^k: odd increment c and multiplier a = 5
   // (a - 1 divisible by 4) give period m for any seed; m = 1 is trivial.
@@ -548,7 +544,13 @@ bool selectRandomSleepFile(const char* firstDirPath, const char* secondDirPath, 
     lcgM <<= 1;
   }
 
+  const uint32_t lastShownIndex = lcgIndexesTotal == fileCount ? lcgState : lcgM;
   uint32_t lcgC = (lcgSeed * 2u + 1u) % lcgM;
+  const auto advanceIndex = [&]() {
+    do {
+      lcgState = (5u * lcgState + lcgC) % lcgM;
+    } while (lcgState >= fileCount);
+  };
 
   if (lcgIndexesLeft == 0 || lcgIndexesTotal != fileCount || lcgIndexesLeft > fileCount || lcgState >= lcgM) {
     uint16_t previousIndexes[CrossPointState::SLEEP_AVOID_REPEAT_LOOKBACK];
@@ -556,7 +558,7 @@ bool selectRandomSleepFile(const char* firstDirPath, const char* secondDirPath, 
     const uint8_t window =
         static_cast<uint8_t>(std::min<uint16_t>(fileCount / 2, CrossPointState::SLEEP_AVOID_REPEAT_LOOKBACK));
     if (lcgIndexesLeft == 0 && lcgIndexesTotal == fileCount && lcgState < fileCount) {
-      // Invert the completed cycle (5 * 0xCCCCCCCD = 1 mod 2^32) to obtain recently shown image indexes
+      // Invert the completed cycle (5 * 0xCCCCCCCD = 1 mod 2^32) to obtain recently visited indexes.
       static constexpr uint32_t LCG_MULTIPLIER_INVERSE = 0xCCCCCCCDu;
       uint32_t previousState = lcgState;
       for (uint32_t step = 0; step < lcgM && previousCount < window; ++step) {
@@ -609,41 +611,60 @@ bool selectRandomSleepFile(const char* firstDirPath, const char* secondDirPath, 
       }
       if (overlapCount == 0) break;
     }
-    randomFileIndex = static_cast<uint16_t>(lcgState);
+    lcgC = (lcgSeed * 2u + 1u) % lcgM;
   } else {
-    for (uint32_t attempt = 0; attempt < lcgM; ++attempt) {
-      lcgState = (5u * lcgState + lcgC) % lcgM;
-      if (lcgState < fileCount) {
-        randomFileIndex = lcgState;
+    advanceIndex();
+  }
+
+  bool wrapped = false;
+  for (uint16_t attempted = 0; attempted < fileCount; ++attempted) {
+    const size_t directoryIndex = lcgState < directoryCounts[0] ? 0 : 1;
+    const uint16_t localIndex = directoryIndex == 0 ? lcgState : lcgState - directoryCounts[0];
+    const char* dirPath = dirPaths[directoryIndex];
+    auto dir = Storage.open(dirPath);
+    if (!dir || !dir.isDirectory()) {
+      LOG_ERR("SLP", "Failed to open selected sleep image directory: %s", dirPath);
+      return !selectedPath.empty();
+    }
+    for (uint16_t index = 0; index <= localIndex; ++index) {
+      auto file = findNextSleepCandidate(dir, recentKind, name.get());
+      if (!file) return !selectedPath.empty();
+      if (index != localIndex) continue;
+
+      if (!isValidSleepCandidate(file, name.get())) {
+        LOG_DBG("SLP", "Skipping invalid sleep image: %s", name.get());
         break;
       }
+      const bool deferredLast = !selectedPath.empty();
+      selectedPath.reserve(strlen(dirPath) + 1 + strlen(name.get()));
+      selectedPath = dirPath;
+      selectedPath += '/';
+      selectedPath += name.get();
+      // Repeat the last image only if this search finds no other valid candidate.
+      if (lcgState == lastShownIndex) break;
+
+      if (wrapped) {
+        // Start the next cycle at this pick. Seeds m/2 apart use the same increment.
+        if (lcgM > 2) lcgSeed = (lcgSeed + 1u + static_cast<uint32_t>(random(lcgM / 2u - 1u))) % lcgM;
+      }
+      if (wrapped || deferredLast) {
+        // Start at this pick so a deferred image still gets a turn in the cycle.
+        lcgIndexesLeft = fileCount;
+      }
+      setLCGState(recentKind, lcgSeed, lcgState, lcgIndexesLeft - 1, lcgIndexesTotal);
+      APP_STATE.saveToFile();
+      return true;
     }
+
+    if (attempted + 1 == fileCount) break;
+    if (--lcgIndexesLeft == 0) {
+      lcgIndexesLeft = fileCount;
+      wrapped = true;
+    }
+    advanceIndex();
   }
 
-  size_t directoryIndex = 0;
-  uint16_t localIndex = randomFileIndex;
-  if (randomFileIndex >= directoryCounts[0]) {
-    directoryIndex = 1;
-    localIndex = static_cast<uint16_t>(randomFileIndex - directoryCounts[0]);
-  }
-
-  auto dir = Storage.open(dirPaths[directoryIndex]);
-  if (!dir || !dir.isDirectory()) {
-    LOG_ERR("SLP", "Failed to open selected sleep image directory: %s", dirPaths[directoryIndex]);
-    return false;
-  }
-  for (uint16_t index = 0; index <= localIndex; ++index) {
-    if (!findNextValidSleepImage(dir, recentKind, name.get())) return false;
-  }
-
-  const char* selectedDirPath = dirPaths[directoryIndex];
-  selectedPath.reserve(strlen(selectedDirPath) + 1 + strlen(name.get()));
-  selectedPath = selectedDirPath;
-  selectedPath += "/";
-  selectedPath += name.get();
-  setLCGState(recentKind, lcgSeed, lcgState, lcgIndexesLeft - 1, lcgIndexesTotal);
-  APP_STATE.saveToFile();
-  return true;
+  return !selectedPath.empty();
 }
 
 bool drawSleepPopupPreservingFrame(GfxRenderer& renderer) {
