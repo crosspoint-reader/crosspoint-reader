@@ -13,7 +13,9 @@
 
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cmath>
+#include <cstdint>
 #include <iterator>
 #include <new>
 
@@ -235,6 +237,37 @@ uint16_t parseTableSpan(const char* value) {
     span = span * 10 + digit;
   }
   return span == 0 ? UINT16_MAX : static_cast<uint16_t>(span);
+}
+
+// HTML "rules for parsing integers" for <ol start="...">; falls back to 1 on missing/invalid/overflow.
+int parseOrderedListStart(const char* value) {
+  if (!value) return 1;
+  const char* p = value;
+  while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\f' || *p == '\r') ++p;
+
+  bool negative = false;
+  if (*p == '-') {
+    negative = true;
+    ++p;
+  } else if (*p == '+') {
+    ++p;
+  }
+  if (*p < '0' || *p > '9') return 1;
+
+  constexpr uint32_t MAX_POS = INT32_MAX;
+  constexpr uint32_t MAX_NEG_ABS = static_cast<uint32_t>(INT32_MAX) + 1u;
+  const uint32_t limit = negative ? MAX_NEG_ABS : MAX_POS;
+  uint32_t acc = 0;
+  while (*p >= '0' && *p <= '9') {
+    const uint32_t digit = static_cast<uint32_t>(*p - '0');
+    if (acc > (limit - digit) / 10u) return 1;
+    acc = acc * 10u + digit;
+    ++p;
+  }
+  if (negative) {
+    return acc == MAX_NEG_ABS ? INT32_MIN : -static_cast<int>(acc);
+  }
+  return static_cast<int>(acc);
 }
 
 // Returns true if the HTML element is a purely inline, non-navigable wrapper.
@@ -2287,9 +2320,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         if (!self->listStack.empty() && self->listStack.back().styleNone) {
           // No marker: leave the block empty so it behaves like a normal paragraph.
         } else if (!self->listStack.empty() && self->listStack.back().ordered) {
-          self->listStack.back().counter += 1;
           char marker[16];
           snprintf(marker, sizeof(marker), "%d.", self->listStack.back().counter);
+          if (self->listStack.back().counter < INT_MAX) {
+            self->listStack.back().counter += 1;
+          }
           self->currentTextBlock->addWord(marker, EpdFontFamily::REGULAR, false, false, self->visibleTextOffset);
           self->listItemBulletOnly = true;
         } else {
@@ -2303,6 +2338,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         // hanging text-indent on <li><p> children keeps the first line on the page.
         ChapterHtmlSlimParser::ListContext ctx;
         ctx.ordered = strcmp(name, "ol") == 0;
+        if (ctx.ordered) {
+          ctx.counter = parseOrderedListStart(getAttribute(atts, "start"));
+        }
         ctx.styleNone = cssStyle.hasListStyleType() && cssStyle.listStyleType == CssListStyleType::None;
         ctx.depth = self->depth;
         self->listStack.push_back(ctx);

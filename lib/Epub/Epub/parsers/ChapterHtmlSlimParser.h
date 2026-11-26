@@ -203,7 +203,7 @@ class ChapterHtmlSlimParser {
   struct ListContext {
     bool ordered = false;    // true for <ol>, false for <ul>
     bool styleNone = false;  // true when list-style-type: none is set on this list
-    int counter = 0;         // incremented before each direct <li>; used as its number when ordered
+    int counter = 1;         // number emitted for the next direct <li> when ordered
     int depth = 0;           // parser depth at open time; matches the depth seen in endElement
                              // for the same tag, so a hidden nested list's close can't pop
                              // an outer list's context
