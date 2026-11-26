@@ -737,13 +737,6 @@ void SleepActivity::onEnter() {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
   }
 
-  // Every mode below replaces the whole screen. One clean straight to the new
-  // image leaves the old screen visible, so clean to white first (BLANK is that clean).
-  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
-    renderer.clearScreen();
-    renderer.displayBuffer(kSleepClean);
-  }
-
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
       return renderBlankSleepScreen();
@@ -826,10 +819,15 @@ void SleepActivity::renderCustomSleepScreen() const {
   renderDefaultSleepScreen();
 }
 
-// Sleep screens paint with kSleepClean (after the white clean in onEnter): HALF, not
+// Sleep screens paint with kSleepClean: HALF, not
 // the multi-flash GC waveform (0xF7) that FULL_REFRESH selects (#2471's blinking
 // complaint), except on Metalio.
 void SleepActivity::renderDefaultSleepScreen() const {
+  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM &&
+      SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT) {
+    renderBlankSleepScreen();
+  }
+
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
@@ -857,7 +855,13 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
 
   LOG_DBG("SLP", "bitmap %d x %d, screen %d x %d", bitmap.getWidth(), bitmap.getHeight(), pageWidth, pageHeight);
   LOG_DBG("SLP", "drawing to %d x %d", x, y);
-  if (!preserveBackground) renderer.clearScreen();
+  if (!preserveBackground) {
+    // Keep the popup visible through cover generation, then clean to white to prevent ghosting.
+    if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT) {
+      renderBlankSleepScreen();
+    }
+    renderer.clearScreen();
+  }
 
   const bool hasGreyscale = (bitmap.hasGreyscale() || (preserveBackground && overlayGrayCover)) &&
                             (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
@@ -890,7 +894,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     return;
   }
   if (absolute) {
-    // Full-screen modes already cleaned to white in onEnter; Cover + Transparent
+    // Full-screen modes already cleaned to white above; Cover + Transparent
     // skips that clean, so its plain-cover fallback cleans here.
     if (preserveBackground || SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_TRANSPARENT) {
       cleanBeforeAbsoluteGray(renderer);
