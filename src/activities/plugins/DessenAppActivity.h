@@ -37,7 +37,8 @@ class DessenAppActivity final : public Activity {
 
   bool loadApp();
   void leaveApp();
-  void openKeyboard();  // service asked for text input
+  void openKeyboard();       // service asked for text input
+  bool storeOverlayFrame();  // best effort, under RenderLock
 
   std::string appPath;
   const bool homeLauncher;

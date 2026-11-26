@@ -755,6 +755,11 @@ bool CrosspointServices::serviceAsyncWork() {
         break;
       }
 
+      // DNS and sockets require an initialized, connected network stack.
+      if (WiFi.status() != WL_CONNECTED) {
+        result_ = DSN_ERR_IO;
+        break;
+      }
       BoundedOutput response(outCap_ - 4);
       const int status =
           HttpDownloader::request(method.c_str(), std::string(url), headers, body_, bodySize_,
@@ -774,6 +779,11 @@ bool CrosspointServices::serviceAsyncWork() {
       size_t bytes = 0;
       if (strncasecmp(url_.c_str(), "https:", 6) == 0 && (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
                                                           ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC)) {
+        result_ = DSN_ERR_IO;
+        break;
+      }
+      // DNS and sockets require an initialized, connected network stack.
+      if (WiFi.status() != WL_CONNECTED) {
         result_ = DSN_ERR_IO;
         break;
       }
@@ -818,7 +828,12 @@ bool CrosspointServices::serviceAsyncWork() {
         break;
       }
       WiFi.persistent(false);
-      WiFi.mode(WIFI_STA);
+      LOG_INF("DSN", "Wi-Fi start: free=%u max_block=%u", static_cast<unsigned>(ESP.getFreeHeap()),
+              static_cast<unsigned>(ESP.getMaxAllocHeap()));
+      if (!WiFi.mode(WIFI_STA)) {
+        result_ = DSN_ERR_IO;
+        break;
+      }
       WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
       wifiStart_ = millis();
       pending_ = Op::WifiConnecting;

@@ -1,6 +1,8 @@
 #if CROSSPOINT_DESSEN_APPS
 #include "DessenAppActivity.h"
 
+#include <FontCacheManager.h>
+#include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -85,6 +87,11 @@ void DessenAppActivity::onEnter() {
   Activity::onEnter();
   {
     RenderLock lock;
+#ifndef BOARD_HAS_PSRAM
+    if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
+    LOG_INF("DSN", "Guest allocation headroom: free=%u max_block=%u", static_cast<unsigned>(ESP.getFreeHeap()),
+            static_cast<unsigned>(ESP.getMaxAllocHeap()));
+#endif
     if (loadApp()) {
       requestUpdate();
       return;
@@ -116,7 +123,24 @@ bool DessenAppActivity::handleHomeGesture() {
   return homeLauncher;
 }
 
+bool DessenAppActivity::storeOverlayFrame() {
+#ifndef BOARD_HAS_PSRAM
+  // Keep working memory available for native screens and radio services.
+  constexpr size_t reserve = 40000;
+  if (ESP.getFreeHeap() < renderer.getBufferSize() + reserve || ESP.getMaxAllocHeap() < 8000) {
+    return false;
+  }
+#endif
+  return renderer.storeBwBuffer();
+}
+
 void DessenAppActivity::openKeyboard() {
+  {
+    RenderLock lock;
+    // Button-only boards do not need a permanent backup for touch overlays.
+    // A keyboard is an explicit native screen, so take a best-effort snapshot here.
+    if (!frameStored) frameStored = storeOverlayFrame();
+  }
   auto kbd = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, services->keyboardPrompt());
   if (!kbd) {
     RenderLock lock;
@@ -186,6 +210,10 @@ void DessenAppActivity::loop() {
         lock.unlock();
         openKeyboard();
         return;
+      }
+      if (frameStored && services->needsNetworkHeap()) {
+        renderer.discardStoredBwBuffer();
+        frameStored = false;
       }
       // Blocking work uses the loop stack. Keep the render task out of poll().
       if (services->serviceAsyncWork()) requestUpdate();
@@ -282,11 +310,11 @@ void DessenAppActivity::render(RenderLock&&) {
     pendingSwipe = dessen::FreeInkHost::SwipeNone;
     if (host.takeRefreshRequest()) {
       renderer.displayBuffer();
-      // Snapshot the latest clean frame so it can be restored after an overlay.
+      // Only touch devices can open the global control-center overlay.
       // discard first: the slot holds the previous frame and storeBwBuffer()
       // errors on a double store.
       renderer.discardStoredBwBuffer();
-      frameStored = renderer.storeBwBuffer();
+      frameStored = mappedInput.hasTouch() && storeOverlayFrame();
       drew = true;
     }
     if (state != dessen::State::Running) break;  // still running: loop() asks for another pass
@@ -299,7 +327,7 @@ void DessenAppActivity::render(RenderLock&&) {
   if (!drew && frameStored && (state == dessen::State::Waiting || state == dessen::State::Busy)) {
     renderer.restoreBwBuffer();  // repaints the saved frame; frees the slot
     renderer.displayBuffer();
-    frameStored = renderer.storeBwBuffer();  // re-save it for the next overlay (slot is free)
+    frameStored = mappedInput.hasTouch() && storeOverlayFrame();  // only touch overlays need a standing copy
   }
 }
 
