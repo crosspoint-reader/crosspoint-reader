@@ -989,6 +989,12 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     return readStageAt(static_cast<uint64_t>(stagingIndex) * STAGE_STRIDE, &dest, STAGE_STRIDE);
   };
 
+  const auto canonicalEntry = [&](const uint16_t titlePosition) -> const StagedEntry* {
+    const uint16_t from = canonicalFrom ? canonicalFrom[titlePosition] : titlePosition;
+    if (from == titlePosition) return &entry;
+    return fetch(order[from], canonical) ? &canonical : nullptr;
+  };
+
   uint32_t nameCursor = 0;
   for (uint16_t i = 0; i < n; i++) {
     serviceBuilder(serviceUnits);
@@ -997,9 +1003,9 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     // The blob holds the path hash, basename, chosen author spelling, title, and
     // source author spelling used by later rebuilds.
     // Keeping them adjacent means no second offset has to live in the record.
-    const uint16_t from = canonicalFrom ? canonicalFrom[i] : i;
-    if (!fetch(order[from], canonical)) break;
-    nameCursor += blobBytesFor(entry, canonical);
+    const auto* chosen = canonicalEntry(i);
+    if (!chosen) break;
+    nameCursor += blobBytesFor(entry, *chosen);
     if (resolvedFirstSeen) entry.record.firstSeen = resolvedFirstSeen[order[i]];
     put(&entry.record, sizeof(ClixRecord));
   }
@@ -1024,15 +1030,15 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     put(&entry.pathHash, sizeof(entry.pathHash));
     put(entry.name, entry.record.nameLen);
 
-    const uint16_t from = canonicalFrom ? canonicalFrom[i] : i;
-    if (!fetch(order[from], canonical)) break;
-    put(&canonical.authorLen, 1);
-    if (canonical.authorLen > 0) put(canonical.author, canonical.authorLen);
+    const auto* chosen = canonicalEntry(i);
+    if (!chosen) break;
+    put(&chosen->authorLen, 1);
+    if (chosen->authorLen > 0) put(chosen->author, chosen->authorLen);
     put(&entry.titleLen, 1);
     if (entry.titleLen > 0) put(entry.title, entry.titleLen);
     put(&entry.authorLen, 1);
     if (entry.authorLen > 0) put(entry.author, entry.authorLen);
-    blobWritten += blobBytesFor(entry, canonical);
+    blobWritten += blobBytesFor(entry, *chosen);
   }
   header.nameLen = blobWritten;
   header.selfSize = header.nameStart + blobWritten;
