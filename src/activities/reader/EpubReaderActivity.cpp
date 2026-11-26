@@ -9,6 +9,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalMemory.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -25,6 +26,7 @@
 #include <limits>
 
 #include "../../util/BookmarkFile.h"
+#include "BookFontSystem.h"
 #include "BookmarkEntry.h"
 #include "ChapterBuildGate.h"
 #include "ClipSelectionActivity.h"
@@ -58,6 +60,7 @@
 #include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "sync/SyncEngine.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
@@ -175,9 +178,10 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     return;
   }
 
-  // Protected-book sidecars travel with the book; a protected book separated
-  // from its key no longer opens, so a failed move rolls everything back.
-  static constexpr const char* SIDECARS[] = {".key", ".rights"};
+  // Sidecars travel with the book: a protected book separated from its key no
+  // longer opens, and sync reads the plugin metadata next to the book. A failed
+  // move rolls everything back.
+  static constexpr const char* SIDECARS[] = {".key", ".rights", ".meta.json"};
   for (size_t i = 0; i < std::size(SIDECARS); i++) {
     const std::string from = srcPath + SIDECARS[i];
     if (!Storage.exists(from.c_str())) continue;
@@ -202,7 +206,17 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     }
   }
 
+  // Bookmarks are stored under the book's path. Like the cache, a failed move
+  // is not fatal: the book is already in place.
+  const std::string oldBookmarkPath = BookmarkUtil::getBookmarkPath(srcPath);
+  const std::string newBookmarkPath = BookmarkUtil::getBookmarkPath(dstPath);
+  if (Storage.exists(oldBookmarkPath.c_str()) &&
+      (Storage.exists(newBookmarkPath.c_str()) || !Storage.rename(oldBookmarkPath.c_str(), newBookmarkPath.c_str()))) {
+    LOG_ERR("ERS", "Failed to move bookmarks %s -> %s (non-fatal)", oldBookmarkPath.c_str(), newBookmarkPath.c_str());
+  }
+
   RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, cacheMoved ? newCachePath : oldCachePath);
+  syncEngine::sleepBookMoved(srcPath, dstPath);
   if (APP_STATE.openEpubPath == srcPath) {
     APP_STATE.openEpubPath = dstPath;
     APP_STATE.saveToFile();
@@ -237,6 +251,9 @@ EpubReaderActivity::~EpubReaderActivity() {
 
   section.reset();
   CLIPPINGS.unload();
+#if CROSSPOINT_VECTOR_FONTS
+  bookFontSystem.close();  // holds a reference to epub
+#endif
   if (pendingReadFolderMove && epub) {
     const std::string srcPath = epub->getPath();
     const std::string oldCachePath = epub->getCachePath();
@@ -276,6 +293,9 @@ bool EpubReaderActivity::loadBook() {
   }
   epub = std::move(loadedEpub);
   vocabularyMetadata.reset();
+#if CROSSPOINT_VECTOR_FONTS
+  bookFontSystem.open(epub, renderer);
+#endif
 
   ImageBlock::clearRenderFailures();
   ImageBlock::setExtractor(epub.get(), [](void* ctx, const char* src, const char* dest) {
@@ -409,9 +429,16 @@ bool EpubReaderActivity::makeRoomForChapterBuild() {
 }
 
 bool EpubReaderActivity::buildTickHeapGate() {
-  const size_t freeHeap = ESP.getFreeHeap();
-  const size_t maxBlock = ESP.getMaxAllocHeap();
-  buildHeapPaused = freeHeap < BACKGROUND_BUILD_MIN_FREE_HEAP || maxBlock < BACKGROUND_BUILD_MIN_MAX_ALLOC;
+  // The heap the build's malloc and new draw from. With PSRAM, small requests fall back to it once internal
+  // RAM runs out, so internal RAM alone paused builds for good (OnePage). Without PSRAM both are the same.
+  const auto heap = HalMemory::getDefaultHeap();
+  const bool paused =
+      heap.freeBytes < BACKGROUND_BUILD_MIN_FREE_HEAP || heap.largestBlockBytes < BACKGROUND_BUILD_MIN_MAX_ALLOC;
+  if (paused && !buildHeapPaused) {
+    LOG_DBG("ERS", "Background build paused: heap free=%u largest=%u", static_cast<unsigned>(heap.freeBytes),
+            static_cast<unsigned>(heap.largestBlockBytes));
+  }
+  buildHeapPaused = paused;
   return !buildHeapPaused;
 }
 
@@ -1450,6 +1477,9 @@ bool EpubReaderActivity::launchKOReaderSync() {
     // The destructor can no longer save the back-stack once epub is gone.
     if (footnoteDepth > 0) saveLinkStack();
     rememberBookOnceRendered();
+#if CROSSPOINT_VECTOR_FONTS
+    bookFontSystem.close();
+#endif
     epub.reset();
   }
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
@@ -1832,7 +1862,7 @@ void EpubReaderActivity::renderBook() {
           // demand after the build. Skipped for cpfont/builtin reading: the
           // release drops the persistent advance table and mini tables, which
           // would force SD metric re-reads on every fresh chapter for no gain.
-          if (!renderer.getTtfFonts().empty()) {
+          if (renderer.getTtfFonts().count(renderSpec.fontId) != 0) {
             if (auto* fcm = renderer.getFontCacheManager()) {
               fcm->releaseSdFontCaches();
             }
@@ -2221,7 +2251,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.clearScreen();
   }
 
-  drawClippingHighlights(*page, fontId, orientedMarginTop, orientedMarginLeft);
+  [[maybe_unused]] const bool drewClippingHighlights =
+      drawClippingHighlights(*page, fontId, orientedMarginTop, orientedMarginLeft);
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
   const auto tBwRender = millis();
@@ -2269,10 +2300,24 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     const int gwBytes = renderer.getDisplayWidthBytes();
     const size_t planeBytes = static_cast<size_t>(gwBytes) * gh;
 
+#ifdef BOARD_HAS_PSRAM
+    if (!grayPlanes || grayPlaneCapacity < planeBytes) {
+      grayPlanes.reset();
+      grayPlaneCapacity = 0;
+      grayPlanes = HalMemory::allocatePsram(2 * planeBytes);
+      if (grayPlanes) grayPlaneCapacity = planeBytes;
+    }
+#endif
+    const int stripRows =
+#ifdef BOARD_HAS_PSRAM
+        grayPlanes ? gh :
+#endif
+                   STRIP_ROWS;
+
     auto renderPlaneToBuffer = [&](const bool lsbPlane, uint8_t* buf) {
       renderer.setRenderMode(lsbPlane ? GfxRenderer::GRAYSCALE_LSB : GfxRenderer::GRAYSCALE_MSB);
-      for (int y = 0; y < gh; y += STRIP_ROWS) {
-        const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
+      for (int y = 0; y < gh; y += stripRows) {
+        const int rows = (gh - y < stripRows) ? (gh - y) : stripRows;
         renderer.beginStripTarget(buf + static_cast<size_t>(y) * gwBytes, y, rows);
         renderer.clearScreen(absoluteImageGrayscale ? 0xFF : 0x00);
         renderGrayscalePass();
@@ -2286,23 +2331,48 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
       return ESP.getFreeHeap() >= planeBytes + PLANE_BUF_HEADROOM &&
              ESP.getMaxAllocHeap() >= planeBytes + PLANE_BUF_MAX_ALLOC_RESERVE;
     };
-    auto lsbPlaneBuf = (overlapRefresh && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
-    auto msbPlaneBuf = (lsbPlaneBuf && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+    uint8_t* lsbPlaneBuf = nullptr;
+    uint8_t* msbPlaneBuf = nullptr;
+#ifdef BOARD_HAS_PSRAM
+    if (grayPlanes) {
+      lsbPlaneBuf = grayPlanes.get();
+      msbPlaneBuf = grayPlanes.get() + planeBytes;
+    }
+#endif
+    auto internalLsb =
+        (!lsbPlaneBuf && overlapRefresh && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+    auto internalMsb = (internalLsb && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+    if (internalLsb) {
+      lsbPlaneBuf = internalLsb.get();
+      msbPlaneBuf = internalMsb.get();
+    }
 
     if (lsbPlaneBuf) {
-      renderPlaneToBuffer(true, lsbPlaneBuf.get());
-      if (msbPlaneBuf) renderPlaneToBuffer(false, msbPlaneBuf.get());
+#ifdef BOARD_HAS_PSRAM
+      // Images and EEGO A4 clipping highlights need separate plane passes.
+      if (grayPlanes && !page->hasImages() && (!drewClippingHighlights || !BoardConfig::isEegoA4())) {
+        renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+        renderer.beginGrayPairTarget(lsbPlaneBuf, msbPlaneBuf, gh);
+        renderer.clearScreen(absoluteImageGrayscale ? 0xFF : 0x00);
+        renderGrayscalePass();
+        renderer.endStripTarget();
+      } else
+#endif
+      {
+        renderPlaneToBuffer(true, lsbPlaneBuf);
+        if (msbPlaneBuf) renderPlaneToBuffer(false, msbPlaneBuf);
+      }
       const auto tGrayRender = millis();
 
       renderer.waitRefreshComplete();
       const auto tWait = millis();
 
-      renderer.writeGrayscalePlaneStrip(true, lsbPlaneBuf.get(), 0, gh);
+      renderer.writeGrayscalePlaneStrip(true, lsbPlaneBuf, 0, gh);
       if (msbPlaneBuf) {
-        renderer.writeGrayscalePlaneStrip(false, msbPlaneBuf.get(), 0, gh);
+        renderer.writeGrayscalePlaneStrip(false, msbPlaneBuf, 0, gh);
       } else {
-        renderPlaneToBuffer(false, lsbPlaneBuf.get());
-        renderer.writeGrayscalePlaneStrip(false, lsbPlaneBuf.get(), 0, gh);
+        renderPlaneToBuffer(false, lsbPlaneBuf);
+        renderer.writeGrayscalePlaneStrip(false, lsbPlaneBuf, 0, gh);
       }
       const auto tGrayWrite = millis();
 
@@ -2453,17 +2523,17 @@ int EpubReaderActivity::clippingAtPoint(const Page& page, const int x, const int
   return -1;
 }
 
-void EpubReaderActivity::drawClippingHighlights(const Page& page, const int fontId, const int orientedMarginTop,
+bool EpubReaderActivity::drawClippingHighlights(const Page& page, const int fontId, const int orientedMarginTop,
                                                 const int orientedMarginLeft) const {
   if (!section || !CLIPPINGS.hasClippings() || section->currentPage < 0 || section->currentPage >= section->pageCount) {
-    return;
+    return false;
   }
 
   size_t chapterClippings = 0;
   for (size_t i = 0; i < CLIPPINGS.clippingCount(); ++i) {
     if (CLIPPINGS.clippingAt(i)->spineIndex == currentSpineIndex) ++chapterClippings;
   }
-  if (!chapterClippings) return;
+  if (!chapterClippings) return false;
 
   const auto started = millis();
   size_t highlightedWords = 0;
@@ -2540,6 +2610,7 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
   }
   LOG_DBG("CLIP", "Highlight pass: chapter_clips=%u highlighted_words=%u time=%lums",
           static_cast<unsigned>(chapterClippings), static_cast<unsigned>(highlightedWords), millis() - started);
+  return highlightedWords != 0;
 }
 
 void EpubReaderActivity::renderStatusBar() const {
@@ -3424,6 +3495,21 @@ void EpubReaderActivity::restoreSavedPosition() {
     section.reset();
   }
   requestUpdate();
+}
+
+void EpubReaderActivity::prepareForSleep() {
+  ReaderActivity::prepareForSleep();
+  if (!epub || !KOREADER_STORE.getSyncOnSleep() || !KOREADER_STORE.hasCredentials()) return;
+  // Sync On Sleep runs after this activity is gone, so hand over the position now.
+  // ActivityManager already holds the render lock here; taking it again would deadlock.
+  CrossPointPosition position = getCurrentPosition();
+  if (isAtEndOfBook() && epub->getSpineItemsCount() > 0) {
+    // The finished screen sits one past the last chapter, which has no size or XPath.
+    // Hand over the end of the last chapter instead.
+    position = {epub->getSpineItemsCount() - 1, 1, 2};
+    position.hasResolvedSpineIndex = true;
+  }
+  syncEngine::noteSleepBook(epub->getPath(), position);
 }
 
 void EpubReaderActivity::loadCachedBookmarks() {

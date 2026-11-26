@@ -10,6 +10,9 @@ options depend on the device.
 - **Side buttons** contains the reader layout, orientation, and page-turn long press.
 - **Taps and gestures** contains **Touch controls while reading** and the page/menu gestures.
 
+On OnePage, the front buttons are Back, Left, Right, and Confirm from left to
+right. The remapping preview follows this order.
+
 **Page turn long press** is shared by Front buttons and Side buttons. Changing it
 in either group changes the same setting.
 

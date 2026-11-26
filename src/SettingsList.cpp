@@ -104,6 +104,12 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
                            StrId::STR_CAT_READER)
            .withTextSettings());
+#if CROSSPOINT_VECTOR_FONTS
+  emit(SettingInfo::Enum(StrId::STR_PUBLISHER_FONTS, &CrossPointSettings::publisherFonts,
+                         {StrId::STR_STATE_OFF, StrId::STR_PUBLISHER_FONTS_ACCENTS, StrId::STR_PUBLISHER_FONTS_ALL},
+                         "publisherFonts", StrId::STR_CAT_READER)
+           .withTextSettings());
+#endif
   emit(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled, "focusReadingEnabled",
                            StrId::STR_CAT_READER)
            .withTextSettings());
@@ -332,6 +338,15 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
         KOREADER_STORE.saveToFile();
       },
       "koSyncClippings", StrId::STR_KOREADER_SYNC));
+  emit(SettingInfo::DynamicEnum(
+      StrId::STR_SYNC_ON_SLEEP, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
+      [] { return static_cast<uint8_t>(KOREADER_STORE.getSyncOnSleep()); },
+      [](uint8_t v) {
+        if (KOREADER_STORE.getSyncOnSleep() == (v != 0)) return;
+        KOREADER_STORE.setSyncOnSleep(v != 0);
+        KOREADER_STORE.saveToFile();
+      },
+      "koSyncOnSleep", StrId::STR_KOREADER_SYNC));
   // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
   emit(SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &CrossPointSettings::statusBarChapterPageCount,
                            "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR));

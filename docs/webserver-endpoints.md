@@ -572,12 +572,15 @@ contracts are below. Outbound TLS is encrypted but the peer is not verified
 
 ### `GET /api/plugins`
 
-Installed plugins that ship a `plugin.js`:
-`[{"name":"<folder>","dir":"<root>/<folder>","title":"<title>","mount":"settings"}, ...]`.
-`dir` is where the plugin is installed (plugins keep their own files there);
-`title` and `mount` come from the plugin's `manifest.json` when present.
-Mount `settings` (the default) shows the card on the Plugins page (`/plugins`);
-mount `files` shows it in the File Manager.
+All installed plugins, including those without browser settings:
+`[{"name":"<folder>","dir":"<root>/<folder>","title":"<title>","mount":"settings","hasPluginJs":true}, ...]`.
+`dir` is the installed folder. `title`, `mount`, optional `version` and
+`author` are read from `manifest.json` and overridden by `device.json` when
+present. `hasPluginJs` tells browser hosts whether the plugin provides a script.
+The Plugins page (`/plugins`) lists every installed plugin and can jump to
+its section. Browser settings render there when `mount` is `settings`
+(the default); `files` plugins render in the File Manager. Native-only
+plugins have an informational card without loading a browser script.
 
 ### `GET /plugin?name=<plugin>&file=<file>`
 
@@ -666,7 +669,11 @@ plus optional `"method"` (`GET`, `POST`, `PUT`, `PATCH`, or `DELETE`; default
   `Authorization`) are sent only while the target keeps the starting URL's
   scheme, host, and port; a redirect elsewhere, including https→http, gets none.
 - For a GET without a body, an answer cut short mid-transfer resumes on its own
-  with a Range request.
+  with a Range request. If the server ignores Range and sends the whole body
+  again, the device rewrites the `.part` from that response. On a request with
+  `offset` above 0 it then ignores `maxBytes` and finishes the whole body, so
+  that request can be long; if the browser loses it, check whether `dest` was
+  installed.
 - **Segments:** `maxBytes` (at most 4MB) ends the request after that many
   bytes with `complete:false`; send the next request with `offset` set to the
   returned `bytes` to continue the same `.part`. `api.fetchToSd()` does this
@@ -686,7 +693,7 @@ plus optional `"method"` (`GET`, `POST`, `PUT`, `PATCH`, or `DELETE`; default
   `400 {"error":"offset and maxBytes need a GET without a body"}`;
   `409 {"error":"offset mismatch","bytes":N}`
   when `offset` does not match the `.part` size; `502 {"error":"sd write failed" |
-  "range unsupported" | "download truncated","bytes":N,"complete":false}`.
+  "download truncated","bytes":N,"complete":false}`.
 
 ### `POST /api/plugin-fs?plugin=<name>&path=<abs path>`
 

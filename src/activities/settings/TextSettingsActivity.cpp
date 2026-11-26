@@ -29,7 +29,15 @@ constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
     StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
     StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION_NO_PREVIEW,
-                                        StrId::STR_EMBEDDED_STYLE_NO_PREVIEW, StrId::STR_TEXT_AA_NO_PREVIEW};
+                                        StrId::STR_EMBEDDED_STYLE_NO_PREVIEW, StrId::STR_TEXT_AA_NO_PREVIEW,
+#if CROSSPOINT_VECTOR_FONTS
+                                        StrId::STR_PUBLISHER_FONTS
+#endif
+};
+#if CROSSPOINT_VECTOR_FONTS
+constexpr StrId PUBLISHER_FONTS_IDS[] = {StrId::STR_STATE_OFF, StrId::STR_PUBLISHER_FONTS_ACCENTS,
+                                         StrId::STR_PUBLISHER_FONTS_ALL};
+#endif
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -230,11 +238,19 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
       case Tab::Layout:
         rowValues_[i] = layoutValueText(i);
         break;
+#if CROSSPOINT_VECTOR_FONTS
+      case Tab::Style:
+        if (i == static_cast<int>(StyleRow::PublisherFonts)) {
+          const uint8_t v = SETTINGS.publisherFonts;
+          rowValues_[i] = I18N.get(v < std::size(PUBLISHER_FONTS_IDS) ? PUBLISHER_FONTS_IDS[v] : StrId::STR_STATE_OFF);
+        }
+        break;
+#endif
       default:
         break;
     }
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
-    if (tab_ == Tab::Style) {
+    if (tab_ == Tab::Style && rowValues_[i].empty()) {
       GUI.setCheckboxRow(rowItems_[i], styleRowChecked(i));
     } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::ParaSpacing)) {
       GUI.setCheckboxRow(rowItems_[i], SETTINGS.extraParagraphSpacing);
@@ -265,6 +281,9 @@ const char* TextSettingsActivity::confirmLabelText() const {
     case Tab::Layout:
       return ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ? tr(STR_TOGGLE) : tr(STR_SELECT);
     case Tab::Style:
+#if CROSSPOINT_VECTOR_FONTS
+      if (ringPos() - 1 == static_cast<int>(StyleRow::PublisherFonts)) return tr(STR_SELECT);
+#endif
       return tr(STR_TOGGLE);
     default:
       return tr(STR_SELECT);
@@ -316,15 +335,13 @@ void TextSettingsActivity::applyFamily(int listIndex) {
   if (font.isBuiltin) {
     SETTINGS.fontFamily = font.settingIndex;
     SETTINGS.sdFontFamilyName[0] = '\0';
-    sdFontSystem.ensureLoaded(renderer);  // unloads the previously resident SD font
+    sdFontSystem.ensureLoaded(renderer, /*retryUnavailable=*/false);
     currentFamilyIndex_ = listIndex;
   } else if (registry_) {
-    const int sdIdx = font.settingIndex - CrossPointSettings::BUILTIN_FONT_COUNT;
-    const auto& families = registry_->getFamilies();
-    if (sdIdx < static_cast<int>(families.size())) {
-      strncpy(SETTINGS.sdFontFamilyName, families[sdIdx].name.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
+    if (registry_->findFamily(font.name)) {
+      strncpy(SETTINGS.sdFontFamilyName, font.name.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
       SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
-      sdFontSystem.ensureLoaded(renderer);
+      sdFontSystem.ensureLoaded(renderer, /*retryUnavailable=*/false);
       currentFamilyIndex_ = listIndex;
     }
   }
@@ -341,7 +358,7 @@ void TextSettingsActivity::applyFamily(int listIndex) {
 void TextSettingsActivity::activateRow(int row) {
   switch (tab_) {
     case Tab::Family:
-      if (row != currentFamilyIndex_) {
+      if (row != currentFamilyIndex_ || (fonts_[row].isBuiltin && SETTINGS.sdFontFamilyName[0] != '\0')) {
         applyFamily(row);
         // Persist immediately (like SettingsActivity's per-change saves): the
         // parent's result callback only runs on a normal finish(), so relying
@@ -379,7 +396,7 @@ void TextSettingsActivity::applySize(int listIndex) {
 
   currentSizeIndex_ = listIndex;
   SETTINGS.fontPointSize = sizes_[listIndex].pointSize;
-  sdFontSystem.ensureLoaded(renderer);
+  sdFontSystem.ensureLoaded(renderer, /*retryUnavailable=*/false);
 }
 
 void TextSettingsActivity::confirmLayoutRow(int row) {
@@ -497,6 +514,16 @@ void TextSettingsActivity::confirmStyleRow(int row) {
     case StyleRow::AntiAliasing:
       SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;
       break;
+#if CROSSPOINT_VECTOR_FONTS
+    case StyleRow::PublisherFonts:
+      optionPopup_.show(StrId::STR_PUBLISHER_FONTS, PUBLISHER_FONTS_IDS,
+                        static_cast<int>(std::size(PUBLISHER_FONTS_IDS)), SETTINGS.publisherFonts, [](int idx) {
+                          SETTINGS.publisherFonts = static_cast<uint8_t>(idx);
+                          SETTINGS.saveToFile();
+                        });
+      requestUpdate();
+      return;
+#endif
 
     default:
       return;

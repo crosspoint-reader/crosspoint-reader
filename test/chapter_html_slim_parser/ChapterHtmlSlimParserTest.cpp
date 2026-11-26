@@ -7,6 +7,7 @@
 #include <array>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <set>
@@ -18,6 +19,7 @@
 #include "src/activities/settings/TextSettingsPreview.h"
 #include "src/clippings/ClippingText.h"
 #include "src/util/ParagraphIndentMigration.h"
+#include "test/ScopedTempDir.h"
 
 #define class struct
 #define private public
@@ -81,15 +83,14 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
   // clipping does: '\n' at a paragraph start, ' ' across a source gap, nothing otherwise.
   std::string parseToParagraphText(const std::string& body) {
     const std::string html = "<html><body>" + body + "</body></html>";
-    const std::string testId = std::to_string(std::hash<std::string>{}(html));
-    const auto tempDir = std::filesystem::temp_directory_path();
-    filepath = (tempDir / ("crosspoint-clipping-paragraphs-" + testId + ".xhtml")).string();
+    const ScopedTempDir tempDir;
+    filepath = (tempDir.path() / "clipping-paragraphs.xhtml").string();
     {
       HalFile file;
       EXPECT_TRUE(file.open(filepath.c_str(), "wb"));
       EXPECT_EQ(file.write(html.data(), html.size()), html.size());
     }
-    const auto cachePath = (tempDir / ("crosspoint-clipping-paragraphs-" + testId + ".bin")).string();
+    const auto cachePath = (tempDir.path() / "clipping-paragraphs.bin").string();
     std::string selected;
     uint32_t previousEnd = 0;
     bool paragraphStartPending = false;
@@ -120,8 +121,6 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
     };
     parser.paragraphIndentSpaces = 0;
     EXPECT_TRUE(parser.parseAndBuildPages());
-    std::filesystem::remove(filepath);
-    std::filesystem::remove(cachePath);
     return selected;
   }
 };
@@ -179,8 +178,8 @@ TEST_F(ChapterHtmlSlimParserTest, StreamsGifDimensionsWithoutExtractingPayload) 
   parser.epub = std::make_shared<Epub>();
   parser.epub->imageBytes = {'G', 'I', 'F', '8', '9', 'a', 1, 0, 1, 0};
   parser.imageRendering = 0;
-  const auto imagePath = std::filesystem::temp_directory_path() / "crosspoint-gif-probe-0.gif";
-  std::filesystem::remove(imagePath);
+  const ScopedTempDir tempDir;
+  const auto imagePath = tempDir.path() / "gif-probe-0.gif";
   parser.imageBasePath = imagePath.string().substr(0, imagePath.string().size() - 5);
   Epub::enableGifProbeForTest = true;
   const char* attrs[] = {"src", "probe.gif", nullptr};
@@ -189,7 +188,6 @@ TEST_F(ChapterHtmlSlimParserTest, StreamsGifDimensionsWithoutExtractingPayload) 
   EXPECT_EQ(parser.epub->headerProbes, 1u);
   EXPECT_EQ(parser.epub->fullExtractions, 0u);
   EXPECT_FALSE(std::filesystem::exists(imagePath));
-  std::filesystem::remove(imagePath);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, AbandonedLayoutStopsExtractingLines) {
@@ -213,9 +211,8 @@ TEST_P(ParserStopTest, PageCallbackStopsParsingAndClosesFile) {
   std::string html = "<html><body>";
   for (int i = 0; i < 100; ++i) html += GetParam();
   html += "</body></html>";
-  // One file per parameter: ctest runs the instances in parallel.
-  const std::string testId = std::to_string(std::hash<std::string>{}(html));
-  filepath = (std::filesystem::temp_directory_path() / ("crosspoint-parser-stop-" + testId + ".xhtml")).string();
+  const ScopedTempDir tempDir;
+  filepath = (tempDir.path() / "parser-stop.xhtml").string();
   {
     HalFile file;
     ASSERT_TRUE(file.open(filepath.c_str(), "wb"));
@@ -237,7 +234,6 @@ TEST_P(ParserStopTest, PageCallbackStopsParsingAndClosesFile) {
   EXPECT_EQ(renderer.fontPreparations, fontPreparationsAtStop);
   EXPECT_EQ(parser.xmlParser_, nullptr);
   EXPECT_FALSE(parser.parseFile_.isOpen());
-  std::filesystem::remove(filepath);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -419,7 +415,8 @@ TEST_F(ChapterHtmlSlimParserTest, BlockFontScaleInheritsAndUsesHeadingDefaults) 
 }
 
 TEST_F(ChapterHtmlSlimParserTest, PageImageDeserializeRejectsMissingImageBlock) {
-  const auto path = std::filesystem::temp_directory_path() / "crosspoint-missing-image-cache.bin";
+  const ScopedTempDir tempDir;
+  const auto path = tempDir.path() / "missing-image-cache.bin";
   {
     HalFile output;
     ASSERT_TRUE(output.open(path.c_str(), "wb"));
@@ -892,7 +889,8 @@ TEST_F(ChapterBlockDecorationTest, InheritUsesSemanticParentEmphasisAndRestoresS
 }
 
 TEST_F(ChapterBlockDecorationTest, FontInheritanceUsesWinningCssRuleBeforeInlineOverride) {
-  const auto path = std::filesystem::temp_directory_path() / "crosspoint-font-inheritance.css";
+  const ScopedTempDir tempDir;
+  const auto path = tempDir.path() / "font-inheritance.css";
   {
     HalFile output;
     ASSERT_TRUE(output.open(path.c_str(), "wb"));
@@ -907,7 +905,6 @@ TEST_F(ChapterBlockDecorationTest, FontInheritanceUsesWinningCssRuleBeforeInline
     ASSERT_TRUE(input.open(path.c_str(), "rb"));
     ASSERT_EQ(cssParser.loadFromStream(input), CssParser::ParseResult::Complete);
   }
-  std::filesystem::remove(path);
   open("body", "font-weight:normal;font-style:normal");
   const XML_Char* inherited[] = {"id", "inherited", "class", "inherited", nullptr};
   ChapterHtmlSlimParser::startElement(&parser, "p", inherited);
@@ -1135,7 +1132,8 @@ TEST_F(ChapterBlockDecorationTest, MultiWordSpanStaysText) {
 }
 
 TEST_F(ChapterBlockDecorationTest, FirstLetterRuleCapturesQuoteAndLetter) {
-  const auto cssPath = std::filesystem::temp_directory_path() / "crosspoint-first-letter.css";
+  const ScopedTempDir tempDir;
+  const auto cssPath = tempDir.path() / "first-letter.css";
   {
     HalFile output;
     ASSERT_TRUE(output.open(cssPath.c_str(), "wb"));
@@ -1157,7 +1155,6 @@ TEST_F(ChapterBlockDecorationTest, FirstLetterRuleCapturesQuoteAndLetter) {
   const auto caps = elementsWithTag(TAG_PageDropCap);
   ASSERT_EQ(caps.size(), 1u);
   EXPECT_STREQ(static_cast<const PageDropCap*>(caps[0])->getText(), "\xe2\x80\x9cI");
-  std::filesystem::remove(cssPath);
 }
 
 // A drop cap draws codepoints one by one; Indic text must shape as a whole word.
@@ -1177,7 +1174,8 @@ TEST_F(ChapterBlockDecorationTest, IndicFloatedSpanStaysText) {
 }
 
 TEST_F(ChapterBlockDecorationTest, IndicFirstLetterRuleKeepsQuoteAndClusterInWord) {
-  const auto cssPath = std::filesystem::temp_directory_path() / "crosspoint-first-letter-indic.css";
+  const ScopedTempDir tempDir;
+  const auto cssPath = tempDir.path() / "first-letter-indic.css";
   {
     HalFile output;
     ASSERT_TRUE(output.open(cssPath.c_str(), "wb"));
@@ -1205,7 +1203,6 @@ TEST_F(ChapterBlockDecorationTest, IndicFirstLetterRuleKeepsQuoteAndClusterInWor
   EXPECT_STREQ(opening.wordText(0), "\xe2\x80\x9c\xe0\xa6\x95\xe0\xa6\xbf");
   // The restored quote keeps its own source offset, right after "Before here", not the previous word's.
   EXPECT_EQ(opening.wordSourceRange(0).start, before.wordSourceRange(before.wordCount() - 1).end);
-  std::filesystem::remove(cssPath);
 }
 
 TEST_F(ChapterBlockDecorationTest, BorderedBlockFramesItsTextAndInsetsIt) {
@@ -1488,7 +1485,8 @@ TEST_F(ChapterInlineSizeTest, MixedSizesWithinALineSurviveTheCache) {
   EXPECT_EQ(block.wordFontId(1, NOTOSANS_14_FONT_ID), NOTOSANS_12_FONT_ID);
   EXPECT_EQ(block.wordFontId(3, NOTOSANS_14_FONT_ID), NOTOSANS_16_FONT_ID);
 
-  const auto path = std::filesystem::temp_directory_path() / "crosspoint-word-fonts.bin";
+  const ScopedTempDir tempDir;
+  const auto path = tempDir.path() / "word-fonts.bin";
   {
     HalFile output;
     ASSERT_TRUE(output.open(path.c_str(), "wb"));
@@ -1501,7 +1499,6 @@ TEST_F(ChapterInlineSizeTest, MixedSizesWithinALineSurviveTheCache) {
   for (uint16_t i = 0; i < block.wordCount(); ++i) {
     EXPECT_EQ(cached->wordFontId(i, NOTOSANS_14_FONT_ID), block.wordFontId(i, NOTOSANS_14_FONT_ID));
   }
-  std::filesystem::remove(path);
 }
 
 TEST_F(ChapterBlockDecorationTest, SdAndVectorFontsSizeThroughTheVariantProvider) {
@@ -1526,6 +1523,200 @@ TEST_F(ChapterBlockDecorationTest, SdAndVectorFontsSizeThroughTheVariantProvider
   EXPECT_EQ(body.wordFontId(1, SD_FONT), SD_FONT * 1000 + 80);
 }
 
+TEST_F(ChapterBlockDecorationTest, EmbeddedFamiliesFollowPublisherFontsMode) {
+  const uint32_t body = CssParser::hashFontFamily("Garamond");
+  const uint32_t hand = CssParser::hashFontFamily("Handscript");
+  renderer.embeddedFamilies = {body, hand};
+  constexpr int BODY_FONT = 900100;
+  constexpr int HAND_FONT = 901100;
+  const auto parse = [this] {
+    open("body", "font-family: Garamond, serif");
+    open("p", nullptr);
+    text("Plain ");
+    open("span", "font-family: 'handscript'");
+    text("inked");
+    close("span");
+    close("p");
+    open("p", "font-family: \"Handscript\"");
+    text("Letter");
+    close("p");
+    close("body");
+  };
+
+  parser.setPublisherFonts(PublisherFonts::Accents);
+  parse();
+  auto lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  const auto& mixed = *static_cast<const PageLine*>(lines[0])->getBlock();
+  EXPECT_EQ(mixed.getBlockStyle().fontId, 0);  // the body family stays in the reader font
+  EXPECT_EQ(mixed.wordFontId(0, NOTOSANS_14_FONT_ID), NOTOSANS_14_FONT_ID);
+  EXPECT_EQ(mixed.wordFontId(1, NOTOSANS_14_FONT_ID), HAND_FONT);
+  EXPECT_EQ(static_cast<const PageLine*>(lines[1])->getBlock()->getBlockStyle().fontId, HAND_FONT);
+
+  pages.clear();
+  parser.beginParse();
+  parser.setPublisherFonts(PublisherFonts::All);
+  parse();
+  lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  const auto& all = *static_cast<const PageLine*>(lines[0])->getBlock();
+  EXPECT_EQ(all.getBlockStyle().fontId, BODY_FONT);
+  EXPECT_EQ(all.wordFontId(0, NOTOSANS_14_FONT_ID), BODY_FONT);
+  EXPECT_EQ(all.wordFontId(1, NOTOSANS_14_FONT_ID), HAND_FONT);
+
+  pages.clear();
+  parser.beginParse();
+  parser.setPublisherFonts(PublisherFonts::Off);
+  parse();
+  lines = elementsWithTag(TAG_PageLine);
+  ASSERT_EQ(lines.size(), 2u);
+  EXPECT_EQ(static_cast<const PageLine*>(lines[1])->getBlock()->getBlockStyle().fontId, 0);
+}
+
+class PublisherBodyFontTest : public ChapterBlockDecorationTest {
+ protected:
+  std::filesystem::path directory;
+  void SetUp() override {
+    ChapterBlockDecorationTest::SetUp();
+    parser.fontId = NOTOSANS_14_FONT_ID;
+    directory = std::filesystem::temp_directory_path() / "crosspoint_body_font_test" /
+                ::testing::UnitTest::GetInstance()->current_test_info()->name();
+    std::filesystem::create_directories(directory);
+    filepath = (directory / "chapter.xhtml").string();
+    renderer.embeddedFamilies = {CssParser::hashFontFamily("EBGaramond"), CssParser::hashFontFamily("YatraOne"),
+                                 CssParser::hashFontFamily("Roboto")};
+    std::ofstream cssFile(directory / "style.css");
+    cssFile << ".indent, .noindent { font-family: EBGaramond, serif; }"
+               ".date, h1 { font-family: YatraOne, sans-serif; }"
+               ".block { font-family: Roboto, sans-serif; }";
+    cssFile.close();
+    HalFile source;
+    ASSERT_TRUE(Storage.openFileForRead("TST", (directory / "style.css").string(), source));
+    ASSERT_EQ(cssParser.loadFromStream(source), CssParser::ParseResult::Complete);
+  }
+  void TearDown() override {
+    parser.abortParse();
+    std::filesystem::remove_all(directory);
+  }
+  void parse(const std::string& html, PublisherFonts mode = PublisherFonts::Accents) {
+    std::ofstream output(filepath);
+    output << html;
+    output.close();
+    parser.setPublisherFonts(mode);
+    ASSERT_TRUE(parser.parseAndBuildPages());
+  }
+  int fontFor(const char* word) {
+    for (const auto& page : pages) {
+      for (const auto& element : page->elements) {
+        if (element->getTag() != TAG_PageLine) continue;
+        const auto& block = *static_cast<const PageLine*>(element.get())->getBlock();
+        for (uint16_t i = 0; i < block.wordCount(); ++i) {
+          if (strcmp(block.wordText(i), word) == 0) {
+            const int font = block.wordFontId(i, parser.fontId);
+            return font == parser.fontId ? 0 : font;
+          }
+        }
+      }
+    }
+    ADD_FAILURE() << "Missing word: " << word;
+    return -1;
+  }
+};
+
+TEST_F(PublisherBodyFontTest, ParagraphBodyFontDoesNotComeFromLeadingDateOrHeading) {
+  parse(
+      "<html><body><h1>Heading</h1><p class='date'>Date</p>"
+      "<p class='noindent'>Ordinary body paragraph with enough narrative text.</p>"
+      "<p class='indent'>More narrative with an <span class='block'>inline</span> accent.</p>"
+      "<p class='block'>Quotation</p></body></html>");
+  EXPECT_EQ(fontFor("Ordinary"), 0);
+  EXPECT_EQ(fontFor("More"), 0);
+  EXPECT_EQ(fontFor("Heading"), 901200);
+  EXPECT_EQ(fontFor("Date"), 901100);
+  EXPECT_EQ(fontFor("inline"), 902100);
+  EXPECT_EQ(fontFor("Quotation"), 902100);
+}
+
+TEST_F(PublisherBodyFontTest, ExplicitRootFontTakesPriorityOverParagraphUsage) {
+  parse(
+      "<html><body style='font-family: EBGaramond'><p>Body</p>"
+      "<p class='block'>A much longer paragraph in an intentionally different publisher font.</p></body></html>");
+  EXPECT_EQ(fontFor("Body"), 0);
+  EXPECT_EQ(fontFor("longer"), 902100);
+}
+
+TEST_F(PublisherBodyFontTest, HiddenAndDecorativeTextDoesNotChooseTheBodyFont) {
+  const std::string decoration(512, 'X');
+  parse(
+      "<html><head><title>Title</title></head><body>"
+      "<p class='date' hidden='hidden'>" +
+      decoration +
+      "</p>"
+      "<blockquote><p class='block'>" +
+      decoration +
+      "</p></blockquote>"
+      "<p class='date' style='text-align: center'>" +
+      decoration +
+      "</p>"
+      "<p class='noindent'>Ordinary prose</p></body></html>");
+  EXPECT_EQ(parser.bodyFontFamily, CssParser::hashFontFamily("EBGaramond"));
+  EXPECT_EQ(fontFor("Ordinary"), 0);
+}
+
+TEST_F(PublisherBodyFontTest, InlineAccentDoesNotChooseTheParagraphFamily) {
+  parse(
+      "<html><body><p class='indent'>"
+      "<span class='block'>A much longer inline accent</span> Body</p></body></html>");
+  EXPECT_EQ(parser.bodyFontFamily, CssParser::hashFontFamily("EBGaramond"));
+  EXPECT_EQ(fontFor("Body"), 0);
+  EXPECT_EQ(fontFor("accent"), 902100);
+}
+
+TEST_F(PublisherBodyFontTest, ReaderFontParagraphsKeepMinorityEmbeddedAccents) {
+  parse(
+      "<html><body><p>Ordinary prose stays in the selected reader font without an embedded family.</p>"
+      "<p class='block'>Quotation</p></body></html>");
+  EXPECT_EQ(fontFor("Ordinary"), 0);
+  EXPECT_EQ(fontFor("Quotation"), 902100);
+}
+
+TEST_F(PublisherBodyFontTest, NoOrdinaryParagraphsPreservesDecorativeFonts) {
+  parse("<html><body><h1>Heading</h1><p class='date' style='text-align: center'>Dedication</p></body></html>");
+  EXPECT_EQ(fontFor("Heading"), 901200);
+  EXPECT_EQ(fontFor("Dedication"), 901100);
+}
+
+TEST_F(PublisherBodyFontTest, AllTextStillUsesThePublisherBodyFont) {
+  parse("<html><body><p class='indent'>Body</p></body></html>", PublisherFonts::All);
+  EXPECT_EQ(fontFor("Body"), 900100);
+  EXPECT_FALSE(parser.bodyFontDetected);
+}
+
+TEST_F(PublisherBodyFontTest, OffStillUsesTheReaderFontEverywhere) {
+  parse("<html><body><h1>Heading</h1><p class='indent'>Body</p></body></html>", PublisherFonts::Off);
+  EXPECT_EQ(fontFor("Body"), 0);
+  EXPECT_EQ(fontFor("Heading"), 0);
+  EXPECT_FALSE(parser.bodyFontDetected);
+}
+
+TEST_F(PublisherBodyFontTest, InheritedContainerFamilyKeepsInlineAccent) {
+  parse(
+      "<html><body><div style='font-family: EBGaramond'><p>Body narrative</p>"
+      "<p><span style='font-family: YatraOne'>Accent</span></p></div></body></html>");
+  EXPECT_EQ(fontFor("Body"), 0);
+  EXPECT_EQ(fontFor("Accent"), 901100);
+}
+
+TEST_F(PublisherBodyFontTest, LongChapterRewindsBeforeLayingOutTheFirstPage) {
+  std::string html = "<html><body><p class='indent'>First ";
+  for (size_t i = 0; i < 12000; ++i) html += "prose ";
+  html += "</p><p class='block'>Lastaccent</p></body></html>";
+  parse(html);
+  EXPECT_EQ(parser.bodyFontFamily, CssParser::hashFontFamily("EBGaramond"));
+  EXPECT_EQ(fontFor("First"), 0);
+  EXPECT_EQ(fontFor("Lastaccent"), 902100);
+}
+
 TEST_F(ChapterBlockDecorationTest, UnloadableVariantFallsBackToSectionFont) {
   EXPECT_EQ(TextBlock::renderFontId(renderer, 12345, 7), 7);
   installSyntheticVariants(renderer);
@@ -1543,7 +1734,8 @@ TEST_F(ChapterInlineSizeTest, UniformLinesCarryNoWordFonts) {
 
 TEST_F(ChapterTableBorderTest, ScansColumnWidthsFromMarkup) {
   renderer.sdFont = true;
-  const auto path = std::filesystem::temp_directory_path() / "crosspoint-table-scan.xhtml";
+  const ScopedTempDir tempDir;
+  const auto path = tempDir.path() / "table-scan.xhtml";
   {
     HalFile output;
     ASSERT_TRUE(output.open(path.c_str(), "wb"));
@@ -1572,7 +1764,6 @@ TEST_F(ChapterTableBorderTest, ScansColumnWidthsFromMarkup) {
   parser.planTableColumns(measure);
   EXPECT_EQ(parser.tableColumnWidths[0], 16 + 8);
   EXPECT_EQ(parser.tableColumnWidths[1], 200 - 24);
-  std::filesystem::remove(path);
 }
 
 TEST_F(ChapterTableBorderTest, RowsUsePlannedColumnWidths) {
@@ -2009,6 +2200,50 @@ TEST_F(ChapterBlockDecorationTest, AncestorShadePaintsBeforeNestedBorders) {
   }
 }
 
+TEST_F(ChapterBlockDecorationTest, ShadedBoxSkipsGrayscaleOverlay) {
+  open("div", "background: #efeff0");
+  text("Inside");
+  close("div");
+  ASSERT_NE(parser.currentPage, nullptr);
+
+  for (const auto plane : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+    SCOPED_TRACE(plane);
+    renderer.renderMode = plane;
+    renderer.absoluteGrayPlanes = false;
+    renderer.boxPaints.clear();
+    parser.currentPage->render(renderer, 0, 0, 0);
+    EXPECT_TRUE(renderer.boxPaints.empty());
+
+    renderer.absoluteGrayPlanes = true;
+    renderer.boxPaints.clear();
+    parser.currentPage->render(renderer, 0, 0, 0);
+    EXPECT_EQ(renderer.boxPaints, "s");
+  }
+}
+
+TEST_F(ChapterBlockDecorationTest, UnshadedTextAndBordersRenderInEveryPass) {
+  open("p", nullptr);
+  text("Plain");
+  close("p");
+  open("div", "background: #fff; border: 1px solid");
+  text("Bordered");
+  close("div");
+  ASSERT_NE(parser.currentPage, nullptr);
+
+  for (const auto mode : {GfxRenderer::BW, GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+    SCOPED_TRACE(mode);
+    renderer.renderMode = mode;
+    renderer.boxPaints.clear();
+    renderer.textDraws.clear();
+    parser.currentPage->render(renderer, 0, 0, 0);
+
+    EXPECT_EQ(renderer.boxPaints, "bbbb");
+    ASSERT_EQ(renderer.textDraws.size(), 2u);
+    EXPECT_EQ(renderer.textDraws[0].text, "Plain");
+    EXPECT_EQ(renderer.textDraws[1].text, "Bordered");
+  }
+}
+
 }  // namespace
 
 TEST(ParagraphIndentation, OverridesNonnegativeCssAndPreservesHangingIndent) {
@@ -2151,7 +2386,8 @@ TEST(TextSpacingLayout, CachedPageRestoresSpacing) {
   ParsedText text(false, false, style);
   text.addWord("一二三", EpdFontFamily::REGULAR);
   text.addWord("四五", EpdFontFamily::REGULAR);
-  const auto path = (std::filesystem::temp_directory_path() / "crosspoint-text-spacing.bin").string();
+  const ScopedTempDir tempDir;
+  const auto path = (tempDir.path() / "text-spacing.bin").string();
   unsigned lines = 0;
   text.layoutAndExtractLines(
       renderer, 0, 200,
@@ -2181,7 +2417,6 @@ TEST(TextSpacingLayout, CachedPageRestoresSpacing) {
       },
       true, -2, 50);
   EXPECT_EQ(lines, 1u);
-  std::filesystem::remove(path);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, ParserAppliesTextSpacingToParagraphs) {

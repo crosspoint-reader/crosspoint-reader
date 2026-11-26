@@ -1,4 +1,10 @@
 #pragma once
+#include <VectorFontSupport.h>
+
+#if CROSSPOINT_VECTOR_FONTS
+#include <atomic>
+#endif
+
 #include "EpdFont.h"
 
 class EpdFontFamily {
@@ -34,9 +40,13 @@ class EpdFontFamily {
   void getTextDimensions(const char* string, int* w, int* h, Style style = REGULAR) const;
   const EpdFontData* getData(Style style = REGULAR) const;
   const EpdGlyph* getGlyph(uint32_t cp, Style style = REGULAR) const;
-  const EpdGlyph* getGlyphMetrics(uint32_t cp, EpdGlyph& solidFallback, Style style = REGULAR) const {
-    return getFont(style)->getGlyphMetrics(cp, solidFallback);
-  }
+  const EpdGlyph* getGlyphMetrics(uint32_t cp, EpdGlyph& solidFallback, Style style = REGULAR,
+                                  const EpdFontData** glyphData = nullptr) const;
+  void setGlyphFallback(const EpdFontFamily* fallback) { glyphFallback = fallback; }
+#if CROSSPOINT_VECTOR_FONTS
+  void setGlyphLoadFailureFlag(const std::atomic<bool>* failure) { glyphLoadFailed = failure; }
+#endif
+  bool hasGlyphFallback() const { return glyphFallback != nullptr; }
   /// Returns true if the resolved style's font can render `cp` directly
   /// (interval coverage only — see EpdFont::hasCodepoint).
   bool hasCodepoint(uint32_t cp, Style style = REGULAR) const;
@@ -52,6 +62,15 @@ class EpdFontFamily {
   const EpdFont* italic;
   const EpdFont* boldItalic;
   float sizeInPixels;
+  const EpdFontFamily* glyphFallback = nullptr;
+#if CROSSPOINT_VECTOR_FONTS
+  const std::atomic<bool>* glyphLoadFailed = nullptr;
+#endif
+
+  bool useFallbackOnly() const;
+
+  const EpdFont* fallbackFont(Style style) const;
+  const EpdFont* glyphFont(uint32_t cp, Style style) const;
 
   const EpdFont* getFont(Style style) const;
 };

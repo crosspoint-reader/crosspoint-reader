@@ -91,6 +91,9 @@ class GfxRenderer {
   // the BW framebuffer (no storeBwBuffer). Mutable because the render path is
   // const. See beginStripTarget()/endStripTarget().
   mutable uint8_t* _stripBuf = nullptr;
+#ifdef BOARD_HAS_PSRAM
+  mutable uint8_t* _grayPairMsb = nullptr;
+#endif
   mutable int _stripY0 = 0;
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
@@ -192,6 +195,11 @@ class GfxRenderer {
   int resolveFontVariant(const int fontId, const float scale) const {
     return fontVariantProvider_.resolveFont(fontId, scale);
   }
+  int resolveFontFamily(const uint32_t family, const float scale) const {
+    return fontVariantProvider_.resolveFamily
+               ? fontVariantProvider_.resolveFamily(fontVariantProvider_.ctx, family, scale)
+               : 0;
+  }
   // True when fontId is registered, loading it through the variant provider if needed.
   bool ensureFontLoaded(const int fontId) const {
     if (fontMap.count(fontId) != 0) return true;
@@ -259,6 +267,10 @@ class GfxRenderer {
   // after the orientation rotate, so it is orientation-agnostic. Used to render
   // grayscale planes band-by-band without a full second buffer.
   void beginStripTarget(uint8_t* scratch, int stripY0, int stripRows) const;
+#ifdef BOARD_HAS_PSRAM
+  // Caller owns both equally sized targets until endStripTarget(). Text-only passes.
+  void beginGrayPairTarget(uint8_t* lsb, uint8_t* msb, int rows) const;
+#endif
   void endStripTarget() const;
 
   // Band culling for tiled grayscale. Takes a glyph bounding box in logical

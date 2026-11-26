@@ -5,6 +5,8 @@
 #include <BoardConfig.h>
 #include <Epub/ReaderRenderSpec.h>
 #include <PersistableStore.h>
+#include <SdCardFontRegistry.h>
+#include <VectorFontSupport.h>
 
 #include <cstdint>
 
@@ -369,13 +371,21 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // Book-embedded @font-face fonts (PublisherFonts); PSRAM boards only.
+  uint8_t publisherFonts = 1;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
   uint8_t readerMenuStyle = READER_MENU_LIST;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
-  // Dictionary folder name under /dictionaries (empty = no dictionary)
-  char dictionaryName[32] = "";
+  // SD card font family to use for the whole UI (menus, home);
+  // empty = the built-in UI font. Bound to the UI font slots at boot and on
+  // change. Independent of the reader font above.
+  char uiFontFamilyName[SdCardFontRegistry::FAMILY_NAME_CAPACITY] = "";
+  // Dictionary folder name under /dictionaries (empty = no dictionary).
+  // Sized to DictionaryRegistry::MAX_NAME_BYTES (checked in SettingsList.h):
+  // a UTF-8 folder name can take 2 or 3 bytes per character.
+  char dictionaryName[128] = "";
   // Save successful dictionary lookups to vocabulary history (default off).
   uint8_t vocabularyHistoryEnabled = 0;
   // Master switch for all SD-card plugin discovery/execution. New installs keep

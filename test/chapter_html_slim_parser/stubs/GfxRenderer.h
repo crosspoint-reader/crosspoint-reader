@@ -24,6 +24,11 @@ class GfxRenderer {
   mutable size_t fontPreparations = 0;
   std::function<void()> onFontPrepare;
   enum class TextMeasureMode { Layout, Rendered };
+  enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
+  RenderMode renderMode = BW;
+  bool absoluteGrayPlanes = false;
+  RenderMode getRenderMode() const { return renderMode; }
+  bool grayPlanesAreAbsolute() const { return absoluteGrayPlanes; }
   // The fixture has no framebuffer to lend; image probes run as without a loan.
   class FrameBufferLoan {
    public:
@@ -98,6 +103,15 @@ class GfxRenderer {
     if (fontMap.count(fontId) != 0 || fontId == 0) return true;
     return fontVariantProvider_.load && fontVariantProvider_.load(fontVariantProvider_.ctx, fontId) &&
            fontMap.count(fontId) != 0;
+  }
+  // Fixture embedded fonts: family i resolves to 900000 + i * 1000 + scale * 100.
+  std::vector<uint32_t> embeddedFamilies;
+  int resolveFontFamily(uint32_t family, float scale) const {
+    for (size_t i = 0; i < embeddedFamilies.size(); ++i) {
+      if (embeddedFamilies[i] == family)
+        return 900000 + static_cast<int>(i) * 1000 + static_cast<int>(scale * 100 + 0.5f);
+    }
+    return 0;
   }
   std::map<int, EpdFontFamily> fontMap;
   int getFontAscenderSize(int fontId) const {

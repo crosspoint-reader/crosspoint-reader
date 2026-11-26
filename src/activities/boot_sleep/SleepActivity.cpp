@@ -771,37 +771,40 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
 
   const bool thresholds = useOriginalCoverThresholds(renderer);
   const bool screenReady = source.getWidth() == renderer.getScreenWidth() &&
-                           source.getHeight() == renderer.getScreenHeight() && source.getBpp() <= 2;
-  if (!screenReady) {
-    // Like book covers: scale and dither once into a cached screen-sized BMP, then draw it without dithering.
-    const bool crop = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
-    // Same-sized BMPs share a byte count, so the key also needs the modification time.
-    const std::string key = path + '|' + std::to_string(file.size()) + '|' + std::to_string(file.modificationTime()) +
-                            '|' + std::to_string(renderer.getScreenWidth()) + 'x' +
-                            std::to_string(renderer.getScreenHeight()) + (crop ? "|c" : "|f") +
-                            (thresholds ? "|t" : "");
-    const std::string cachePath = "/.crosspoint/sleep_" + std::to_string(std::hash<std::string>{}(key)) + ".bmp";
-    if (!Storage.exists(cachePath.c_str())) {
-      const std::string tmpPath = cachePath + ".tmp";
-      HalFile out;
-      bool ok = Storage.openFileForWrite("SLP", tmpPath, out) &&
-                BmpToBmpConverter::bmpFileToBmpStream(file, out, crop, thresholds);
-      if (out.isOpen()) ok = out.close() && ok;
-      ok = ok && Storage.rename(tmpPath.c_str(), cachePath.c_str());
-      if (!ok) Storage.remove(tmpPath.c_str());
-    }
-    HalFile cached;
-    if (Storage.openFileForRead("SLP", cachePath, cached)) {
-      Bitmap bitmap(cached);
-      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        renderBitmapSleepScreen(bitmap);
-        return true;
-      }
-      cached.close();
-      Storage.remove(cachePath.c_str());
-    }
-    LOG_ERR("SLP", "Sleep image conversion failed; drawing %s directly", path.c_str());
+                           source.getHeight() == renderer.getScreenHeight() && source.hasNativePalette();
+  if (screenReady) {
+    renderBitmapSleepScreen(source);
+    return true;
   }
+
+  // Like book covers: scale and dither once into a cached screen-sized BMP, then draw it without dithering.
+  const bool crop = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
+  // Same-sized BMPs share a byte count, so the key includes mtime; |n avoids reusing old dithered caches.
+  const std::string key = path + '|' + std::to_string(file.size()) + '|' + std::to_string(file.modificationTime()) +
+                          '|' + std::to_string(renderer.getScreenWidth()) + 'x' +
+                          std::to_string(renderer.getScreenHeight()) + (crop ? "|c" : "|f") + (thresholds ? "|t" : "") +
+                          (source.hasNativePalette() ? "|n" : "");
+  const std::string cachePath = "/.crosspoint/sleep_" + std::to_string(std::hash<std::string>{}(key)) + ".bmp";
+  if (!Storage.exists(cachePath.c_str())) {
+    const std::string tmpPath = cachePath + ".tmp";
+    HalFile out;
+    bool ok = Storage.openFileForWrite("SLP", tmpPath, out) &&
+              BmpToBmpConverter::bmpFileToBmpStream(file, out, crop, thresholds);
+    if (out.isOpen()) ok = out.close() && ok;
+    ok = ok && Storage.rename(tmpPath.c_str(), cachePath.c_str());
+    if (!ok) Storage.remove(tmpPath.c_str());
+  }
+  HalFile cached;
+  if (Storage.openFileForRead("SLP", cachePath, cached)) {
+    Bitmap bitmap(cached);
+    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      renderBitmapSleepScreen(bitmap);
+      return true;
+    }
+    cached.close();
+    Storage.remove(cachePath.c_str());
+  }
+  LOG_ERR("SLP", "Sleep image conversion failed; drawing %s directly", path.c_str());
 
   Bitmap bitmap(file, true, thresholds);
   if (bitmap.parseHeaders() != BmpReaderError::Ok) return false;

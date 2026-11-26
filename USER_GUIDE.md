@@ -111,6 +111,8 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Browse Files](#33-browse-files-screen)**, the **[Library](#34-library-screen)**, **[File Transfer](#35-file-transfer-screen)**, or **[Settings](#36-settings)**.
 
+When saved reading progress is available, Lyra shows the percentage and a progress bar below the book title and author.
+
 ### 3.2 Reading Mode
 
 See [Reading Mode](#4-reading-mode) below for more information.
@@ -260,6 +262,8 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
   - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
   - "RoundedRaff" - A rounded theme with additional visual styling
 
+- **UI Font**: Choose the font used for menus, library titles, and other interface text. See [Menu Fonts](docs/sd-card-fonts.md#menu-fonts) for supported files and sizes.
+
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
   
   - "OFF" (default) - Disable the fix
@@ -281,6 +285,11 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 
 - **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
+
+- **Publisher Fonts**: On devices with external RAM, open **Text Settings → Style** to choose how fonts embedded in an EPUB are used. **Embedded Style** must be on, and the book must contain supported font files.
+  - **Off**: Use your selected reading font instead of the book's embedded fonts.
+  - **Ignore Body Font** (default): Use your selected reading font instead of the publisher's main body font. Allow other embedded fonts from the book. Text using the same font family as the book's body also uses your selected reading font.
+  - **All Text**: Use the book's embedded fonts wherever they are specified and supported, with your reading font as the fallback.
 
 - **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF". Korean text wraps only at spaces when "OFF"; when "ON", a Korean word may also wrap at the end of a line between syllables or where it meets digits, Latin letters, or brackets (no hyphen is drawn).
 
@@ -567,6 +576,10 @@ If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only fo
 Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Front buttons -> Menu long press** to **CrossPoint Sync** and hold Confirm to launch sync directly.
 
 - **Sync Clippings** is off by default. Enable it only for a compatible CrossPoint Sync server; manual **Sync Progress** then uploads and downloads this book’s clippings too. Leave it off for ordinary KOSync servers.
+- With the server type set to **CrossPoint** or **Other**, manual **Sync Progress** also syncs this book's bookmarks and uploads your reading sessions, if the server offers these features. If it does not, or this step fails, progress sync still continues.
+  - **Bookmarks:** each bookmark's position, text excerpt, and name are uploaded. Bookmarks added, renamed, or deleted on one device appear on your other devices after they sync.
+  - **Reading sessions:** CrossPoint records each reading session in `/.crosspoint/reading_sessions.jsonl` on the SD card, even before sync is set up, and never trims that file. Each line also stores the book's path and title, which are not uploaded. A sync uploads sessions the server does not have yet, up to 200 per sync, so a long history is uploaded over several syncs. Each session carries the book id, start time, active reading time, time zone offset, and an id that includes this device's hardware address.
+- **Sync On Sleep** is off by default. When it is on and you put the device to sleep from an EPUB, CrossPoint joins a saved Wi-Fi network that is in range, preferring the last one you used (if the battery is at least 20%), and syncs that book after the sleep screen appears: bookmarks, reading sessions, clippings if enabled, and your position. Your position is uploaded only when the server is not further ahead; a further position on the server waits for a manual **Sync Progress**. Going to sleep takes a few seconds longer and uses more battery. If the network is not reachable, the device just sleeps.
 - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
 - With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 

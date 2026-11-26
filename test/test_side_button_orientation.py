@@ -40,6 +40,10 @@ harness = r"""
 #include <initializer_list>
 #include <FreeInkUICore.h>
 namespace fui = freeink::ui;
+namespace BoardConfig {
+  bool onePage = false;
+  bool isOnePage() { return onePage; }
+}
 #define private public
 #include "MappedInputManager.h"
 #undef private
@@ -154,6 +158,13 @@ int main() {
           const auto labels = input.mapLabels("back", "confirm", previous, next);
           assert(labels.btn3 == (swapNav ? next : previous));
           assert(labels.btn4 == (swapNav ? previous : next));
+          BoardConfig::onePage = true;
+          const auto onePageLabels = input.mapLabels("back", "confirm", previous, next);
+          assert(onePageLabels.btn1 == labels.btn1);
+          assert(onePageLabels.btn2 == labels.btn3);
+          assert(onePageLabels.btn3 == labels.btn4);
+          assert(onePageLabels.btn4 == labels.btn2);
+          BoardConfig::onePage = false;
           for (uint8_t layout = 0; layout < 5; ++layout) {
             SETTINGS.sideButtonLayout = layout;
             for (int physical = 0; physical < 7; ++physical) {

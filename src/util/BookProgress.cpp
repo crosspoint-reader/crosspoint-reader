@@ -24,11 +24,12 @@ int loadBookProgress(const std::string& path) {
       LOG_ERR("HOME", "OOM: progress metadata");
       return -1;
     }
-    if (!epub->load(false, true)) return -1;
     HalFile file;
     if (!Storage.openFileForRead("HOME", epub->getCachePath() + "/progress.bin", file)) return -1;
     const int size = file.read(data, sizeof(data));
+    file.close();
     if (size != 4 && size != 6 && size != 10) return -1;
+    if (!epub->load(false, true)) return -1;
     const int spine = data[0] | (data[1] << 8);
     const int page = data[2] | (data[3] << 8);
     const int total = size >= 6 ? data[4] | (data[5] << 8) : 0;
@@ -44,10 +45,11 @@ int loadBookProgress(const std::string& path) {
       LOG_ERR("HOME", "OOM: XTC progress metadata");
       return -1;
     }
-    if (!xtc->load()) return -1;
     HalFile file;
     if (!Storage.openFileForRead("HOME", xtc->getCachePath() + "/progress.bin", file) || file.read(data, 4) != 4)
       return -1;
+    file.close();
+    if (!xtc->load()) return -1;
     const uint32_t page = readLe32(data);
     if (xtc->getPageCount() == 0) return -1;
     if (page >= xtc->getPageCount()) return 100;

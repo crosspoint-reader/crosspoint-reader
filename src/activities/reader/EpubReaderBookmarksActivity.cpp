@@ -167,10 +167,14 @@ void EpubReaderBookmarksActivity::startRename() {
     }
     std::string previousName = std::move(bookmarks[renameIndex].name);
     bookmarks[renameIndex].name = std::get<KeyboardResult>(result.data).text;
+    // The name is synced, so the bookmark must be uploaded again.
+    const bool previousSynced = bookmarks[renameIndex].synced;
+    bookmarks[renameIndex].synced = false;
     rebuildBookmarkRowItems();
     if (!BookmarkFile::save(epubPath, bookmarks)) {
       LOG_ERR("EPB", "Failed to save bookmarks after rename");
       bookmarks[renameIndex].name = std::move(previousName);
+      bookmarks[renameIndex].synced = previousSynced;
       rebuildBookmarkRowItems();
     }
     requestUpdate();

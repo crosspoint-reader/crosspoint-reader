@@ -8,13 +8,13 @@
 #include <vector>
 
 #include "blocks/TextBlock.h"
+#include "test/ScopedTempDir.h"
 
 namespace {
 
-std::string tempPath(const char* name) { return testing::TempDir() + name; }
-
 std::unique_ptr<TextBlock> roundTrip(const TextBlock& block, const char* name) {
-  const std::string path = tempPath(name);
+  const ScopedTempDir tempDir;
+  const auto path = tempDir.path() / name;
   {
     HalFile out;
     EXPECT_TRUE(out.open(path.c_str(), "wb"));
@@ -22,9 +22,7 @@ std::unique_ptr<TextBlock> roundTrip(const TextBlock& block, const char* name) {
   }
   HalFile in;
   EXPECT_TRUE(in.open(path.c_str(), "rb"));
-  auto restored = TextBlock::deserialize(in);
-  std::remove(path.c_str());
-  return restored;
+  return TextBlock::deserialize(in);
 }
 
 // A shaped word as the renderer stores it: arbitrary bytes that are not the logical text.
@@ -68,7 +66,8 @@ TEST(TextBlockDisplay, RejectsACorruptDisplayOffset) {
   const std::vector<std::string> words = {"\xE0\xA6\x95", "\xE0\xA6\x96"};
   TextBlock block(words, {0, 20}, {EpdFontFamily::REGULAR, EpdFontFamily::REGULAR}, {}, {}, BlockStyle(), {}, {}, {},
                   UINT16_MAX, {kShaped, kShaped});
-  const std::string path = tempPath("corrupt.bin");
+  const ScopedTempDir tempDir;
+  const auto path = tempDir.path() / "corrupt.bin";
   {
     HalFile out;
     ASSERT_TRUE(out.open(path.c_str(), "wb"));
@@ -87,7 +86,6 @@ TEST(TextBlockDisplay, RejectsACorruptDisplayOffset) {
   HalFile in;
   ASSERT_TRUE(in.open(path.c_str(), "rb"));
   EXPECT_EQ(TextBlock::deserialize(in), nullptr);
-  std::remove(path.c_str());
 }
 
 TEST(TextBlockDisplay, ComplexScriptLineWithNothingToRedrawRoundTrips) {
