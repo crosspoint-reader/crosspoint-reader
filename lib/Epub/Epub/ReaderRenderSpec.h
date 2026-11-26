@@ -1,6 +1,10 @@
 #pragma once
 #include <cstdint>
 
+// Which book-embedded (@font-face) fonts replace the reader font. Accents keeps the
+// reader font wherever the book uses its body font.
+enum class PublisherFonts : uint8_t { Off = 0, Accents = 1, All = 2 };
+
 // The resolved text-rendering configuration a reader hands to the layout
 // engine. Section-cache validation keys on every field: a section file built
 // with a different spec is discarded and rebuilt.
@@ -24,6 +28,7 @@ struct ReaderRenderSpec {
   bool embeddedStyle = true;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
+  PublisherFonts publisherFonts = PublisherFonts::Off;
 };
 
 // Stable signature for clipping anchors. Page-local word ordinals are valid
@@ -49,5 +54,6 @@ inline uint32_t readerRenderSpecSignature(const ReaderRenderSpec& spec) {
   mix(spec.embeddedStyle);
   mix(spec.imageRendering);
   mix(spec.focusReadingEnabled);
+  mix(static_cast<uint8_t>(spec.publisherFonts));
   return signature == 0 ? 1 : signature;
 }

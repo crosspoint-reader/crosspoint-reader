@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef BOARD_HAS_PSRAM
+#include <HalMemory.h>
+#endif
+
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -154,6 +158,10 @@ class SdCardFont {
   uint32_t contentHash() const { return contentHash_; }
 
  private:
+#ifdef BOARD_HAS_PSRAM
+  static constexpr size_t BITMAP_READ_BYTES = 16 * 1024;
+  HalMemory::PsramBuffer bitmapReadBuffer_;
+#endif
   // Per-style metadata (parsed from file header/TOC)
   struct CpFontHeader {
     uint32_t intervalCount = 0;

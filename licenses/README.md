@@ -76,5 +76,5 @@ The script reads the installed dependency notices and writes one release `LICENS
 It does not download packages or create another source archive.
 
 For the final release, the workflow attaches the license file beside the firmware files.
-For a release candidate, each artifact includes its own copy.
+Manual release candidate builds upload one firmware ZIP per device.
 The web footer links to the license information in this repository.

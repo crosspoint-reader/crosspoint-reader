@@ -669,7 +669,11 @@ plus optional `"method"` (`GET`, `POST`, `PUT`, `PATCH`, or `DELETE`; default
   `Authorization`) are sent only while the target keeps the starting URL's
   scheme, host, and port; a redirect elsewhere, including https→http, gets none.
 - For a GET without a body, an answer cut short mid-transfer resumes on its own
-  with a Range request.
+  with a Range request. If the server ignores Range and sends the whole body
+  again, the device rewrites the `.part` from that response. On a request with
+  `offset` above 0 it then ignores `maxBytes` and finishes the whole body, so
+  that request can be long; if the browser loses it, check whether `dest` was
+  installed.
 - **Segments:** `maxBytes` (at most 4MB) ends the request after that many
   bytes with `complete:false`; send the next request with `offset` set to the
   returned `bytes` to continue the same `.part`. `api.fetchToSd()` does this
@@ -689,7 +693,7 @@ plus optional `"method"` (`GET`, `POST`, `PUT`, `PATCH`, or `DELETE`; default
   `400 {"error":"offset and maxBytes need a GET without a body"}`;
   `409 {"error":"offset mismatch","bytes":N}`
   when `offset` does not match the `.part` size; `502 {"error":"sd write failed" |
-  "range unsupported" | "download truncated","bytes":N,"complete":false}`.
+  "download truncated","bytes":N,"complete":false}`.
 
 ### `POST /api/plugin-fs?plugin=<name>&path=<abs path>`
 
