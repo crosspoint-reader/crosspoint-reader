@@ -95,16 +95,6 @@ jobs:
           ARTIFACT_NAME: ${{ steps.artifact.outputs.name }}
         run: cp ".pio/build/${{ matrix.pio_env }}/firmware.bin" "${ARTIFACT_NAME}.bin"
 
-      - name: Prepare license asset
-        run: python3 scripts/build_release_license.py --env ${{ matrix.pio_env }} --output dist/LICENSE
-
-      - name: Upload license artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: ${{ steps.artifact.outputs.name }}-license
-          path: dist/LICENSE
-          if-no-files-found: error
-
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v6
         with:
