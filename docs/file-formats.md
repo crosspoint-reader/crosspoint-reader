@@ -20,7 +20,10 @@ While the directory is removed, `progress.bin` is moved next to it as
 power loss is finished on the next open (the rest of the directory is removed,
 then `progress.bin` is moved back). If it cannot be moved back, the book does
 not open and the parked file is kept. A saved chapter past the rebuilt book's
-last chapter starts the book over.
+last chapter starts the book over. Whenever `book.bin` is rebuilt, `sections/`
+is removed with it: section files are keyed by spine index only, so ones left
+from an older index (for example a book replaced before the update to version
+11) would show the old text.
 
 ImHex pattern:
 

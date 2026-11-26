@@ -582,6 +582,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   const uint32_t indexingStart = millis();
 
+  // Section files are keyed by spine index only and come from whatever file the old index
+  // described (e.g. a book replaced before a cache version bump), so they go with it.
+  Storage.removeDir((cachePath + "/sections").c_str());
+
   // Begin building cache - stream entries to disk immediately
   if (!bookMetadataCache->beginWrite()) {
     LOG_ERR("EBP", "Could not begin writing cache");
