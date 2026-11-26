@@ -600,9 +600,9 @@ bool FileBrowserActivity::handleButtons() {
   return false;
 }
 
-void FileBrowserActivity::render(RenderLock&& lock) {
+void FileBrowserActivity::render(RenderLock&&) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
-  UiListActivity::render(std::move(lock));
+  renderList(mode == Mode::Books);
 }
 
 std::string getFileExtension(const std::string& filename) {
