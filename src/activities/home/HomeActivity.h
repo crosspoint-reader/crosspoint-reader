@@ -89,6 +89,9 @@ class HomeActivity final : public Activity {
   void fillCoverGridFromLibrary();
   void resolveGridCoverPaths();
   void loadGridCover(RecentBook& book, int height, bool& showingLoading, Rect& popupRect);
+  void drawThemeHome(const ThemeMetrics& metrics, const int pageWidth, const int pageHeight, const Rect& content);
+  void drawCoverGrid();
+  void submitDisplayBuffer();
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -100,5 +103,6 @@ class HomeActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  void drawHomeContent();
   bool isHomeActivity() const override { return true; }
 };
