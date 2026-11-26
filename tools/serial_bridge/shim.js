@@ -307,6 +307,52 @@
   }
 
   // Settings / fonts are served by the reader's own web-server code (CMD_API).
+  // ---- SD-card plugins: discovered and served over the cable like any other file ----
+  const PLUGIN_ROOTS = ['/.crosspoint/plugins', '/plugins', '/.plugins'];
+  let pluginDirs = {};  // name -> folder, filled by the last /api/plugins scan
+  async function scanPlugins() {
+    const found = [], dirs = {};
+    for (const root of PLUGIN_ROOTS) {
+      let entries;
+      try { entries = await listDir(root); } catch (e) { continue; }  // root not on this card
+      for (const e of entries) {
+        if (!e.isDirectory || dirs[e.name]) continue;  // the earlier root wins a name collision
+        const dir = root + '/' + e.name;
+        let files;
+        try { files = await listDir(dir); } catch (err) { continue; }
+        if (files.some((f) => f.name === '.installing') || !files.some((f) => !f.isDirectory && f.name === 'plugin.js')) continue;
+        const info = { name: e.name, dir, title: e.name, mount: 'settings' };
+        if (files.some((f) => !f.isDirectory && f.name === 'manifest.json')) {
+          try {
+            const m = JSON.parse(await (await readFile(dir + '/manifest.json')).text());
+            if (typeof m.title === 'string') info.title = m.title;
+            if (typeof m.mount === 'string') info.mount = m.mount;
+          } catch (err) { /* unreadable manifest: keep the defaults */ }
+        }
+        dirs[e.name] = dir; found.push(info);
+      }
+    }
+    pluginDirs = dirs;
+    return found;
+  }
+  async function pluginDir(name) {
+    if (!pluginDirs[name]) await scanPlugins();
+    return pluginDirs[name];
+  }
+  const safeName = (n) => !!n && !/[\/\\]/.test(n) && n !== '.' && n !== '..';
+
+  // Plugins that call out (api.relay) get the computer's internet connection instead of the reader's WiFi.
+  async function relay(req) {
+    const init = { method: (req.method || 'GET').toUpperCase(), headers: req.headers || {} };
+    if (req.body && init.method !== 'GET' && init.method !== 'HEAD') init.body = req.body;
+    const r = await fetch(req.url, init);
+    const list = []; r.headers.forEach((v, k) => list.push([k, v]));
+    // The page decodes this header as Latin-1 code units holding UTF-8 bytes.
+    const hdr = String.fromCharCode(...enc.encode(JSON.stringify(list)));
+    return { status: 200, type: r.headers.get('Content-Type') || 'text/plain', body: await r.text(),
+             headers: { 'X-Relay-Status': String(r.status), 'X-Relay-Headers': hdr } };
+  }
+
   const callApi = (method, uri, body) => link.exclusive(() => callApiOp(method, uri, body));
   async function callApiOp(method, uri, body) {
     const m = new Uint8Array([method]);
@@ -360,8 +406,36 @@
           throw e;
         }
       }
-      if (method === 'GET' && (u.pathname === '/api/plugins' || u.pathname === '/api/opds' || u.pathname === '/api/wifi')) {
+      if (method === 'GET' && u.pathname === '/api/plugins') {
+        return { status: 200, type: 'application/json', body: JSON.stringify(await scanPlugins()) };
+      }
+      if (method === 'GET' && (u.pathname === '/api/opds' || u.pathname === '/api/wifi')) {
         return { status: 200, type: 'application/json', body: '[]' };
+      }
+      if (method === 'GET' && u.pathname === '/plugin') {
+        const name = q.get('name'), file = q.get('file');
+        const dir = safeName(name) && safeName(file) ? await pluginDir(name) : null;
+        if (!dir) return { status: 404, type: 'text/plain', body: 'not found' };
+        const blob = await readFile(dir + '/' + file);
+        return { status: 200, type: /\.js$/i.test(file) ? 'text/javascript' : 'text/plain', body: await blob.text(), blob };
+      }
+      if (method === 'GET' && u.pathname === '/download') {
+        const blob = await readFile(norm(q.get('path')));
+        return { status: 200, type: 'application/octet-stream', body: await blob.text() };
+      }
+      if (method === 'POST' && u.pathname === '/api/plugin-fs') {
+        const path = norm(q.get('path')), name = q.get('plugin');
+        const dir = safeName(name) ? await pluginDir(name) : null;
+        if (!dir || !path.startsWith(dir + '/')) return { status: 400, type: 'application/json', body: '{"error":"bad path"}' };
+        const data = new Uint8Array(await body.get('file').arrayBuffer());
+        if (!data.length) return { status: 400, type: 'application/json', body: '{"error":"empty body"}' };
+        if (data.length > 256 * 1024) return { status: 413, type: 'application/json', body: '{"error":"too large"}' };
+        await writeFile(path, data, true);
+        return { status: 200, type: 'application/json', body: JSON.stringify({ ok: true, bytes: data.length }) };
+      }
+      if (method === 'POST' && u.pathname === '/api/relay') {
+        try { return await relay(JSON.parse(body)); }
+        catch (e) { return { status: 502, type: 'application/json', body: JSON.stringify({ error: 'relay failed: ' + e.message }) }; }
       }
       if (method === 'POST' && u.pathname === '/upload') {
         const file = body.get('file');
@@ -446,8 +520,9 @@
     win.fetch = async (input, init = {}) => {
       const url = typeof input === 'string' ? input : input.url;
       await connectedPromise;
+      if (/^https?:\/\//i.test(url)) return fetch(input, init);  // a real website: use the computer's network
       const r = await route((init.method || 'GET').toUpperCase(), url, init.body);
-      return new Response(r.body, { status: r.status, headers: { 'Content-Type': r.type } });
+      return new Response(r.body, { status: r.status, headers: Object.assign({ 'Content-Type': r.type }, r.headers) });
     };
     // <img> loads of /download bypass fetch: read the file over serial and hand the image a Blob URL.
     const imgProto = win.HTMLImageElement.prototype;
@@ -480,10 +555,23 @@
       get() { return srcDesc.get.call(this); },
       set(v) {
         const key = typeof v === 'string' ? v.split('?')[0] : '';
+        if (key === '/plugin') {
+          const el = this;
+          readPluginScript(v).then((url) => srcDesc.set.call(el, url),
+                                   () => el.dispatchEvent(new Event('error')));
+          return;
+        }
         if (embedded[key]) v = URL.createObjectURL(new Blob([embedded[key]], { type: 'text/javascript' }));
         srcDesc.set.call(this, v);
       },
     });
+  }
+
+  async function readPluginScript(v) {
+    await connectedPromise;
+    const r = await route('GET', v);
+    if (r.status !== 200) throw new Error(r.body);
+    return URL.createObjectURL(new Blob([r.blob], { type: 'text/javascript' }));
   }
 
   async function download(path) {

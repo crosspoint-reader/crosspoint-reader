@@ -16,7 +16,14 @@ computer manage the SD card over the USB cable.
 
 Regenerate the page after changing the web UI: `python tools/serial_bridge/build_page.py`.
 
-The Home, Files, Settings and Fonts pages work; Plugins, WiFi and OPDS pages need WiFi.
+The Home, Files, Settings, Fonts and Plugins pages work; the WiFi and OPDS pages need WiFi.
+
+The **Plugins** tab lists the plugins installed on the SD card (`/.crosspoint/plugins`, `/plugins`,
+`/.plugins`) and runs their `plugin.js` in the page, so their settings can be edited over the
+cable: the page reads and writes the plugin's files (for example `config.json`) through the
+regular file commands. A plugin that calls out (`api.relay`, for example a city search) uses the
+computer's internet connection, not the reader's WiFi. `api.fetchToSd`, `api.crypto` and the plugin
+job queue are not available over the cable.
 Limits: folders cannot be moved/renamed (as in the web UI).
 The reader's log output is muted while the mode is active.
 

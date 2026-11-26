@@ -33,13 +33,25 @@ def main():
     }
     shim = open(os.path.join(HERE, "shim.js"), encoding="utf-8").read()
 
+    plugin_host = asset("plugin_hostJs")
+
+    def inline_script(code):
+        return "<script>" + code.replace("</script", "<" + chr(92) + "/script") + "</script>"
+
     def prepare(symbol):
         page = asset(symbol)
         page = re.sub(r'<link[^>]*href="/assets/web\.css"[^>]*>', lambda m: "<style>" + css + "</style>", page)
         page = re.sub(r'<link[^>]*rel="icon"[^>]*>', "", page)
         page = page.replace("/assets/icons.svg#", "#")
         page = page.replace("/assets/crosspoint-icon.svg", logo)
-        page = page.replace('<script src="/js/plugin-host.js"></script>', "")
+        host_tag = '<script src="/js/plugin-host.js"></script>'
+        if symbol == "PluginsPageHtml":
+            # The Plugins page needs the plugin host; a parsed <script src> bypasses the shim, so inline it.
+            page = page.replace(host_tag, inline_script(plugin_host))
+        else:
+            page = page.replace(host_tag, "")
+        # The reader shows the Plugins link only while plugins are enabled (a cookie); show it here always.
+        page = page.replace("document.cookie.split('; ').includes('cpPlugins=1')", "true")
         # No real URL inside the page host: navigation and reload go through the shim.
         page = page.replace("window.location.search", "window.__cpxSearch")
         page = page.replace("window.location.reload()", "window.__cpxReload()")
@@ -48,7 +60,8 @@ def main():
         return page
 
     pages = {"/": prepare("HomePageHtml"), "/files": prepare("FilesPageHtml"),
-             "/settings": prepare("SettingsPageHtml"), "/fonts": prepare("FontsPageHtml")}
+             "/settings": prepare("SettingsPageHtml"), "/fonts": prepare("FontsPageHtml"),
+             "/plugins": prepare("PluginsPageHtml")}
     bs = "<" + chr(92) + "/"
     def js(obj):
         return json.dumps(obj).replace("</", bs)
