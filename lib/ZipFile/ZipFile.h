@@ -66,6 +66,11 @@ class ZipFile {
   bool open();
   bool close();
   bool loadAllFileStatSlims();
+  // Start the next lookup at the first archive member, as a fresh open does.
+  void restartMemberSearch() {
+    lastCentralDirPosValid = false;
+    lastLookupValid = false;
+  }
   bool getInflatedFileSize(const char* filename, size_t* size);
   // Batch lookup: scan ZIP central dir once and fill sizes for matching targets.
   // targets must be sorted by (hash, len). sizes[target.index] receives uncompressedSize.
