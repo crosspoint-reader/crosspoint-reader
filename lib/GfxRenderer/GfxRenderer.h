@@ -252,6 +252,7 @@ class GfxRenderer {
   // fadingFix isn't forcing the blocking path. Callers can skip overlap
   // scaffolding (e.g. whole-plane grayscale buffers) when false.
   bool supportsAsyncRefresh() const;
+  bool supportsAsyncShadowRefresh() const { return !fadingFix && display.supportsAsyncShadowRefresh(); }
   // When checking stripUploads, pass the grayscale mode used for the planes.
   HalDisplay::GrayscaleCapabilities grayscaleCapabilities(
       HalDisplay::GrayscaleMode mode = HalDisplay::GrayscaleMode::Overlay) const;

@@ -73,6 +73,7 @@ class HalDisplay {
   // True when displayBufferAsync() genuinely overlaps (panel driver defers);
   // false where it falls back to a blocking refresh.
   bool supportsAsyncRefresh() const;
+  bool supportsAsyncShadowRefresh() const { return einkDisplay.supportsAsyncShadowRefresh(); }
 
   // Output polarity. The framebuffer remains in normal polarity; inversion is
   // applied by the display driver while sending it to the panel.

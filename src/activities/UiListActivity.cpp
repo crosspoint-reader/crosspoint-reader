@@ -264,7 +264,7 @@ void UiListActivity::renderList(const bool deferRefresh) {
   }
   drawFooter();
   // The SDK keeps the submitted pixels while input opens or redraws a screen.
-  if (deferRefresh && renderer.supportsAsyncRefresh()) {
+  if (deferRefresh && renderer.supportsAsyncShadowRefresh()) {
     renderer.displayBufferAsyncWithShadow(HalDisplay::FAST_REFRESH);
   } else {
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);

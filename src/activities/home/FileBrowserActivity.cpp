@@ -602,11 +602,7 @@ bool FileBrowserActivity::handleButtons() {
 
 void FileBrowserActivity::render(RenderLock&&) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
-#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC
-  renderList(mode == Mode::Books && display.getController() == HalDisplay::Controller::UC8279);
-#else
-  renderList(false);
-#endif
+  renderList(mode == Mode::Books);
 }
 
 std::string getFileExtension(const std::string& filename) {
