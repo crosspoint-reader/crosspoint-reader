@@ -63,6 +63,29 @@ class EpubReaderActivity final : public ReaderActivity {
   int idlePrewarmPage = -1;
   int idlePrewarmOffset = 0;
   unsigned long lastRenderCompleteMs = 0;
+
+  // EEGO A4: the page a turn is most likely to land on, rendered into PSRAM
+  // while the panel runs the current turn's waveform. Trusted only by the
+  // render that directly follows a page turn, so anything else that repaints
+  // the page (menus, clippings, settings) drops it.
+  struct PagePrerender {
+    HalMemory::PsramBuffer bw;
+    size_t planeBytes = 0;
+    bool valid = false;
+    int spine = -1;
+    int page = -1;
+    int fontId = 0;
+    int marginLeft = 0;
+    int marginTop = 0;
+    uint32_t layoutSignature = 0;
+    uint8_t orientation = 0;
+  };
+  PagePrerender pagePrerender;
+  bool prerenderTurnPending = false;
+  int prerenderLastSpine = -1;
+  int prerenderLastPage = -1;
+  bool ensurePrerenderBuffer(size_t planeBytes);
+  void prerenderAdjacentPage(int fontId, int marginLeft, int marginTop, int direction, uint8_t* lsb, uint8_t* msb);
   bool bookmarkRemoved = false;
   std::vector<BookmarkEntry> cachedBookmarks;
   bool recentsEntryRemoved = false;
@@ -230,7 +253,8 @@ class EpubReaderActivity final : public ReaderActivity {
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
-  bool drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
+  bool drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft,
+                              int pageIndex = -1) const;
   void renderStatusBar() const;
   void applyOrientation(uint8_t orientation);
   void applyInitialOrientation() override;
