@@ -769,6 +769,19 @@ bool SleepActivity::renderCustomSleepBmp(const std::string& path) const {
   if (source.parseHeaders() != BmpReaderError::Ok) return false;
   LOG_DBG("SLP", "Loading: %s", path.c_str());
 
+#if FREEINK_DEVICE_READPICO
+  if (source.hasGreyscale() &&
+      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER) {
+    const auto placement = calculateBitmapPlacement(source.getWidth(), source.getHeight(), renderer);
+    if (renderer.drawBitmapGrayscale16(source, placement.x, placement.y, renderer.getScreenWidth(),
+                                       renderer.getScreenHeight(), placement.cropX, placement.cropY)) {
+      return true;
+    }
+    LOG_ERR("SLP", "16-level display failed; falling back to standard BMP rendering");
+    if (source.rewindToData() != BmpReaderError::Ok) return false;
+  }
+#endif
+
   const bool thresholds = useOriginalCoverThresholds(renderer);
   const bool screenReady = source.getWidth() == renderer.getScreenWidth() &&
                            source.getHeight() == renderer.getScreenHeight() && source.hasNativePalette();

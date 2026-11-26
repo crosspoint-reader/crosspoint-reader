@@ -1,17 +1,9 @@
 #include "HalTiltSensor.h"
 
+#include <BoardConfig.h>
 #include <Logging.h>
 
 HalTiltSensor halTiltSensor;  // Singleton instance
-
-bool HalTiltSensor::readGyro(float& gx, float& gy, float& gz) const {
-  Imu::Sample sample;
-  if (!_sdkImu.read(sample)) return false;
-  gx = sample.gx;
-  gy = sample.gy;
-  gz = sample.gz;
-  return true;
-}
 
 void HalTiltSensor::begin() {
   if (!_sdkImu.begin()) {
@@ -23,8 +15,11 @@ void HalTiltSensor::begin() {
   if (!_sdkImu.sleep()) {
     LOG_ERR("GYR", "IMU standby failed");
   }
-  // Tilt detection reads the gyro; accelerometer-only parts (SC7A20H) can't drive it.
+  // The Read Pico uses acceleration changes for its tilt gesture.
   _available = _sdkImu.hasGyroscope();
+#if FREEINK_DEVICE_READPICO
+  _available |= BoardConfig::isReadPico();
+#endif
   if (!_available) {
     LOG_INF("GYR", "IMU has no gyroscope");
     return;
@@ -64,6 +59,9 @@ bool HalTiltSensor::deepSleep() {
   clearPendingEvents();
   _inTilt = false;
   _isAwake = false;
+#if FREEINK_DEVICE_READPICO
+  _lastAccelMs = 0;
+#endif
   return true;
 }
 
@@ -83,6 +81,9 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
 
   // If disabled, skip the rest of the polling logic and avoid unnecessary I2C traffic in non-reader activities
   if ((mode == CrossPointTiltPageTurn::TILT_OFF) || !inReader) {
+#if FREEINK_DEVICE_READPICO
+    _lastAccelMs = 0;
+#endif
     return;
   }
 
@@ -97,10 +98,25 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation, const 
   }
   _lastPollMs = now;
 
-  float gx, gy, gz;
-  if (!readGyro(gx, gy, gz)) {
-    return;
+  Imu::Sample sample;
+  if (!_sdkImu.read(sample)) return;
+  float gx = sample.gx, gy = sample.gy;
+#if FREEINK_DEVICE_READPICO
+  if (BoardConfig::isReadPico()) {
+    const auto elapsed = now - _lastAccelMs;
+    // Near neutral, a change of one g per second approximates one radian per second.
+    constexpr float DEG_PER_RADIAN_MS = 57295.78f;
+    const bool consecutive = _lastAccelMs != 0 && elapsed > 0 && elapsed <= 3 * POLL_INTERVAL_MS;
+    if (consecutive) {
+      gx = (sample.ax - _lastAccelX) * -DEG_PER_RADIAN_MS / elapsed;
+      gy = (sample.ay - _lastAccelY) * -DEG_PER_RADIAN_MS / elapsed;
+    }
+    _lastAccelX = sample.ax;
+    _lastAccelY = sample.ay;
+    _lastAccelMs = now;
+    if (!consecutive) return;
   }
+#endif
 
   // Map the gyro axis to left/right tilt based on reader orientation.
   // On the X3 PCB: X axis = left/right in portrait, Y axis = left/right in landscape.

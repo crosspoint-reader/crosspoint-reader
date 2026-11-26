@@ -27,6 +27,14 @@ class HalDisplay {
     return einkDisplay.displayRetainedGrayscaleOverlay(x, y, w, h, restore);
   }
 
+#if FREEINK_DEVICE_READPICO
+  // Hold RenderLock until commit or cancel. The white-initialized buffer uses
+  // width/2 bytes per row, low nibble first, with 0 black and 15 white.
+  uint8_t* beginGrayscale16() { return einkDisplay.beginGrayscale16(); }
+  bool commitGrayscale16() { return einkDisplay.commitGrayscale16(); }
+  void cancelGrayscale16() { einkDisplay.cancelGrayscale16(); }
+#endif
+
   // Constructor with pin configuration
   HalDisplay();
 

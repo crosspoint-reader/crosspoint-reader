@@ -93,6 +93,8 @@ const char* displayControllerName(const BoardConfig::DisplayController c) {
       return "UC8253";
     case BoardConfig::DisplayController::ED2208:
       return "ED2208";
+    case BoardConfig::DisplayController::EpdiyLcd:
+      return "LCD_CAM";
     case BoardConfig::DisplayController::LgfxEpd:
       return "LovyanGFX EPD";
     case BoardConfig::DisplayController::IT8951:
@@ -123,6 +125,8 @@ const char* touchControllerName(const BoardConfig::TouchController c) {
       return "GSLX680";
     case BoardConfig::TouchController::Cst816s:
       return "CST816S";
+    case BoardConfig::TouchController::Cst836u:
+      return "CST836U";
     case BoardConfig::TouchController::Tma525c:
       return "TMA525C";
   }

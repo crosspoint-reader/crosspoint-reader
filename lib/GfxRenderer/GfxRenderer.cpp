@@ -1554,6 +1554,45 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
   }
 }
 
+#if FREEINK_DEVICE_READPICO
+bool GfxRenderer::drawBitmapGrayscale16(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
+                                        const int maxHeight, const float cropX, const float cropY) const {
+  const int width = bitmap.getWidth(), height = bitmap.getHeight();
+  const int cropPixelsX = static_cast<int>(width * cropX / 2);
+  const int cropPixelsY = static_cast<int>(height * cropY / 2);
+  const int sourceWidth = width - 2 * cropPixelsX, sourceHeight = height - 2 * cropPixelsY;
+  const float scale =
+      std::min({1.0f, static_cast<float>(maxWidth) / sourceWidth, static_cast<float>(maxHeight) / sourceHeight});
+  const int targetWidth = std::max(1, static_cast<int>(sourceWidth * scale));
+  const int targetHeight = std::max(1, static_cast<int>(sourceHeight * scale));
+  auto row = makeUniqueNoThrow<uint8_t[]>(width + bitmap.getRowBytes());
+  if (!row) return false;
+  uint8_t* const gray = display.beginGrayscale16();
+  if (!gray) return false;
+  clearScreen();  // Keep the B/W proxy used by subsequent drawing.
+  for (int iy = 0; iy < targetHeight; ++iy) {
+    const int sy = cropPixelsY + iy * sourceHeight / targetHeight;
+    if (bitmap.readRowGray(sy, row.get(), row.get() + width) != BmpReaderError::Ok) {
+      display.cancelGrayscale16();
+      return false;
+    }
+    for (int ix = 0; ix < targetWidth; ++ix) {
+      const int sx = cropPixelsX + ix * sourceWidth / targetWidth;
+      const int dx = x + ix, dy = y + iy;
+      if (dx < 0 || dy < 0 || dx >= getScreenWidth() || dy >= getScreenHeight()) continue;
+      int px, py;
+      rotateCoordinates(orientation, dx, dy, &px, &py, panelWidth, panelHeight);
+      const size_t index = static_cast<size_t>(py) * (panelWidth / 2) + px / 2;
+      const unsigned shift = (px & 1) * 4;
+      const uint8_t level = (row[sx] + 8) / 17;
+      gray[index] = (gray[index] & ~(0x0Fu << shift)) | (level << shift);
+      drawPixel(dx, dy, level < 8);
+    }
+  }
+  return display.commitGrayscale16();
+}
+#endif
+
 bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY, const bool whiteAsTransparent) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return false;

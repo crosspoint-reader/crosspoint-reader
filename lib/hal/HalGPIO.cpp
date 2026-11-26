@@ -1,4 +1,7 @@
 #include <BatteryMonitor.h>
+#if FREEINK_DEVICE_READPICO
+#include <BoardReadPico.h>
+#endif
 #include <HalGPIO.h>
 #include <Logging.h>
 #include <PowerManager.h>
@@ -111,6 +114,9 @@ void HalGPIO::begin() {
   if (BoardConfig::ACTIVE.usbDetect >= 0 && !BoardConfig::ACTIVE.usbDetectActiveHigh) {
     pinMode(BoardConfig::ACTIVE.usbDetect, INPUT_PULLUP);
   }
+#if FREEINK_DEVICE_READPICO
+  if (!BoardReadPico::begin()) LOG_ERR("GPIO", "Read Pico board bring-up failed");
+#endif
   inputMgr.begin();
 #if FREEINK_DEVICE_LILYGO
   // T5S3 IO48 key sits behind the PCA9535 expander. Mirrors BoardT5S3::begin(), which also
@@ -281,6 +287,12 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
 
+#if FREEINK_DEVICE_READPICO
+  // The PMU cuts host power during sleep, so a key wake is an ESP power-on reset.
+  if (BoardConfig::isReadPico() && resetReason == ESP_RST_POWERON && BoardReadPico::wokeFromPowerKey()) {
+    return WakeupReason::PowerButton;
+  }
+#endif
   const bool usbConnected = isUsbConnected();
 
   if (resetReason == ESP_RST_DEEPSLEEP &&
