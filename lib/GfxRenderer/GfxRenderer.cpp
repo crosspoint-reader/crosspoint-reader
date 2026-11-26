@@ -1929,6 +1929,15 @@ void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const 
   display.displayBufferAsync(refreshMode);
 }
 
+void GfxRenderer::displayBufferAsyncWithShadow(HalDisplay::RefreshMode refreshMode) const {
+  if (fadingFix) {
+    displayBuffer(refreshMode);
+    return;
+  }
+  LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", millis() - start_ms);
+  display.displayBufferAsyncWithShadow(applyPromotedRefresh(refreshMode));
+}
+
 void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
 
 bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }

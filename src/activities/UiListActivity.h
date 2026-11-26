@@ -76,6 +76,9 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Button hints, drawn after the app renders. Default: Back/Select/Up/Down.
   virtual void drawFooter();
 
+  // Called under RenderLock. Deferral keeps a copy of the presented frame.
+  void renderList(bool deferRefresh);
+
   // --- helpers ---------------------------------------------------------------
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the
   // viewport, and write selection/viewport into props. Call from buildScreen

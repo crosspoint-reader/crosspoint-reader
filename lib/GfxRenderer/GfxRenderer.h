@@ -245,6 +245,8 @@ class GfxRenderer {
   // a blocking refresh when fadingFix is enabled or the panel lacks deferral
   // support. See HalDisplay::displayBufferAsync for the baseline contract.
   void displayBufferAsync(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  // Submit a frame whose pixels remain valid while the caller draws the next screen.
+  void displayBufferAsyncWithShadow(HalDisplay::RefreshMode refreshMode) const;
   void waitRefreshComplete() const;
   // True when displayBufferAsync() genuinely overlaps: panel defers and
   // fadingFix isn't forcing the blocking path. Callers can skip overlap

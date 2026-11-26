@@ -70,6 +70,10 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
   einkDisplay.displayBufferAsyncNoShadow(convertRefreshMode(mode));
 }
 
+void HalDisplay::displayBufferAsyncWithShadow(RefreshMode mode) {
+  einkDisplay.displayBufferAsync(convertRefreshMode(mode));
+}
+
 void HalDisplay::waitRefreshComplete() { einkDisplay.waitRefreshComplete(); }
 
 bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }

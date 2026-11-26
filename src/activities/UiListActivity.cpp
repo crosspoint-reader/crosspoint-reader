@@ -246,7 +246,9 @@ void UiListActivity::drawFooter() {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
-void UiListActivity::render(RenderLock&&) {
+void UiListActivity::render(RenderLock&&) { renderList(false); }
+
+void UiListActivity::renderList(const bool deferRefresh) {
   renderer.clearScreen();
   drawChrome();
   renderUi();
@@ -261,5 +263,10 @@ void UiListActivity::render(RenderLock&&) {
     renderUi();
   }
   drawFooter();
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  // The SDK keeps the submitted pixels while input opens or redraws a screen.
+  if (deferRefresh && renderer.supportsAsyncRefresh()) {
+    renderer.displayBufferAsyncWithShadow(HalDisplay::FAST_REFRESH);
+  } else {
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
 }
