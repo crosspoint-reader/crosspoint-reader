@@ -42,6 +42,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [Chapter Navigation](#chapter-navigation)
     - [Auto Page Turn](#auto-page-turn)
     - [Tilt Page Turn (X3 only)](#tilt-page-turn-x3-only)
+    - [Top-corner shortcuts (touch devices)](#top-corner-shortcuts-touch-devices)
     - [Links and footnotes](#links-and-footnotes)
     - [Dictionary Lookup](#dictionary-lookup)
     - [System Navigation](#system-navigation)
@@ -688,6 +689,27 @@ Auto Page Turn automatically advances pages at a set interval, useful for hands-
 
 On the **Xteink X3**, the gyroscope can be used to turn pages by tilting the device. This feature is available in the Controls settings.
 
+### Top-corner shortcuts (touch devices)
+
+On a touch device, the two top corners can run shortcuts while reading an EPUB,
+TXT, or Markdown book (XTC books are not affected). Gestures without a saved
+binding default to **Disabled** and behave normally. Saved bindings stay
+unchanged.
+
+Each corner gesture is assigned independently in **Settings → Controls → Taps
+and gestures → Corner actions**. A bound tap no longer turns the page, and a
+bound long press replaces word selection in that corner: set that gesture to
+**Disabled** to restore its normal meaning. Tap and long press are separate, so
+a corner can run its shortcut on a tap and still start word selection on a
+long press (or the reverse). The target is a small square (15% of the shorter
+screen side) in each top corner, so holding a word elsewhere on the page still
+starts word selection. A link directly under the corner keeps priority on a
+tap, and the shortcuts follow **Touch controls while reading**.
+An unavailable shortcut falls back to the normal zone behavior. A lookup that
+cannot open despite having a dictionary, or a bookmark save that fails, does
+not fall back. If a tap during a page refresh does nothing, tap again after the
+page is drawn.
+
 ### Links and footnotes
 
 Internal EPUB links include chapter links, cross-references, and footnotes. Tap a link on a touchscreen device, or choose "Links and Footnotes" from the Reader Menu to select a link. Press Back to return to the previous location.
@@ -758,7 +780,7 @@ Accessible by selecting **Chapters** from the Reader Menu.
 
 Bookmarks can be created to quickly save and restore your place in a book.
 
-To create a bookmark, hold **Confirm** for about half a second while inside a book. A popup will appear letting you know a bookmark was created. The popup message will automatically disappear in a couple of seconds.
+In an EPUB, TXT, or Markdown book, the default top-right tap on a touch device toggles a bookmark. On a button device, hold **Confirm** if its long-press action is set to **Bookmark**. After the change is saved to the SD card, a brief popup confirms that the bookmark was added or removed.
 
 To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for about 0.7 seconds, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
 

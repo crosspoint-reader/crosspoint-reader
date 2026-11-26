@@ -660,3 +660,8 @@ STR_KOREADER_CUSTOM_HEADER_1_NAME: "Nombre de la cabecera personalizada 1 de KOR
 STR_KOREADER_CUSTOM_HEADER_1_VALUE: "Valor de la cabecera personalizada 1 de KOReader"
 STR_KOREADER_CUSTOM_HEADER_2_NAME: "Nombre de la cabecera personalizada 2 de KOReader"
 STR_KOREADER_CUSTOM_HEADER_2_VALUE: "Valor de la cabecera personalizada 2 de KOReader"
+STR_CORNER_TOP_LEFT_TAP: "Pulsación arriba izq."
+STR_CORNER_TOP_LEFT_HOLD: "Pulsación larga arriba izq."
+STR_CORNER_TOP_RIGHT_TAP: "Pulsación arriba dcha."
+STR_CORNER_TOP_RIGHT_HOLD: "Pulsación larga arriba dcha."
+STR_CORNER_ACTIONS: "Acciones de las esquinas"

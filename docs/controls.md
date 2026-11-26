@@ -8,7 +8,28 @@ options depend on the device.
 - **Front buttons** contains remapping, orientation, Back behavior, and the two
   long-press settings at the bottom.
 - **Side buttons** contains the reader layout, orientation, and page-turn long press.
-- **Taps and gestures** contains **Touch controls while reading** and the page/menu gestures.
+- **Taps and gestures** contains **Touch controls while reading**, the page/menu
+  gestures, and a **Corner actions** screen. **Corner actions** holds the four
+  **top-corner shortcuts** (**Top left tap**, **Top left long press**, **Top
+  right tap**, **Top right long press**).
+
+**Top-corner shortcuts** run while reading an EPUB, TXT, or Markdown book (XTC
+books do not use them). The tap and long press in each top corner can be
+assigned independently. Gestures without a saved binding default to
+**Disabled**; saved bindings stay unchanged. Each target is a square whose
+side is 15% of the screen's shorter dimension. A bound tap is removed from the
+page-turn tap zone under it, so it runs its action instead of turning the page;
+a bound long press replaces word selection in that corner. Set that gesture to
+**Disabled** to give the spot back to its normal meaning. Tap and long press
+are independent: a corner with a disabled tap behaves like any other tap on
+the page, and a corner with a disabled long press still starts word selection.
+Tap and long press can be bound to **Toggle Bookmark**, **Bookmarks**,
+**Select Chapter**, **Reader Menu**, **Look Up**, **Links and Footnotes**,
+**Night Mode**, **Go to %**, or **CrossPoint Sync**. An unavailable shortcut
+(for example footnotes on a page without them, or a lookup with no dictionary)
+falls back to the normal zone behavior. A lookup that cannot open despite
+having a dictionary, or a bookmark save that fails, does not fall back.
+The shortcuts follow **Touch controls while reading**.
 
 On OnePage, the front buttons are Back, Left, Right, and Confirm from left to
 right. The remapping preview follows this order.

@@ -29,6 +29,22 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
     values[CrossPointSettings::STATUS_BAR_CLOCK_LEFT] = StrId::STR_DIR_LEFT;
     return values;
   }();
+#if FREEINK_CAP_TOUCH
+  static constexpr auto CORNER_ACTION_VALUES = [] {
+    std::array<StrId, CrossPointSettings::CORNER_ACTION_COUNT> values{};
+    values[CrossPointSettings::CORNER_ACTION_DISABLED] = StrId::STR_DISABLED;
+    values[CrossPointSettings::CORNER_ACTION_TOGGLE_BOOKMARK] = StrId::STR_TOGGLE_BOOKMARK;
+    values[CrossPointSettings::CORNER_ACTION_BOOKMARKS] = StrId::STR_BOOKMARKS;
+    values[CrossPointSettings::CORNER_ACTION_SELECT_CHAPTER] = StrId::STR_SELECT_CHAPTER;
+    values[CrossPointSettings::CORNER_ACTION_READER_MENU] = StrId::STR_READER_MENU;
+    values[CrossPointSettings::CORNER_ACTION_DICTIONARY] = StrId::STR_LOOKUP;
+    values[CrossPointSettings::CORNER_ACTION_FOOTNOTES] = StrId::STR_FOOTNOTES;
+    values[CrossPointSettings::CORNER_ACTION_NIGHT_MODE] = StrId::STR_NIGHT_MODE;
+    values[CrossPointSettings::CORNER_ACTION_GO_TO_PERCENT] = StrId::STR_GO_TO_PERCENT;
+    values[CrossPointSettings::CORNER_ACTION_SYNC] = StrId::STR_KOSYNC;
+    return values;
+  }();
+#endif
 
   const auto emit = [visit, context](auto&& info) { visit(context, info); };
   // --- Display ---
@@ -169,6 +185,16 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                            {StrId::STR_TAP_AND_SWIPE, StrId::STR_TAP_ONLY, StrId::STR_SWIPE_ONLY,
                             StrId::STR_INVERTED_TAP, StrId::STR_DISABLED},
                            "previousPageGesture", StrId::STR_CAT_CONTROLS));
+#if FREEINK_CAP_TOUCH
+    emit(SettingInfo::StaticEnum(StrId::STR_CORNER_TOP_LEFT_TAP, &CrossPointSettings::cornerTopLeftTap,
+                                 CORNER_ACTION_VALUES, "cornerTopLeftTap", StrId::STR_CAT_CONTROLS));
+    emit(SettingInfo::StaticEnum(StrId::STR_CORNER_TOP_LEFT_HOLD, &CrossPointSettings::cornerTopLeftHold,
+                                 CORNER_ACTION_VALUES, "cornerTopLeftHold", StrId::STR_CAT_CONTROLS));
+    emit(SettingInfo::StaticEnum(StrId::STR_CORNER_TOP_RIGHT_TAP, &CrossPointSettings::cornerTopRightTap,
+                                 CORNER_ACTION_VALUES, "cornerTopRightTap", StrId::STR_CAT_CONTROLS));
+    emit(SettingInfo::StaticEnum(StrId::STR_CORNER_TOP_RIGHT_HOLD, &CrossPointSettings::cornerTopRightHold,
+                                 CORNER_ACTION_VALUES, "cornerTopRightHold", StrId::STR_CAT_CONTROLS));
+#endif
   }
   // The reader-menu gesture choice only makes sense where the menu stays
   // reachable without the tap and the bottom edge is free (the capacitive

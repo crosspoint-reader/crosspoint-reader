@@ -445,3 +445,8 @@ STR_FIRMWARE_WRITE_FAILED: "Микробағдарламаны жазу сәтс
 STR_FIRMWARE_UPDATE_DO_NOT_POWER_OFF: "Қуатты өшірмеңіз!"
 STR_RECOVERY_MODE: "Қалпына келтіру режимі"
 STR_RECOVERY_MODE_HINT: "firmware.bin файлын SD картаның түбірлік қалтасына салып, оны таңдаңыз"
+STR_CORNER_TOP_LEFT_TAP: "Жоғары сол жақта түрту"
+STR_CORNER_TOP_LEFT_HOLD: "Жоғары сол жақта ұзақ басу"
+STR_CORNER_TOP_RIGHT_TAP: "Жоғары оң жақта түрту"
+STR_CORNER_TOP_RIGHT_HOLD: "Жоғары оң жақта ұзақ басу"
+STR_CORNER_ACTIONS: "Бұрыш әрекеттері"

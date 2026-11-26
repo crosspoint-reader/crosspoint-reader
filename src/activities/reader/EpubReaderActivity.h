@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BoardConfig.h>
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
 #include <Epub/PageLink.h>
@@ -111,7 +112,9 @@ class EpubReaderActivity final : public ReaderActivity {
   std::vector<EpubReaderMenuActivity::MenuItem> moreItems;
   EpubReaderMenuActivity::MenuAction selectedMenuAction = EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER;
 
-  // Footnote support
+  // Footnote and link support. renderBook() rebuilds these on the render task;
+  // the tap/corner readers snapshot them under the render lock. Some older menu
+  // readers still read them without it.
   std::vector<FootnoteEntry> currentPageFootnotes;
   std::vector<PageLink> currentPageLinks;
   int currentPageLinkMarginLeft = 0;
@@ -120,6 +123,9 @@ class EpubReaderActivity final : public ReaderActivity {
     int spineIndex;
     int pageNumber;
   };
+#if FREEINK_CAP_TOUCH
+  SavedPosition bookmarkMessagePosition{};
+#endif
   static constexpr int MAX_FOOTNOTE_DEPTH = 3;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
@@ -208,13 +214,16 @@ class EpubReaderActivity final : public ReaderActivity {
   std::string moreRowName(int row) const;
   std::string moreRowValue(int row) const;
   void activateMoreRow(int row);
-  void openFootnoteSelect(bool reopenMenuOnCancel);
+  bool openFootnoteSelect(bool reopenMenuOnCancel);
   void openDictionaryWordSelect();
+  // Top-corner shortcuts (touch boards only; compiled out elsewhere).
+  bool runCornerActionAt(int x, int y, bool hold);
   // Selection to restore when returning from a dictionary lookup.
   ClipSelectionActivity::Selection pendingLookupSelection;
   ClipSelectionActivity::Selection lookupReturnSelection;
-  void startClipSelection(int initialX = -1, int initialY = -1,
-                          ClipSelectionActivity::Mode mode = ClipSelectionActivity::Mode::Clip);
+  enum class SelectionResult { Unavailable, Consumed, Opened };
+  SelectionResult startClipSelection(int initialX = -1, int initialY = -1,
+                                     ClipSelectionActivity::Mode mode = ClipSelectionActivity::Mode::Clip);
   int clippingAtPoint(const Page& page, int x, int y) const;
   void openClippings();
   void applyProgressChange(const ProgressChangeResult& progress);
@@ -222,7 +231,8 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();
-  void addBookmark();
+  enum class BookmarkResult { Unavailable, SaveFailed, Saved };
+  BookmarkResult addBookmark(bool showConfirmation = false);
   void updateBookmarkFlag();
 
   void navigateToHref(const std::string& href, bool savePosition = false);

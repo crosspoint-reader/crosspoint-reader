@@ -38,6 +38,7 @@ enum class SettingAction {
   ControlsFront,
   ControlsSide,
   ControlsTouch,
+  ControlsCorner,
   About,
 };
 
@@ -188,7 +189,7 @@ struct SettingInfo {
   }
 };
 
-enum class ControlsGroup : uint8_t { Root, Power, Front, Side, Touch };
+enum class ControlsGroup : uint8_t { Root, Power, Front, Side, Touch, Corner };
 
 // The rows of one SettingsSection; activating a row toggles/cycles it, opens
 // its option popup, or launches its sub-screen.
