@@ -10,11 +10,13 @@
 
 // Application-owned feedback policy; the SDK owns motor timing and PWM.
 class HalHaptics {
+#if FREEINK_CAP_HAPTIC && !CROSSPOINT_EMULATED
   // Persisted option order: Low, Medium, High. This scales motor PWM duty,
   // not pulse duration; perceived strength depends on the motor and battery.
   // Metalio's motor did not respond to short pulses at 50% in device testing.
   // Use approximately 60%, 75%, and 88%; validate the new floor on hardware.
   static constexpr uint8_t gain(uint8_t level) { return level == 0 ? 153 : level == 1 ? 191 : 224; }
+#endif
 
  public:
   static void longPress(bool enabled, uint8_t intensity) {

@@ -20,12 +20,17 @@
 
 namespace {
 
-constexpr const char* EVENT_NAMES[] = {"reader.open", "reader.exit", "reader.session", "book.downloaded",
-                                       "sleep.enter"};
+constexpr const char* EVENT_NAMES[] = {"reader.open",     "reader.exit", "reader.session",
+                                       "book.downloaded", "sleep.enter", "reader.end"};
 static_assert(sizeof(EVENT_NAMES) / sizeof(EVENT_NAMES[0]) == static_cast<size_t>(pluginevents::Event::COUNT),
               "event name table out of sync");
 
 constexpr const char* OUTBOX_NAME = "/events.jsonl";
+// A dessen-app handler ("app" in device.json) routes its events here instead of
+// the network outbox: the app reads and clears this file itself next time it
+// runs (read mode) or when the event launches it (launch mode). drain() only
+// touches OUTBOX_NAME, so an app's queue is never delivered or deleted by it.
+constexpr const char* APP_OUTBOX_NAME = "/app-events.jsonl";
 // Drop-oldest wholesale: a plugin that is never drained must not grow a file
 // forever, and by the time 4KB of events piled up the old ones describe stale
 // state anyway.
@@ -40,15 +45,24 @@ constexpr size_t MAX_EVENT_RESPONSE = 8 * 1024;
 // plugin list screen, not a marketplace.
 constexpr size_t MAX_EVENT_PLUGINS = 8;
 struct Subscriber {
-  char name[24] = {0};      // plugin folder name; "" = empty slot
-  char dir[64] = {0};       // "<root>/<name>"
-  uint8_t mask = 0;         // bit per Event
-  uint8_t connectMask = 0;  // events whose handler declares "connect": true
+  char name[24] = {0};       // plugin folder name; "" = empty slot
+  char dir[64] = {0};        // "<root>/<name>"
+  uint8_t mask = 0;          // bit per Event
+  uint8_t connectMask = 0;   // events whose handler declares "connect": true
+  uint8_t appMask = 0;       // events whose handler routes to a dessen app ("app")
+  uint8_t launchMask = 0;    // app events with "mode": "launch" (open the app now)
+  bool replacesEob = false;  // reader.end handler marked "replaces": "end of book"
+  char launchBin[40] = {0};  // launch handler's declared "app" binary; "" = app.bin
   // Hash of each handler's "require_meta" key, 0 = unfiltered. A hash keeps
   // emit() free of manifest reads; a collision only queues an extra event.
   uint32_t metaKeyHash[static_cast<size_t>(pluginevents::Event::COUNT)] = {};
 };
 Subscriber subscribers[MAX_EVENT_PLUGINS];
+
+// Armed by a launch-mode emit, consumed by the UI loop (ActivityManager), which
+// opens the app. One launch is buffered: a second before the first is consumed
+// wins, and the earlier app's events simply wait in its queue for a later run.
+std::string pendingLaunchPath;
 
 uint8_t eventBit(const pluginevents::Event e) { return static_cast<uint8_t>(1u << static_cast<uint8_t>(e)); }
 
@@ -60,6 +74,7 @@ int eventFromName(const char* name) {
 }
 
 std::string outboxPath(const Subscriber& sub) { return std::string(sub.dir) + OUTBOX_NAME; }
+std::string appOutboxPath(const Subscriber& sub) { return std::string(sub.dir) + APP_OUTBOX_NAME; }
 
 // FNV-1a, never 0 (0 marks an unfiltered handler).
 uint32_t metaKeyHash(const char* key) {
@@ -104,6 +119,10 @@ void refreshSubscriptions() {
     if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) continue;
     uint8_t mask = 0;
     uint8_t connectMask = 0;
+    uint8_t appMask = 0;
+    uint8_t launchMask = 0;
+    bool replacesEob = false;
+    char launchBin[40] = {0};  // last launch handler's "app" binary (bare filename)
     uint32_t metaHashes[static_cast<size_t>(Event::COUNT)] = {};
     for (JsonPairConst kv : doc["events"].as<JsonObjectConst>()) {
       const int e = eventFromName(kv.key().c_str());
@@ -118,6 +137,32 @@ void refreshSubscriptions() {
         continue;
       }
       mask |= static_cast<uint8_t>(1u << e);
+      // "app": "<bin>" routes the event to a dessen app's own queue (read mode)
+      // or launches it (launch mode) instead of a network request/download.
+      if (kv.value()["app"].is<const char*>()) {
+        appMask |= static_cast<uint8_t>(1u << e);
+        const bool replaceEob =
+            e == static_cast<int>(Event::ReaderEnd) && strcmp(kv.value()["replaces"] | "", "end of book") == 0;
+        // Replacing the EOB screen means opening the app at the last page, so it
+        // implies launch mode even if the manifest omits it.
+        if (replaceEob || strcmp(kv.value()["mode"] | "read", "launch") == 0) {
+          // Honour the declared binary; keep it a bare in-dir filename so it can
+          // not traverse out of the plugin.
+          const char* bin = kv.value()["app"] | "";
+          const bool bare = bin[0] && !strpbrk(bin, "/\\") && strcmp(bin, ".") && strcmp(bin, "..") &&
+                            strlen(bin) < sizeof(launchBin);
+          const char* want = bare ? bin : "";
+          // One launch binary per plugin (saves a per-event table): a handler
+          // naming a different one is not launched instead of opening the wrong app.
+          if (launchMask && strcmp(want, launchBin) != 0) {
+            LOG_ERR("PEVT", "%s: %s launches a second binary; launch ignored", entry.name.c_str(), kv.key().c_str());
+          } else {
+            launchMask |= static_cast<uint8_t>(1u << e);
+            strncpy(launchBin, want, sizeof(launchBin) - 1);
+            if (replaceEob) replacesEob = true;
+          }
+        }
+      }
       if (kv.value()["connect"] | false) connectMask |= static_cast<uint8_t>(1u << e);
       const char* requiredMeta = requireMeta | "";
       if (requiredMeta[0] != '\0') metaHashes[e] = metaKeyHash(requiredMeta);
@@ -133,6 +178,10 @@ void refreshSubscriptions() {
     strncpy(sub.dir, entry.dir.c_str(), sizeof(sub.dir) - 1);
     sub.mask = mask;
     sub.connectMask = connectMask;
+    sub.appMask = appMask;
+    sub.launchMask = launchMask;
+    sub.replacesEob = replacesEob;
+    memcpy(sub.launchBin, launchBin, sizeof(launchBin));
     memcpy(sub.metaKeyHash, metaHashes, sizeof(metaHashes));
     LOG_DBG("PEVT", "%s subscribes mask=0x%02x", sub.name, sub.mask);
   }
@@ -141,6 +190,13 @@ void refreshSubscriptions() {
 bool anySubscriber(const Event e) {
   for (const auto& sub : subscribers) {
     if (sub.name[0] != '\0' && (sub.mask & eventBit(e))) return true;
+  }
+  return false;
+}
+
+bool anyEndOfBookReplacer() {
+  for (const auto& sub : subscribers) {
+    if (sub.name[0] != '\0' && sub.replacesEob) return true;
   }
   return false;
 }
@@ -167,8 +223,8 @@ bool wantsConnectAny() {
   return false;
 }
 
-void emit(const Event e, const Var* vars, const size_t varCount) {
-  if (!anySubscriber(e)) return;
+bool emit(const Event e, const Var* vars, const size_t varCount) {
+  if (!anySubscriber(e)) return false;
 
   // One line: {"e":"reader.exit","id":"3fa9c21b-7","ts":1734212345,"vars":{"book":"...","percent":"74"}}
   JsonDocument doc;
@@ -194,12 +250,13 @@ void emit(const Event e, const Var* vars, const size_t varCount) {
   line += '\n';
   if (line.size() > MAX_EVENT_LINE) {
     LOG_ERR("PEVT", "event line too large (%u); dropped", static_cast<unsigned>(line.size()));
-    return;
+    return false;
   }
 
   // The book's sidecar, read once and shared by every filtered handler.
   pluginhttp::Headers meta;
   bool metaLoaded = false;
+  bool armedReplacer = false;  // a "replaces: end of book" handler actually fired and launched
   for (const auto& sub : subscribers) {
     if (sub.name[0] == '\0' || !(sub.mask & eventBit(e))) continue;
     const uint32_t wanted = sub.metaKeyHash[static_cast<size_t>(e)];
@@ -220,7 +277,7 @@ void emit(const Event e, const Var* vars, const size_t varCount) {
       }
       if (!matched) continue;
     }
-    const std::string path = outboxPath(sub);
+    const std::string path = (sub.appMask & eventBit(e)) ? appOutboxPath(sub) : outboxPath(sub);
     HalFile file = Storage.open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND);
     if (!file || !file.isOpen()) {
       LOG_ERR("PEVT", "%s: outbox open failed", sub.name);
@@ -235,14 +292,39 @@ void emit(const Event e, const Var* vars, const size_t varCount) {
       LOG_DBG("PEVT", "%s: outbox over cap, dropped", sub.name);
     }
     const uint64_t before = file.fileSize64();
-    if (file.write(reinterpret_cast<const uint8_t*>(line.data()), line.size()) != line.size()) {
+    const bool appended = file.write(reinterpret_cast<const uint8_t*>(line.data()), line.size()) == line.size();
+    if (!appended) {
       // A torn line would glue the next event onto it and the drain would drop
       // both as corrupt: cut back to the last complete line, losing only this one.
       LOG_ERR("PEVT", "%s: short outbox append; event dropped", sub.name);
       file.truncate(before);
     }
     file.flush();
+    // Launch mode: the event is now in the app's queue; ask the UI loop to open
+    // the app. Only once the append actually landed (a rolled-back short write
+    // would open the app with no event to read). Not for sleep.enter (no UI as
+    // the chip powers down). First wins.
+    if (appended && (sub.launchMask & eventBit(e)) && e != Event::SleepEnter && pendingLaunchPath.empty()) {
+      std::string target = std::string(sub.dir) + "/" + (sub.launchBin[0] ? sub.launchBin : "app.bin");
+      // A missing binary must not take the handoff: the event stays queued, but
+      // the firmware's own end-of-book handling runs.
+      if (!Storage.exists(target.c_str())) {
+        LOG_ERR("PEVT", "%s: launch target %s missing", sub.name, target.c_str());
+        continue;
+      }
+      pendingLaunchPath = std::move(target);
+      // An EOB replacement really took the handoff (replacesEob is a plugin-wide
+      // flag, so also require this to be the reader.end event).
+      if (sub.replacesEob && e == Event::ReaderEnd) armedReplacer = true;
+    }
   }
+  return armedReplacer;
+}
+
+std::string takePendingLaunch() {
+  std::string p;
+  p.swap(pendingLaunchPath);
+  return p;
 }
 
 namespace {

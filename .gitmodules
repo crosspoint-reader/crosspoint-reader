@@ -2,3 +2,6 @@
 	path = freeink-sdk
 	url = https://github.com/Free-Ink/freeink-sdk.git
 	branch = main
+[submodule "dessen"]
+	path = dessen
+	url = https://github.com/Free-Ink/dessen.git

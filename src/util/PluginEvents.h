@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 class GfxRenderer;
 
@@ -22,8 +23,19 @@ class GfxRenderer;
 //     }
 //   }
 //
-// A handler is either a "request" (response discarded; an acknowledgement) or
-// a "download" (response streamed to `dest` on SD, e.g. a sleep image).
+// A handler is a "request" (response discarded; an acknowledgement), a
+// "download" (response streamed to `dest` on SD, e.g. a sleep image), or an
+// "app" (a dessen app). An app handler declares "app": "<bin>" plus
+//   "mode": "read"   — the event is queued to <plugin dir>/app-events.jsonl and
+//                      the app reads/clears that file itself next time it runs
+//                      (default); or
+//   "mode": "launch" — same queue, and the event opens the app full-screen now.
+// A "reader.end" app handler may also set "replaces": "end of book": reaching
+// the last page then opens the app full-screen IN PLACE OF the firmware's
+// end-of-book menu (implies launch). The app owns that screen and offers its
+// own actions (it can launch another book or exit via syscalls).
+// App events never touch the network outbox, so drain() neither delivers nor
+// deletes them.
 // "require_meta": "<key>" queues an event for that handler only when the
 // event's book ("book", or "path" for book.downloaded) has a sidecar with a
 // non-empty value for the key.
@@ -52,6 +64,7 @@ enum class Event : uint8_t {
   ReaderSession,   // "reader.session"   vars: book, document, active-session summary
   BookDownloaded,  // "book.downloaded"  vars: path, title, plugin
   SleepEnter,      // "sleep.enter"      vars: book, percent, end_percent when sleeping from a reader, else none
+  ReaderEnd,       // "reader.end"       vars: book, percent, end_percent — fired once when the last page is reached
   COUNT
 };
 
@@ -69,6 +82,11 @@ void refreshSubscriptions();
 // True when at least one plugin subscribes to `e` (a few string compares).
 bool anySubscriber(Event e);
 
+// True when some plugin's "reader.end" handler is marked "replaces": "end of
+// book" — the reader then launches that app at the last page instead of drawing
+// the firmware end-of-book menu. Reflects the last refreshSubscriptions().
+bool anyEndOfBookReplacer();
+
 // Bit per Event the named plugin subscribes to (0 = none), for disclosing
 // what leaves the device. Reflects the last refreshSubscriptions().
 uint8_t subscriptionMask(const char* plugin);
@@ -82,7 +100,10 @@ bool wantsConnectAny();
 // Appends the event to each subscribing plugin's outbox. No-op without
 // subscribers. An outbox over the size cap is dropped wholesale first (the
 // newest events carry the current state; stale ones are worthless by then).
-void emit(Event e, const Var* vars, size_t varCount);
+// Returns true only when a "reader.end" "replaces": "end of book" handler
+// actually fired (passed metadata filtering) and armed its launch — the caller
+// uses this to take over the end-of-book screen, versus merely being subscribed.
+bool emit(Event e, const Var* vars, size_t varCount);
 
 // Replays queued events through their manifest handlers. Call only while WiFi
 // is connected; requests run synchronously on the calling task. At most
@@ -92,5 +113,10 @@ void emit(Event e, const Var* vars, size_t varCount);
 // non-null, a handler's "toast" template is shown via the standard popup after
 // its request succeeds.
 void drain(GfxRenderer* renderer, size_t maxEvents = 4);
+
+// Path to the app.bin a launch-mode handler ("mode": "launch") just armed, or
+// "" if none. The UI loop calls this each tick and opens the app; one launch is
+// buffered at a time, and sleep.enter never arms one (no UI then).
+std::string takePendingLaunch();
 
 }  // namespace pluginevents
