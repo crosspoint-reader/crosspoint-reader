@@ -251,6 +251,33 @@ TEST(ContentOpfParserCover, ResolvesEpub3CoverWithoutReadingCacheStorage) {
   EXPECT_EQ(Storage.readOpens, 0);
 }
 
+TEST(ContentOpfParserCover, CoverlessPackageHasNeitherImageNorGuidePath) {
+  const std::string xml = R"(<package><metadata/>
+    <manifest><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest>
+    <spine><itemref idref="chapter"/></spine></package>)";
+  const std::string cachePath = "/missing-cache";
+  const std::string basePath = "OPS/";
+  Storage = {};
+  ContentOpfParser parser(cachePath, basePath, xml.size(), nullptr);
+  parse(parser, xml);
+  EXPECT_TRUE(parser.coverItemHref.empty());
+  EXPECT_TRUE(parser.guideCoverPageHref.empty());
+}
+
+TEST(ContentOpfParserCover, GuideOnlyCoverHasAPathWithoutAResolvedImage) {
+  const std::string xml = R"(<package><metadata/>
+    <manifest><item id="wrapper" href="cover.xhtml" media-type="application/xhtml+xml"/></manifest>
+    <spine><itemref idref="wrapper"/></spine>
+    <guide><reference type="cover" href="cover.xhtml"/></guide></package>)";
+  const std::string cachePath = "/missing-cache";
+  const std::string basePath = "OPS/";
+  Storage = {};
+  ContentOpfParser parser(cachePath, basePath, xml.size(), nullptr);
+  parse(parser, xml);
+  EXPECT_TRUE(parser.coverItemHref.empty());
+  EXPECT_EQ(parser.guideCoverPageHref, "OPS/cover.xhtml");
+}
+
 TEST(ContentOpfParserCover, ReadingParserStillOpensManifestCache) {
   const std::string xml = R"(<package><metadata/>
     <manifest><item id="cover" href="cover.png" media-type="image/png" properties="cover-image"/></manifest>

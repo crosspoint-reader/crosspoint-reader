@@ -48,7 +48,8 @@ class Epub {
 
   bool findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip = nullptr) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true,
-                       bool metadataOnly = false, ZipFile* sharedZip = nullptr, bool normalizeLookup = false);
+                       bool metadataOnly = false, ZipFile* sharedZip = nullptr, bool normalizeLookup = false,
+                       bool* noCoverPathFound = nullptr);
   bool generateThumbBmpForCover(int height, const std::string& coverImageHref) const;
   bool openProtection();
   bool parseTocNcxFile(ZipFile* sharedZip) const;

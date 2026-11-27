@@ -10,6 +10,7 @@
 #include <LibraryBuilder.h>
 #include <LibraryIndexFile.h>
 #include <Memory.h>
+#include <Txt.h>
 #include <Utf8.h>
 #include <Xtc.h>
 
@@ -124,6 +125,14 @@ void HomeActivity::resolveGridCoverPaths() {
 void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoading, Rect& popupRect) {
   if (!book.coverBmpPath.empty() && Storage.exists(UITheme::getCoverThumbPath(book.coverBmpPath, height).c_str()))
     return;
+
+  const auto showLoadingOnce = [&] {
+    if (showingLoading) return;
+    showingLoading = true;
+    popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+    GUI.fillPopupProgress(renderer, popupRect, 0);
+  };
+
   // Only one parser lives at a time; EPUB/XTC objects exceed the stack budget.
   if (FsHelpers::hasReflowableBookExtension(book.path)) {
     auto epub = makeUniqueNoThrow<Epub>(book.path, "/.crosspoint");
@@ -132,13 +141,21 @@ void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoad
       return;
     }
     book.coverBmpPath = epub->getThumbBmpPath();
-    if (Storage.exists(epub->getThumbBmpPath(height).c_str())) return;
-    if (!showingLoading) {
-      showingLoading = true;
-      popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-      GUI.fillPopupProgress(renderer, popupRect, 0);
+    const auto thumbPath = epub->getThumbBmpPath(height);
+    if (Storage.exists(thumbPath.c_str())) return;
+
+    const bool isTextBook = Txt::isTxtOrMd(book.path);
+    const auto companionCover = isTextBook ? Txt::findCompanionCoverImage(book.path) : std::string();
+    if (isTextBook && companionCover.empty()) {
+      book.coverBmpPath.clear();
+      return;
     }
-    if (epub->generateThumbBmpFromSource(height)) {
+
+    showLoadingOnce();
+    if (isTextBook) {
+      epub->setupCacheDir();
+      if (Txt::convertCoverImageToBmp(companionCover, thumbPath, height)) return;
+    } else if (epub->generateThumbBmpFromSource(height)) {
       return;
     }
   } else if (FsHelpers::hasXtcExtension(book.path)) {
@@ -149,13 +166,9 @@ void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoad
     }
     book.coverBmpPath = xtc->getThumbBmpPath();
     if (Storage.exists(xtc->getThumbBmpPath(height).c_str())) return;
-    if (!showingLoading) {
-      showingLoading = true;
-      popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-      GUI.fillPopupProgress(renderer, popupRect, 0);
-    }
-    if (xtc->load() && xtc->generateThumbBmp(height)) {
-      return;
+    if (xtc->load()) {
+      showLoadingOnce();
+      if (xtc->generateThumbBmp(height)) return;
     }
   }
   book.coverBmpPath.clear();

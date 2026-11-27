@@ -66,7 +66,8 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip) c
 }
 
 bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const bool writeSpineEntries,
-                           const bool metadataOnly, ZipFile* sharedZip, const bool normalizeLookup) {
+                           const bool metadataOnly, ZipFile* sharedZip, const bool normalizeLookup,
+                           bool* noCoverPathFound) {
   std::string contentOpfFilePath;
   if (!findContentOpfFile(&contentOpfFilePath, sharedZip)) {
     LOG_ERR("EBP", "Could not find content.opf in zip");
@@ -114,6 +115,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   }
 
   bookMetadata.coverItemHref = opfParser.coverItemHref;
+  if (noCoverPathFound) *noCoverPathFound = opfParser.coverItemHref.empty() && opfParser.guideCoverPageHref.empty();
 
   // Guide-based cover fallback: if no cover found via metadata/properties,
   // try extracting the image reference from the guide's cover page XHTML
@@ -1004,11 +1006,21 @@ bool Epub::generateThumbBmpFromSource(int height) {
     LOG_ERR("EBP", "Could not open EPUB for cover metadata");
     return false;
   }
-  if (!parseContentOpf(*metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/false, zip.get())) return false;
+  bool noCoverPathFound = false;
+  if (!parseContentOpf(*metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/false, zip.get(),
+                       /*normalizeLookup=*/false, &noCoverPathFound)) {
+    return false;
+  }
   zip.reset();
   // The cover of a protected book is encrypted like everything else.
   if (!decryptor && !openProtection()) return false;
   setupCacheDir();
+  // A guide path can exist even if its image could not be resolved.
+  if (noCoverPathFound) {
+    auto marker = Storage.open(getThumbBmpPath(height).c_str(), O_WRONLY | O_CREAT);
+    if (!marker) LOG_ERR("EBP", "Could not cache missing thumbnail");
+    return false;
+  }
   return generateThumbBmpForCover(height, metadata->coverItemHref);
 }
 
