@@ -73,6 +73,12 @@ class CrossPointWebServer {
   // Returning true drops the client: the upload aborts and its partial file is removed.
   void setUploadCancelCheck(std::function<bool()> check) { uploadCancelCheck = std::move(check); }
 
+  // Shared with the serial transfer mode (no HTTP server involved).
+  static void writeSettingsJson(Print& out, const String& keys);
+  static int applySettingsJson(const String& body, String& error);  // -1 on error
+  static bool writeFontListJson(Print& out);
+  static bool deleteFontFamily(const char* familyName);
+
  private:
   std::unique_ptr<WebServer> server = nullptr;
   std::unique_ptr<WebSocketsServer> wsServer = nullptr;

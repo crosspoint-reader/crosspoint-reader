@@ -1039,7 +1039,7 @@ void loop() {
 
   // Handle incoming serial commands,
   // nb: we use logSerial from logging to avoid deprecation warnings
-  if (logSerial.available() > 0) {
+  if (!logIsMuted() && logSerial.available() > 0) {
     String line = logSerial.readStringUntil('\n');
     if (line.startsWith("CMD:")) {
       String cmd = line.substring(4);

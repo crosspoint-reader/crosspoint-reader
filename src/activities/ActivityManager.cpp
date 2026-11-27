@@ -26,6 +26,7 @@
 #include "home/HomeActivity.h"
 #include "library/LibraryListActivity.h"
 #include "network/CrossPointWebServerActivity.h"
+#include "network/SerialTransferActivity.h"
 #include "network/UsbDriveActivity.h"
 #include "plugins/PluginCatalogActivity.h"
 #include "reader/ReaderActivity.h"
@@ -291,6 +292,16 @@ void ActivityManager::goToJoinNetwork() {
   // Post heap-defrag reboot: enter the web-server activity straight in Join
   // Network mode (skips mode selection, does not reboot again).
   replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput, /*startInJoinNetwork=*/true));
+}
+
+bool ActivityManager::goToSerialTransfer() {
+  auto activity = makeUniqueNoThrow<SerialTransferActivity>(renderer, mappedInput);
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: Serial Transfer activity");
+    return false;
+  }
+  replaceActivity(std::move(activity));
+  return true;
 }
 
 void ActivityManager::goToUsbDrive() {
