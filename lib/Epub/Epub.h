@@ -65,6 +65,7 @@ class Epub {
   bool loadSyncMetadata(SyncMetadata& metadata);
   bool clearCache() const;
   void setupCacheDir() const;
+  static std::string cachePathFor(const std::string& filepath, const std::string& cacheDir);
   const std::string& getCachePath() const;
   const std::string& getPath() const;
   // Empty unless the encrypted-entry accessor failed to open.

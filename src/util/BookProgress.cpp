@@ -5,6 +5,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Txt.h>
 #include <Xtc.h>
 
 #include <algorithm>
@@ -18,26 +19,21 @@ uint32_t readLe32(const uint8_t* p) {
 int loadBookProgress(const std::string& path) {
   uint8_t data[10]{};
   if (FsHelpers::hasReflowableBookExtension(path)) {
-    // Metadata objects exceed the stack budget; only the featured book is loaded, once per entry.
-    auto epub = makeUniqueNoThrow<Epub>(path, "/.crosspoint");
-    if (!epub) {
-      LOG_ERR("HOME", "OOM: progress metadata");
-      return -1;
-    }
+    const auto cache = Epub::cachePathFor(path, "/.crosspoint");
     HalFile file;
-    if (!Storage.openFileForRead("HOME", epub->getCachePath() + "/progress.bin", file)) return -1;
-    const int size = file.read(data, sizeof(data));
+    if (!Storage.exists(path.c_str()) || !Storage.openFileForRead("HOME", cache + "/progress.bin", file)) return -1;
+    const auto size = file.size();
+    if ((size != 4 && size != 6 && size != 10) || file.read(data, size) != static_cast<int>(size)) return -1;
     file.close();
-    if (size != 4 && size != 6 && size != 10) return -1;
-    if (!epub->load(false, true)) return -1;
-    const int spine = data[0] | (data[1] << 8);
+    const uint16_t spine = data[0] | (data[1] << 8);
     const int page = data[2] | (data[3] << 8);
     const int total = size >= 6 ? data[4] | (data[5] << 8) : 0;
-    if (epub->getSpineItemsCount() <= 0 || epub->getBookSize() == 0) return -1;
-    if (spine == epub->getSpineItemsCount()) return 100;
-    if (spine > epub->getSpineItemsCount()) return -1;
+    uint32_t before, through, bookSize, first;
+    if (!BookMetadataCache::readProgressSizes(cache, spine, before, through, bookSize, first)) return -1;
+    if (Txt::isTxtOrMd(path) && !Txt::validateCache(path, cache, first)) return -1;
     const float fraction = total > 0 && page != UINT16_MAX ? std::clamp(float(page) / total, 0.0f, 1.0f) : 0;
-    return std::clamp(static_cast<int>(epub->calculateProgress(spine, fraction) * 100 + 0.5f), 0, 100);
+    const float progress = (float(before) + fraction * float(through - before)) / float(bookSize);
+    return std::clamp(static_cast<int>(progress * 100 + 0.5f), 0, 100);
   }
   if (FsHelpers::hasXtcExtension(path)) {
     auto xtc = makeUniqueNoThrow<Xtc>(path, "/.crosspoint");
