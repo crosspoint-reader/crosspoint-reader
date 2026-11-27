@@ -14,6 +14,7 @@ class EpubReaderPercentSelectionActivity final : public Activity, private UiAppH
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  bool buffersButtons() const override { return true; }
   void render(RenderLock&&) override;
 
  private:
