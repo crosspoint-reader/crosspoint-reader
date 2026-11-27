@@ -203,6 +203,13 @@ class EpubReaderActivity final : public ReaderActivity {
   // Persist the reader text settings, (re)load the selected SD font, and
   // re-paginate the current chapter so changes apply without re-opening the book.
   void applyReaderTextSettings();
+  // Apply a font chosen in the list menu: family is a picker list index, or -1
+  // to keep the stored family. setMenuFont() only writes the settings.
+  bool setMenuFont(int family, uint8_t pointSize);
+  void applyMenuFont(int family, uint8_t pointSize);
+  // A menu font held back while a page action runs (see openReaderMenu()).
+  int deferredMenuFontFamily = -1;
+  uint8_t deferredMenuFontSize = 0;
   // More panel rows.
   void buildMoreActions();
   std::string moreRowName(int row) const;
@@ -267,6 +274,7 @@ class EpubReaderActivity final : public ReaderActivity {
   ~EpubReaderActivity() override;
 
   void loop() override;
+  void onExit() override;
   void prepareForSleep() override;
   void render(RenderLock&& lock) override;
 
