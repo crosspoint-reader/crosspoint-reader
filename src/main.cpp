@@ -1048,8 +1048,10 @@ void loop() {
         const uint32_t bufferSize = display.getBufferSize();
         logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
         uint8_t* buf = display.getFrameBuffer();
-        logSerial.write(buf, bufferSize);
-        logSerial.printf("SCREENSHOT_END\n");
+        // write() returns short when the host stops draining; only a whole frame is complete.
+        if (logSerial.write(buf, bufferSize) == bufferSize) {
+          logSerial.printf("SCREENSHOT_END\n");
+        }
       }
     }
   }

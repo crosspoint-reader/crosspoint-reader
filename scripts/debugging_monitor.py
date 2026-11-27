@@ -32,10 +32,14 @@ import re
 import signal
 import sys
 import threading
+import time
 from collections import deque
 from datetime import datetime
 
 DEFAULT_BAUDRATE = 115200
+# The frame trailer arrives in its own read and the port timeout is 0.1 s, so a stalled
+# host can split it; wait this long for a complete line before rejecting the frame.
+SCREENSHOT_TRAILER_TIMEOUT_S = 1.0
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -272,6 +276,23 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                     continue
                 screenshot_data += data
                 if len(screenshot_data) == screenshot_size:
+                    # A whole frame ends with its trailer; anything else means output landed
+                    # inside the read, so the pixels are shifted or padded.
+                    trailer = b""
+                    trailer_deadline = time.monotonic() + SCREENSHOT_TRAILER_TIMEOUT_S
+                    while time.monotonic() < trailer_deadline and not shutdown_event.is_set():
+                        trailer += ser.readline()
+                        if trailer.rstrip() == b"SCREENSHOT_END" or trailer.endswith(b"\n"):
+                            break
+                    trailer = trailer.rstrip()
+                    if trailer != b"SCREENSHOT_END":
+                        print(
+                            f"{Fore.RED}Screenshot rejected: expected SCREENSHOT_END after the frame, "
+                            f"got {trailer[:24]!r}{Style.RESET_ALL}"
+                        )
+                        expecting_screenshot = False
+                        screenshot_data = b""
+                        continue
                     if Image:
                         img = Image.frombytes("1", (800, 480), screenshot_data)
                         # We need to rotate the image because the raw data is in landscape mode
