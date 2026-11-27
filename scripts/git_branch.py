@@ -3,7 +3,8 @@ PlatformIO pre-build script: inject git branch and short SHA into
 CROSSPOINT_VERSION for development environments.
 
 Results in a version string like:  1.1.0-dev-feat-kosync-xpath-05c6cf8
-Release environments are unaffected; they set CROSSPOINT_VERSION in the ini.
+Environments not listed below (release builds, and sticky with its fixed
+label) set CROSSPOINT_VERSION in platformio.ini and are unaffected.
 """
 
 import configparser
@@ -77,10 +78,10 @@ def get_base_version(project_dir):
 
 
 def inject_version(env):
-    # Only applies to development environments; release envs set the
+    # Only applies to the listed development environments; the others set the
     # version via build_flags in platformio.ini and are unaffected.
     if env['PIOENV'] not in (
-        'default', 'sticky', 'x4pro', 'x4c', 'metalio_eink4', 'papermono', 'eego_a4', 'picco'
+        'default', 'x4pro', 'x4c', 'metalio_eink4', 'papermono', 'eego_a4', 'picco'
     ):
         return
 
