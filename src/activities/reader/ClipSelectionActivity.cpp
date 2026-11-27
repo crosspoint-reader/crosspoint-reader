@@ -266,12 +266,16 @@ int ClipSelectionActivity::closestInRow(const uint16_t row, const int centerX) c
 
 int ClipSelectionActivity::wordAt(const int x, int y) const {
   y -= textOffset();
-  constexpr int SLOP = 4;
-  for (int i = 0; i < static_cast<int>(wordCount); ++i) {
-    const WordBox& word = words[i];
-    if (word.pageOffset != currentPageOffset) continue;
-    if (x >= word.x - SLOP && x < word.x + word.width + SLOP && y >= word.y - SLOP && y < word.y + word.height + SLOP) {
-      return i;
+  // A touch inside a word box wins over the slop of its neighbours: pieces of an elided word
+  // (l|'|agent) are narrow and touch each other, so the first piece's slop would swallow the rest.
+  for (const int slop : {0, 4}) {
+    for (int i = 0; i < static_cast<int>(wordCount); ++i) {
+      const WordBox& word = words[i];
+      if (word.pageOffset != currentPageOffset) continue;
+      if (x >= word.x - slop && x < word.x + word.width + slop && y >= word.y - slop &&
+          y < word.y + word.height + slop) {
+        return i;
+      }
     }
   }
   return -1;

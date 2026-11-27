@@ -292,6 +292,59 @@ bool isWordCharacter(uint32_t cp) {
   return true;
 }
 
+// Apostrophes that join two letters inside a word: ' (U+0027), the curly right quote used as an
+// apostrophe (U+2019) and the modifier letter apostrophe (U+02BC).
+bool isElisionApostrophe(const uint32_t cp) { return cp == '\'' || cp == 0x2019 || cp == 0x02BC; }
+
+bool isElisionLetter(const uint32_t cp) {
+  return isWordCharacter(cp) && cp != 0x2018 && !isElisionApostrophe(cp) && !utf8IsCjkBreakable(cp);
+}
+
+// A token boundary inside a word: `offset` is the byte offset where the next token starts, and
+// `breakable` says whether a line may wrap there (after a visible hyphen) or the two sides must stay
+// on one line (around an elision apostrophe).
+struct WordBreakPoint {
+  size_t offset;
+  bool breakable;
+};
+
+// Boundaries inside `text`: after each explicit hyphen or dash (breakable), and on both sides of an
+// apostrophe that sits between two letters (we're, qu'il, dell'arte) so that the word becomes the
+// tokens "we", "'", "re". The elision boundaries are unbreakable, so the word still moves as one
+// piece, but the reader can pick any part of it for a dictionary lookup (we, re, we', 're, we're).
+std::vector<WordBreakPoint> wordBreakPoints(const std::string& text, const bool attachToPrevious) {
+  std::vector<WordBreakPoint> points;
+  for (const size_t offset : explicitHyphenBreakByteOffsets(text, attachToPrevious)) {
+    points.push_back({offset, true});
+  }
+
+  const auto* const start = reinterpret_cast<const unsigned char*>(text.c_str());
+  const auto* const end = start + text.size();
+  const auto* ptr = start;
+  uint32_t prev = 0;
+  bool elided = false;
+  while (ptr < end) {
+    const auto* const cpStart = ptr;
+    const uint32_t cp = utf8NextCodepoint(&ptr);
+    if (cp == 0) break;
+    if (isElisionApostrophe(cp) && isElisionLetter(prev) && ptr < end) {
+      const auto* peek = ptr;
+      if (isElisionLetter(utf8NextCodepoint(&peek))) {
+        points.push_back({static_cast<size_t>(cpStart - start), false});
+        points.push_back({static_cast<size_t>(ptr - start), false});
+        elided = true;
+      }
+    }
+    prev = cp;
+  }
+
+  if (elided) {
+    std::sort(points.begin(), points.end(),
+              [](const WordBreakPoint& a, const WordBreakPoint& b) { return a.offset < b.offset; });
+  }
+  return points;
+}
+
 }  // namespace
 
 uint32_t ParsedText::visibleOffsetBaseAt(const size_t wordIndex) const {
@@ -574,23 +627,25 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   // Already-bold text should stay fully bold; focus splitting would make its suffix regular later.
   // Complex-script words never take a focus split: each half would shape on its own.
   if (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0 || scan.complexScript) {
-    if (auto breakOffsets = explicitHyphenBreakByteOffsets(word, effectiveAttachToPrevious); !breakOffsets.empty()) {
-      ensureTokenCapacity(breakOffsets.size() + 1);
+    if (const auto breakPoints = wordBreakPoints(word, effectiveAttachToPrevious); !breakPoints.empty()) {
+      ensureTokenCapacity(breakPoints.size() + 1);
       bool firstToken = true;
+      bool tokenNoSpaceBefore = effectiveNoSpaceBefore;  // how the token about to be pushed attaches
       size_t tokenStart = 0;
       uint32_t tokenVisibleOffset = visibleTextOffset;
-      for (const size_t breakOffset : breakOffsets) {
-        if (breakOffset <= tokenStart || breakOffset > word.size()) continue;
-        const std::string_view token(word.data() + tokenStart, breakOffset - tokenStart);
-        pushToken(token, firstToken ? effectiveAttachToPrevious : true, firstToken ? effectiveNoSpaceBefore : true,
+      for (const auto& point : breakPoints) {
+        if (point.offset <= tokenStart || point.offset > word.size()) continue;
+        const std::string_view token(word.data() + tokenStart, point.offset - tokenStart);
+        pushToken(token, firstToken ? effectiveAttachToPrevious : true, tokenNoSpaceBefore,
                   /*focusBoundary=*/0, tokenVisibleOffset);
         tokenVisibleOffset = sourceOffsetAfter(tokenVisibleOffset, countCodepoints(token));
         firstToken = false;
-        tokenStart = breakOffset;
+        tokenStart = point.offset;
+        tokenNoSpaceBefore = point.breakable;
       }
       if (tokenStart < word.size()) {
         pushToken(std::string_view(word).substr(tokenStart), firstToken ? effectiveAttachToPrevious : true,
-                  firstToken ? effectiveNoSpaceBefore : true, /*focusBoundary=*/0, tokenVisibleOffset);
+                  tokenNoSpaceBefore, /*focusBoundary=*/0, tokenVisibleOffset);
       }
       if (wordStartsRtl) {
         hasRtlWord = true;
@@ -666,6 +721,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   const unsigned char* segmentStart = ptr;
   uint32_t firstCp = utf8NextCodepoint(&ptr);  // Consume the first char to determine initial state
   bool inWordSegment = isWordCharacter(firstCp);
+  uint32_t prevCp = firstCp;
 
   bool isFirstSegment = true;
 
@@ -673,6 +729,13 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     const unsigned char* currentCpStart = ptr;
     uint32_t cp = utf8NextCodepoint(&ptr);
     bool isWordChar = isWordCharacter(cp);
+    // An apostrophe between two letters (we're, l'agent) is its own regular-weight segment, like in the
+    // unfocused path, so the word still splits into three selectable tokens.
+    if (isWordChar && isElisionApostrophe(cp) && isElisionLetter(prevCp) && ptr < end) {
+      const unsigned char* peek = ptr;
+      if (isElisionLetter(utf8NextCodepoint(&peek))) isWordChar = false;
+    }
+    prevCp = cp;
 
     // Whenever the character type flips, slice off the segment we just completed and process it
     if (isWordChar != inWordSegment) {
