@@ -166,22 +166,28 @@ bool LibraryListActivity::openedOnly() const {
   return SETTINGS.libraryRecentOpenedOnly != 0 && activeTabIndex == RECENT_TAB && query.empty();
 }
 
-// Store book behind a pinned entry; the ascending toggle reads the store backwards.
+// Store book behind a visible pin; ascending reads the filtered pins backwards.
 const RecentBook* LibraryListActivity::storeBook(const int entry) const {
+  if (entry < 0 || entry >= pinnedTotal) return nullptr;
   const auto& books = RECENT_BOOKS.getBooks();
-  const int count = std::min(static_cast<int>(books.size()), static_cast<int>(pinnedTotal));
-  if (entry < 0 || entry >= count) return nullptr;
-  return &books[static_cast<size_t>(isDescending(sortOrder) ? entry : count - 1 - entry)];
+  const size_t pinIndex = static_cast<size_t>(isDescending(sortOrder) ? entry : pinnedTotal - 1 - entry);
+  const size_t storeIndex = pinnedStoreIndices[pinIndex];
+  return storeIndex < books.size() ? &books[storeIndex] : nullptr;
 }
 
 void LibraryListActivity::resolvePinned() {
   const auto& books = RECENT_BOOKS.getBooks();
-  pinnedTotal = static_cast<uint8_t>(std::min<size_t>(books.size(), RecentBooksStore::MAX_RECENT_BOOKS));
-  for (int i = 0; i < pinnedTotal; i++) pinnedAscRows[i] = 0xFFFF;
+  pinnedTotal = 0;
+  const size_t count = std::min<size_t>(books.size(), RecentBooksStore::MAX_RECENT_BOOKS);
+  for (size_t i = 0; i < count; i++) {
+    if (!library::isLibraryBookFile(books[i].path)) continue;
+    pinnedStoreIndices[pinnedTotal] = static_cast<uint8_t>(i);
+    pinnedAscRows[pinnedTotal++] = 0xFFFF;
+  }
   if (pinnedTotal > 0 && index.isOpen()) {
     library::BookIdentity identities[RecentBooksStore::MAX_RECENT_BOOKS];
     for (int i = 0; i < pinnedTotal; i++) {
-      const std::string& path = books[static_cast<size_t>(i)].path;
+      const std::string& path = books[pinnedStoreIndices[i]].path;
       identities[i].pathHash = library::clixPathHash(path.data(), path.size());
       // Size is only a lookup prefilter; 0 (stat failed, e.g. the index handle
       // is the card's one open reader) falls back to hash-only matching.

@@ -21,6 +21,14 @@ uint8_t hexValue(const char c) {
 }
 }  // namespace
 
+bool equalsIgnoreAsciiCase(const std::string_view lhs, const std::string_view rhs) {
+  return std::equal(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(), [](const char a, const char b) {
+    const char foldedA = a >= 'A' && a <= 'Z' ? static_cast<char>(a + ('a' - 'A')) : a;
+    const char foldedB = b >= 'A' && b <= 'Z' ? static_cast<char>(b + ('a' - 'A')) : b;
+    return foldedA == foldedB;
+  });
+}
+
 std::string decodeUriEscapes(const std::string& path) {
   std::string decoded;
   decoded.reserve(path.size());
