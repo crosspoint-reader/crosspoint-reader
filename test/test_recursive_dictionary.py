@@ -142,11 +142,17 @@ struct Renderer {
     preparedStyles = styles;
   }
   int getSpaceWidth(int, EpdFontFamily::Style) const { return 1; }
-  int getLineHeight(int, float) const { return 10; }
+  mutable float lastLineCompression = 0.0f;
+  int getLineHeight(int, float compression) const {
+    lastLineCompression = compression;
+    return static_cast<int>(10.0f * compression + 0.5f);
+  }
 };
 struct Settings {
   bool touchReaderControls = true;
+  float lineCompression = 1.0f;
   int getReaderFontId() const { return 0; }
+  float getReaderLineCompression() const { return lineCompression; }
 } SETTINGS;
 struct MappedInputManager {
   enum class Button { Back };
@@ -388,6 +394,18 @@ int main() {
   assert(first.block->positions == std::vector<int16_t>({0, 4}));
   assert(cjk.block->words == std::vector<std::string>({"你", "好", "世"}));
   assert(cjk.y == 10 && cjk.block->ranges[0].start == 8 && cjk.block->ranges[1].start == 11);
+  view.lookup->selectionPages.clear();
+  SETTINGS.lineCompression = 1.5f;
+  assert(view.prepareDefinition(view.content) && view.buildPlainSelectionPages());
+  assert(view.renderer.lastLineCompression == 1.5f);
+  assert(view.content.linesPerPage == 1 && view.content.totalPages == 7);
+  view.lookup->selectionPages.clear();
+  SETTINGS.lineCompression = 0.6f;
+  assert(view.prepareDefinition(view.content) && view.buildPlainSelectionPages());
+  assert(view.renderer.lastLineCompression == 0.6f);
+  assert(view.content.linesPerPage == 3 && view.content.totalPages == 3);
+  assert(static_cast<const PageLine&>(*view.lookup->selectionPages[0]->elements[1]).y == 6);
+  SETTINGS.lineCompression = 1.0f;
   view.lookup->selectionPages.clear();
   view.content = {};
   view.content.text = "אחד שני";

@@ -28,7 +28,6 @@ namespace {
 // Longest measurable/drawable span. Wrapped lines stay under the screen width
 // (far below this); only pathological unbreakable tokens are split at this cap.
 constexpr size_t MAX_LINE_BYTES = 191;
-constexpr float PLAIN_TEXT_LINE_SPACING = 2.0f;
 constexpr size_t HEAP_HEADROOM = 8 * 1024;
 constexpr unsigned long MESSAGE_DURATION_MS = 1500;
 constexpr size_t SELECTION_PAGE_WINDOW = 3;
@@ -263,7 +262,7 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
   const BodyArea body = bodyArea();
   const int maxWidth = body.width;
   const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
-  const int lineHeight = renderer.getLineHeight(fontId, PLAIN_TEXT_LINE_SPACING);
+  const int lineHeight = renderer.getLineHeight(fontId, SETTINGS.getReaderLineCompression());
   next.linesPerPage = std::max(1, body.height / lineHeight);
 
   const char* text = definition.c_str();
@@ -478,7 +477,7 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
 bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
   // Only the selection window gets packed word arenas; the definition keeps its cheap line spans.
   const int fontId = SETTINGS.getReaderFontId();
-  const int lineHeight = renderer.getLineHeight(fontId, PLAIN_TEXT_LINE_SPACING);
+  const int lineHeight = renderer.getLineHeight(fontId, SETTINGS.getReaderLineCompression());
   const int pageCount = std::min<int>(SELECTION_PAGE_WINDOW, content.totalPages - content.selectionPage);
   const size_t scratchBytes =
       sizeof(PlainSelectionLine) + MAX_LINE_BYTES + 1 +
@@ -685,7 +684,7 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     pages[currentPage]->render(renderer, fontId, x, startY);
     return;
   }
-  const int lineHeight = renderer.getLineHeight(fontId, PLAIN_TEXT_LINE_SPACING);
+  const int lineHeight = renderer.getLineHeight(fontId, SETTINGS.getReaderLineCompression());
   char buf[MAX_LINE_BYTES + 1];
   const int firstLine = currentPage * linesPerPage;
   const int lastLine = std::min(firstLine + linesPerPage, static_cast<int>(lines.size()));
