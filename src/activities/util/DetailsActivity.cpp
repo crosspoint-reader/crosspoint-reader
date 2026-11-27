@@ -13,6 +13,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/reader/DictionaryDefinitionActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/CatalogScreens.h"
 #include "components/UITheme.h"
 #include "util/DictHtmlPages.h"
@@ -23,6 +24,7 @@ namespace fui = freeink::ui;
 namespace {
 constexpr fui::ActionId ACTION_PRIMARY = 1;
 constexpr fui::ActionId ACTION_MORE = 2;
+constexpr fui::ActionId ACTION_SECONDARY = 3;
 // htmlToPlainText marks a heading line with this byte. The plain-text target
 // used here has no bold style, so the marker is dropped again after conversion.
 constexpr char DETAILS_HEADING_MARKER = '\x01';
@@ -38,6 +40,7 @@ void DetailsActivity::onEnter() {
   setResult(std::move(cancelled));
   resetUi();
   app.on(ACTION_PRIMARY, &DetailsActivity::onPrimaryEvent, this);
+  app.on(ACTION_SECONDARY, &DetailsActivity::onSecondaryEvent, this);
   app.on(ACTION_MORE, &DetailsActivity::onMoreEvent, this);
   app.setScreen(&DetailsActivity::detailsScreen, this);
   requestUpdate();
@@ -86,14 +89,38 @@ void DetailsActivity::loop() {
     cancel();
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     confirm();
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
-             mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+  } else if (mappedInput.wasReleased(MappedInputManager::Button::NavPrevious)) {
+    // Nav* swap with orientation exactly as mapLabels() swaps the hints.
+    confirmSecondary();
+  } else if (mappedInput.wasReleased(MappedInputManager::Button::NavNext)) {
     openMore();
   }
 }
 
 void DetailsActivity::confirm() {
   setResult(ActivityResult{});
+  finish();
+}
+
+void DetailsActivity::confirmSecondary() {
+  if (spec.secondaryLabel.empty()) return;
+  if (spec.secondaryConfirm.empty()) {
+    finishSecondary();
+    return;
+  }
+  auto confirmation = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, spec.secondaryConfirm, spec.title,
+                                                              std::string(), spec.secondaryLabel);
+  if (!confirmation) {
+    LOG_ERR("DETAILS", "OOM: confirmation");
+    return;
+  }
+  startActivityForResult(std::move(confirmation), [this](const ActivityResult& result) {
+    if (!result.isCancelled) finishSecondary();
+  });
+}
+
+void DetailsActivity::finishSecondary() {
+  setResult(ActivityResult{DetailsResult{true}});
   finish();
 }
 
@@ -115,6 +142,12 @@ void DetailsActivity::onPrimaryEvent(const fui::ActionEvent&, void* user) {
   auto* self = static_cast<DetailsActivity*>(user);
   self->app.clearTapFlash();
   self->confirm();
+}
+
+void DetailsActivity::onSecondaryEvent(const fui::ActionEvent&, void* user) {
+  auto* self = static_cast<DetailsActivity*>(user);
+  self->app.clearTapFlash();
+  self->confirmSecondary();
 }
 
 void DetailsActivity::onMoreEvent(const fui::ActionEvent&, void* user) {
@@ -203,6 +236,11 @@ void DetailsActivity::buildScreen(UiScreen& screen) {
   props.primary.label = asPtr(spec.actionLabel);
   props.primary.action = ACTION_PRIMARY;
   styleButton(props.primary);
+  props.secondary.label = asPtr(spec.secondaryLabel);
+  if (props.secondary.label) {
+    props.secondary.action = ACTION_SECONDARY;
+    styleButton(props.secondary);
+  }
   if (!spec.description.empty()) {
     props.more.label = tr(STR_DETAILS);
     props.more.action = ACTION_MORE;
@@ -239,7 +277,9 @@ void DetailsActivity::render(RenderLock&&) {
   }
 
   const char* moreLabel = spec.description.empty() ? "" : tr(STR_DETAILS);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), spec.actionLabel.c_str(), "", moreLabel);
+  const char* actionHint = spec.actionHint ? spec.actionHint : spec.actionLabel.c_str();
+  const char* secondaryHint = spec.secondaryHint ? spec.secondaryHint : spec.secondaryLabel.c_str();
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), actionHint, secondaryHint, moreLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
