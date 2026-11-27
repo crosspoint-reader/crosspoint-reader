@@ -53,7 +53,8 @@ uint16_t getSdCardSpaceAdvance(SdCardFont& font, const EpdFontFamily::Style styl
   // Zero means uncached (full table, style not prewarmed, or failed
   // preparation): read the glyph, as the per-codepoint slow path does.
   const EpdFont* epdFont = font.getEpdFont(resolvedStyle);
-  const EpdGlyph* glyph = epdFont ? epdFont->getGlyph(' ') : nullptr;
+  EpdGlyph scratch;
+  const EpdGlyph* glyph = epdFont ? epdFont->getGlyph(' ', scratch) : nullptr;
   return glyph ? glyph->advanceX : 0;
 }
 }  // namespace
@@ -121,7 +122,8 @@ void appendShapedRtlTokens(const char* text, std::string& shapedOut) {
 }
 }  // namespace
 
-const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
+const uint8_t* GfxRenderer::getGlyphBitmap(const GlyphBitmapSource& source, const EpdGlyph* glyph) const {
+  const auto* fontData = source.font;
   // Vector (TTF) fonts: the glyph bitmap lives in the font's own cache, keyed by
   // the EpdGlyph the miss handler returned. Checked first so it never reaches the
   // SdCardFont overflow cast below. nullptr = zero-width glyph (e.g. space).
@@ -134,11 +136,10 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
       LOG_ERR("GFX", "Compressed font but no FontDecompressor set");
       return nullptr;
     }
-    uint32_t glyphIndex = static_cast<uint32_t>(glyph - fontData->glyph);
     // For page-buffer hits the pointer is stable for the page lifetime.
     // For hot-group hits it is valid only until the next getBitmap() call — callers
     // must consume it (draw the glyph) before requesting another bitmap.
-    return fd->getBitmap(fontData, glyph, glyphIndex);
+    return fd->getBitmap(fontData, glyph, source.index);
   }
   // For SD card fonts, check if the glyph was loaded on demand into the overflow
   // buffer.  getOverflowBitmap() returns:
@@ -499,17 +500,18 @@ enum class TextRotation { None, Rotated90CW };
 static void renderCharScaled(const GfxRenderer& renderer, const EpdFontFamily& fontFamily, const uint32_t cp,
                              int cursorX, int cursorY, const bool pixelState, const EpdFontFamily::Style style,
                              const int scaleNum, const int scaleDen) {
-  EpdGlyph solidFallback;
-  const EpdFontData* fontData = nullptr;
-  const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, solidFallback, style, &fontData);
+  EpdGlyph scratch;
+  GlyphBitmapSource source;
+  const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, scratch, style, &source);
+  const auto* fontData = source.font;
   if (!glyph) return;
-  if (glyph == &solidFallback) {
+  if (source.index == GlyphBitmapSource::SOLID) {
     renderer.fillRect(cursorX + glyph->left * scaleNum / scaleDen, cursorY - glyph->top * scaleNum / scaleDen,
                       (glyph->width * scaleNum + scaleDen - 1) / scaleDen,
                       (glyph->height * scaleNum + scaleDen - 1) / scaleDen, pixelState);
     return;
   }
-  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
+  const uint8_t* bitmap = renderer.getGlyphBitmap(source, glyph);
   if (!bitmap) return;
 
   const int srcW = glyph->width;
@@ -558,9 +560,10 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
                            const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                            const bool pixelState, const EpdFontFamily::Style style) {
   if (renderer.grayPlanesAreAbsolute()) renderMode = GfxRenderer::BW;
-  EpdGlyph solidFallback;
-  const EpdFontData* fontData = nullptr;
-  const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, solidFallback, style, &fontData);
+  EpdGlyph scratch;
+  GlyphBitmapSource source;
+  const EpdGlyph* glyph = fontFamily.getGlyphMetrics(cp, scratch, style, &source);
+  const auto* fontData = source.font;
   if (!glyph) {
     if (!fontFamily.hasGlyphFallback()) LOG_ERR("GFX", "No glyph for codepoint %d", cp);
     return;
@@ -589,7 +592,7 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     }
   }
 
-  if (glyph == &solidFallback) {
+  if (source.index == GlyphBitmapSource::SOLID) {
     if constexpr (rotation == TextRotation::Rotated90CW) {
       renderer.fillRect(cursorX + fontData->ascender - top, cursorY - left - width + 1, height, width, pixelState);
     } else {
@@ -597,7 +600,7 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     }
     return;
   }
-  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
+  const uint8_t* bitmap = renderer.getGlyphBitmap(source, glyph);
   if (bitmap == nullptr) return;
 
   // Logical placement of glyph pixel (0, 0) and the logical step for one move
@@ -816,7 +819,7 @@ void GfxRenderer::drawVisualText(const int fontId, const int resolvedFontId, con
     if (!isShapedGlyph && (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp))) {
       // getGlyph falls back to U+FFFD, which would be stamped over the base.
       if (!font.hasCodepoint(cp, style)) continue;
-      const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
+      const auto combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
       const auto anchor = combiningMark::anchorFor(cp);
       const int raiseBy =
@@ -835,8 +838,8 @@ void GfxRenderer::drawVisualText(const int fontId, const int resolvedFontId, con
       cp = font.applyLigatures(cp, textCursor, style);
     }
 
-    EpdGlyph solidFallback;
-    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
+    EpdGlyph scratch;
+    const EpdGlyph* glyph = font.getGlyphMetrics(cp, scratch, style);
     // Neither the UI font nor its built-in fallback covers cp.
     if (!glyph && !isShapedGlyph && font.hasGlyphFallback()) continue;
 
@@ -2239,7 +2242,7 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
     return 0;
   }
 
-  const EpdGlyph* spaceGlyph = fontIt->second.getGlyph(' ', style);
+  const auto spaceGlyph = fontIt->second.getGlyph(' ', style);
   return spaceGlyph ? fp4::toPixel(spaceGlyph->advanceX) : 0;  // snap 12.4 fixed-point to nearest pixel
 }
 
@@ -2256,7 +2259,7 @@ int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const 
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return 0;
   const auto& font = fontIt->second;
-  const EpdGlyph* spaceGlyph = font.getGlyph(' ', style);
+  const auto spaceGlyph = font.getGlyph(' ', style);
   const int32_t spaceAdvanceFP = spaceGlyph ? static_cast<int32_t>(spaceGlyph->advanceX) : 0;
   // Combine space advance + flanking kern into one fixed-point sum before snapping.
   // Snapping the combined value avoids the +/-1 px error from snapping each component separately.
@@ -2339,8 +2342,8 @@ int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, c
       cp = smallCapCp;
       int32_t advFP = sdIt->second->getAdvance(cp, styleIdx);
       if (advFP == 0 || (syntheticGlyph::isSolid(cp) && !font.hasCodepoint(cp, style))) {
-        EpdGlyph solidFallback;
-        const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
+        EpdGlyph scratch;
+        const EpdGlyph* glyph = font.getGlyphMetrics(cp, scratch, style);
         advFP = glyph ? glyph->advanceX : 0;
       }
       if (prevCp != 0) {
@@ -2382,9 +2385,8 @@ int GfxRenderer::measureVisualText(const int resolvedFontId, const char* text, c
     }
 
     // Shaped glyphs carry their advance; only fetch the glyph when they don't.
-    EpdGlyph solidFallback;
-    const EpdGlyph* glyph =
-        isShapedGlyph && shaped.advanceFP >= 0 ? nullptr : font.getGlyphMetrics(cp, solidFallback, style);
+    EpdGlyph scratch;
+    const EpdGlyph* glyph = isShapedGlyph && shaped.advanceFP >= 0 ? nullptr : font.getGlyphMetrics(cp, scratch, style);
     // Neither the UI font nor its built-in fallback covers cp.
     if (!glyph && !isShapedGlyph && font.hasGlyphFallback()) continue;
 
@@ -2442,7 +2444,7 @@ bool GfxRenderer::getCodepointMetrics(const int fontId, const uint32_t cp, const
                                       int32_t& advanceFP, int& top) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return false;
-  const EpdGlyph* glyph = fontIt->second.getGlyph(cp, style);
+  const auto glyph = fontIt->second.getGlyph(cp, style);
   if (!glyph) return false;
   advanceFP = glyph->advanceX;
   top = glyph->top;
@@ -2461,11 +2463,13 @@ int GfxRenderer::drawScaledCodepoint(const int fontId, const uint32_t cp, const 
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) return 0;
   const EpdFontFamily& font = fontIt->second;
-  const EpdGlyph* glyph = font.getGlyph(cp, style);
+  EpdGlyph scratch;
+  GlyphBitmapSource source;
+  const EpdGlyph* glyph = font.getGlyph(cp, scratch, style, &source);
   if (!glyph) return 0;
   const int advance = fp4::toPixel(static_cast<int32_t>(glyph->advanceX) * scale256 / 256);
-  const EpdFontData* fontData = font.getData(style);
-  const uint8_t* bitmap = getGlyphBitmap(fontData, glyph);
+  const EpdFontData* fontData = source.font;
+  const uint8_t* bitmap = getGlyphBitmap(source, glyph);
   if (!bitmap) return advance;
 
   const int srcW = glyph->width;
@@ -2590,7 +2594,7 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     if (!isShapedGlyph && (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp))) {
       // getGlyph falls back to U+FFFD, which would be stamped over the base.
       if (!font.hasCodepoint(cp, style)) continue;
-      const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
+      const auto combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
       const auto anchor = combiningMark::anchorFor(cp);
       const int raiseBy =
@@ -2604,8 +2608,8 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
     if (!isShapedGlyph) cp = font.applyLigatures(cp, text, style);
 
-    EpdGlyph solidFallback;
-    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
+    EpdGlyph scratch;
+    const EpdGlyph* glyph = font.getGlyphMetrics(cp, scratch, style);
     // Neither the UI font nor its built-in fallback covers cp.
     if (!glyph && !isShapedGlyph && font.hasGlyphFallback()) continue;
 

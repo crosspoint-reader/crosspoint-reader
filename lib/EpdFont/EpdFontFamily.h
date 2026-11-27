@@ -1,6 +1,8 @@
 #pragma once
 #include <VectorFontSupport.h>
 
+#include <optional>
+
 #if CROSSPOINT_VECTOR_FONTS
 #include <atomic>
 #endif
@@ -39,9 +41,10 @@ class EpdFontFamily {
   float getSizeInPixels() const { return sizeInPixels; }
   void getTextDimensions(const char* string, int* w, int* h, Style style = REGULAR) const;
   const EpdFontData* getData(Style style = REGULAR) const;
-  const EpdGlyph* getGlyph(uint32_t cp, Style style = REGULAR) const;
-  const EpdGlyph* getGlyphMetrics(uint32_t cp, EpdGlyph& solidFallback, Style style = REGULAR,
-                                  const EpdFontData** glyphData = nullptr) const;
+  std::optional<EpdGlyph> getGlyph(uint32_t cp, Style style = REGULAR) const;
+  const EpdGlyph* getGlyph(uint32_t cp, EpdGlyph& scratch, Style style, GlyphBitmapSource* source) const;
+  const EpdGlyph* getGlyphMetrics(uint32_t cp, EpdGlyph& scratch, Style style = REGULAR,
+                                  GlyphBitmapSource* source = nullptr) const;
   void setGlyphFallback(const EpdFontFamily* fallback) { glyphFallback = fallback; }
 #if CROSSPOINT_VECTOR_FONTS
   void setGlyphLoadFailureFlag(const std::atomic<bool>* failure) { glyphLoadFailed = failure; }
@@ -67,6 +70,7 @@ class EpdFontFamily {
   const std::atomic<bool>* glyphLoadFailed = nullptr;
 #endif
 
+  const EpdGlyph* lookup(uint32_t cp, EpdGlyph& scratch, Style style, GlyphBitmapSource* source, bool allowSolid) const;
   bool useFallbackOnly() const;
 
   const EpdFont* fallbackFont(Style style) const;

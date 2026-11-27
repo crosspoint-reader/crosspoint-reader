@@ -474,7 +474,7 @@ class GfxRenderer {
   void cleanupGrayscaleWithFrameBuffer() const;
 
   // Font helpers
-  const uint8_t* getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const;
+  const uint8_t* getGlyphBitmap(const GlyphBitmapSource& source, const EpdGlyph* glyph) const;
 
   // Lend the 48 KB framebuffer's bytes to a memory-hungry phase (chapter
   // builds) WITHOUT freeing the allocation, so it never moves and repeated

@@ -147,6 +147,15 @@ typedef struct {
   uint32_t dataOffset;  ///< Pointer into EpdFont->bitmap (or within-group offset for compressed fonts)
 } EpdGlyph;
 
+// Firmware-generated faces only. SD fonts and scalable callbacks retain EpdGlyph.
+struct EpdBuiltinGlyph {
+  uint8_t width, height;
+  uint16_t advanceX;
+  int8_t left, top;
+  uint16_t dataOffset;
+};
+static_assert(sizeof(EpdBuiltinGlyph) == 8);
+
 /// Compressed font group: a DEFLATE-compressed block of glyph bitmaps
 typedef struct {
   uint32_t compressedOffset;  ///< Byte offset into compressed data array
@@ -182,7 +191,7 @@ typedef struct {
 EPD_PACKED_END
 
 /// Data stored for FONT AS A WHOLE
-typedef struct {
+struct EpdFontData {
   const uint8_t* bitmap;                ///< Glyph bitmaps, concatenated
   const EpdGlyph* glyph;                ///< Glyph array
   const EpdUnicodeInterval* intervals;  ///< Valid unicode intervals for this font
@@ -271,7 +280,30 @@ typedef struct {
   /// Shares glyphMissCtx. nullptr for fonts without shaping data (all fonts
   /// zero-init this).
   bool (*shapeHandler)(void* ctx, const char* utf8, std::string* out);
-} EpdFontData;
+  const EpdBuiltinGlyph* builtinGlyphs = nullptr;
+
+  // SD caches identify resident glyphs by their original addresses.
+  const EpdGlyph& glyphAt(uint32_t index, EpdGlyph& decoded) const {
+    if (!builtinGlyphs) return glyph[index];
+    const auto& g = builtinGlyphs[index];
+    const unsigned pixels = unsigned(g.width) * g.height;
+    const auto length = static_cast<uint16_t>(is2Bit ? (pixels + 3) / 4 : (pixels + 7) / 8);
+    decoded = {g.width, g.height, g.advanceX, g.left, g.top, length, g.dataOffset};
+    return decoded;
+  }
+};
+
+constexpr EpdFontData withBuiltinGlyphs(EpdFontData font, const EpdBuiltinGlyph* glyphs) {
+  font.builtinGlyphs = glyphs;
+  return font;
+}
+
+// A synthetic solid has metrics but no bitmap or table entry.
+struct GlyphBitmapSource {
+  static constexpr uint32_t SOLID = UINT32_MAX;
+  const EpdFontData* font = nullptr;
+  uint32_t index = 0;
+};
 
 // Solid Unicode symbols can be drawn as rectangles when the font lacks them.
 namespace syntheticGlyph {

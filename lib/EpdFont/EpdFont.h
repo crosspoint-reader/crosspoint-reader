@@ -11,15 +11,15 @@ class EpdFont {
   ~EpdFont() = default;
   void getTextDimensions(const char* string, int* w, int* h, const EpdFont* fallback = nullptr) const;
 
-  const EpdGlyph* getGlyph(uint32_t cp) const;
+  // Compact built-ins expand into scratch. SD and TTF retain their cache pointer identity.
+  const EpdGlyph* getGlyph(uint32_t cp, EpdGlyph& scratch, uint32_t* index = nullptr) const;
 
   // With an explicit fallback, omit characters that neither font covers.
   const EpdFont* fontForCodepoint(uint32_t cp, const EpdFont* fallback) const;
 
   /// Like getGlyph(), but supplies metrics for missing solid block symbols.
-  /// If the returned pointer is &solidFallback, draw a filled rectangle;
-  /// it has no bitmap. The caller owns the fallback storage.
-  const EpdGlyph* getGlyphMetrics(uint32_t cp, EpdGlyph& solidFallback) const;
+  /// Synthetic solids return GlyphBitmapSource::SOLID through index.
+  const EpdGlyph* getGlyphMetrics(uint32_t cp, EpdGlyph& scratch, uint32_t* index = nullptr) const;
 
   /// Returns true if this font covers `cp`: either via its in-RAM interval
   /// table or, for SD card fonts, via the coverageHandler that consults the

@@ -198,6 +198,33 @@ void expectPageBitmaps(SdCardFont& font, uint32_t first, uint32_t count) {
 }
 }  // namespace
 
+TEST(SdCardFontTest, FullWidthRecordsKeepTheirOverflowAndResidentBitmaps) {
+  makeFont();
+  constexpr size_t glyphOffset = 64 + 24;
+  put16(glyphOffset + 4, static_cast<uint16_t>(-160));
+  put16(glyphOffset + 6, 180);
+  sdFontTestFile.back() = 0xA5;  // Last byte of FIRST's bitmap, at file-relative bitmap offset 65536.
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  EpdGlyph scratch;
+  const auto* cold = font.getEpdFont()->getGlyph(FIRST, scratch);
+  ASSERT_NE(cold, nullptr);
+  EXPECT_EQ(cold->left, -160);
+  EXPECT_EQ(cold->top, 180);
+  EXPECT_EQ(cold->dataOffset, 65536U);
+  ASSERT_TRUE(font.isOverflowGlyph(cold));
+  const auto* bitmap = font.getOverflowBitmap(cold);
+  ASSERT_NE(bitmap, nullptr);
+  EXPECT_EQ(bitmap[BITMAP_BYTES - 1], 0xA5);
+  ASSERT_EQ(0, font.prewarm(page(FIRST, 1).c_str(), 1));
+  const auto* resident = font.getEpdFont()->getGlyph(FIRST, scratch);
+  ASSERT_NE(resident, nullptr);
+  EXPECT_EQ(resident, font.getEpdFont()->data->glyph);
+  EXPECT_EQ(resident->left, -160);
+  EXPECT_EQ(resident->top, 180);
+  EXPECT_EQ(font.getEpdFont()->data->bitmap[resident->dataOffset + BITMAP_BYTES - 1], 0xA5);
+}
+
 TEST(SdCardFontTest, CompletePagesReplaceEarlierGlyphs) {
   makeFont();
   SdCardFont font;

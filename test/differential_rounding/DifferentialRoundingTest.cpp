@@ -333,18 +333,19 @@ TEST(EpdFont, KernLookupEmptyRowIsZero) {
 }
 
 TEST(EpdFont, GlyphLookup) {
-  ASSERT_NE(testFont().getGlyph('T'), nullptr);
-  ASSERT_NE(testFont().getGlyph('a'), nullptr);
-  ASSERT_NE(testFont().getGlyph('o'), nullptr);
-  ASSERT_NE(testFont().getGlyph('x'), nullptr);
-  EXPECT_EQ(testFont().getGlyph('T')->advanceX, 137);
-  EXPECT_EQ(testFont().getGlyph('a')->advanceX, 130);
-  EXPECT_EQ(testFont().getGlyph('o')->advanceX, 145);
-  EXPECT_EQ(testFont().getGlyph('x')->advanceX, 136);
+  EpdGlyph scratch;
+  ASSERT_NE(testFont().getGlyph('T', scratch), nullptr);
+  ASSERT_NE(testFont().getGlyph('a', scratch), nullptr);
+  ASSERT_NE(testFont().getGlyph('o', scratch), nullptr);
+  ASSERT_NE(testFont().getGlyph('x', scratch), nullptr);
+  EXPECT_EQ(testFont().getGlyph('T', scratch)->advanceX, 137);
+  EXPECT_EQ(testFont().getGlyph('a', scratch)->advanceX, 130);
+  EXPECT_EQ(testFont().getGlyph('o', scratch)->advanceX, 145);
+  EXPECT_EQ(testFont().getGlyph('x', scratch)->advanceX, 136);
 
   // No U+FFFD in font, so unknown codepoints return nullptr
-  EXPECT_EQ(testFont().getGlyph('Z'), nullptr);
-  EXPECT_EQ(testFont().getGlyph('b'), nullptr);
+  EXPECT_EQ(testFont().getGlyph('Z', scratch), nullptr);
+  EXPECT_EQ(testFont().getGlyph('b', scratch), nullptr);
 }
 
 // Known-value regression tests.  Expected widths are computed by hand using
@@ -498,6 +499,7 @@ TEST(EpdFont, EmptyFontStillMeasuresSolidSymbols) {
 }
 
 TEST(EpdFont, MissingTurnedCommaUsesQuoteAndNativeGlyphWins) {
+  EpdGlyph scratch;
   const EpdGlyph glyphs[] = {{3, 5, 64, 0, 8, 1, 0}, {4, 6, 80, 0, 9, 1, 1}};
   const EpdUnicodeInterval intervals[] = {{0x02BB, 0x02BB, 0}, {0x2018, 0x2018, 1}};
   EpdFontData data{};
@@ -505,10 +507,10 @@ TEST(EpdFont, MissingTurnedCommaUsesQuoteAndNativeGlyphWins) {
   data.intervals = intervals + 1;
   data.intervalCount = 1;
   const EpdFont font(&data);
-  EXPECT_EQ(font.getGlyph(0x02BB), &glyphs[1]);
+  EXPECT_EQ(font.getGlyph(0x02BB, scratch), &glyphs[1]);
   data.intervals = intervals;
   data.intervalCount = 2;
-  EXPECT_EQ(font.getGlyph(0x02BB), &glyphs[0]);
+  EXPECT_EQ(font.getGlyph(0x02BB, scratch), &glyphs[0]);
 }
 
 TEST(UiFontFallback, MixesGlyphsAndOmitsUnsupportedCharacters) {
@@ -521,11 +523,11 @@ TEST(UiFontFallback, MixesGlyphsAndOmitsUnsupportedCharacters) {
   family.setGlyphFallback(&builtin);
 
   EpdGlyph solid;
-  const EpdFontData* source = nullptr;
+  GlyphBitmapSource source;
   EXPECT_EQ(family.getGlyphMetrics('T', solid, EpdFontFamily::REGULAR, &source), &kGlyphs[0]);
-  EXPECT_EQ(source, &kTestFontData);
+  EXPECT_EQ(source.font, &kTestFontData);
   EXPECT_EQ(family.getGlyphMetrics('a', solid, EpdFontFamily::REGULAR, &source), &kGlyphs[1]);
-  EXPECT_EQ(source, &customData);
+  EXPECT_EQ(source.font, &customData);
   EXPECT_EQ(family.getGlyphMetrics('?', solid), nullptr);
   EXPECT_EQ(family.getKerning('T', 'a'), 0);
   int width = 0;
@@ -548,8 +550,31 @@ TEST(UiFontFallback, SwitchesToBuiltinsWhenGlyphLoadFails) {
   failed = true;
   EXPECT_EQ(family.getData(), &kTestFontData);
   EpdGlyph solid;
-  const EpdFontData* source = nullptr;
+  GlyphBitmapSource source;
   EXPECT_EQ(family.getGlyphMetrics('a', solid, EpdFontFamily::REGULAR, &source), &kGlyphs[1]);
-  EXPECT_EQ(source, &kTestFontData);
+  EXPECT_EQ(source.font, &kTestFontData);
   EXPECT_EQ(family.getGlyphMetrics('?', solid), nullptr);
+}
+
+TEST(CompactGlyphs, NativeBitmapAndSyntheticSolidHaveDistinctSources) {
+  const EpdBuiltinGlyph glyphs[] = {{1, 1, 16, 0, 1, 0}, {9, 3, 147, -2, 7, 531}};
+  const EpdUnicodeInterval intervals[] = {{'M', 'M', 0}, {0x25A0, 0x25A0, 1}};
+  EpdFontData data{};
+  data.builtinGlyphs = glyphs;
+  data.intervals = intervals;
+  data.intervalCount = 2;
+  data.is2Bit = true;
+  EpdFont font(&data);
+  EpdFontFamily family(12, &font);
+  EpdGlyph scratch;
+  GlyphBitmapSource source;
+  ASSERT_EQ(family.getGlyphMetrics(0x25A0, scratch, EpdFontFamily::REGULAR, &source), &scratch);
+  EXPECT_EQ(source.font, &data);
+  EXPECT_EQ(source.index, 1u);
+  EXPECT_EQ(scratch.dataLength, 7);
+  EXPECT_EQ(scratch.dataOffset, 531u);
+  EXPECT_EQ(scratch.left, -2);
+  ASSERT_EQ(family.getGlyphMetrics(0x2588, scratch, EpdFontFamily::REGULAR, &source), &scratch);
+  EXPECT_EQ(source.index, GlyphBitmapSource::SOLID);
+  EXPECT_EQ(scratch.dataLength, 0);
 }
