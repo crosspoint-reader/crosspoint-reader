@@ -120,6 +120,9 @@ class BookMetadataCache {
 
   // Reading phase (read mode)
   bool load();
+  // Read only the spine sizes needed for saved progress; never open the source book.
+  static bool readProgressSizes(const std::string& cachePath, uint16_t spine, uint32_t& before, uint32_t& through,
+                                uint32_t& total, uint32_t& first);
   SpineEntry getSpineEntry(int index);
   TocEntry getTocEntry(int index);
   // Cumulative byte size up to and including the given spine item (0 if out of range

@@ -151,3 +151,22 @@ TEST(BookMetadataCacheSizes, SpineIndexForSizeMatchesLinearScan) {
     }
   }
 }
+
+TEST(BookMetadataCacheSizes, CachedProgressReadsOnlyRequiredSpines) {
+  for (const int count : {30, 5000}) {
+    const ScopedTempDir tempDir;
+    const auto dir = tempDir.path().string();
+    const auto cumulative = buildBook(dir, count);
+    uint32_t before = 0, through = 0, total = 0, first = 0;
+    for (const int spine : {0, 5, count - 1, count}) {
+      ASSERT_TRUE(BookMetadataCache::readProgressSizes(dir, spine, before, through, total, first));
+      EXPECT_EQ(first, cumulative.front());
+      EXPECT_EQ(total, cumulative.back());
+      EXPECT_EQ(before, spine ? cumulative[spine - 1] : 0);
+      EXPECT_EQ(through, cumulative[std::min(spine, count - 1)]);
+    }
+    EXPECT_FALSE(BookMetadataCache::readProgressSizes(dir, count + 1, before, through, total, first));
+    std::filesystem::resize_file(tempDir.path() / "book.bin", 8);
+    EXPECT_FALSE(BookMetadataCache::readProgressSizes(dir, 0, before, through, total, first));
+  }
+}

@@ -459,6 +459,55 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 
 /* ============= READING / LOADING FUNCTIONS ================ */
 
+bool BookMetadataCache::readProgressSizes(const std::string& cachePath, uint16_t spine, uint32_t& before,
+                                          uint32_t& through, uint32_t& total, uint32_t& first) {
+  HalFile file;
+  if (!Storage.openFileForRead("BMC", cachePath + bookBinFile, file)) return false;
+  const uint64_t size = file.size();
+  uint8_t version = 0;
+  uint32_t lut = 0;
+  uint16_t count = 0, toc = 0;
+  if (!serialization::tryReadPod(file, version) || version != BOOK_CACHE_VERSION ||
+      !serialization::tryReadPod(file, lut) || !serialization::tryReadPod(file, count) ||
+      !serialization::tryReadPod(file, toc) || !count || spine > count || lut > size)
+    return false;
+  // Validate length-prefixed header strings without allocating them.
+  for (int i = 0; i < 5; ++i) {
+    uint32_t length = 0;
+    if (file.position() > lut || lut - file.position() < sizeof(length) || !serialization::tryReadPod(file, length) ||
+        length > lut - file.position() || !file.seek(file.position() + length))
+      return false;
+  }
+  const uint64_t start = uint64_t(lut) + (uint32_t(count) + toc) * sizeof(uint32_t);
+  if (file.position() != lut || start > size) return false;
+  const auto readSize = [&](uint16_t index, uint32_t& value) {
+    uint32_t pos = 0, length = 0;
+    if (!file.seek(lut + uint32_t(index) * sizeof(uint32_t)) || !serialization::tryReadPod(file, pos) || pos < start ||
+        pos > size || size - pos < 10 || !file.seek(pos) || !serialization::tryReadPod(file, length) ||
+        length > size - pos - 10)
+      return false;
+    // The next LUT entry (including the first TOC entry) bounds this record.
+    const uint64_t end = uint64_t(pos) + 10 + length;
+    if (uint32_t(index) + 1 < uint32_t(count) + toc) {
+      uint32_t next = 0;
+      if (!file.seek(lut + uint32_t(index + 1) * sizeof(uint32_t)) || !serialization::tryReadPod(file, next) ||
+          next != end)
+        return false;
+    } else if (end != size)
+      return false;
+    if (!index && pos != start) return false;
+    return file.seek(uint64_t(pos) + sizeof(length) + length) && serialization::tryReadPod(file, value);
+  };
+  if (!readSize(0, first) || !readSize(count - 1, total) || !total || first > total) return false;
+  if (spine == count) {
+    before = through = total;
+    return true;
+  }
+  before = 0;
+  return (!spine || readSize(spine - 1, before)) && readSize(spine, through) && before <= through && through <= total &&
+         (!spine || first <= before);
+}
+
 bool BookMetadataCache::load() {
   loaded = false;
   if (!Storage.openFileForRead("BMC", cachePath + bookBinFile, bookFile)) {
