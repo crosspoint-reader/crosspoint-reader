@@ -277,6 +277,8 @@ class EpubReaderActivity final : public ReaderActivity {
   void onReturnFromEndOfBook() override;
 
   bool skipLoopDelay() override;
+  // Auto page turn is reading without input, so it must not trip the sleep timeout.
+  bool preventAutoSleep() override { return automaticPageTurnActive; }
 
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;
