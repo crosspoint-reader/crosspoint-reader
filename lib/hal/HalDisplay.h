@@ -113,6 +113,12 @@ class HalDisplay {
 
   void displayGrayBuffer(bool turnOffScreen = false);
 
+  // One-shot work to run while the next grayscale page-turn waveform drives the
+  // panel (the CPU otherwise only polls BUSY). It must not touch the display.
+  // Only panel drivers that support it run the hook (today the EEGO A4), so
+  // clear it with nullptr after the display call.
+  void setRefreshIdleHook(void (*hook)(void* ctx), void* ctx);
+
   // Tiled grayscale: stream one band of a plane (lsbPlane selects LSB/MSB RAM)
   // straight to the controller. Check grayscaleCapabilities(mode).stripUploads
   // with the same grayscale mode used for the planes.
