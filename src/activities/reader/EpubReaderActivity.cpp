@@ -2101,6 +2101,7 @@ void EpubReaderActivity::renderBook() {
     // The page just re-rendered under the overlay: refresh the snapshot that
     // backs panel->toolbar restores (any previous copy is stale).
     overlayPageStored = renderer.storeBwBuffer();
+    ++overlayPaintsAfterRender;
     renderOverlay();
     // An open option picker rides on top of the freshly drawn panel.
     if (overlayPopup.isActive()) overlayPopup.render(renderer);
@@ -2788,7 +2789,7 @@ void EpubReaderActivity::settleOverlayRefresh() {
 void EpubReaderActivity::openOverlay(Overlay target) {
   mappedInput.resetHomeButtonInput();
   const Overlay previous = overlay;
-  overlay = target;
+  const uint32_t paintsBefore = overlayPaintsAfterRender.load();
   if (!toolbarUi) toolbarUi = std::make_unique<ReaderToolbarUi>(renderer);
   if (previous == Overlay::None) toolbarUi->begin();
   // Buttons show a cursor from the start; touch boards only once a button moves it.
@@ -2818,6 +2819,10 @@ void EpubReaderActivity::openOverlay(Overlay target) {
       break;
   }
   panelHoldJumped = false;
+  // Publish the overlay only now that its state is set up: the render task
+  // paints it as soon as it sees it open, and the early return below trusts
+  // that paint.
+  overlay = target;
 
   // The page is already on screen and still in the framebuffer, so paint the
   // chrome straight onto it and push one refresh. requestUpdate() would
@@ -2836,6 +2841,13 @@ void EpubReaderActivity::openOverlay(Overlay target) {
     // the loop task at the same time interleaves the two frames.
     RenderLock lock;
     settleOverlayRefresh();
+    if (previous == Overlay::None && overlayPaintsAfterRender.load() != paintsBefore) {
+      // A page render was in flight: renderBook() finished it while this waited
+      // for the lock, saw the overlay open, snapshotted the clean page and
+      // painted the chrome. Doing it again here would snapshot the page with
+      // the chrome on it and push a second refresh.
+      return;
+    }
     if (previous == Overlay::None) {
       // Snapshot the clean page so stepping back from a panel to the toolbar
       // (and closing, where supported) can restore it without a re-render.

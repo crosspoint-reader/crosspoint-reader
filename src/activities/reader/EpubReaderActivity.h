@@ -73,7 +73,9 @@ class EpubReaderActivity final : public ReaderActivity {
   // over the page instead of pushing the full-screen list menu. Select opens the
   // Toolbar; its tools open the Contents/Text/More bottom-sheet panels.
   enum class Overlay { None, Toolbar, Contents, Text, More };
-  Overlay overlay = Overlay::None;
+  // Written by the loop task and read by the render task, which paints the
+  // overlay as soon as it sees it open.
+  std::atomic<Overlay> overlay{Overlay::None};
   int focusedTool = 0;  // toolbar tool focus: 0=Contents, 1=Text, 2=More
   int panelIndex = 0;   // selected row within the active panel
   // Panel list navigation: a tap steps one row, a hold jumps PANEL_HOLD_STEP rows in one go
@@ -97,6 +99,10 @@ class EpubReaderActivity final : public ReaderActivity {
   // overlay, letting panel->toolbar steps restore the page without a full
   // re-render. Discarded on close / whenever the page under the overlay changes.
   bool overlayPageStored = false;
+  // Counts the overlay paints renderBook() makes after rendering a page. It
+  // tells openOverlay() that the render task painted the overlay it was
+  // opening while it waited for the RenderLock.
+  std::atomic<uint32_t> overlayPaintsAfterRender{0};
   // A background build step lent the framebuffer: it came back white while the panel still shows the
   // page. Until renderBook() redraws, nothing may be painted straight onto it. Set by the loop task,
   // cleared by the render task.
