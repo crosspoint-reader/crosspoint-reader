@@ -19,6 +19,10 @@
 #include <driver/gpio.h>
 #endif
 
+#if FREEINK_DEVICE_READPICO
+#include <BoardReadPico.h>
+#endif
+
 #if FREEINK_DEVICE_PAPERMONO
 #include <M5Pm1.h>
 #endif
@@ -86,7 +90,19 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio, const bool wakeOnHeldButton)
   // The frontlight driver and touch share I2C; turn the light off before touch
   // releases the bus. On Picco this also puts the TMA525C to sleep.
   Frontlight.setOn(false);
+#endif
+#if FREEINK_DEVICE_EEGO_A4 || FREEINK_DEVICE_PICCO || FREEINK_DEVICE_READPICO
   gpio.prepareForDeepSleep();
+#endif
+#if FREEINK_DEVICE_READPICO
+  if (BoardConfig::isReadPico()) {
+    // The PMU owns wake and cuts the ESP32's rail. Restart if it leaves the host running.
+    if (!BoardReadPico::pmuSoftSleep() && !BoardReadPico::pmuPowerOff()) {
+      LOG_ERR("PWR", "Read Pico PMU shutdown failed");
+    }
+    delay(1000);
+    ESP.restart();
+  }
 #endif
 #ifdef ENABLE_SERIAL_LOG
   // Tear down HWCDC so the host sees a clean disconnect and the peripheral

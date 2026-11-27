@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <BoardConfig.h>
 #include <Imu.h>
 
 // TODO: Move enums into new header and share with CrossPointSettings.h
@@ -38,7 +39,11 @@ class HalTiltSensor {
 
   mutable unsigned long _lastPollMs = 0;
 
-  bool readGyro(float& gx, float& gy, float& gz) const;
+#if FREEINK_DEVICE_READPICO
+  unsigned long _lastAccelMs = 0;
+  float _lastAccelX = 0;
+  float _lastAccelY = 0;
+#endif
 
  public:
   // Call after BoardConfig has selected the active device.
