@@ -2,6 +2,7 @@ add_executable(ProtectedPathsTest ProtectedPathsTest.cpp)
 
 target_include_directories(ProtectedPathsTest PRIVATE
   ${REPO_ROOT}/src
+  ${REPO_ROOT}/lib/FsHelpers
 )
 
 target_link_libraries(ProtectedPathsTest PRIVATE
