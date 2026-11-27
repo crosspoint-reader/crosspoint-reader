@@ -42,10 +42,7 @@ module.exports = async ({github, context, core}) => {
     { env: 'sticky', name: 'firmware-sticky.bin', device: 'Sticky' },
     { env: 'x4pro', name: 'firmware-x4pro.bin', device: 'X4 Pro' },
     { env: 'x4c', name: 'firmware-x4c.bin', device: 'X4 Classic' },
-    { env: 'papermono', name: 'firmware-papermono.bin', device: 'Paper Mono' },
-    { env: 'metalio_eink4', name: 'firmware-metalio_eink4.bin', device: 'MetalIO EInk4' },
     { env: 'eego_a4', name: 'firmware-eego_a4.bin', device: 'EEGO A4' },
-    { env: 'picco', name: 'firmware-picco.bin', device: 'BOOX Picco' },
   ];
   const artifactResponse =
     await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {

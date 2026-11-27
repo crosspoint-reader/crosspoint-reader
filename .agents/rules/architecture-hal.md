@@ -2,8 +2,7 @@
 
 ### Build System: PlatformIO
 
-Routine builds use the [existing environment](environment.md#build-in-an-existing-environment);
-first-time IDE/toolchain setup is in [getting started](../../docs/contributing/getting-started.md).
+First-time IDE/toolchain setup is in [getting started](../../docs/contributing/getting-started.md).
 Shared configuration is `platformio.ini` and `partitions.csv`; personal
 overrides belong in ignored `platformio.local.ini`.
 
