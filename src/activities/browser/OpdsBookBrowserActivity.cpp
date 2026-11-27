@@ -16,15 +16,18 @@
 #include <ResumableFetch.h>
 #include <StreamingJsonParser.h>
 #include <Util.h>
+#include <WiFi.h>
 #include <WolfsslCrypto.h>
 
 #include <iterator>
 
 #include "BookKey.h"
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "LcpPassphraseStore.h"
 #include "MappedInputManager.h"
 #include "OpdsTokenStore.h"
+#include "SilentRestart.h"
 #include "activities/util/DetailsActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
@@ -482,24 +485,36 @@ void OpdsBookBrowserActivity::navigateBack() {
 
 void OpdsBookBrowserActivity::onBackButton() { navigateBack(); }
 
+// opdsDownloadFolder is already a null-terminated char[64]; use it directly —
+// no std::string copy. exists()/mkdir() take const char*.
+const char* OpdsBookBrowserActivity::downloadFolder() const { return SETTINGS.opdsDownloadFolder; }
+
+// Where a download would be saved, creating nothing: the configured folder when it exists,
+// else SD root, where downloadDestination() saves when the folder can't be created.
+const char* OpdsBookBrowserActivity::existingDownloadFolder() const {
+  const char* folder = downloadFolder();
+  return (folder[0] != '\0' && Storage.exists(folder)) ? folder : "";
+}
+
 // SD destination from the configured download folder + filename format.
 std::string OpdsBookBrowserActivity::downloadDestination(const OpdsEntry& book) const {
-  // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
-  // no std::string copy. exists()/mkdir() take const char*.
-  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
-  bool haveFolder = folder[0] != '\0';
-  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
+  const char* folder = downloadFolder();
+  if (folder[0] != '\0' && !Storage.exists(folder) && !Storage.mkdir(folder)) {
     // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
     // existing caller checks exists() before mkdir. On real failure, fall back
     // to SD root so the download is never lost.
     LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
-    haveFolder = false;
   }
+  return bookPathIn(existingDownloadFolder(), book);
+}
+
+// Path of `book` inside `folder` ("" = SD root); creates nothing.
+std::string OpdsBookBrowserActivity::bookPathIn(const char* folder, const OpdsEntry& book) {
   // Titles are unbounded (a fixed char[] would truncate). Cold path (a
-  // multi-second download follows), so one reserve'd owning string is right.
+  // multi-second download or a details page follows), so one reserve'd owning string is right.
   std::string filename;
   filename.reserve(96);
-  if (haveFolder) filename += folder;
+  filename += folder;
   filename += '/';
   filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
   return filename;
@@ -528,7 +543,7 @@ bool OpdsBookBrowserActivity::verifyAndRegisterEpub(const std::string& filename)
   return true;
 }
 
-void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
+void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const bool openAfter) {
   if (book.lcpLicense) {
     downloadLcpBook(book);
     return;
@@ -596,7 +611,24 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   }
 
   if (result == HttpDownloader::OK && !verifyAndRegisterEpub(filename)) return;
+  if (result == HttpDownloader::OK && openAfter) {
+    openBook(filename);
+    return;
+  }
   finishDownload(result);
+}
+
+// Leaving the catalog reboots to reclaim the Wi-Fi heap (CatalogActivity::onExit),
+// which lands on Home; reboot into the book instead, as the reader does.
+void OpdsBookBrowserActivity::openBook(const std::string& path) {
+  APP_STATE.openEpubPath = path;
+  APP_STATE.saveToFile();
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(false);
+    delay(30);
+  }
+  silentRestartToReader();
+  onSelectBook(path);  // reached only when sleep supersedes the reboot
 }
 
 // LCP acquisition: the href is a small license document (.lcpl), not the
@@ -906,7 +938,25 @@ void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
   spec.descriptionHeading = tr(STR_OPDS_ABOUT_BOOK);
   spec.description = std::move(publication.description);
   spec.descriptionHtml = true;  // publication documents may carry markup; plain text parses as-is
-  spec.actionLabel = acquireLabel(publication.availability);
+
+  // A plain download can be read in place: Read when this book's file is already where a
+  // download would save it, else download and read. Purchases and loans keep one button.
+  const bool plainDownload = !detailBook.purchase && !detailBook.indirect && !detailBook.lcpLicense;
+  std::string localPath = plainDownload ? bookPathIn(existingDownloadFolder(), detailBook) : std::string();
+  const bool onDevice = plainDownload && Storage.exists(localPath.c_str());
+  if (onDevice) {
+    spec.status = tr(STR_OPDS_ON_DEVICE);  // the local copy matters more than catalog availability
+    spec.actionLabel = tr(STR_READ);
+    spec.secondaryLabel = tr(STR_REDOWNLOAD);
+    spec.secondaryHint = tr(STR_DOWNLOAD);               // the full label overflows a button-hint slot
+    spec.secondaryConfirm = tr(STR_REDOWNLOAD_CONFIRM);  // it resets the reading position
+  } else if (plainDownload) {
+    spec.actionLabel = tr(STR_DOWNLOAD_AND_READ);
+    spec.actionHint = tr(STR_READ);  // the full label overflows a button-hint slot
+    spec.secondaryLabel = tr(STR_DOWNLOAD);
+  } else {
+    spec.actionLabel = acquireLabel(publication.availability);
+  }
 
   auto details = makeUniqueNoThrow<DetailsActivity>(renderer, mappedInput, std::move(spec));
   if (!details) {
@@ -914,16 +964,23 @@ void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
     startBrowse();
     return;
   }
-  startActivityForResult(std::move(details), [this](const ActivityResult& result) {
+  startActivityForResult(std::move(details), [this, plainDownload, onDevice,
+                                              localPath = std::move(localPath)](const ActivityResult& result) {
     if (!detailCoverPath.empty()) {
       if (Storage.exists(detailCoverPath.c_str())) Storage.remove(detailCoverPath.c_str());
       detailCoverPath.clear();
     }
     if (result.isCancelled) {
       startBrowse();  // entries were released for heap; rebuild the catalog we came from
-    } else {
-      downloadBook(detailBook);
+      return;
     }
+    const auto* choice = std::get_if<DetailsResult>(&result.data);
+    const bool secondary = choice && choice->secondary;
+    if (onDevice && !secondary) {
+      openBook(localPath);
+      return;
+    }
+    downloadBook(detailBook, /*openAfter=*/plainDownload && !onDevice && !secondary);
   });
 }
 

@@ -82,9 +82,13 @@ struct FilePathResult {
   std::string path;
 };
 
-using ResultVariant =
-    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ClippingResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+struct DetailsResult {
+  bool secondary = false;  // the second button was chosen, not the primary one
+};
+
+using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
+                                   IntervalResult, PageResult, ClippingResult, ProgressChangeResult, NetworkModeResult,
+                                   FootnoteResult, FilePathResult, DetailsResult>;
 
 struct ActivityResult {
   bool isCancelled = false;
