@@ -925,8 +925,7 @@ void EpubReaderActivity::loop() {
     }
 
     if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
-      const bool succeeded = pageTurn(true);
-      notePageTurn(true, succeeded);
+      pageTurn(true);
       requestUpdate();
       return;
     }
@@ -1082,7 +1081,6 @@ void EpubReaderActivity::loop() {
     const bool forward = pendingManualTurn > 0;
     pendingManualTurn = 0;
     const bool succeeded = pageTurn(forward);
-    notePageTurn(forward, succeeded);
     if (succeeded && pendingManualTurnTouch) haptic_feedback::touchAction();
     pendingManualTurnTouch = false;
     requestUpdate();
@@ -1113,7 +1111,6 @@ void EpubReaderActivity::loop() {
   const bool longPress = !fromTilt && heldMs >= ReaderUtils::SKIP_HOLD_MS;
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
     const bool succeeded = skipPages(nextTriggered ? 1 : -1);
-    notePageTurn(false, succeeded);
     if (succeeded && (touch.prev || touch.next)) haptic_feedback::touchAction(true);
     requestUpdate();
     return;
@@ -1141,7 +1138,6 @@ void EpubReaderActivity::loop() {
   }
 
   const bool succeeded = pageTurn(!prevTriggered);
-  notePageTurn(!prevTriggered, succeeded);
   if (succeeded && (touch.prev || touch.next)) haptic_feedback::touchAction();
   requestUpdate();
 }
@@ -1541,7 +1537,7 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
   }
 }
 
-bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
+bool EpubReaderActivity::performPageTurn(bool isForwardTurn) {
   if (!section) return false;
   // A "Bluetooth failed" note has been read: the page this turn paints shows the title again.
   bleturner::acknowledgeLinkNote();
@@ -1584,7 +1580,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
   return false;
 }
 
-bool EpubReaderActivity::skipPages(int amount) {
+bool EpubReaderActivity::performSkipPages(int amount) {
   if (!section) return false;
   bleturner::acknowledgeLinkNote();
   if (amount > 0) {
