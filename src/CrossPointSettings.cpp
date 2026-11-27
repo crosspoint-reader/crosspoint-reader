@@ -109,6 +109,10 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
   }
+  // Hotspot subnet — edited in settings.json only, save manually
+  if (apCidr[0] != '\0') {
+    doc["apCidr"] = apCidr;
+  }
   // The displayed option list varies by board, so this setting uses a dynamic
   // display-index mapping and is skipped by the generic persistence loop.
   doc["longPressMenuFunction"] = longPressMenuFunction;
@@ -306,6 +310,12 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   if (storedFontFamily != STORED_NOTOSANS) needsResave = true;
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
+  // Hotspot subnet — edited in settings.json only, load manually. Reject
+  // oversized values so truncation can't reshape them into a different CIDR.
+  const char* cidr = doc["apCidr"] | "";
+  if (strlen(cidr) < sizeof(apCidr)) {
+    copyToField(apCidr, cidr, sizeof(apCidr));
+  }
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
     language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));

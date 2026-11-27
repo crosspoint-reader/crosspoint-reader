@@ -346,6 +346,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // OPDS server list. Persisted via a category-less SettingInfo::String in
   // SettingsList.h, so it stays out of the on-device Settings screen.
   char opdsDownloadFolder[64] = "";
+  // Hotspot (Create Hotspot mode) IPv4 network in CIDR notation, e.g.
+  // "10.0.0.1/24" ("" = the ESP32 default 192.168.4.1/24). Edited only via
+  // settings.json; not in SettingsList. The Arduino core rejects AP netmasks
+  // outside /24-/28.
+  char apCidr[20] = "";
   // On-disk filename format for OPDS downloads (0=Author-Title default, 1=Title-Author,
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,
   // edited from the OPDS server list; hidden from the on-device Settings screen.
