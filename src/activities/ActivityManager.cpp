@@ -85,9 +85,23 @@ void ActivityManager::renderTaskLoop() {
     RenderLock lock;
     if (currentActivity) {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
-      // Night mode is a global output polarity applied to every activity.
-      // The sleep screen forces normal polarity itself (SleepActivity).
-      display.setInverted(SETTINGS.screenInverted != 0);
+      bool inverted = false;
+      switch (SETTINGS.screenInverted) {
+        case CrossPointSettings::NIGHT_MODE_OFF:
+          break;
+        case CrossPointSettings::NIGHT_MODE_ON:
+          inverted = true;
+          break;
+        case CrossPointSettings::NIGHT_MODE_MENU_ONLY:
+          inverted = !isReaderActivity();
+          break;
+        case CrossPointSettings::NIGHT_MODE_READER_ONLY:
+          inverted = isReaderActivity();
+          break;
+        case CrossPointSettings::NIGHT_MODE_COUNT:
+          break;
+      }
+      display.setInverted(inverted);
       const uint32_t renderingVisit = screenVisit;
       currentActivity->render(std::move(lock));
       paintedVisit.store(renderingVisit, std::memory_order_release);

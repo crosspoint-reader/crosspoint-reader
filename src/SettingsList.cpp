@@ -29,6 +29,8 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
     values[CrossPointSettings::STATUS_BAR_CLOCK_LEFT] = StrId::STR_DIR_LEFT;
     return values;
   }();
+  static constexpr std::array<StrId, CrossPointSettings::NIGHT_MODE_COUNT> NIGHT_MODE_VALUES = {
+      StrId::STR_STATE_OFF, StrId::STR_STATE_ON, StrId::STR_MENU_ONLY, StrId::STR_READER_ONLY};
 
   const auto emit = [visit, context](auto&& info) { visit(context, info); };
   // --- Display ---
@@ -62,10 +64,8 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
   emit(SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                            "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));
 #endif
-  // Night mode = inverted output polarity everywhere (ActivityManager
-  // applies it to every activity), so it lives in the Display category.
-  emit(SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
-                           StrId::STR_CAT_DISPLAY));
+  emit(SettingInfo::StaticEnum(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, NIGHT_MODE_VALUES,
+                               "screenInverted", StrId::STR_CAT_DISPLAY));
 
   // --- Reader ---
   // Built-in font-family entry. Replaced per-call with a registry-aware
