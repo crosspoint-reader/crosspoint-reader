@@ -28,6 +28,9 @@ void ReaderSession::onRenderComplete(const uint32_t monotonicMs, const int64_t t
       endProgress = std::max(endProgress, progress);
     }
   }
+  // Turning onto the end finishes the session's book even when the last turn was quick: the
+  // dwell rule times reading, it should not hide the finish. A jump there is not reading it.
+  if (pendingForward && progress == 10000 && startEpoch > 0) endProgress = 10000;
 
   anchorMs = monotonicMs;
   anchorEpoch = trustedEpoch;

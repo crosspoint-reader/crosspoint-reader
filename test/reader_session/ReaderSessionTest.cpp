@@ -50,6 +50,38 @@ TEST(ReaderSession, ExcludesBackwardSkipAndFailedTurns) {
   EXPECT_EQ(session.durationSeconds(), 0u);
 }
 
+TEST(ReaderSession, ReachingTheEndCountsAfterAQuickLastTurn) {
+  ReaderSession session;
+  anchor(session, 1000, 100, 7000);
+  turnAndRender(session, true, true, 11000, 110, 7800);   // read the second-to-last page
+  turnAndRender(session, true, true, 11500, 110, 10000);  // flicked onto the last page
+
+  EXPECT_EQ(session.durationSeconds(), 10u);
+  EXPECT_EQ(session.endProgressBp(), 10000);
+  EXPECT_TRUE(session.isEmitWorthy());
+}
+
+TEST(ReaderSession, TheEndAloneStartsNoSession) {
+  ReaderSession session;
+  anchor(session, 1000, 100, 9000);
+  turnAndRender(session, true, true, 1500, 100, 10000);
+
+  EXPECT_EQ(session.durationSeconds(), 0u);
+  EXPECT_EQ(session.endProgressBp(), 0);
+  EXPECT_FALSE(session.isEmitWorthy());
+}
+
+TEST(ReaderSession, AJumpToTheEndIsNotAFinish) {
+  ReaderSession session;
+  anchor(session, 1000, 100, 1000);
+  turnAndRender(session, true, true, 11000, 110, 1100);  // a real read starts the session
+  session.noteTurn(false, false);                        // go-to-percent / contents jump
+  session.onRenderComplete(12000, 111, 10000);
+  turnAndRender(session, false, true, 13000, 112, 10000);  // a backward turn onto the end
+
+  EXPECT_EQ(session.endProgressBp(), 1100);
+}
+
 TEST(ReaderSession, CapsOneDwellAtThirtyMinutes) {
   ReaderSession session;
   anchor(session, 1000, 100, 1000);
