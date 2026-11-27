@@ -277,8 +277,9 @@ void DetailsActivity::render(RenderLock&&) {
   }
 
   const char* moreLabel = spec.description.empty() ? "" : tr(STR_DETAILS);
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), spec.actionLabel.c_str(), spec.secondaryLabel.c_str(), moreLabel);
+  const char* actionHint = spec.actionHint ? spec.actionHint : spec.actionLabel.c_str();
+  const char* secondaryHint = spec.secondaryHint ? spec.secondaryHint : spec.secondaryLabel.c_str();
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), actionHint, secondaryHint, moreLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

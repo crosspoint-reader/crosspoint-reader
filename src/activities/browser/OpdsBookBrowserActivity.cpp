@@ -1034,9 +1034,11 @@ void OpdsBookBrowserActivity::openPublicationDetail(const OpdsEntry& entry) {
     spec.status = tr(STR_OPDS_ON_DEVICE);  // the local copy matters more than catalog availability
     spec.actionLabel = tr(STR_READ);
     spec.secondaryLabel = tr(STR_REDOWNLOAD);
+    spec.secondaryHint = tr(STR_DOWNLOAD);               // the full label overflows a button-hint slot
     spec.secondaryConfirm = tr(STR_REDOWNLOAD_CONFIRM);  // it resets the reading position
   } else if (plainDownload) {
     spec.actionLabel = tr(STR_DOWNLOAD_AND_READ);
+    spec.actionHint = tr(STR_READ);  // the full label overflows a button-hint slot
     spec.secondaryLabel = tr(STR_DOWNLOAD);
   } else {
     spec.actionLabel = acquireLabel(publication.availability);
