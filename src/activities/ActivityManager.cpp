@@ -33,6 +33,7 @@
 #include "reader/RemoteTurnGate.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsListActivity.h"
+#include "stats/ReadingStatsActivity.h"
 #include "util/BmpViewerActivity.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
@@ -328,6 +329,10 @@ void ActivityManager::goToDictionarySearch() {
   replaceActivity(std::make_unique<DictionarySearchActivity>(renderer, mappedInput));
 }
 
+void ActivityManager::goToReadingStats() {
+  replaceActivity(std::make_unique<ReadingStatsActivity>(renderer, mappedInput));
+}
+
 void ActivityManager::goToBrowser() {
   const auto& servers = OPDS_STORE.getServers();
   // Skip the server picker when there's only one server configured
@@ -379,9 +384,8 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh) {
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
     const auto& activityName = currentActivity->name;
-    if (activityName == "FileBrowser") {
-      initialMenuItem = HomeMenuItem::FILE_BROWSER;
-    } else if (activityName == "Library") {
+    // Files opens from the Library header, so Home returns to Library.
+    if (activityName == "FileBrowser" || activityName == "Library") {
       initialMenuItem = HomeMenuItem::LIBRARY;
     } else if (activityName == "PluginCatalog") {
       initialMenuItem = HomeMenuItem::PLUGINS;
@@ -391,6 +395,10 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
     } else if (activityName == "Settings" || activityName == "SettingsList") {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
+    } else if (activityName == "ReadingStats") {  // Home gesture; Back passes its item itself
+      initialMenuItem = HomeMenuItem::READING_STATS;
+    } else if (activityName == "DictionarySearch" || activityName == "DictionaryHistory") {
+      initialMenuItem = HomeMenuItem::DICTIONARY;
     }
   }
   // EEGO A4: after a gray reader page, a fast refresh leaves the page ghosting

@@ -21,6 +21,7 @@
 #include "components/HeaderBackTapTarget.h"
 #include "components/UITheme.h"
 #include "util/DictHtmlPages.h"
+#include "util/DictionaryHistory.h"
 #include "util/HtmlToPlainText.h"
 
 namespace {
@@ -444,6 +445,8 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
     }
     return;
   }
+  // A word followed from inside a definition joins the dictionary history too.
+  if (!back) dicthistory::add(Dictionary::cleanWord(word));
   const bool forcePlain = back && !lookup->history[lookup->depth - 1].styled;
   if (!prepareDefinition(next, forcePlain)) {
     recover(StrId::STR_DICT_LOW_MEMORY);

@@ -9,6 +9,7 @@
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
 #include "components/UITheme.h"
+#include "util/DictionaryHistory.h"
 
 namespace {
 
@@ -65,7 +66,8 @@ void DictionaryWordSelectActivity::performLookup() {
       popup = Popup::None;
       page.reset();
     }
-    if (recordVocabulary && SETTINGS.vocabularyHistoryEnabled &&
+    dicthistory::add(Dictionary::cleanWord(lookupText.c_str()));
+    if (source == Source::Book && SETTINGS.vocabularyHistoryEnabled &&
         !VocabularyStore::append(vocabulary, lookupText, headword, definition, dict.definitionsAreHtml())) {
       LOG_ERR("VOCAB", "Could not save successful dictionary lookup");
     }

@@ -116,26 +116,16 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   tabProps.count = static_cast<uint16_t>(count);
   tabProps.action = ACTION_TAB;
   tabProps.inputMask = fui::InputTouch;
-  // Pill shape and label size are theme-driven. Lyra uses equal-width slots
-  // with small labels so wide text (e.g. "Controls") still fits at large UI scales.
-  // Full-slot (RoundedRaff): the pill fills its slot like the legacy layout
-  // (slot minus a 4px frame, 8px clearance above the divider) with
-  // body-size labels; zero horizontal contentInset disables the tabBar's
-  // label-width shrink.
+  // Equal-width slots with small labels, so wide text (e.g. "Controls") still
+  // fits at large UI scales.
   const bool tabsFocused = ringPos() == 0;
-  if (metrics.tabPillFullSlot) {
-    tabProps.text = screen.theme().bodyText;
-    tabProps.tabInset = fui::Insets{4, 4, 7, 4};
-    tabProps.contentInset = fui::Insets{2, 0, 2, 0};
-  } else {
-    tabProps.text = screen.theme().smallText;
-    tabProps.gap = static_cast<int16_t>(metrics.tabSpacing);
-    // Unfocused state: no bottom inset, so the pill (and the 2px selected
-    // underline drawn along its bottom edge) reaches the band's 1px divider —
-    // legacy Lyra drew the underline sitting on that rule, not floating above.
-    tabProps.tabInset = tabsFocused ? fui::Insets{2, 4, 4, 4} : fui::Insets{2, 4, 0, 4};
-    tabProps.contentInset = fui::Insets{2, 0, 2, 0};
-  }
+  tabProps.text = screen.theme().smallText;
+  tabProps.gap = static_cast<int16_t>(metrics.tabSpacing);
+  // Unfocused state: no bottom inset, so the pill (and the 2px selected
+  // underline drawn along its bottom edge) reaches the band's 1px divider —
+  // legacy Lyra drew the underline sitting on that rule, not floating above.
+  tabProps.tabInset = tabsFocused ? fui::Insets{2, 4, 4, 4} : fui::Insets{2, 4, 0, 4};
+  tabProps.contentInset = fui::Insets{2, 0, 2, 0};
   const int16_t tabLineHeight = screen.target().lineHeight(tabProps.text.font);
   const int16_t preferredTabHeight =
       mappedInput.hasTouch() ? TOUCH_TAB_BAR_HEIGHT : static_cast<int16_t>(metrics.tabBarHeight);
@@ -163,12 +153,6 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
     tabStyles.selected.background = fui::Paint::solid(fui::Color::Black);
     tabStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
     tabStyles.selected.radius = screen.theme().listRowRadius;
-  } else if (metrics.tabPillFullSlot) {
-    // Legacy RoundedRaff unfocused treatment: same pill, dimmed to dark gray,
-    // text stays inverted; no underline.
-    tabStyles.selected.background = fui::Paint::dither(fui::Color::DarkGray);
-    tabStyles.selected.foreground = fui::Paint::solid(fui::Color::White);
-    tabStyles.selected.radius = screen.theme().listRowRadius;
   } else {
     tabStyles.selected.background = fui::Paint::dither(fui::Color::LightGray);
     tabStyles.selected.foreground = fui::Paint::solid(fui::Color::Black);
@@ -186,9 +170,8 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   const fui::Rect tabRect{static_cast<int16_t>(contentTabRect.x - safeRect.x), contentTabRect.y,
                           static_cast<int16_t>(contentTabRect.width + frameRect.width - safeRect.width),
                           contentTabRect.height};
-  // Focused band wash is the Lyra treatment; legacy RoundedRaff keeps the
-  // band plain in both states.
-  if (tabsFocused && !metrics.tabPillFullSlot) {
+  // Focused band wash.
+  if (tabsFocused) {
     screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
   }
   // Leave space on both sides of the tab labels and selection highlights.

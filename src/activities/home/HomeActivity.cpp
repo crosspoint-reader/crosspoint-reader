@@ -28,7 +28,7 @@
 #include "util/BookProgress.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 5;  // File Browser, Library, File transfer, Dictionary, Settings
+  int count = 5;  // Library, File transfer, Dictionary, Reading stats, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -256,8 +256,7 @@ void HomeActivity::onEnter() {
                        : slot == HomeMenuItem::OPDS_BROWSER ? CoverGridHomeUi::SlotTab::OPDS
                                                             : CoverGridHomeUi::SlotTab::NONE,
                        hasContinueReading);
-  } else if (hasContinueReading &&
-             (SETTINGS.uiTheme == CrossPointSettings::LYRA || SETTINGS.uiTheme == CrossPointSettings::COVER_GRID)) {
+  } else if (hasContinueReading) {
     continueReadingProgress = loadBookProgress(recentBooks.front().path);
   }
 
@@ -325,9 +324,6 @@ void HomeActivity::loop() {
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
     switch (indexToMenuItem(menuIndex, slotItem())) {
-      case HomeMenuItem::FILE_BROWSER:
-        onFileBrowserOpen();
-        break;
       case HomeMenuItem::LIBRARY:
         onLibraryOpen();
         break;
@@ -342,6 +338,9 @@ void HomeActivity::loop() {
         break;
       case HomeMenuItem::DICTIONARY:
         onDictionarySearchOpen();
+        break;
+      case HomeMenuItem::READING_STATS:
+        onReadingStatsOpen();
         break;
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
@@ -456,8 +455,7 @@ void HomeActivity::loop() {
   const int renderedMenuCount =
       menuCount - (metrics.homeContinueReadingInMenu ? 0 : static_cast<int>(recentBooks.size()));
   int menuRow = -1;
-  // Row height from the theme, not the metrics table: RoundedRaff draws
-  // font-derived rows and the touch grid must match the visuals exactly.
+  // Row height from the theme, so the touch grid matches the drawn rows.
   const int menuRowHeight = GUI.getMenuRowHeight(renderer);
   const auto menuTouch = mappedInput.rowTouch(menuRow, menuTop, menuRowHeight + metrics.menuSpacing, renderedMenuCount,
                                               0, INT32_MAX, menuRowHeight);
@@ -537,7 +535,7 @@ void HomeActivity::render(RenderLock&&) {
 
   // Band spans topPadding..homeTopPadding: the cover tile starts at the fixed
   // homeTopPadding, so the height must shrink by topPadding or the band (and a
-  // centered title, e.g. RoundedRaff's book title) sinks into the tile.
+  // centered title) sinks into the tile.
   // Home is the stack root: no back button in its header.
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding - metrics.topPadding},
                  metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr,
@@ -556,13 +554,13 @@ void HomeActivity::render(RenderLock&&) {
                           std::bind(&HomeActivity::storeCoverBuffer, this), continueReadingProgress);
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_LIBRARY), tr(STR_FILE_TRANSFER),
-                                        tr(STR_DICTIONARY), tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Library, Transfer, Search, Settings};
+  std::vector<const char*> menuItems = {tr(STR_LIBRARY), tr(STR_FILE_TRANSFER), tr(STR_DICTIONARY),
+                                        tr(STR_READING_STATS), tr(STR_SETTINGS_TITLE)};
+  std::vector<UIIcon> menuIcons = {Library, Transfer, Search, Stats, Settings};
 
   if (slotItem() != HomeMenuItem::NONE) {
-    menuItems.insert(menuItems.begin() + 2, hasPlugins ? tr(STR_PLUGINS) : tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, hasPlugins ? Plugins : Book);
+    menuItems.insert(menuItems.begin() + 1, hasPlugins ? tr(STR_PLUGINS) : tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + 1, hasPlugins ? Plugins : Book);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -597,8 +595,6 @@ void HomeActivity::render(RenderLock&&) {
 
 void HomeActivity::onRecentBookSelected(const std::string& path) { activityManager.goToReader(path); }
 
-void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
-
 void HomeActivity::onLibraryOpen() { activityManager.goToLibrary(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
@@ -610,3 +606,5 @@ void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
 void HomeActivity::onPluginsOpen() { activityManager.goToPlugins(); }
 
 void HomeActivity::onDictionarySearchOpen() { activityManager.goToDictionarySearch(); }
+
+void HomeActivity::onReadingStatsOpen() { activityManager.goToReadingStats(); }

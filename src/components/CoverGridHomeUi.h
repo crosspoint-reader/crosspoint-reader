@@ -18,7 +18,7 @@ class CoverGridHomeUi final : public UiAppHost {
   static constexpr int GRID_ROWS = 2;
   static constexpr int MAX_BOOKS = 1 + GRID_COLUMNS * GRID_ROWS;
   static_assert(MAX_BOOKS <= HomeCoverCache::MAX_COVERS);
-  // What the third tab opens; NONE hides it.
+  // What the second tab opens; NONE hides it.
   enum class SlotTab : uint8_t { NONE, PLUGINS, OPDS };
 
   explicit CoverGridHomeUi(GfxRenderer& renderer);

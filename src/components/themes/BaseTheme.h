@@ -47,13 +47,13 @@ struct ThemeMetrics {
   // uiScale fonts supply the sizes. Plain data by design — the eventual
   // SD-card theme files will provide exactly these values.
   int listRowGap;          // vertical gap between rows
-  int listRowRadius;       // row corner radius (RoundedRaff cards, Lyra pill)
+  int listRowRadius;       // row corner radius (Lyra pill)
   int listInset;           // horizontal inset of the whole list band
   int listSidePadding;     // text inset within a row
   int listSelectionStyle;  // 0=invert fill, 1=light pill, 2=underline, 3=triangle (fui::SelectionStyle order)
   int listScrollWidth;     // scroll indicator thickness
   int listScrollSide;      // 0 = right edge, 1 = left edge
-  bool listTitleBold;      // bold row titles (RoundedRaff)
+  bool listTitleBold;      // bold row titles
   // FreeInkUI header shape, same contract as the list fields above.
   int headerSidePadding;    // title text inset
   int headerUnderlineSize;  // bottom rule thickness (Lyra), 0 = none
@@ -70,9 +70,6 @@ struct ThemeMetrics {
   int tabSpacing;
   int tabBarHeight;
   int coverGridTabBarHeight = 72;
-  // Selected-tab pill fills its equal-width slot (legacy RoundedRaff tabs)
-  // instead of shrinking to hug the label (legacy Lyra tabs).
-  bool tabPillFullSlot = false;
 
   int scrollBarWidth;
   int scrollBarRightOffset;
@@ -148,10 +145,11 @@ enum UIIcon {
   Bookmark,
   Usb,
   Blocks,
-  Search
+  Search,
+  Stats
 };
 
-// Default theme implementation (Classic Theme)
+// Base theme: Lyra builds on it, and it draws until the Lyra theme is created
 // Additional themes can inherit from this and override methods as needed
 
 namespace BaseMetrics {
@@ -252,8 +250,7 @@ class BaseTheme {
                             int boxHeight);
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   // Menu row height as DRAWN by drawButtonMenu. HomeActivity builds its touch
-  // grid from this, so hit bands always match the visuals (RoundedRaff derives
-  // its row height from the font, not the metrics table).
+  // grid from this, so hit bands always match the visuals.
   virtual int getMenuRowHeight(const GfxRenderer& renderer) const;
   // Also draws the wall clock opposite the battery when the user enabled
   // SETTINGS.clockShowInHeader and an RTC is present. On touch boards a

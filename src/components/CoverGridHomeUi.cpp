@@ -12,10 +12,10 @@
 #include "UITheme.h"
 #include "icons/blocks.h"
 #include "icons/book.h"
-#include "icons/folder.h"
 #include "icons/library.h"
 #include "icons/search.h"
 #include "icons/settings2.h"
+#include "icons/stats.h"
 #include "icons/transfer.h"
 #include "util/BookProgress.h"
 
@@ -284,12 +284,13 @@ void CoverGridHomeUi::drawGrid(UiScreen& screen) {
 }
 
 void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
-  static constexpr const uint8_t* ICONS[] = {FolderIcon,   LibraryIcon, BlocksIcon,
-                                             TransferIcon, SearchIcon,  Settings2Icon};
+  // Tab order matches HomeActivity's menu; index 1 is the Plugins/OPDS slot.
+  static constexpr const uint8_t* ICONS[] = {LibraryIcon, BlocksIcon, TransferIcon,
+                                             SearchIcon,  StatsIcon,  Settings2Icon};
   static_assert(sizeof(ICONS) / sizeof(ICONS[0]) == std::tuple_size_v<decltype(tabItems)>);
   int count = 0;
   for (int i = 0; i < static_cast<int>(tabItems.size()); ++i) {
-    if (i == 2 && slotTab == SlotTab::NONE) continue;
+    if (i == 1 && slotTab == SlotTab::NONE) continue;
     auto& tab = tabItems[count];
     tab.value = books->size() + count;
     tab.selected = selected == tab.value;
@@ -306,8 +307,8 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   tabs.iconPainter = [](fui::DrawTarget&, fui::Rect iconRect, const fui::TabItem& tab, uint8_t, void* user) {
     const auto& self = *static_cast<CoverGridHomeUi*>(user);
     const int index = tab.value - static_cast<int>(self.books->size());
-    const int icon = self.slotTab == SlotTab::NONE && index >= 2 ? index + 1 : index;
-    const uint8_t* bitmap = icon == 2 && self.slotTab == SlotTab::OPDS ? BookIcon : ICONS[icon];
+    const int icon = self.slotTab == SlotTab::NONE && index >= 1 ? index + 1 : index;
+    const uint8_t* bitmap = icon == 1 && self.slotTab == SlotTab::OPDS ? BookIcon : ICONS[icon];
     self.renderer.drawIcon(bitmap, iconRect.x, iconRect.y, iconRect.width);
     return true;
   };

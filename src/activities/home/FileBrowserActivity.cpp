@@ -591,7 +591,8 @@ bool FileBrowserActivity::handleButtons() {
         setResult(std::move(res));
         finish();
       } else {
-        onGoHome();
+        // Files opens from the Library header, so Back returns there.
+        activityManager.goToLibrary();
       }
     }
     return true;

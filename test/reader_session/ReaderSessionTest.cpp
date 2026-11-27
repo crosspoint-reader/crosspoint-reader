@@ -36,6 +36,7 @@ TEST(ReaderSession, AccumulatesSuccessfulForwardDwellsAndCompactsEndTime) {
   EXPECT_EQ(session.endTime(), session.startTime() + session.durationSeconds());
   EXPECT_EQ(session.startProgressBp(), 1000);
   EXPECT_EQ(session.endProgressBp(), 1200);
+  EXPECT_EQ(session.pagesRead(), 2u);
   EXPECT_TRUE(session.isEmitWorthy());
 }
 
@@ -48,6 +49,7 @@ TEST(ReaderSession, ExcludesBackwardSkipAndFailedTurns) {
   session.onRenderComplete(31000, 130, 2000);
 
   EXPECT_EQ(session.durationSeconds(), 0u);
+  EXPECT_EQ(session.pagesRead(), 0u);
 }
 
 TEST(ReaderSession, CapsOneDwellAtThirtyMinutes) {
@@ -108,6 +110,7 @@ TEST(ReaderSession, ResetClearsSummaryAnchorAndPendingTurn) {
   EXPECT_EQ(session.durationSeconds(), 0u);
   EXPECT_EQ(session.startProgressBp(), 0);
   EXPECT_EQ(session.endProgressBp(), 0);
+  EXPECT_EQ(session.pagesRead(), 0u);
   EXPECT_FALSE(session.isEmitWorthy());
 }
 

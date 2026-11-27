@@ -16,17 +16,21 @@
 // Indexing, Not found, Error).
 class DictionaryWordSelectActivity final : public Activity {
  public:
+  // Where the word came from. Every found word joins the dictionary history;
+  // a book lookup also goes to vocabulary history when that is enabled.
+  enum class Source : uint8_t { Book, Search };
+
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         std::unique_ptr<Page> page, int marginLeft, int marginTop,
                                         std::string lookupText = {}, VocabularyContext vocabulary = {},
-                                        bool recordVocabulary = true)
+                                        Source source = Source::Book)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
         marginTop(marginTop),
         lookupText(std::move(lookupText)),
         vocabulary(std::move(vocabulary)),
-        recordVocabulary(recordVocabulary) {}
+        source(source) {}
 
   void onEnter() override;
   void loop() override;
@@ -44,8 +48,7 @@ class DictionaryWordSelectActivity final : public Activity {
 
   std::string lookupText;
   VocabularyContext vocabulary;
-  // False for searches with no book, which have no location to record.
-  const bool recordVocabulary;
+  const Source source;
   bool lookupPending = false;
   Dictionary dict;
   bool dictOpenAttempted = false;

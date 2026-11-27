@@ -207,7 +207,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // UI Theme
-  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3, COVER_GRID = 4 };
+  // Saved by position in the settings list, so values stay consecutive.
+  enum UI_THEME { LYRA = 0, COVER_GRID = 1 };
 
   // Image rendering in EPUB reader. IMAGES_DISPLAY_BW lays images out like
   // IMAGES_DISPLAY but draws them as a B/W dither, so image pages skip the
@@ -386,6 +387,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char dictionaryName[128] = "";
   // Save successful dictionary lookups to vocabulary history (default off).
   uint8_t vocabularyHistoryEnabled = 0;
+  // Daily reading goal in minutes; 0 = off.
+  uint8_t dailyReadingGoalMinutes = 0;
   // Master switch for all SD-card plugin discovery/execution. New installs keep
   // this disabled; settings migration enables it when pre-existing plugin files
   // are found so a firmware update never silently disables an existing setup.

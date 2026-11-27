@@ -362,18 +362,16 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
   screen.sheet(sheetProps, static_cast<int16_t>(panelBottom));
   screen.insetContent(fui::Insets{0, kPanelSideMargin, 0, kPanelSideMargin});
 
-  // Reuse the exact battery renderer and header rectangle used by Home. Call
-  // the base implementation directly because RoundedRaff suppresses its
-  // untitled Home header.
+  // Reuse the exact battery renderer and header rectangle used by Home.
   {
     const auto& metrics = UITheme::getInstance().getMetrics();
     screen.spacer(theme.spaceMd);
     const int16_t bandH = std::max<int16_t>(static_cast<int16_t>(metrics.batteryHeight),
                                             screen.target().lineHeight(theme.smallText.font));
     screen.takeTop(bandH, theme.spaceMd);
-    UITheme::getInstance().getTheme().BaseTheme::drawHeader(
-        renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.homeTopPadding - metrics.topPadding},
-        nullptr);
+    GUI.drawHeader(renderer,
+                   Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.homeTopPadding - metrics.topPadding},
+                   nullptr);
   }
 
   if (Frontlight.present()) {

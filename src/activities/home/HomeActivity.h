@@ -19,7 +19,7 @@ class HomeActivity final : public Activity {
   bool firstRenderDone = false;
   bool hasOpdsServers = false;
   bool hasPlugins = false;
-  // The home "library" slot (index 2) shows Plugins while the plugin system is
+  // The home "library" slot (index 1) shows Plugins while the plugin system is
   // enabled, otherwise OPDS when a server is configured. NONE hides the slot.
   // NetworkModeSelectionActivity lists OPDS in exactly the other cases.
   HomeMenuItem slotItem() const {
@@ -48,8 +48,6 @@ class HomeActivity final : public Activity {
   // Convert HomeMenuItem to menu index (used in onEnter)
   static int menuItemToIndex(HomeMenuItem item, HomeMenuItem slot) {
     int i = 0;
-    if (item == HomeMenuItem::FILE_BROWSER) return i;
-    ++i;
     if (item == HomeMenuItem::LIBRARY) return i;
     ++i;
     if (slot != HomeMenuItem::NONE && item == slot) return i;
@@ -60,6 +58,8 @@ class HomeActivity final : public Activity {
     ++i;
     if (item == HomeMenuItem::DICTIONARY) return i;
     ++i;
+    if (item == HomeMenuItem::READING_STATS) return i;
+    ++i;
     if (item == HomeMenuItem::SETTINGS_MENU) return i;
     return 0;
   }
@@ -67,22 +67,22 @@ class HomeActivity final : public Activity {
   // Convert menu index to HomeMenuItem (used in loop)
   static HomeMenuItem indexToMenuItem(int idx, HomeMenuItem slot) {
     int i = 0;
-    if (idx == i++) return HomeMenuItem::FILE_BROWSER;
     if (idx == i++) return HomeMenuItem::LIBRARY;
     if (slot != HomeMenuItem::NONE && idx == i++) return slot;
     if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
     if (idx == i++) return HomeMenuItem::DICTIONARY;
+    if (idx == i++) return HomeMenuItem::READING_STATS;
     if (idx == i) return HomeMenuItem::SETTINGS_MENU;
     return HomeMenuItem::NONE;
   }
   void onRecentBookSelected(const std::string& path);
-  void onFileBrowserOpen();
   void onLibraryOpen();
   void onSettingsOpen();
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
   void onPluginsOpen();
   void onDictionarySearchOpen();
+  void onReadingStatsOpen();
 
   int getMenuItemCount() const;
   bool storeCoverBuffer();    // Store frame buffer for cover image

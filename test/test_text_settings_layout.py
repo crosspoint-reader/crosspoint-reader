@@ -58,7 +58,6 @@ harness = r"""
 #include <builtinFonts/ubuntu_10_regular.h>
 #include <builtinFonts/ubuntu_12_regular.h>
 #include <components/themes/lyra/LyraTheme.h>
-#include <components/themes/roundedraff/RoundedRaffTheme.h>
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -392,7 +391,7 @@ int main() {
                               BoardConfig::XTEINK_X4, BoardConfig::XTEINK_X4_CLASSIC})
     for (auto orientation : {GfxRenderer::Portrait, GfxRenderer::PortraitInverted,
                              GfxRenderer::LandscapeClockwise, GfxRenderer::LandscapeCounterClockwise})
-      for (const auto& metrics : {LyraMetrics::values, RoundedRaffMetrics::values})
+      for (const auto& metrics : {LyraMetrics::values})
         checkStyleRowsFit(profile, orientation, metrics);
   for (const auto& profile : {BoardConfig::XTEINK_X3, BoardConfig::XTEINK_X3_UC8279, BoardConfig::XTEINK_X4,
                               BoardConfig::XTEINK_X4_PRO, BoardConfig::XTEINK_X4_CLASSIC, BoardConfig::STICKY,
@@ -400,7 +399,7 @@ int main() {
                               BoardConfig::PICCO})
     for (auto orientation : {GfxRenderer::Portrait, GfxRenderer::PortraitInverted,
                              GfxRenderer::LandscapeClockwise, GfxRenderer::LandscapeCounterClockwise})
-      for (const auto& metrics : {LyraMetrics::values, RoundedRaffMetrics::values})
+      for (const auto& metrics : {LyraMetrics::values})
         for (Tab tab : {Tab::Family, Tab::Size, Tab::Layout, Tab::Style})
           checkLayout(profile, orientation, metrics, tab);
   checkSharedPartialRows();

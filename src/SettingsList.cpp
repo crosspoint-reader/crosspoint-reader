@@ -49,7 +49,9 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                          {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                           StrId::STR_PAGES_30, StrId::STR_NEVER},
                          "refreshFrequency", StrId::STR_CAT_DISPLAY));
-  emit(SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme, homeThemeValues(), "uiTheme",
+  // "homeTheme", not the old "uiTheme": values saved under the old theme list
+  // would name a different theme now.
+  emit(SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme, homeThemeValues(), "homeTheme",
                          StrId::STR_CAT_DISPLAY));
   if (!BoardConfig::hasTouch()) {
     auto fadingFix = SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
@@ -132,6 +134,8 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
                          StrId::STR_CAT_READER));
   emit(SettingInfo::Toggle(StrId::STR_SAVE_VOCABULARY_LOOKUPS, &CrossPointSettings::vocabularyHistoryEnabled,
                            "vocabularyHistoryEnabled", StrId::STR_CAT_READER));
+  emit(SettingInfo::Value(StrId::STR_DAILY_READING_GOAL, &CrossPointSettings::dailyReadingGoalMinutes, {0, 120, 5},
+                          "dailyReadingGoalMinutes", StrId::STR_CAT_READER));
   // --- Controls ---
 #if FREEINK_CAP_HAPTIC
   emit(SettingInfo::Enum(StrId::STR_VIBRATION, &CrossPointSettings::vibration,

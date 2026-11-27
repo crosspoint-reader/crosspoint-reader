@@ -197,7 +197,13 @@ struct Dictionary {
     return readDefinition(location, text, result);
   }
   std::string lastQuery;
+  static std::string cleanWord(const char* word) { return word; }
 };
+// Records what navigateDefinition adds to the dictionary history.
+namespace dicthistory {
+std::vector<std::string> added;
+void add(const std::string& word) { added.push_back(word); }
+}  // namespace dicthistory
 struct ClipSelectionActivity {
 ''' + selection + r'''
   template<typename... Args> explicit ClipSelectionActivity(Args&&...) {}
@@ -290,6 +296,8 @@ int main() {
   view.navigateDefinition(false);
   assert(view.lookup->depth == 1 && view.content.text == dictionary.entries.at(20));
   assert(view.content.text == "other definition");
+  // A word followed forward and found joins the history; going back adds nothing.
+  assert(dicthistory::added.size() == 1 && dicthistory::added[0] == "alias");
   dictionary.failRead = true;
   view.navigateDefinition(true);
   assert(view.finished && view.lookup->depth == 1);
@@ -299,8 +307,10 @@ int main() {
   assert(view.lookup->depth == 0 && view.content.text == dictionary.entries.at(10));
   assert(view.content.currentPage == 1 && view.content.selection.valid);
   assert(view.content.selection.lastPage == 1 && view.content.selection.firstWord == 2);
+  assert(dicthistory::added.size() == 1);
   view.lookup->pendingWord = "missing";
   view.navigateDefinition(false);
+  assert(dicthistory::added.size() == 1);  // a miss is not added
   assert(view.lookup->depth == 0 && view.content.currentPage == 1);
   assert(view.message == StrId::STR_DICT_NOT_FOUND);
   assert(view.content.text == dictionary.entries.at(10) && view.content.selection.valid && !view.finished);

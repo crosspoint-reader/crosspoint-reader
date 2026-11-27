@@ -33,7 +33,9 @@ Two ways to start a lookup while reading:
 - Open the reader menu (**Confirm**) and choose **Look Up**.
 - Or set **Settings → Controls → Front buttons → Menu long press** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
 
-To search without a book, choose **Dictionary** on the Home screen and type a word. After the definition or a "Not found" message, the keyboard opens again with the last word, ready for the next search. Press **Back** on the keyboard, or hold **Back** on a definition, to return Home. If no dictionary is selected, a "No Dictionary Set" message appears. Home searches are not added to the vocabulary history.
+To search without a book, choose **Dictionary** on the Home screen. The screen lists **New Search**, which opens the keyboard, followed by your 10 most recent found words, newest first; select one to look it up again. The first time, with no words yet, the keyboard opens straight away, and **Back** on it returns Home; later, **Back** on the keyboard returns to the list. After a definition or a "Not found" message you return to this list. Press **Back** on the list, or hold **Back** on a definition, to return Home. If no dictionary is selected, a "No Dictionary Set" message appears.
+
+Tap the history icon in the Dictionary header to see **Lookup History**: every word you have found, from a book or from Home search, newest first and without repeats (the latest 200). Select a word to look it up again; after the definition you return to the history. Words you follow from inside a definition are included. The history is kept in `/.crosspoint/dictionary_history.txt` even when **Settings → Reader → Save Vocabulary Lookups** is off. Words that were not found are not added.
 
 ### Selecting Text
 

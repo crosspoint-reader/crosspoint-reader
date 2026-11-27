@@ -44,6 +44,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [Tilt Page Turn (X3 only)](#tilt-page-turn-x3-only)
     - [Links and footnotes](#links-and-footnotes)
     - [Dictionary Lookup](#dictionary-lookup)
+    - [Reading Stats](#reading-stats)
     - [System Navigation](#system-navigation)
     - [Supported Languages](#supported-languages)
   - [5. Reader Menu](#5-reader-menu)
@@ -109,7 +110,7 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 ### 3.1 Home Screen
 
-The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Browse Files](#33-browse-files-screen)**, the **[Library](#34-library-screen)**, **[File Transfer](#35-file-transfer-screen)**, **Dictionary** (type a word to look it up), or **[Settings](#36-settings)**.
+The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, the **[Library](#34-library-screen)**, **[File Transfer](#35-file-transfer-screen)**, **Dictionary** (type a word to look it up), **[Reading Stats](#reading-stats)**, or **[Settings](#36-settings)**. On a touch device, **[Browse Files](#33-browse-files-screen)** is opened from the folder icon in the Library header; button-only devices reach it by holding **Back** while reading.
 
 When saved reading progress is available, Lyra shows the percentage and a progress bar below the book title and author.
 
@@ -118,6 +119,8 @@ When saved reading progress is available, Lyra shows the percentage and a progre
 See [Reading Mode](#4-reading-mode) below for more information.
 
 ### 3.3 Browse Files Screen
+
+On a touch device, open it with the folder icon in the **[Library](#34-library-screen)** header. Press **Back** in the top folder to return to the Library.
 
 The Browse Files screen acts as a file and folder browser. The full path to the current directory is shown at the top of the screen. File extensions are displayed alongside each filename (turn off **Show File Extensions** in **Settings → System** to give names the full row; files that differ only by extension, such as `book.epub` and `book.xtc`, then look alike), and directories are shown with brackets (e.g. `[folder-name]`). Hidden directories (those beginning with `.`) are also visible.
 
@@ -145,7 +148,7 @@ On a button-only device:
 - In the Title or Author views, hold **Confirm** on a book to collapse the list to its letter or author groups. The matching group remains selected. Press **Confirm** to enter a group, or **Back** to restore the exact book and position you came from.
 - While a search is active in the Title or Author views, hold **Confirm** on a book to delete it. Press **Back** to clear the search.
 
-On a touch device, tap tabs, books, and the Search icon directly. Tap the active tab again to reverse its sort direction. Swipe up or down to scroll. Long-press a book in the Recent view to open its options. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. Swipe a row sideways to reveal a delete button. Tap the refresh icon in the header to rebuild the index.
+On a touch device, tap tabs, books, and the Search icon directly. Tap the active tab again to reverse its sort direction. Swipe up or down to scroll. Long-press a book in the Recent view to open its options. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. Swipe a row sideways to reveal a delete button. Tap the refresh icon in the header to rebuild the index, or the folder icon to open **[Browse Files](#33-browse-files-screen)**.
 
 The index is created automatically the first time the Library is opened, and it is rebuilt after books are added through file transfer. To pick up other file changes or updated metadata, choose **Refresh Library** from a Recent book's options, or tap the refresh icon on a touch device. **Settings → Library → Refresh Library** does the same from any device, including when the Library shows no books. The **Use Book Metadata** setting controls whether the index reads titles and authors stored inside books.
 
@@ -257,10 +260,8 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 
 - **UI Theme**: Set which UI theme to use:
   
-  - "Classic" - The original Crosspoint theme
-  - "Lyra" - The new theme for Crosspoint featuring rounded elements and menu icons
-  - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
-  - "RoundedRaff" - A rounded theme with additional visual styling
+  - "Lyra" - Rounded elements and menu icons
+  - "Cover Grid" - Recent book covers in a grid, with icon tabs (devices with PSRAM, such as the reTerminal Sticky)
 
 - **UI Font**: Choose the font used for menus, library titles, and other interface text. See [Menu Fonts](docs/sd-card-fonts.md#menu-fonts) for supported files and sizes.
 
@@ -691,9 +692,19 @@ If the device sleeps or you close the book after following a link, the book reop
 
 ### Dictionary Lookup
 
-Words on the current page can be looked up in an offline StarDict dictionary stored on the SD card. Copy a dictionary to the `/dictionaries/` folder, select it in **Settings → Reader → Dictionary**, then start a lookup by choosing **Look Up** in the **[Reader Menu](#5-reader-menu)** (or by holding **Confirm**, if the **Menu long press** setting in **[Controls Settings](#363-controls)** is set to "Dictionary"). Use **Left/Right** to highlight a word and press **Confirm** to show its definition. To look up any word without opening a book, choose **Dictionary** on the **[Home](#31-home-screen)** screen and type it.
+Words on the current page can be looked up in an offline StarDict dictionary stored on the SD card. Copy a dictionary to the `/dictionaries/` folder, select it in **Settings → Reader → Dictionary**, then start a lookup by choosing **Look Up** in the **[Reader Menu](#5-reader-menu)** (or by holding **Confirm**, if the **Menu long press** setting in **[Controls Settings](#363-controls)** is set to "Dictionary"). Use **Left/Right** to highlight a word and press **Confirm** to show its definition. To look up any word without opening a book, choose **Dictionary** on the **[Home](#31-home-screen)** screen and type it. Tap the history icon in its header to see every word you have found, from books or Home search (the latest 200).
 
 See [docs/dictionary.md](docs/dictionary.md) for supported formats, setup, and where to find dictionaries.
+
+### Reading Stats
+
+Reading time is measured while you turn pages forward: a page counts when you stay on it at least 2 seconds before turning forward, up to 30 minutes per page. Turning back adds nothing. Each reading session is saved when you close the book or the device goes to sleep. Time is only measured once the clock is set.
+
+* **Reading Stats** on the **[Home](#31-home-screen)** screen shows **Today** (your reading time today) and your all-time totals: **Day Streak**, **Time Read**, **Sessions**, **Pages Read**, **Average Session**, **Pages per Minute** and **Books Finished**.
+* Set **Settings → Reader → Daily Reading Goal (min)** to a number of minutes (0 to 120, in steps of 5) to show today's progress as, for example, "12 / 20 min". 0 turns the goal off. A session counts toward the day it started.
+* **Book Stats** in the EPUB **[Reader Menu](#5-reader-menu)** shows the same figures for the open book, including the reading you have done since you opened it. Turn on **Finished** there to mark the book as finished; this updates **Books Finished**.
+* A session shorter than 1 minute adds time and pages but does not count as a session or in the average session length. The day streak counts consecutive days with reading, and resets after a full day without reading.
+* Stats are stored in `/.crosspoint/stats/`. They are kept when you delete a book's cache or move the book to another folder, but renaming the book file starts its stats again.
 
 ### System Navigation
 
@@ -731,6 +742,7 @@ Available options include:
 - **Reading Orientation** – Cycle through screen orientations without leaving the reader.
 - **Auto Turn (Pages Per Minute)** – Cycle through automatic page turn speed options for hands-free reading.
 - **Go to %** – Jump to a specific position in the book by percentage.
+- **Book Stats** – Show this book's reading time, sessions, pages and pace, and mark it as finished (see [Reading Stats](#reading-stats)).
 - **Take screenshot** – Save a screenshot of the current page to the `screenshots/` folder.
 - **Show page as QR** – Display a QR code encoding the current reading position.
 - **Go Home** – Close the book and return to the Home screen.

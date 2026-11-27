@@ -54,6 +54,7 @@
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
+#include "activities/stats/BookStatsActivity.h"
 #include "clippings/ClippingText.h"
 #include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
@@ -1324,6 +1325,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
       openDictionaryWordSelect();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOK_STATS: {
+      auto stats = makeUniqueNoThrow<BookStatsActivity>(renderer, mappedInput, bookPath,
+                                                        readerSession.durationSeconds(), readerSession.pagesRead());
+      if (!stats) {
+        LOG_ERR("ERS", "OOM: book stats");
+        requestUpdate();
+        break;
+      }
+      startActivityForResult(std::move(stats), [this](const ActivityResult&) { openReaderMenu(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {

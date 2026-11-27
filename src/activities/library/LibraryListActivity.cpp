@@ -91,6 +91,8 @@ void LibraryListActivity::onEnter() {
   app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
   app.on(ACTION_REBUILD, &LibraryListActivity::rebuildActionTrampoline, this);
   app.on(ACTION_BACK, &LibraryListActivity::backActionTrampoline, this);
+  // The app holds 6 handlers and drops extras silently.
+  if (app.handlerOverflowed()) LOG_ERR("LIB", "Action handler table full; a header action is ignored");
 
   // Recent is backed by the resident store. Prune before opening the index so
   // its persistence write never overlaps the long-lived index reader.
@@ -706,7 +708,11 @@ void LibraryListActivity::handleBackAction() {
   }
 }
 
-void LibraryListActivity::searchActionTrampoline(const fui::ActionEvent&, void* user) {
+void LibraryListActivity::searchActionTrampoline(const fui::ActionEvent& event, void* user) {
+  if (event.value == HEADER_FILES) {
+    activityManager.goToFileBrowser();
+    return;
+  }
   static_cast<LibraryListActivity*>(user)->openSearch();
 }
 
@@ -997,7 +1003,29 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
                                                fui::Rect{frameRect.x, static_cast<int16_t>(metrics.topPadding),
                                                          frameRect.width, static_cast<int16_t>(metrics.headerHeight)},
                                                header);
+  // The header has two trailing slots; the Files button sits left of them.
+  // Its size, 12 px edge inset, 4 px gaps and 4 px top inset, and the rule for
+  // which trailing buttons are drawn, copy fui::header() in the SDK's header.h.
+  const bool showFiles = mappedInput.hasTouch();
+  const bool hasTrailing = header.trailingIcon && header.trailingAction != fui::NO_ACTION;
+  const bool hasAdjacent =
+      hasTrailing && header.trailingAdjacentIcon && header.trailingAdjacentAction != fui::NO_ACTION;
+  const int trailingButtons = (hasTrailing ? 1 : 0) + (hasAdjacent ? 1 : 0);
+  const int16_t buttonSize = header.trailingSize > 0 ? header.trailingSize : static_cast<int16_t>(band.height - 8);
+  if (showFiles) header.rightReserve = static_cast<int16_t>(buttonSize + 4);
   fui::header(screen.frame(), band, header);
+  if (showFiles) {
+    fui::ButtonProps files;
+    files.icon = fui::bitmapFromIcon(icon_folder_32);
+    files.action = ACTION_SEARCH;  // shares the search handler; the value tells them apart
+    files.value = HEADER_FILES;
+    files.styles = header.trailingStyles;
+    files.radius = header.trailingRadius;
+    files.minTouchSize = header.minTouchSize;
+    const int16_t x = static_cast<int16_t>(band.right() - 12 - trailingButtons * (buttonSize + 4) - buttonSize);
+    const int16_t y = static_cast<int16_t>(band.y + 4 + header.actionOffsetY);
+    fui::button(screen.frame(), fui::Rect{x, y, buttonSize, buttonSize}, files);
+  }
 }
 
 void LibraryListActivity::buildScreen(UiScreen& screen) {

@@ -67,6 +67,8 @@ class LibraryListActivity final : public UiTabListActivity {
   static constexpr freeink::ui::ActionId ACTION_SEARCH = ACTION_TAB_USER;
   static constexpr freeink::ui::ActionId ACTION_REBUILD = ACTION_SEARCH + 1;
   static constexpr freeink::ui::ActionId ACTION_BACK = ACTION_REBUILD + 1;
+  // Value of the Files header button, which shares ACTION_SEARCH's handler.
+  static constexpr int16_t HEADER_FILES = 1;
 
   // Walk the card and write a fresh index. Blocking, with a popup: at ~70 books
   // it is well under a second, and it only runs when the index is missing or the

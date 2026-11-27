@@ -20,6 +20,7 @@
 #include "SdCardFontSystem.h"
 #include "XtcReaderActivity.h"
 #include "activities/RenderLock.h"
+#include "stats/ReadingStatsStore.h"
 #include "sync/ReadingSessionLog.h"
 #include "util/PluginEvents.h"
 
@@ -138,6 +139,11 @@ void ReaderActivity::onExit() {
 void ReaderActivity::prepareForSleep() { flushReaderSession(); }
 
 void ReaderActivity::flushReaderSession() {
+  // Stats keep every counted second; the session log and plugins need 10 s.
+  if (readerSession.durationSeconds() > 0) {
+    readingstats::recordSession(bookPath, readerSession.durationSeconds(), readerSession.pagesRead(),
+                                readerSession.startTime());
+  }
   if (!readerSession.isEmitWorthy()) {
     readerSession.reset();
     return;

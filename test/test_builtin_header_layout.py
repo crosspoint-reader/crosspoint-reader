@@ -7,8 +7,6 @@ def source(relative):
 
 base = source("src/components/themes/BaseTheme.cpp")
 metrics = source("src/components/themes/BaseTheme.h")
-rounded = source("src/components/themes/roundedraff/RoundedRaffTheme.cpp")
-rounded_metrics = source("src/components/themes/roundedraff/RoundedRaffTheme.h")
 lyra_metrics = source("src/components/themes/lyra/LyraTheme.h")
 
 # The system header's clock/battery location is independent of built-in theme metrics.
@@ -32,7 +30,6 @@ assert re.search(
 )
 assert "getOrientedViewableTRBL" not in shift_helper
 assert "static_cast<int16_t>(rect.height - offset)" in base
-assert "headerBatterySide = 0" in rounded_metrics
 assert "headerClockCentered = false" in lyra_metrics
 
 # Only the status row moves: title and buttons must land where the theme's
@@ -56,11 +53,6 @@ for padding, content_strip in ((5, 20), (10, 20), (13, 24)):
             content_strip // 2 + int((board_offset - shift) / 2))
         assert abs(new_center2 - old_center2) <= 2, (padding, board_offset)
 
-# A taller RoundedRaff Home band separates the clock from the book title
-# without moving the bottom of its cover tile and menu.
-assert ".homeTopPadding = 80," in rounded_metrics
-assert ".homeCoverTileHeight = 325," in rounded_metrics
-assert 80 + 325 == 64 + 341
 assert "props.sidePadding = props.status.edgeInset;" in base
 assert "props.titleText.align == fui::TextAlign::Left" in base
 
@@ -86,18 +78,6 @@ for band_y, band_h, clock_h, title_h, title_line_h, title_ink_y in (
     assert target + title_h + 6 <= band_y + band_h
     if target == clock_top + clock_h + 12:
         assert target - (clock_top + clock_h) == 12
-
-# RoundedRaff's Home screen must not suppress the shared status line when
-# it draws a header without a book title.
-header = rounded.split("void RoundedRaffTheme::drawHeader(", 1)[1].split(
-    "void RoundedRaffTheme::drawRecentBookCover(", 1)[0]
-# The delegation must be unconditional: an early return or a conditional
-# before the call would allow a null Home title to suppress the status row.
-delegate = "BaseTheme::drawHeader(renderer, rect, title, subtitle, backButton);"
-assert header.count(delegate) == 1
-before_delegate = re.sub(r"//[^\n]*|/\*.*?\*/", "", header.split(delegate, 1)[0], flags=re.S)
-before_delegate = before_delegate.split("{", 1)[1]
-assert not re.search(r"\b(if|switch|for|while|return|goto)\b", before_delegate)
 
 # Verify the production geometry keeps the bottom edge fixed, including for
 # short Home bands and when a board's headerOffsetY shifts the top edge.
