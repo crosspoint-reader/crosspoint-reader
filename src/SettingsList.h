@@ -278,10 +278,12 @@ inline SettingInfo buildDoublePowerButtonSetting() {
       "doublePwrBtn", StrId::STR_CAT_CONTROLS);
 }
 
+// Saved by position, so new themes are appended. Without PSRAM, Cover Grid
+// stays listed and Home draws as Lyra (UITheme::hasCoverGridHome).
 inline std::vector<StrId> homeThemeValues() {
-  static constexpr StrId VALUES[] = {StrId::STR_THEME_LYRA, StrId::STR_THEME_COVER_GRID};
-  const size_t count = UITheme::supportsCoverGrid() ? std::size(VALUES) : std::size(VALUES) - 1;
-  return {VALUES, VALUES + count};
+  static constexpr StrId VALUES[] = {StrId::STR_THEME_LYRA, StrId::STR_THEME_COVER_GRID,
+                                     StrId::STR_THEME_LYRA_EXTENDED};
+  return {VALUES, VALUES + std::size(VALUES)};
 }
 
 using SettingVisitor = void (*)(void* context, SettingInfo& info);

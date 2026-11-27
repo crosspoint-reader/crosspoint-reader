@@ -56,6 +56,7 @@ class UITheme {
   BaseTheme fallbackTheme;
   const ThemeMetrics* currentMetrics = &BaseMetrics::values;
   std::unique_ptr<BaseTheme> currentTheme;
+  bool currentThreeCovers = false;  // currentTheme is a Lyra3CoversTheme
   mutable ThemeMetrics adjustedMetrics;
   mutable bool metricsValid = false;
   mutable bool metricsForTouch = false;

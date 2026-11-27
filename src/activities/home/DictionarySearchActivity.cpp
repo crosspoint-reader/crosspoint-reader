@@ -24,7 +24,7 @@ const char* DictionarySearchActivity::headerTitle() const { return tr(STR_DICTIO
 
 void DictionarySearchActivity::onEnter() {
   {
-    // The base onEnter schedules a paint; hold the lock until the rows are filled.
+    // The base onEnter schedules a paint; hold the lock until the row is filled.
     RenderLock lock;
     UiListActivity::onEnter();
     app.on(ACTION_HISTORY, &DictionarySearchActivity::historyActionTrampoline, this);
@@ -33,28 +33,12 @@ void DictionarySearchActivity::onEnter() {
       noDictionaryTime = millis();
       return;
     }
-    reloadRows();
-  }
-  // Nothing to pick from yet: go straight to typing.
-  if (words.empty()) openKeyboard();
-}
-
-void DictionarySearchActivity::reloadRows() {
-  dicthistory::load(words, RECENT_WORDS);
-  rowItems[0].label = tr(STR_DICT_NEW_SEARCH);
-  rowItems[0].actionValue = 0;
-  for (size_t i = 0; i < words.size(); ++i) {
-    rowItems[i + 1].label = words[i].c_str();
-    rowItems[i + 1].actionValue = static_cast<int16_t>(i + 1);
+    newSearchRow.label = tr(STR_DICT_NEW_SEARCH);
   }
 }
 
 void DictionarySearchActivity::activateIndex(const int index) {
-  if (index == 0) {
-    openKeyboard();
-  } else if (index > 0 && index <= static_cast<int>(words.size())) {
-    lookUp(words[index - 1]);
-  }
+  if (index == 0) openKeyboard();
 }
 
 void DictionarySearchActivity::openKeyboard() {
@@ -65,11 +49,7 @@ void DictionarySearchActivity::openKeyboard() {
     return;
   }
   startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
-    if (!result.isCancelled) {
-      lookUp(std::get<KeyboardResult>(result.data).text);
-    } else if (words.empty()) {
-      activityManager.goHome(HomeMenuItem::DICTIONARY);
-    }
+    if (!result.isCancelled) lookUp(std::get<KeyboardResult>(result.data).text);
   });
 }
 
@@ -104,11 +84,6 @@ void DictionarySearchActivity::lookUp(const std::string& word, const bool reopen
       activityManager.goHome(HomeMenuItem::DICTIONARY);
       return;
     }
-    {
-      RenderLock lock;
-      reloadRows();
-      moveSelectionTo(0);
-    }
     if (reopenHistory) openHistory();
   });
 }
@@ -135,7 +110,7 @@ void DictionarySearchActivity::buildScreen(UiScreen& screen) {
   catalogScreenHeader(screen, renderer, tr(STR_DICTIONARY), fui::bitmapFromIcon(icon_history_32), ACTION_HISTORY);
 
   fui::ListProps props;
-  props.items = rowItems;
+  props.items = &newSearchRow;
   props.count = static_cast<uint16_t>(listCount());
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()

@@ -277,6 +277,8 @@ void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valueP
   if (valuePtr != &CrossPointSettings::uiTheme) {
     return;
   }
+  // reload() can replace the theme object the render task draws through.
+  RenderLock lock;
   UITheme::getInstance().reload();
   // Re-derive the shared tokens for the new look; the gate stays closed until
   // the repaint that rebuilds the interaction table in the new layout.

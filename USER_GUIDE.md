@@ -261,7 +261,8 @@ Settings are grouped into **System**, **Display**, **Reader**, **Controls**, **L
 - **UI Theme**: Set which UI theme to use:
   
   - "Lyra" - Rounded elements and menu icons
-  - "Cover Grid" - Recent book covers in a grid, with icon tabs (devices with PSRAM, such as the reTerminal Sticky)
+  - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
+  - "Cover Grid" - Recent book covers in a grid, with icon tabs (devices with PSRAM, such as the reTerminal Sticky; on other devices it looks like Lyra)
 
 - **UI Font**: Choose the font used for menus, library titles, and other interface text. See [Menu Fonts](docs/sd-card-fonts.md#menu-fonts) for supported files and sizes.
 

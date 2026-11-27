@@ -208,7 +208,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // UI Theme
   // Saved by position in the settings list, so values stay consecutive.
-  enum UI_THEME { LYRA = 0, COVER_GRID = 1 };
+  enum UI_THEME { LYRA = 0, COVER_GRID = 1, LYRA_3_COVERS = 2 };
 
   // Image rendering in EPUB reader. IMAGES_DISPLAY_BW lays images out like
   // IMAGES_DISPLAY but draws them as a B/W dither, so image pages skip the

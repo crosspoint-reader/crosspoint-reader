@@ -21,15 +21,15 @@ bool sameWord(const std::string& a, const std::string& b) {
          });
 }
 
-bool readFrom(const char* path, std::vector<std::string>& out, const size_t maxWords) {
+bool readFrom(const char* path, std::vector<std::string>& out) {
   HalFile file;
   if (!Storage.exists(path) || !Storage.openFileForRead("DHIST", path, file)) return false;
   std::string line;
   bool overlong = false;
   char buf[128];
   int got;
-  while (out.size() < maxWords && (got = file.read(buf, sizeof(buf))) > 0) {
-    for (int i = 0; i < got && out.size() < maxWords; ++i) {
+  while (out.size() < MAX_WORDS && (got = file.read(buf, sizeof(buf))) > 0) {
+    for (int i = 0; i < got && out.size() < MAX_WORDS; ++i) {
       const char c = buf[i];
       if (c == '\n') {
         if (!line.empty() && !overlong) out.push_back(std::move(line));
@@ -42,17 +42,17 @@ bool readFrom(const char* path, std::vector<std::string>& out, const size_t maxW
       }
     }
   }
-  if (!line.empty() && !overlong && out.size() < maxWords) out.push_back(std::move(line));
+  if (!line.empty() && !overlong && out.size() < MAX_WORDS) out.push_back(std::move(line));
   return true;
 }
 
 }  // namespace
 
-void load(std::vector<std::string>& out, const size_t maxWords) {
+void load(std::vector<std::string>& out) {
   out.clear();
-  out.reserve(maxWords);
+  out.reserve(MAX_WORDS);
   // A power cut between replaceFile's remove and rename leaves only the .tmp.
-  if (!readFrom(PATH, out, maxWords)) readFrom(TMP_PATH, out, maxWords);
+  if (!readFrom(PATH, out)) readFrom(TMP_PATH, out);
 }
 
 void add(const std::string& word) {

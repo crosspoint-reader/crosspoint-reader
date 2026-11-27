@@ -256,7 +256,8 @@ void HomeActivity::onEnter() {
                        : slot == HomeMenuItem::OPDS_BROWSER ? CoverGridHomeUi::SlotTab::OPDS
                                                             : CoverGridHomeUi::SlotTab::NONE,
                        hasContinueReading);
-  } else if (hasContinueReading) {
+  } else if (hasContinueReading && SETTINGS.uiTheme != CrossPointSettings::LYRA_3_COVERS) {
+    // Lyra Extended's three-cover Home draws no progress bar, so it skips this read.
     continueReadingProgress = loadBookProgress(recentBooks.front().path);
   }
 

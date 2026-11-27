@@ -353,6 +353,7 @@ STR_CLOCK_SYNC_NO_WIFI_HINT: "Ligue-se primeiro ao Wi-Fi e, em seguida, tente no
 STR_CLOCK_SYNCED: "Relógio sincronizado"
 STR_UI_THEME: "Tema da interface"
 STR_THEME_LYRA: "Lyra"
+STR_THEME_LYRA_EXTENDED: "Lyra Extended"
 STR_SUNLIGHT_FADING_FIX: "Ajuste de desbotamento ao sol"
 STR_REMAP_FRONT_BUTTONS: "Remapear botões frontais"
 STR_BOOKMARKS: "Marcadores"

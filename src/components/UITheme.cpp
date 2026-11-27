@@ -15,6 +15,7 @@
 #include "RecentBooksStore.h"
 #include "components/CoverGridHomeUi.h"
 #include "components/themes/BaseTheme.h"
+#include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
 
 UITheme UITheme::instance;
@@ -35,15 +36,28 @@ bool UITheme::hasCoverGridHome() { return SETTINGS.uiTheme == CrossPointSettings
 
 void UITheme::drawCoverGridHome(CoverGridHomeUi& home) { home.renderUi(); }
 
-void UITheme::setTheme(CrossPointSettings::UI_THEME) {
-  // Both home themes draw with Lyra; Cover Grid only changes the Home screen
-  // (hasCoverGridHome()), so the theme object never needs replacing.
-  currentMetrics = &LyraMetrics::values;
-  if (!currentTheme) {
-    currentTheme = makeUniqueNoThrow<LyraTheme>();
-    // getTheme() draws with the base fallback theme until this succeeds.
-    if (!currentTheme) LOG_ERR("UI", "OOM: Lyra theme");
+void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
+  // Lyra Extended draws three Home covers; Lyra and Cover Grid share LyraTheme
+  // (Cover Grid only changes the Home screen, see hasCoverGridHome()).
+  const bool threeCovers = type == CrossPointSettings::LYRA_3_COVERS;
+  if (!currentTheme || threeCovers != currentThreeCovers) {
+    std::unique_ptr<BaseTheme> theme;
+    if (threeCovers) {
+      theme = makeUniqueNoThrow<Lyra3CoversTheme>();
+    } else {
+      theme = makeUniqueNoThrow<LyraTheme>();
+    }
+    if (theme) {
+      currentTheme = std::move(theme);
+      currentThreeCovers = threeCovers;
+    } else {
+      // getTheme() keeps the previous theme, or the base fallback, with matching metrics.
+      LOG_ERR("UI", "OOM: theme");
+    }
   }
+  currentMetrics = !currentTheme        ? &BaseMetrics::values
+                   : currentThreeCovers ? &Lyra3CoversMetrics::values
+                                        : &LyraMetrics::values;
   metricsValid = false;
 }
 
