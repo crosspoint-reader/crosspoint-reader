@@ -58,6 +58,8 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
     if (!CrossPointSettings::fadingFixSupported()) fadingFix.withWebHidden();
     emit(fadingFix);
   }
+  emit(SettingInfo::Toggle(StrId::STR_IMAGE_CLEAN_REFRESH, &CrossPointSettings::imageCleanRefresh, "imageCleanRefresh",
+                           StrId::STR_CAT_DISPLAY));
 #if FREEINK_CAP_FRONTLIGHT
   emit(SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                            "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));

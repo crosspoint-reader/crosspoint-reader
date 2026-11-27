@@ -367,6 +367,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     return board == BoardConfig::Board::XteinkX4 || board == BoardConfig::Board::XteinkX3 ||
            board == BoardConfig::Board::XteinkX3Uc8279;
   }
+  // Clean (HALF) refresh on the page after one that carried images. The gray
+  // image pass can leave a faint ghost a differential update won't erase; the
+  // cost is a full inverting refresh one page later, every visit. On by default
+  // (shipping behaviour) — turn off if the ghost is milder than the flash.
+  uint8_t imageCleanRefresh = 1;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
