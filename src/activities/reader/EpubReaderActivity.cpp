@@ -329,6 +329,18 @@ bool EpubReaderActivity::loadBook() {
     }
   }
 
+  // A book replaced under the same path may have fewer chapters than the saved position.
+  if (progressLoaded && currentSpineIndex >= epub->getSpineItemsCount()) {
+    LOG_DBG("ERS", "Saved chapter %d is past the book's %d chapters, starting over", currentSpineIndex,
+            epub->getSpineItemsCount());
+    progressLoaded = false;
+    currentSpineIndex = 0;
+    nextPageNumber = 0;
+    cachedSpineIndex = 0;
+    cachedChapterTotalPageCount = 0;
+    cachedVisibleTextOffset.reset();
+  }
+
   // Only a book with no saved position starts at the text reference; a reader
   // who paged back into spine 0 stays there.
   if (!progressLoaded && currentSpineIndex == 0) {

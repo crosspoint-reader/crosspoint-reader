@@ -13,7 +13,7 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 10;  // v10: ignore ambiguous guide text references
+constexpr uint8_t BOOK_CACHE_VERSION = 11;  // v11: record the book file's size and modification time
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -198,19 +198,31 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
   serialization::BufferedFileReader spineIn(spineFile, BUILD_IO_BUFFER_SIZE);
   serialization::BufferedFileReader tocIn(tocFile, BUILD_IO_BUFFER_SIZE);
 
-  constexpr uint32_t headerASize =
-      sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
+  constexpr uint32_t headerASize = sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) +
+                                   sizeof(tocCount) + sizeof(sourceSize) + sizeof(sourceModified);
   const uint32_t metadataSize = metadata.title.size() + metadata.author.size() + metadata.language.size() +
                                 metadata.coverItemHref.size() + metadata.textReferenceHref.size() +
                                 sizeof(uint32_t) * 5;
   const uint32_t lutSize = sizeof(uint32_t) * spineCount + sizeof(uint32_t) * tocCount;
   const uint32_t lutOffset = headerASize + metadataSize;
 
+  sourceSize = 0;
+  sourceModified = 0;
+  {
+    HalFile sourceFile;
+    if (Storage.openFileForRead("BMC", epubPath, sourceFile)) {
+      sourceSize = static_cast<uint32_t>(sourceFile.size());
+      sourceModified = sourceFile.modificationTime();
+    }
+  }
+
   // Header A
   serialization::writePod(bookOut, BOOK_CACHE_VERSION);
   serialization::writePod(bookOut, lutOffset);
   serialization::writePod(bookOut, spineCount);
   serialization::writePod(bookOut, tocCount);
+  serialization::writePod(bookOut, sourceSize);
+  serialization::writePod(bookOut, sourceModified);
   // Metadata
   serialization::writeString(bookOut, metadata.title);
   serialization::writeString(bookOut, metadata.author);
@@ -477,7 +489,8 @@ bool BookMetadataCache::load() {
   }
 
   if (!serialization::tryReadPod(bookFile, lutOffset) || !serialization::tryReadPod(bookFile, spineCount) ||
-      !serialization::tryReadPod(bookFile, tocCount) ||
+      !serialization::tryReadPod(bookFile, tocCount) || !serialization::tryReadPod(bookFile, sourceSize) ||
+      !serialization::tryReadPod(bookFile, sourceModified) ||
       !serialization::tryReadString(bookFile, coreMetadata.title, lutOffset) ||
       !serialization::tryReadString(bookFile, coreMetadata.author, lutOffset) ||
       !serialization::tryReadString(bookFile, coreMetadata.language, lutOffset) ||
@@ -511,6 +524,15 @@ bool BookMetadataCache::load() {
   loaded = true;
   LOG_DBG("BMC", "Loaded cache data: %d spine, %d TOC entries", spineCount, tocCount);
   return true;
+}
+
+bool BookMetadataCache::sourceUnchanged(const std::string& epubPath) const {
+  HalFile sourceFile;
+  if (!Storage.openFileForRead("BMC", epubPath, sourceFile)) return true;
+  if (static_cast<uint32_t>(sourceFile.size()) != sourceSize) return false;
+  // Zero means the file system gave no time; size alone decides then.
+  const uint32_t modified = sourceFile.modificationTime();
+  return modified == 0 || sourceModified == 0 || modified == sourceModified;
 }
 
 uint32_t BookMetadataCache::getCumulativeSize(const int index) const {

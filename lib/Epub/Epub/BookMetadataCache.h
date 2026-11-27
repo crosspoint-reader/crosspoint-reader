@@ -50,6 +50,9 @@ class BookMetadataCache {
   uint32_t lutOffset;
   uint16_t spineCount;
   uint16_t tocCount;
+  // Size and FAT modification time of the book file book.bin was built from.
+  uint32_t sourceSize = 0;
+  uint32_t sourceModified = 0;
   bool loaded;
   bool buildMode;
 
@@ -120,6 +123,9 @@ class BookMetadataCache {
 
   // Reading phase (read mode)
   bool load();
+  // False when the book file no longer has the size or modification time recorded at build.
+  // A file that cannot be opened counts as unchanged: the caller's own open reports it.
+  bool sourceUnchanged(const std::string& epubPath) const;
   SpineEntry getSpineEntry(int index);
   TocEntry getTocEntry(int index);
   // Cumulative byte size up to and including the given spine item (0 if out of range

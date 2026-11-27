@@ -56,7 +56,9 @@ release conversion downloads source fonts, so verify asset hashes before publish
 Book data uses `/.crosspoint/epub_<hash>/{book.bin,progress.bin,cover.bmp,sections/*.bin}`.
 The directory key is `std::hash<std::string>{}(filepath)`, not content identity.
 Rename/move flows must preserve progress and other book state; replacing contents
-at the same path leaves this key unchanged.
+at the same path leaves this key unchanged. `book.bin` records the book file's
+size and modification time; `Epub::load()` rebuilds the directory, keeping
+`progress.bin`, when they no longer match.
 
 ### Cache Invalidation Rules
 

@@ -1,5 +1,6 @@
 #include <HalStorage.h>
 #include <gtest/gtest.h>
+#include <sys/time.h>
 
 #include <cstdlib>
 #include <filesystem>
@@ -62,7 +63,8 @@ uint32_t chapterBytes(const int i) {
 }
 
 // Writes book.bin through the cache's own writer; returns every chapter's cumulative size.
-std::vector<uint32_t> buildBook(const std::string& dir, const int spineCount) {
+std::vector<uint32_t> buildBook(const std::string& dir, const int spineCount,
+                                const std::string& epubPath = "book.epub") {
   zipEntrySizes.clear();
   std::vector<uint32_t> cumulative;
   for (int i = 0; i < spineCount; i++) {
@@ -75,12 +77,56 @@ std::vector<uint32_t> buildBook(const std::string& dir, const int spineCount) {
   EXPECT_TRUE(cache.endContentOpfPass() && cache.beginTocPass());
   for (int i = 0; i < spineCount; i++) cache.createTocEntry("Chapter " + std::to_string(i), chapterHref(i), "", 1);
   EXPECT_TRUE(cache.endTocPass() && cache.endWrite());
-  EXPECT_TRUE(cache.buildBookBin("book.epub", {}));
+  EXPECT_TRUE(cache.buildBookBin(epubPath, {}));
   EXPECT_TRUE(cache.cleanupTmpFiles());
   return cumulative;
 }
 
+void writeBookFile(const std::string& path, const size_t size, const time_t modified) {
+  std::ofstream(path, std::ios::binary) << std::string(size, 'x');
+  const timeval times[2] = {{modified, 0}, {modified, 0}};
+  ASSERT_EQ(utimes(path.c_str(), times), 0);
+}
+
 }  // namespace
+
+// book.bin remembers the book file it was built from; another file at the same path is noticed.
+TEST(BookMetadataCacheSource, DetectsReplacedBookFile) {
+  const ScopedTempDir tempDir;
+  const auto cacheDir = tempDir.path().string();
+  const std::string epubPath = (tempDir.path() / "book.epub").string();
+  writeBookFile(epubPath, 1000, 1700000000);
+  buildBook(cacheDir, 3, epubPath);
+  BookMetadataCache cache(cacheDir);
+  ASSERT_TRUE(cache.load());
+  EXPECT_TRUE(cache.sourceUnchanged(epubPath));
+
+  writeBookFile(epubPath, 1001, 1700000000);
+  EXPECT_FALSE(cache.sourceUnchanged(epubPath)) << "size changed";
+  writeBookFile(epubPath, 1000, 1700000002);
+  EXPECT_FALSE(cache.sourceUnchanged(epubPath)) << "same size, newer file";
+  writeBookFile(epubPath, 1000, 0);
+  EXPECT_TRUE(cache.sourceUnchanged(epubPath)) << "no time on the file: size decides";
+
+  std::filesystem::remove(epubPath);
+  EXPECT_TRUE(cache.sourceUnchanged(epubPath)) << "missing file is left to the caller";
+}
+
+// A cache built from a file without a time compares by size only.
+TEST(BookMetadataCacheSource, IgnoresTimeWhenNoneWasRecorded) {
+  const ScopedTempDir tempDir;
+  const auto cacheDir = tempDir.path().string();
+  const std::string epubPath = (tempDir.path() / "book.epub").string();
+  writeBookFile(epubPath, 1000, 0);
+  buildBook(cacheDir, 3, epubPath);
+  BookMetadataCache cache(cacheDir);
+  ASSERT_TRUE(cache.load());
+  writeBookFile(epubPath, 1000, 1700000000);
+  EXPECT_TRUE(cache.sourceUnchanged(epubPath));
+  writeBookFile(epubPath, 999, 1700000000);
+  EXPECT_FALSE(cache.sourceUnchanged(epubPath));
+  std::filesystem::remove(epubPath);
+}
 
 // A loaded book must not hold heap per chapter: 5,000 chapters may hold at most 1 KB more than 30.
 TEST(BookMetadataCacheHeap, ResidentHeapDoesNotGrowWithSpineCount) {

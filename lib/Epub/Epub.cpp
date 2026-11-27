@@ -496,8 +496,27 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     return false;
   }
 
+  // A rebuild cut short by a power loss leaves progress.bin parked next to a partly removed
+  // cache; finish removing it so no chapter cache of the old file survives.
+  if (Storage.exists(parkedProgressPath().c_str())) {
+    LOG_DBG("EBP", "Finishing an interrupted cache rebuild: %s", filepath.c_str());
+    if (!clearCache() || !restoreParkedProgress()) return false;
+  }
+
   // Try to load existing cache first
-  if (bookMetadataCache->load()) {
+  bool cacheLoaded = bookMetadataCache->load();
+  if (cacheLoaded && !bookMetadataCache->sourceUnchanged(filepath)) {
+    LOG_DBG("EBP", "Book file changed since it was indexed, rebuilding cache: %s", filepath.c_str());
+    bookMetadataCache.reset();  // closes book.bin before its directory is removed
+    if (!clearCacheKeepingProgress()) return false;
+    bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+    if (!bookMetadataCache) {
+      LOG_ERR("EBP", "OOM: metadata cache");
+      return false;
+    }
+    cacheLoaded = false;
+  }
+  if (cacheLoaded) {
     if (Txt::isTxtOrMd(filepath)) {
       if (!Txt::validateCache(filepath, cachePath, bookMetadataCache->getCumulativeSize(0))) {
         LOG_DBG("EBP", "TXT/MD cache invalid or outdated: %s", filepath.c_str());
@@ -578,6 +597,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   setupCacheDir();
 
   const uint32_t indexingStart = millis();
+
+  // Section files are keyed by spine index only and come from whatever file the old index
+  // described (e.g. a book replaced before a cache version bump), so they go with it.
+  Storage.removeDir((cachePath + "/sections").c_str());
 
   // Begin building cache - stream entries to disk immediately
   if (!bookMetadataCache->beginWrite()) {
@@ -767,6 +790,39 @@ bool Epub::clearCache() const {
 
   LOG_DBG("EPB", "Cache cleared successfully");
   return true;
+}
+
+// progress.bin is parked next to the cache directory while the directory is removed, so it is
+// moved, never copied: a failed write or a power cut at any point leaves it in one of the two places.
+std::string Epub::parkedProgressPath() const { return cachePath + ".progress.bin"; }
+
+bool Epub::restoreParkedProgress() const {
+  const std::string parked = parkedProgressPath();
+  if (!Storage.exists(parked.c_str())) return true;
+  setupCacheDir();
+  const std::string progressPath = cachePath + "/progress.bin";
+  if (Storage.exists(progressPath.c_str())) {
+    Storage.remove(parked.c_str());  // the reader saved a newer position since
+    return true;
+  }
+  if (!Storage.rename(parked.c_str(), progressPath.c_str())) {
+    // Left in place: the next open tries again instead of starting the book over.
+    LOG_ERR("EBP", "Could not restore parked reading progress: %s", parked.c_str());
+    return false;
+  }
+  return true;
+}
+
+bool Epub::clearCacheKeepingProgress() const {
+  // Everything else in the directory is derived from the old file.
+  const std::string progressPath = cachePath + "/progress.bin";
+  const std::string parked = parkedProgressPath();
+  if (Storage.exists(progressPath.c_str()) && !Storage.exists(parked.c_str()) &&
+      !Storage.rename(progressPath.c_str(), parked.c_str())) {
+    LOG_ERR("EBP", "Could not park reading progress, keeping the old cache");
+    return false;
+  }
+  return clearCache() && restoreParkedProgress();
 }
 
 void Epub::setupCacheDir() const {
