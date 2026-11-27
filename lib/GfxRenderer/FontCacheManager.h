@@ -30,6 +30,9 @@ class FontCacheManager {
     releaseCtx_ = ctx;
   }
   void releaseSdFontCaches();
+  // Drop only the SD fonts' advance tables (rebuilt on the next layout), for a
+  // glyph bitmap that a table elsewhere keeps from fitting (SdCardFont::setAdvanceReleaseHook).
+  void releaseSdFontAdvanceTables();
   bool prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F, bool accumulate = true);
   // Recommended lookahead depth for idle prewarming. TTF fonts on PSRAM
   // accumulate glyphs across multiple pages; single-page SD fonts use 1.
