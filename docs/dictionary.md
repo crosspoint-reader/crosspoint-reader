@@ -115,3 +115,14 @@ The screen also closes if a failed forward lookup cannot reload the current defi
 - [Fictionaries](https://fictionary.gumroad.com/) provides dictionaries for various speculative fiction books and series.
 - [World Factbooks Archive](https://github.com/MilkMp/CIA-World-Factbooks-Archive-1990-2025) provides 36 years of CIA's World Factbook dictionaries in StarDict format.
 - [StarDict-Hebrew](https://github.com/Uri-Tauber/StarDict-Hebrew) Hebrew-English StarDict versions of Babylon dictionaries.
+
+### Converting GCIDE
+
+[GCIDE](https://ftp.gnu.org/gnu/gcide/), the GNU Collaborative International Dictionary of English (mostly Webster's 1913, GPL-licensed), is published as tagged text rather than StarDict. Convert an unpacked release with:
+
+```sh
+tar -xzf gcide-0.54.tar.gz
+python3 scripts/gcide_to_stardict.py gcide-0.54 gcide
+```
+
+Then copy the `gcide` folder to `/dictionaries/gcide/` on the SD card and select it in **Settings → Reader → Dictionary**. The first lookup builds the search index once. Definitions are HTML, with the headword in bold and the part of speech in italics; a few very rare symbols (zodiac signs, unusual fractions) are left out.
