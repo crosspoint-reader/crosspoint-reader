@@ -2626,3 +2626,102 @@ TEST(TextSpacingLayout, UsesShapingMemoOnlyForParagraphsWithIndicText) {
     EXPECT_EQ(GfxRenderer::shapingMemoStarts - before, indic ? 1u : 0u) << word;
   }
 }
+
+namespace {
+
+std::vector<std::vector<std::string>> parseBodyToCachedLines(const std::string& body) {
+  const std::string html = "<html><body>" + body + "</body></html>";
+  const ScopedTempDir tempDir;
+  const std::string htmlPath = (tempDir.path() / "list.xhtml").string();
+  const std::string cachePath = (tempDir.path() / "page.bin").string();
+  {
+    HalFile file;
+    EXPECT_TRUE(file.open(htmlPath.c_str(), "wb"));
+    EXPECT_EQ(file.write(html.data(), html.size()), html.size());
+  }
+
+  GfxRenderer renderer;
+  CssParser cssParser{"/tmp"};
+  std::vector<std::vector<std::string>> lines;
+  ChapterHtmlSlimParser parser(
+      nullptr, htmlPath, renderer, 0, 1.0f, false, 0, static_cast<uint16_t>(renderer.getScreenWidth()),
+      static_cast<uint16_t>(renderer.getScreenHeight()), false, false,
+      [&](std::unique_ptr<Page> page, auto, auto, auto) {
+        {
+          HalFile out;
+          ASSERT_TRUE(out.open(cachePath.c_str(), "wb"));
+          ASSERT_TRUE(page->serialize(out));
+        }
+        HalFile in;
+        ASSERT_TRUE(in.open(cachePath.c_str(), "rb"));
+        auto cached = Page::deserialize(in);
+        ASSERT_NE(cached, nullptr);
+        for (const auto& element : cached->elements) {
+          if (element->getTag() != TAG_PageLine) continue;
+          const auto& block = *static_cast<const PageLine&>(*element).getBlock();
+          auto& words = lines.emplace_back();
+          for (uint16_t i = 0; i < block.wordCount(); ++i) {
+            words.emplace_back(block.wordText(i));
+          }
+        }
+      },
+      true, "", "", 0, {}, nullptr, &cssParser);
+  EXPECT_TRUE(parser.parseAndBuildPages());
+  return lines;
+}
+
+}  // namespace
+
+TEST(OrderedListStart, DefaultPlainListStartsAtOne) {
+  const auto lines = parseBodyToCachedLines("<ol><li>Alpha</li><li>Beta</li></ol>");
+  const std::vector<std::vector<std::string>> expected{{"1.", "Alpha"}, {"2.", "Beta"}};
+  EXPECT_EQ(lines, expected);
+}
+
+TEST(OrderedListStart, HonorsStartAttribute) {
+  const auto lines =
+      parseBodyToCachedLines("<ol start=\"5\" style=\"list-style-type: decimal\"><li>Alpha</li><li>Beta</li></ol>");
+  const std::vector<std::vector<std::string>> expected{{"5.", "Alpha"}, {"6.", "Beta"}};
+  EXPECT_EQ(lines, expected);
+}
+
+TEST(OrderedListStart, NestedListKeepsStartCounterLocal) {
+  const auto lines = parseBodyToCachedLines(
+      "<ol><li>Outer1<ol start=\"5\"><li>Inner1</li><li>Inner2</li></ol></li><li>Outer2</li></ol>");
+  const std::vector<std::vector<std::string>> expected{
+      {"1.", "Outer1"}, {"5.", "Inner1"}, {"6.", "Inner2"}, {"2.", "Outer2"}};
+  EXPECT_EQ(lines, expected);
+}
+
+TEST(OrderedListStart, SupportsZeroNegativeAndSignedWhitespace) {
+  EXPECT_EQ(parseBodyToCachedLines("<ol start=\"0\"><li>A</li><li>B</li></ol>"),
+            (std::vector<std::vector<std::string>>{{"0.", "A"}, {"1.", "B"}}));
+  EXPECT_EQ(parseBodyToCachedLines("<ol start=\"-2\"><li>A</li><li>B</li><li>C</li></ol>"),
+            (std::vector<std::vector<std::string>>{{"-2.", "A"}, {"-1.", "B"}, {"0.", "C"}}));
+  EXPECT_EQ(parseBodyToCachedLines("<ol start=\" +10 \"><li>A</li><li>B</li></ol>"),
+            (std::vector<std::vector<std::string>>{{"10.", "A"}, {"11.", "B"}}));
+  EXPECT_EQ(parseBodyToCachedLines("<ol start=\"5.5\"><li>A</li></ol>"),
+            (std::vector<std::vector<std::string>>{{"5.", "A"}}));
+}
+
+TEST(OrderedListStart, InvalidAndOverflowStartFallBackToOne) {
+  for (const char* bad : {"", "   ", "abc", "+", "-", "2147483648", "-2147483649", "99999999999999999999"}) {
+    const std::string body = std::string("<ol start=\"") + bad + "\"><li>Alpha</li><li>Beta</li></ol>";
+    const std::vector<std::vector<std::string>> expected{{"1.", "Alpha"}, {"2.", "Beta"}};
+    EXPECT_EQ(parseBodyToCachedLines(body), expected) << "start=" << bad;
+  }
+}
+
+TEST(OrderedListStart, Int32BoundariesDoNotOverflow) {
+  EXPECT_EQ(parseBodyToCachedLines("<ol start=\"-2147483648\"><li>A</li><li>B</li></ol>"),
+            (std::vector<std::vector<std::string>>{{"-2147483648.", "A"}, {"-2147483647.", "B"}}));
+  EXPECT_EQ(parseBodyToCachedLines("<ol start=\"2147483647\"><li>A</li><li>B</li></ol>"),
+            (std::vector<std::vector<std::string>>{{"2147483647.", "A"}, {"2147483647.", "B"}}));
+}
+
+TEST(OrderedListStart, ListStyleNoneStillSuppressesMarkers) {
+  const auto lines =
+      parseBodyToCachedLines("<ol start=\"5\" style=\"list-style-type: none\"><li>Alpha</li><li>Beta</li></ol>");
+  const std::vector<std::vector<std::string>> expected{{"Alpha"}, {"Beta"}};
+  EXPECT_EQ(lines, expected);
+}

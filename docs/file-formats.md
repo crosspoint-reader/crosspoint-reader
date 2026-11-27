@@ -90,6 +90,12 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 78
+
+Ordered lists (`<ol>`) honor the HTML `start` attribute instead of always numbering
+from 1. List markers are baked into cached text blocks, so older completed and partial
+section caches rebuild automatically while book metadata and reading progress are kept.
+
 ### Version 77
 
 The header gains a `publisherFonts` byte after `wordSpacingPercent` (0 off, 1 ignore
