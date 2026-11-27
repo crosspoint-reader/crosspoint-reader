@@ -30,6 +30,10 @@ struct DetailsSpec {
   std::string secondaryLabel;
   // When set, the second button asks this first; declining stays on the page.
   std::string secondaryConfirm;
+  // Optional shorter button-hint labels for a set label; null shows the full
+  // label. Must point to static text such as tr() results.
+  const char* actionHint = nullptr;
+  const char* secondaryHint = nullptr;
 };
 
 // Title, metadata and the start of the description, with the primary action
