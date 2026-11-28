@@ -1,5 +1,6 @@
 #include "UiAppHost.h"
 
+#include "TouchFrameRouting.h"
 #include "UiAppHelpers.h"
 
 namespace fui = freeink::ui;
@@ -21,13 +22,24 @@ void UiAppHost::renderUi() {
 UiAppHost::TouchRoute UiAppHost::routeTouch(const MappedInputManager& input, const bool withLongPress,
                                             const bool routeHeld) {
   TouchRoute result;  // named apart from route() — cppcheck flags the shadow
-  if (!uiReady) return result;
+  if (!uiReady) {
+    if (routeHeld) suppressContactBeforeReady(input);
+    return result;
+  }
   result.snap = touchSnapshotFrom(input, withLongPress);
   if (!result.snap.touchPressed && !result.snap.touchReleased && !(routeHeld && result.snap.touchHeld)) {
     return result;
   }
   result.routed = true;
-  result.event = route(result.snap);
+  int liveX = 0;
+  int liveY = 0;
+  if (routeHeld && input.isScreenTouchHeld(liveX, liveY)) {
+    result.event =
+        routePressThenHold(result.snap, static_cast<int16_t>(liveX), static_cast<int16_t>(liveY), app.touchActive(),
+                           [this](const fui::InputSnapshot& snap) { return route(snap); });
+  } else {
+    result.event = route(result.snap);
+  }
   return result;
 }
 

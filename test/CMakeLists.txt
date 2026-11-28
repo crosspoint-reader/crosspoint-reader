@@ -106,6 +106,7 @@ add_subdirectory(plugin_catalog_paging)
 add_subdirectory(plugin_manifest_classification)
 add_subdirectory(plugin_picker_layout)
 add_subdirectory(protected_paths)
+add_subdirectory(touch_frame_routing)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME VectorFontIdentity COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vector_font_identity.py)
