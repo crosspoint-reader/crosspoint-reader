@@ -32,6 +32,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
         - [Option A: CrossPoint Sync Server (`sync.crosspointreader.com`, default)](#option-a-crosspoint-sync-server-synccrosspointreadercom-default)
         - [Option B: Legacy Public KOReader Server (`sync.koreader.rocks`)](#option-b-legacy-public-koreader-server-synckoreaderrocks)
         - [Option C: Self-Hosted Server (Docker Compose)](#option-c-self-hosted-server-docker-compose)
+        - [Option D: Calibre-Web Automated (CWA)](#option-d-calibre-web-automated-cwa)
         - [Syncing While Reading](#syncing-while-reading)
     - [3.7 Sleep Screen](#37-sleep-screen)
       - [Cover settings](#cover-settings)
@@ -570,6 +571,36 @@ If this returns `HTTP 402` with `{"code":2002,"message":"Username is already reg
    - Run **Authenticate**.
 
 If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only for self-signed certificate testing).
+
+##### Option D: Calibre-Web Automated (CWA)
+
+[Calibre-Web Automated](https://github.com/crocodilestick/Calibre-Web-Automated) has a built-in KOReader-compatible sync server at `/kosync`. It accepts HTTP Basic authentication with your existing CWA account. CrossPoint sends Basic authentication alongside the standard KOSync headers, so no extra server is needed.
+
+1. In CWA, open **Admin -> CWA Settings**, enable **Enable KOReader Sync (CWA Plugin)**, and save. No restart is needed.
+
+2. On each CrossPoint device:
+
+   - Go to **Settings -> Connectivity -> CrossPoint Sync**.
+
+   - Set **Username** and **Password** to your CWA account (plain password).
+
+   - Set **Sync Server URL** to `http://<cwa-host>:8083/kosync`. The `/kosync` path is required: CrossPoint appends `/users/auth` and `/syncs/progress` to this URL. Do not use the `/opds` URL here.
+
+   - Set **Server Type** to **KoSync**.
+
+   - Set **Document Matching** to **Binary**. CWA links progress to a library book by KOReader's partial-MD5 checksum, and CWA's KOReader plugin always uses that checksum. With **Filename**, progress is not linked to the book in CWA and only matches devices that store the book under the same file name.
+
+   - Run **Authenticate**. Do not use **Sign Up**: CWA has no registration endpoint, so the account must already exist in CWA.
+
+3. Download books from CWA's OPDS catalog (`http://<cwa-host>:8083/opds`, same credentials; see [OPDS Servers](#365-opds-servers-multiple-libraries)). When CWA embeds metadata on download, it records the checksum of each file it serves and links it to the book. Progress is stored per book, so devices can share progress even if their downloaded files differ.
+
+To share progress with KOReader, install CWA's sync plugin there (download link on `http://<cwa-host>:8083/kosync`). KOReader's built-in Progress sync plugin authenticates with KOSync headers only, which CWA rejects.
+
+> [!NOTE]
+> CWA serves KEPUB files with the EPUB media type, so an OPDS entry can list two "EPUB" links. Download the same link on every device.
+
+> [!WARNING]
+> Basic authentication sends your CWA password with every request. Over plain HTTP, use it only on a trusted network, or put CWA behind HTTPS. Consider a dedicated CWA user for sync.
 
 ##### Syncing While Reading
 
