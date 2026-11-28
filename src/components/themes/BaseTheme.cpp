@@ -1032,11 +1032,15 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 }
 
-void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) {
+void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label, bool isDrawCentered) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   auto truncatedLabel =
       renderer.truncatedText(SMALL_FONT_ID, label, rect.width - metrics.contentSidePadding * 2, EpdFontFamily::REGULAR);
-  renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
+  if (isDrawCentered) {
+    renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
+  } else {
+    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, rect.y, truncatedLabel.c_str());
+  }
 }
 
 void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
