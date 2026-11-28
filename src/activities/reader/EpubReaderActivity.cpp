@@ -623,7 +623,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
     requestUpdate();
     return;
   }
-  startActivityForResult(std::move(activity), [this, spineIndex, pageNumber, pageCount, layoutSignature,
+  startActivityForResult(std::move(activity), [this, mode, spineIndex, pageNumber, pageCount, layoutSignature,
                                                bookTitle = std::move(bookTitle), author = std::move(author),
                                                chapterTitle = std::move(chapterTitle)](const ActivityResult& result) {
     if (result.isCancelled) {
@@ -686,10 +686,15 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         return;
       }
       lookupReturnSelection = lookupReturnSelectionFor(clipping);
-      startActivityForResult(std::move(lookup), [this](const ActivityResult& result) {
+      startActivityForResult(std::move(lookup), [this, mode](const ActivityResult& result) {
         if (!result.isCancelled && !mappedInput.hasTouch()) {
           pendingLookupSelection = lookupReturnSelection;
-          openDictionaryWordSelect();
+          // Select mode returns to Select so the user can choose Look up or Clip again.
+          if (mode == ClipSelectionActivity::Mode::Select) {
+            startClipSelection(-1, -1, mode);
+          } else {
+            openDictionaryWordSelect();
+          }
         }
       });
       return;
@@ -898,6 +903,7 @@ void EpubReaderActivity::loop() {
     case HomeButtonAction::Dictionary:
     case HomeButtonAction::Footnotes:
     case HomeButtonAction::CreateClipping:
+    case HomeButtonAction::SelectText:
       automaticPageTurnActive = false;
       break;
     default:
@@ -969,6 +975,11 @@ void EpubReaderActivity::loop() {
       case CrossPointSettings::LP_MENU_DICTIONARY:
         openDictionaryWordSelect();
         return;
+      case CrossPointSettings::LP_MENU_SELECT_TEXT:
+        automaticPageTurnActive = false;
+        pendingManualTurn = 0;
+        startClipSelection(-1, -1, ClipSelectionActivity::Mode::Select);
+        return;
       case CrossPointSettings::LP_MENU_CREATE_CLIPPING:
         startClipSelection();
         return;
@@ -1001,6 +1012,10 @@ void EpubReaderActivity::loop() {
         return;
       case HomeButtonAction::Dictionary:
         if (!showDictionaryMessage) openDictionaryWordSelect();
+        return;
+      case HomeButtonAction::SelectText:
+        pendingManualTurn = 0;
+        startClipSelection(-1, -1, ClipSelectionActivity::Mode::Select);
         return;
       case HomeButtonAction::CreateClipping:
         startClipSelection();
@@ -1393,6 +1408,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           progressChangeResultHandler);
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::SELECT_TEXT: {
+      startClipSelection(-1, -1, ClipSelectionActivity::Mode::Select);
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SAVE_CLIPPING: {
       startClipSelection();
       break;
@@ -1415,6 +1434,7 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
     case CrossPointSettings::LP_MENU_BOOKMARK:
     case CrossPointSettings::LP_MENU_DICTIONARY:
     case CrossPointSettings::LP_MENU_CREATE_CLIPPING:
+    case CrossPointSettings::LP_MENU_SELECT_TEXT:
     case CrossPointSettings::LP_MENU_FOOTNOTES:
       return ReaderUtils::BOOKMARK_HOLD_MS;
     case CrossPointSettings::LP_MENU_KOSYNC:
