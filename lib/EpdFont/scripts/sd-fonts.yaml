@@ -634,3 +634,12 @@ families:
     styles:
       regular: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"}
       bold:    {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Sans/OTF/Japanese/NotoSansCJKjp-Bold.otf"}
+
+  - name: NotoSerifCJKJP
+    description: "Japanese serif with full kanji coverage (Kanji, Kana, Latin)"
+    scripts: [cjk]
+    intervals: cjk,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Serif/OTF/Japanese/NotoSerifCJKjp-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Serif/OTF/Japanese/NotoSerifCJKjp-Bold.otf"}
